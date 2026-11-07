@@ -28,7 +28,7 @@ export class AgentCheckpointService {
   constructor(private readonly repository: AgentCheckpointRepository) {}
 
   async persist(checkpoint: AgentCheckpoint): Promise<Result<void>> {
-    const validation = validateCheckpoint(checkpoint);
+    const validation = validateAgentCheckpoint(checkpoint);
     if (validation) return err("validation", validation);
     let current: Result<AgentCheckpoint | null>;
     try { current = await this.repository.get(checkpoint.runId); }
@@ -68,7 +68,7 @@ export class AgentCheckpointService {
   }
 }
 
-function validateCheckpoint(value: AgentCheckpoint): string | null {
+export function validateAgentCheckpoint(value: AgentCheckpoint): string | null {
   if (!value || value.schemaVersion !== 1) return "Unsupported checkpoint schema version.";
   if (![value.runId, value.agentId, value.threadId].every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160)) {
     return "Checkpoint run, agent, and thread identifiers are required.";
