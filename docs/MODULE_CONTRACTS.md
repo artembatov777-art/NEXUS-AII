@@ -239,3 +239,16 @@ Runtime guarantees and current limits:
 - Agent code must call `context.checkpoint(label)` before each meaningful unit of work. The runtime also counts progress events as steps.
 
 Future tool execution must go through a separate permission-enforcing Tool Gateway. Never pass raw host capabilities into an agent.
+
+
+## 11. Tool Gateway
+
+The first gateway implementation lives in `src/core/tools.ts`.
+
+- Tool definitions declare required permission scopes, risk, timeout, input validation, and execution.
+- Inputs and outputs must be JSON-serializable and no larger than 64 KB.
+- Permission checks run before execution. `deny`, `ask_user`, and permission-service errors all fail closed.
+- An audit `started` event must persist before the tool is allowed to execute.
+- Execution receives an abort signal and is bounded by a per-tool timeout.
+- Tools are discoverable through metadata only; implementation functions are not exposed.
+- The gateway is not yet connected to agents, MCP, UI approval flows, or a persistent audit store. The current audit sink is an injected port.
