@@ -5,6 +5,10 @@ import { err, ok, type Result } from "./result";
 class FakeMemoryRepository implements MemoryRepository {
   records = new Map<MemoryId, MemoryRecord>();
 
+  async list(scope: "all" | "profile" | "project" | "conversation", limit: number): Promise<Result<MemoryRecord[]>> {
+    return ok([...this.records.values()].filter(record => scope === "all" || record.scope === scope).slice(0, limit));
+  }
+
   async search(query: string, scope: "all" | "profile" | "project" | "conversation", limit: number): Promise<Result<MemoryRecord[]>> {
     const matches = [...this.records.values()].filter(record =>
       (scope === "all" || record.scope === scope) &&
@@ -88,6 +92,7 @@ describe("MemoryService", () => {
 
   it("passes repository failures through unchanged", async () => {
     const failing: MemoryRepository = {
+      list: async () => err("storage_failed", "Storage unavailable"),
       search: async () => err("storage_failed", "Storage unavailable"),
       save: async () => err("storage_failed", "Storage unavailable"),
       delete: async () => err("storage_failed", "Storage unavailable")
