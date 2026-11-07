@@ -9,7 +9,7 @@ The current draft PR #1 remains separate from this architecture work. Do not mer
 ## Milestone 0 — Architecture baseline
 - [x] Create modular system design
 - [x] Define module contracts
-- [ ] Add threat model and permission matrix
+- [x] Add initial threat model and permission matrix (security implementation remains incomplete)
 - [ ] Add ADR process and changelog
 - [ ] Review contracts with maintainers
 
