@@ -1,16 +1,11 @@
-import type { AgentCheckpoint, AgentCheckpointRepository } from "../core/agentCheckpoints";
+import { validateAgentCheckpoint, type AgentCheckpoint, type AgentCheckpointRepository } from "../core/agentCheckpoints";
 import { err, ok, type Result } from "../core/result";
 import type { StorageLike } from "./memoryStorage";
 
 const DEFAULT_KEY = "nexus-au:agent-checkpoints:v1";
 
 function isCheckpoint(value: unknown): value is AgentCheckpoint {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<AgentCheckpoint>;
-  return item.schemaVersion === 1 && typeof item.runId === "string" &&
-    typeof item.agentId === "string" && typeof item.threadId === "string" &&
-    Number.isSafeInteger(item.sequence) && typeof item.status === "string" &&
-    typeof item.createdAt === "number" && typeof item.updatedAt === "number" && "state" in item;
+  return validateAgentCheckpoint(value as AgentCheckpoint) === null;
 }
 
 export class LocalStorageAgentCheckpointRepository implements AgentCheckpointRepository {
