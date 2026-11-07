@@ -80,9 +80,11 @@ function validateCheckpoint(value: AgentCheckpoint): string | null {
   }
   if (value.pendingApproval && (
     value.status !== "waiting_for_approval" ||
+    typeof value.pendingApproval.permission !== "string" ||
     !value.pendingApproval.permission.trim() ||
     !Number.isFinite(value.pendingApproval.requestedAt)
   )) return "Pending approval metadata is invalid.";
+  if (!isSafeJsonValue(value.state)) return "Checkpoint state must contain only safe JSON values.";
   try {
     const serialized = JSON.stringify(value.state);
     if (serialized === undefined || new TextEncoder().encode(serialized).byteLength > 256 * 1024) {
@@ -90,4 +92,26 @@ function validateCheckpoint(value: AgentCheckpoint): string | null {
     }
   } catch { return "Checkpoint state must be serializable JSON data."; }
   return null;
+}
+
+function isSafeJsonValue(value: unknown, depth = 0, seen = new Set<object>()): value is JsonValue {
+  if (depth > 40) return false;
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object") return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const valid = value.every(item => isSafeJsonValue(item, depth + 1, seen));
+    seen.delete(value);
+    return valid;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const valid = Object.entries(value).every(([key, item]) =>
+    key !== "__proto__" && key !== "constructor" && key !== "prototype" &&
+    isSafeJsonValue(item, depth + 1, seen)
+  );
+  seen.delete(value);
+  return valid;
 }
