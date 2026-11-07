@@ -33,6 +33,15 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
     private readonly key = MEMORY_STORAGE_KEY
   ) {}
 
+  async list(scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>> {
+    const loaded = this.readAll();
+    if (!loaded.ok) return loaded;
+    return ok(loaded.value
+      .filter(record => scope === "all" || record.scope === scope)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit));
+  }
+
   async search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>> {
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
