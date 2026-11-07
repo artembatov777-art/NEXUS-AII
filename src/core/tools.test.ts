@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ToolGateway, type ToolExecutionContext } from "./tools";
-import { ok, err } from "./result";
+import { ok, err, type Result } from "./result";
 
 const context = (): ToolExecutionContext => ({
   traceId: "trace-1",
@@ -8,11 +8,11 @@ const context = (): ToolExecutionContext => ({
   signal: new AbortController().signal
 });
 
-const definition = (execute = vi.fn().mockResolvedValue(ok({ answer: 42 }))) => ({
+const definition = (execute: (input: { query: string }, context: ToolExecutionContext) => Promise<Result<unknown>> = vi.fn().mockResolvedValue(ok({ answer: 42 }))) => ({
   id: "sample",
   version: "1.0.0",
   description: "Sample test tool",
-  requiredPermissions: ["conversation:read"] as const,
+  requiredPermissions: ["conversation:read"] as ("conversation:read")[],
   risk: "low" as const,
   timeoutMs: 2_000,
   validateInput: (input: unknown) => typeof input === "object" && input !== null && "query" in input
