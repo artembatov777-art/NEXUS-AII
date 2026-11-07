@@ -35,9 +35,11 @@ Exit criteria: streamed responses work through the same application interface wi
 
 ## Milestone 3 — Durable local data
 - [ ] Define SQLite schema and migrations
+- [x] Define versioned agent checkpoint contract and local preview repository
 - [ ] Implement conversation and message repositories
 - [ ] Add export/import format
 - [ ] Add backup and recovery tests
+- [x] Add checkpoint sequence, validation, and stale-write tests
 
 Exit criteria: data survives restarts and can be exported without provider credentials.
 
@@ -56,6 +58,7 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Add tool registry and input validation port
 - [x] Add audit events, timeout, cancellation, and input/output limits
 - [ ] Add approval UI and approval-resume flow
+- [ ] Wire checkpoint persistence into AgentRuntime and implement safe resume
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
