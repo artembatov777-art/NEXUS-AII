@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "./result";
+import { err, type Result } from "./result";
 
 export type AgentCheckpointStatus = "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
