@@ -92,6 +92,24 @@ export interface ConversationRepository {
   delete(id: string): Promise<Result<void>>;
 }
 
+export type MemoryScope = "all" | "profile" | "project" | "conversation";
+
+export interface MemoryRecord {
+  id: string;
+  content: string;
+  category: "preference" | "goal" | "fact" | "workflow" | "project";
+  scope: Exclude<MemoryScope, "all">;
+  source: {
+    type: "user_confirmed" | "conversation" | "import";
+    referenceId?: string;
+    label: string;
+  };
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  schemaVersion: 1;
+}
+
 export interface MemoryRepository {
   search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
   save(record: MemoryRecord): Promise<Result<void>>;
