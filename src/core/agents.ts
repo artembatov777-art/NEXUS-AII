@@ -180,7 +180,9 @@ export class AgentRuntime {
         const next = await Promise.race([iterator.next(), abortPromise]);
         if (next.done) break;
         if (next.value.type === "progress") {
-          context.checkpoint(next.value.label);
+          if (!next.value.label.trim() || next.value.label.length > 200) {
+            throw new AgentExecutionError("validation", "Progress labels must contain 1 to 200 characters.");
+          }
           yield { type: "progress", runId, step: steps, maxSteps: agent.maxSteps, label: next.value.label };
         } else if (next.value.type === "output") {
           if (next.value.content.length > 20_000) {
