@@ -60,3 +60,14 @@ The first provider-neutral runtime primitive is implemented in `src/core/agents.
 Currently implemented: agent registration, metadata listing, preflight permission checks, explicit approval handoff event, cancellation, timeout signal, checkpoint/step limits, and output-size limits.
 
 Not implemented yet: approval resume, model-backed planning, tool gateway integration, specialist delegation, token budgets, persistent run history, and UI. The role list above remains a design proposal, not a set of working agents.
+
+
+## Agent checkpoint foundation
+
+Implemented in `src/core/agentCheckpoints.ts` and `src/lib/agentCheckpointStorage.ts`:
+- Versioned run snapshots with thread/agent/run identity.
+- Monotonic sequence numbers and compare-and-swap stale-writer protection.
+- Immutable run identity and creation timestamp; terminal snapshots cannot be overwritten.
+- JSON-only state payload capped at 256 KB and approval metadata validation.
+
+This is a persistence contract and LocalStorage preview adapter. It is **not yet connected to AgentRuntime**, does not resume an interrupted iterator, and does not provide crash-safe SQLite durability. Those require a serializable agent state machine and explicit resume semantics; replaying arbitrary generator code would be unsafe and incorrect.
