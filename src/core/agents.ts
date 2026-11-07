@@ -134,6 +134,7 @@ export class AgentRuntime {
     const controller = new AbortController();
     const startedAt = this.clock.now();
     let steps = 0;
+    let lastCheckpointLabel: string | null = null;
     let timedOut = false;
     const onExternalAbort = () => controller.abort();
     signal?.addEventListener("abort", onExternalAbort, { once: true });
@@ -169,6 +170,7 @@ export class AgentRuntime {
           throw new AgentExecutionError("validation", "Checkpoint labels must contain 1 to 200 characters.");
         }
         steps += 1;
+        lastCheckpointLabel = label;
       }
     };
 
@@ -183,6 +185,8 @@ export class AgentRuntime {
           if (!next.value.label.trim() || next.value.label.length > 200) {
             throw new AgentExecutionError("validation", "Progress labels must contain 1 to 200 characters.");
           }
+          if (lastCheckpointLabel === next.value.label) lastCheckpointLabel = null;
+          else context.checkpoint(next.value.label);
           yield { type: "progress", runId, step: steps, maxSteps: agent.maxSteps, label: next.value.label };
         } else if (next.value.type === "output") {
           if (next.value.content.length > 20_000) {
