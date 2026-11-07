@@ -45,7 +45,7 @@ Exit criteria: data survives restarts and can be exported without provider crede
 - [x] Define memory record schema and provenance
 - [x] Add user-approved memory write path
 - [x] Add repository-backed retrieval contract and validation
-- [ ] Add relevance scoring in storage adapter
+- [x] Add relevance scoring in browser storage adapter
 - [ ] Add source attribution in UI
 - [ ] Add inspect/edit/delete controls
 
