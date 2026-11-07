@@ -252,3 +252,16 @@ The first gateway implementation lives in `src/core/tools.ts`.
 - Execution receives an abort signal and is bounded by a per-tool timeout.
 - Tools are discoverable through metadata only; implementation functions are not exposed.
 - The gateway is not yet connected to agents, MCP, UI approval flows, or a persistent audit store. The current audit sink is an injected port.
+
+
+## 12. Agent checkpoint contract
+
+The checkpoint contract lives in `src/core/agentCheckpoints.ts`.
+
+- Snapshots are schema-versioned and scoped by run, agent, and thread identifiers.
+- Each update increments a monotonic sequence by exactly one; the first sequence is 1.
+- Repository writes use compare-and-swap against the previously observed sequence to reject stale writers.
+- Creation time and run identity are immutable. Terminal states cannot be overwritten.
+- State is JSON data capped at 256 KB. Approval metadata is valid only while the run is waiting for approval.
+- The LocalStorage adapter is a browser-preview persistence adapter, not a substitute for encrypted desktop storage or SQLite.
+- The checkpoint service and adapter are not yet wired into AgentRuntime. Runtime resume and crash recovery remain pending.
