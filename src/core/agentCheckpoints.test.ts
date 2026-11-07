@@ -58,3 +58,10 @@ describe("AgentCheckpointService", () => {
     expect((await repository.save(checkpoint({ sequence: 2, updatedAt: 200 }), null)).ok).toBe(false);
   });
 });
+  it("rejects non-JSON values, non-finite numbers, and prototype-sensitive keys", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    expect((await service.persist(checkpoint({ state: { value: Number.NaN } }))).ok).toBe(false);
+    expect((await service.persist(checkpoint({ state: { value: undefined } as unknown as AgentCheckpoint["state"] }))).ok).toBe(false);
+    expect((await service.persist(checkpoint({ state: JSON.parse('{"__proto__":{"polluted":true}}') }))).ok).toBe(false);
+  });
+
