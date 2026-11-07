@@ -52,10 +52,10 @@ Exit criteria: data survives restarts and can be exported without provider crede
 Exit criteria: the system can explain which memory records influenced a response and users can correct or delete them.
 
 ## Milestone 5 — Permissions and tool gateway
-- [ ] Implement default-deny permission service
-- [ ] Add tool registry and schema validation
-- [ ] Add audit events, timeout, cancellation, and output limits
-- [ ] Add approval UI
+- [x] Define permission service port and default-deny gateway behavior
+- [x] Add tool registry and input validation port
+- [x] Add audit events, timeout, cancellation, and input/output limits
+- [ ] Add approval UI and approval-resume flow
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
