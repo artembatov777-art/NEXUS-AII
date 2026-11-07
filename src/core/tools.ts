@@ -142,6 +142,10 @@ export class ToolGateway {
 
     const auditStarted = await this.writeAudit(tool.id, context, "started");
     if (!auditStarted.ok) return err("storage_failed", "Tool execution was blocked because the audit event could not be recorded.");
+    if (context.signal.aborted) {
+      await this.writeAudit(tool.id, context, "failed", "Cancelled before execution.");
+      return err("cancelled", "Tool execution was cancelled.");
+    }
 
     const controller = new AbortController();
     const onAbort = () => controller.abort();
@@ -167,7 +171,8 @@ export class ToolGateway {
         await this.writeAudit(tool.id, context, "failed", "Output exceeded 64 KB or was not serializable.");
         return err("tool_failed", "Tool output must be valid JSON and no larger than 64 KB.");
       }
-      await this.writeAudit(tool.id, context, "completed");
+      const auditCompleted = await this.writeAudit(tool.id, context, "completed");
+      if (!auditCompleted.ok) return err("storage_failed", "Tool completed, but its completion audit could not be recorded.");
       return result as Result<Output>;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Tool execution failed.";
@@ -181,14 +186,18 @@ export class ToolGateway {
     }
   }
 
-  private writeAudit(toolId: string, context: ToolExecutionContext, status: ToolAuditEvent["status"], detail?: string): Promise<Result<void>> {
-    return this.audit.record({
-      toolId,
-      runId: context.runId,
-      traceId: context.traceId,
-      status,
-      timestamp: this.clock.now(),
-      ...(detail ? { detail } : {})
-    });
+  private async writeAudit(toolId: string, context: ToolExecutionContext, status: ToolAuditEvent["status"], detail?: string): Promise<Result<void>> {
+    try {
+      return await this.audit.record({
+        toolId,
+        runId: context.runId,
+        traceId: context.traceId,
+        status,
+        timestamp: this.clock.now(),
+        ...(detail ? { detail } : {})
+      });
+    } catch {
+      return err("storage_failed", "Audit sink failed.");
+    }
   }
 }
