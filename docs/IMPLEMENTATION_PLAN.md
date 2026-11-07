@@ -16,10 +16,10 @@ The current draft PR #1 remains separate from this architecture work. Do not mer
 Exit criteria: module boundaries, dependency direction, and security defaults are documented.
 
 ## Milestone 1 — Core domain and application facade
-- [ ] Create domain types for IDs, messages, conversations, models, errors, and operation events
-- [ ] Create application command/query interfaces
+- [x] Create initial domain types for IDs, messages, conversations, models, errors, and operation events
+- [x] Create initial conversation service and repository port
 - [ ] Move UI away from direct infrastructure calls
-- [ ] Add unit test runner and baseline tests
+- [x] Add Vitest and baseline conversation service tests
 - [ ] Add lint/typecheck/test/build CI stages
 
 Exit criteria: application use cases can be tested without React, Tauri, network, or a real model.
