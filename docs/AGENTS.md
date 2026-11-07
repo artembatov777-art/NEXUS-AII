@@ -1,0 +1,53 @@
+# NEXUS AU — Agent System
+
+## Goal
+
+Agents are specialized task workers coordinated by a bounded orchestrator. They are not independent authorities and do not bypass user permissions.
+
+## Initial agent roles
+
+- **Main / Coordinator:** interprets the user request, delegates bounded subtasks, and combines results.
+- **Research:** gathers and summarizes source-grounded information.
+- **Coding:** inspects, edits, and tests code within an explicitly authorized workspace.
+- **Analyst:** evaluates data and documents.
+- **Writer:** drafts structured text and documentation.
+- **Planner:** converts goals into ordered tasks and acceptance criteria.
+- **Memory:** proposes memory updates and retrieves approved records.
+- **Browser:** interacts with explicitly permitted web resources.
+- **Security Reviewer:** checks proposed changes, permissions, and risky tool use.
+
+These are proposed roles, not claims that agents have already been implemented.
+
+## Agent contract
+
+Each agent definition should include:
+
+- Stable identifier and display name.
+- Purpose and system instructions.
+- Model/provider configuration.
+- Allowed tools and capabilities.
+- Input and output schemas.
+- Timeout and step budget.
+- Maximum delegation depth.
+- Cancellation behavior.
+- Logging and audit metadata.
+
+## Orchestration lifecycle
+
+1. Validate the user's request.
+2. Create a task with explicit scope and acceptance criteria.
+3. Select the minimum necessary agents.
+4. Provide only relevant context and approved tools.
+5. Execute within time, step, and budget limits.
+6. Validate outputs and collect evidence.
+7. Request user approval before sensitive actions.
+8. Return a concise result and execution summary.
+
+## Safety constraints
+
+- No unbounded agent loops or recursive delegation.
+- No permission escalation without user approval.
+- No secrets in prompts or logs unless strictly required by a secure provider flow.
+- Treat retrieved documents and tool output as untrusted input.
+- Make cancellation available.
+- Keep a trace of agent decisions and tool calls.
