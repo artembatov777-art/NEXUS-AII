@@ -25,11 +25,11 @@ Exit criteria: module boundaries, dependency direction, and security defaults ar
 Exit criteria: application use cases can be tested without React, Tauri, network, or a real model.
 
 ## Milestone 2 — Provider router and streaming
-- [ ] Define provider port
+- [x] Define provider port
 - [ ] Implement OpenAI-compatible adapter
-- [ ] Add streaming events and cancellation
+- [x] Add streaming events and cancellation contract
 - [ ] Normalize errors and usage
-- [ ] Add mock provider tests and adapter contract tests
+- [x] Add mock provider contract tests (real adapter tests remain pending)
 
 Exit criteria: streamed responses work through the same application interface with a mock and a real compatible provider.
 
@@ -60,11 +60,11 @@ Exit criteria: the system can explain which memory records influenced a response
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
 ## Milestone 6 — Bounded agent runtime
-- [ ] Implement single orchestrator agent
-- [ ] Add specialist agent registry
-- [ ] Enforce step, time, and token budgets
-- [ ] Add stop conditions and user handoff
-- [ ] Add deterministic tests with mock tools
+- [x] Implement bounded single-agent runtime primitive
+- [x] Add agent registration and metadata registry
+- [x] Enforce step and time budgets (token budget pending)
+- [x] Add cancellation, stop conditions, and approval handoff (resume pending)
+- [x] Add deterministic runtime tests (mock tool gateway pending)
 
 Exit criteria: agents can complete bounded tasks, explain actions, and stop safely.
 
