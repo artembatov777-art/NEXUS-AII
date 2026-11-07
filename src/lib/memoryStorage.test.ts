@@ -34,6 +34,8 @@ describe("LocalStorageMemoryRepository", () => {
 
     expect((await repository.save(first)).ok).toBe(true);
     expect((await repository.save(second)).ok).toBe(true);
+    const recent = await repository.list("all", 10);
+    expect(recent.ok && recent.value[0].id).toBe(second.id);
 
     const results = await repository.search("technical examples", "profile", 10);
     expect(results.ok).toBe(true);
