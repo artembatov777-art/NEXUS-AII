@@ -1,0 +1,106 @@
+import { useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { Bot, Check, ChevronDown, Command, Cpu, Menu, MessageSquare, Plus, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { sendMessage } from "./lib/ai";
+import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
+import type { ChatMessage, Conversation, ProviderSettings } from "./types";
+
+const makeId = () => crypto.randomUUID();
+const welcome: ChatMessage = {
+  id: "welcome",
+  role: "assistant",
+  content: "Welcome to NEXUS AU. Your workspace is ready. Configure an AI provider in settings, then start a conversation.",
+  createdAt: Date.now()
+};
+
+export default function App() {
+  const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [provider, setProvider] = useState<ProviderSettings>(loadProvider);
+  const [apiKey, setApiKey] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => { saveConversations(conversations); }, [conversations]);
+  useEffect(() => { saveProvider(provider); }, [provider]);
+  useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
+
+  const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
+  const messages = active?.messages ?? [welcome];
+
+  function newChat() {
+    const item: Conversation = { id: makeId(), title: "New conversation", messages: [welcome], updatedAt: Date.now() };
+    setConversations(current => [item, ...current]);
+    setActiveId(item.id);
+    setError("");
+  }
+  function updateMessages(id: string, next: ChatMessage[]) {
+    setConversations(current => current.map(c => c.id === id
+      ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
+      : c));
+  }
+  async function submit() {
+    const text = draft.trim();
+    if (!text || busy) return;
+    let target = active;
+    if (!target) {
+      target = { id: makeId(), title: text.slice(0, 36), messages: [welcome], updatedAt: Date.now() };
+      setConversations(current => [target!, ...current]);
+      setActiveId(target.id);
+    }
+    const userMessage: ChatMessage = { id: makeId(), role: "user", content: text, createdAt: Date.now() };
+    const next = [...target.messages.filter(m => m.id !== "welcome"), userMessage];
+    updateMessages(target.id, next);
+    setDraft("");
+    setBusy(true);
+    setError("");
+    try {
+      const answer = await sendMessage(provider, apiKey, next);
+      updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now() }]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function removeConversation(id: string) {
+    setConversations(current => current.filter(c => c.id !== id));
+    if (activeId === id) setActiveId(null);
+  }
+
+  return <div className="app-shell">
+    <aside className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
+      <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><X size={17}/></button></div>
+      <button className="new-chat" onClick={newChat}><Plus size={17}/> New conversation <span>⌘ K</span></button>
+      <div className="nav-label">WORKSPACE</div>
+      <button className="nav-item selected"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
+      <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
+      <div className="history-heading"><span>RECENT</span><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div>
+      <div className="history-list">
+        {conversations.map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
+        {conversations.length === 0 && <p className="empty-history">Your conversations will appear here.</p>}
+      </div>
+      <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => setSettingsOpen(true)}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
+    </aside>
+
+    <main className="main-panel">
+      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="model-pill"><span className="status-dot"/>{provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
+      <section className="chat-area">
+        <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><h1>{active?.title ?? "What are we building today?"}</h1><p>Your models, tools and ideas. Connected in one workspace.</p></div>
+        <div className="messages">
+          {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : "YOU"} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="message-content">{m.content}</div></div></div>)}
+          {busy && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">NEXUS</div><div className="typing"><i/><i/><i/> Connecting to provider…</div></div></div>}
+          {error && <div className="error-banner">{error}</div>}
+        </div>
+        {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
+        <div className="composer-wrap"><div className="composer"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is session-only and is not saved</span><button className="send-btn" disabled={!draft.trim() || busy} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+      </section>
+    </main>
+
+    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. Your API key stays in memory for this session only.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Enter API key (not stored)" autoComplete="off"/></label><div className="security-note"><ShieldCheck size={16}/> The key is sent to the Rust backend only when you submit a message. It is never written to local storage.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => setApiKey("")}>Clear key</button><button className="primary-btn" onClick={() => setSettingsOpen(false)}><Check size={15}/> Save settings</button></div></section></div>}
+  </div>;
+}
