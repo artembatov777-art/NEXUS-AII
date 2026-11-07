@@ -27,6 +27,62 @@ function tokenize(value: string): string[] {
   return value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+/**
+ * A deterministic lexical ranker inspired by information-retrieval patterns:
+ * inverse document frequency reduces the impact of common terms, while tags
+ * receive a modest boost. This is not semantic/vector search.
+ */
+function rankMemories(records: MemoryRecord[], query: string): MemoryRecord[] {
+  const terms = [...new Set(tokenize(query))];
+  if (terms.length === 0) return [];
+
+  const documents = records.map(record => ({
+    record,
+    content: new Set(tokenize(record.content)),
+    tags: new Set(record.tags.flatMap(tokenize)),
+    category: new Set(tokenize(record.category))
+  }));
+
+  const documentFrequency = new Map<string, number>();
+  for (const term of terms) {
+    documentFrequency.set(term, documents.filter(document =>
+      document.content.has(term) || document.tags.has(term) || document.category.has(term)
+    ).length);
+  }
+
+  return documents.map(document => {
+    let score = 0;
+    let matchedTerms = 0;
+    for (const term of terms) {
+      const contentMatch = document.content.has(term);
+      const tagMatch = document.tags.has(term);
+      const categoryMatch = document.category.has(term);
+      if (!contentMatch && !tagMatch && !categoryMatch) continue;
+      matchedTerms += 1;
+      const frequency = documentFrequency.get(term) ?? 0;
+      const inverseFrequency = Math.log(1 + (documents.length - frequency + 0.5) / (frequency + 0.5));
+      score += inverseFrequency * (
+        (contentMatch ? 1 : 0) +
+        (tagMatch ? 1.35 : 0) +
+        (categoryMatch ? 0.5 : 0)
+      );
+    }
+
+    const searchable = [document.record.content, document.record.category, ...document.record.tags]
+      .join(" ").toLocaleLowerCase();
+    if (searchable.includes(query.toLocaleLowerCase())) score += 1.5;
+    score += (matchedTerms / terms.length) * 0.25;
+    return { record: document.record, score, matchedTerms };
+  })
+    .filter(item => item.score > 0)
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.matchedTerms - a.matchedTerms ||
+      b.record.updatedAt - a.record.updatedAt
+    )
+    .map(item => item.record);
+}
+
 export class LocalStorageMemoryRepository implements MemoryRepository {
   constructor(
     private readonly storage: StorageLike,
@@ -45,25 +101,8 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
   async search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>> {
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
-
-    const normalized = query.trim().toLocaleLowerCase();
-    const terms = [...new Set(tokenize(normalized))];
-    const ranked = loaded.value
-      .filter(record => scope === "all" || record.scope === scope)
-      .map(record => {
-        const searchable = [record.content, record.category, ...record.tags].join(" ").toLocaleLowerCase();
-        const tokens = tokenize(searchable);
-        const matched = terms.filter(term => tokens.includes(term)).length;
-        const phraseBonus = searchable.includes(normalized) ? 3 : 0;
-        const score = matched * 2 + phraseBonus;
-        return { record, score };
-      })
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score || b.record.updatedAt - a.record.updatedAt)
-      .slice(0, limit)
-      .map(item => item.record);
-
-    return ok(ranked);
+    const scoped = loaded.value.filter(record => scope === "all" || record.scope === scope);
+    return ok(rankMemories(scoped, query.trim()).slice(0, limit));
   }
 
   async save(record: MemoryRecord): Promise<Result<void>> {
@@ -101,7 +140,7 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
       }
       return ok(parsed);
     } catch {
-      return err("storage_failed", "Could not read memory from local storage.", true);
+      return err("storage_failed", "Could not read local memory storage.", true);
     }
   }
 }
