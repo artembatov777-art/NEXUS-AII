@@ -65,3 +65,10 @@ describe("AgentCheckpointService", () => {
     expect((await service.persist(checkpoint({ state: JSON.parse('{"__proto__":{"polluted":true}}') }))).ok).toBe(false);
   });
 
+  it("rejects corrupted persisted checkpoint records", async () => {
+    const storage = new FakeStorage();
+    storage.values.set("nexus-au:agent-checkpoints:v1", JSON.stringify([{ ...checkpoint(), status: "mystery" }]));
+    const repository = new LocalStorageAgentCheckpointRepository(storage);
+    expect((await repository.get("run-1")).ok).toBe(false);
+  });
+
