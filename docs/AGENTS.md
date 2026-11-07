@@ -57,7 +57,7 @@ Each agent definition should include:
 
 The first provider-neutral runtime primitive is implemented in `src/core/agents.ts` with deterministic tests in `src/core/agents.test.ts`.
 
-Currently implemented: agent registration, metadata listing, preflight permission checks, explicit approval handoff event, cancellation, timeout signal, checkpoint/step limits, and output-size limits.
+Currently implemented: agent registration, metadata listing, preflight permission checks, explicit approval handoff event, cancellation, timeout signal, checkpoint/step limits, and output-size limits. An explicit checkpoint followed by a progress event with the same label counts as one logical step.
 
 Not implemented yet: approval resume, model-backed planning, tool gateway integration, specialist delegation, token budgets, persistent run history, and UI. The role list above remains a design proposal, not a set of working agents.
 
