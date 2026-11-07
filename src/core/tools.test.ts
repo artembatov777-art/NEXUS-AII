@@ -1,0 +1,104 @@
+import { describe, expect, it, vi } from "vitest";
+import { ToolGateway, type ToolExecutionContext } from "./tools";
+import { ok, err } from "./result";
+
+const context = (): ToolExecutionContext => ({
+  traceId: "trace-1",
+  runId: "run-1",
+  signal: new AbortController().signal
+});
+
+const definition = (execute = vi.fn().mockResolvedValue(ok({ answer: 42 }))) => ({
+  id: "sample",
+  version: "1.0.0",
+  description: "Sample test tool",
+  requiredPermissions: ["conversation:read"] as const,
+  risk: "low" as const,
+  timeoutMs: 2_000,
+  validateInput: (input: unknown) => typeof input === "object" && input !== null && "query" in input
+    ? ok(input as { query: string })
+    : err("validation", "Expected a query object."),
+  execute
+});
+
+const setup = (decision: "allow" | "deny" | "ask_user" = "allow") => {
+  const permissions = { authorize: vi.fn().mockResolvedValue(decision) };
+  const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+  const gateway = new ToolGateway(permissions, audit, { now: () => 123 });
+  return { gateway, permissions, audit };
+};
+
+describe("ToolGateway", () => {
+  it("registers tools and exposes metadata only", () => {
+    const { gateway } = setup();
+    expect(gateway.register(definition()).ok).toBe(true);
+    expect(gateway.list()).toHaveLength(1);
+    expect(gateway.list()[0]).not.toHaveProperty("execute");
+    expect(gateway.register(definition()).ok).toBe(false);
+  });
+
+  it("validates input before requesting permission", async () => {
+    const { gateway, permissions } = setup();
+    gateway.register(definition());
+    const result = await gateway.execute("sample", { wrong: true }, context(), "user-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(permissions.authorize).not.toHaveBeenCalled();
+  });
+
+  it("executes only after every permission is granted and audits lifecycle", async () => {
+    const { gateway, permissions, audit } = setup();
+    const tool = definition();
+    gateway.register(tool);
+    const result = await gateway.execute("sample", { query: "hello" }, context(), "user-1");
+    expect(result).toEqual(ok({ answer: 42 }));
+    expect(permissions.authorize).toHaveBeenCalledOnce();
+    expect(tool.execute).toHaveBeenCalledOnce();
+    expect(audit.record.mock.calls.map(call => call[0].status)).toEqual(["started", "completed"]);
+  });
+
+  it("fails closed when permission is denied or approval is needed", async () => {
+    for (const decision of ["deny", "ask_user"] as const) {
+      const { gateway, audit } = setup(decision);
+      const tool = definition();
+      gateway.register(tool);
+      const result = await gateway.execute("sample", { query: "hello" }, context(), "user-1");
+      expect(result).toMatchObject({ ok: false, error: { code: "permission_denied" } });
+      expect(tool.execute).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ status: "denied" }));
+    }
+  });
+
+  it("blocks execution if the audit start event cannot be persisted", async () => {
+    const { gateway, audit } = setup();
+    audit.record.mockResolvedValueOnce(err("storage_failed", "offline"));
+    const tool = definition();
+    gateway.register(tool);
+    const result = await gateway.execute("sample", { query: "hello" }, context(), "user-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
+    expect(tool.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized input and output", async () => {
+    const { gateway } = setup();
+    gateway.register(definition());
+    const largeInput = await gateway.execute("sample", { query: "x".repeat(70_000) }, context(), "user-1");
+    expect(largeInput).toMatchObject({ ok: false, error: { code: "validation" } });
+
+    const outputGateway = setup().gateway;
+    outputGateway.register(definition(vi.fn().mockResolvedValue(ok("x".repeat(70_000)))));
+    const largeOutput = await outputGateway.execute("sample", { query: "hello" }, context(), "user-1");
+    expect(largeOutput).toMatchObject({ ok: false, error: { code: "tool_failed" } });
+  });
+
+  it("does not run tools for pre-cancelled requests", async () => {
+    const { gateway, permissions } = setup();
+    const tool = definition();
+    gateway.register(tool);
+    const controller = new AbortController();
+    controller.abort();
+    const result = await gateway.execute("sample", { query: "hello" }, { ...context(), signal: controller.signal }, "user-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(permissions.authorize).not.toHaveBeenCalled();
+    expect(tool.execute).not.toHaveBeenCalled();
+  });
+});
