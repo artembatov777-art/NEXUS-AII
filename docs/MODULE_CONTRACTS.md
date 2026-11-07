@@ -236,7 +236,7 @@ Runtime guarantees and current limits:
 - Execution has cancellation, a timeout signal, a bounded step/checkpoint budget, and a 20,000-character per-output limit.
 - Agents receive no direct filesystem, shell, browser, or network APIs.
 - This is a single-agent execution primitive, not yet a planner, multi-agent orchestrator, or tool gateway.
-- Agent code must call `context.checkpoint(label)` before each meaningful unit of work. The runtime also counts progress events as steps.
+- Agent code must call `context.checkpoint(label)` before each meaningful unit of work. Progress events also consume a step unless they immediately report the same label as the preceding explicit checkpoint; that logical step is counted once.
 
 Future tool execution must go through a separate permission-enforcing Tool Gateway. Never pass raw host capabilities into an agent.
 
