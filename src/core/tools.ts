@@ -146,9 +146,11 @@ export class ToolGateway {
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     context.signal.addEventListener("abort", onAbort, { once: true });
-    const timeout = setTimeout(() => controller.abort(), tool.timeoutMs);
     let timedOut = false;
-    const timeoutMarker = setTimeout(() => { timedOut = true; }, tool.timeoutMs);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, tool.timeoutMs);
     try {
       const execution = tool.execute(validated.value, { ...context, signal: controller.signal });
       const timeoutResult = new Promise<never>((_, reject) => {
@@ -175,7 +177,6 @@ export class ToolGateway {
       return err(code, message, code === "timeout");
     } finally {
       clearTimeout(timeout);
-      clearTimeout(timeoutMarker);
       context.signal.removeEventListener("abort", onAbort);
     }
   }
