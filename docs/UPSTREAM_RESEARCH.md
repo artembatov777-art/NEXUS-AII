@@ -60,3 +60,25 @@ OpenHands is relevant as a reference for coding-agent execution environments, no
 2. Inspect Mem0 OSS retrieval internals and separate open-source SDK behavior from hosted/proprietary benchmark claims.
 3. Select one real RAG/document ingestion example from awesome-llm-apps and trace its dependencies, persistence, and tests.
 4. Compare OpenHands workspace isolation with a minimal Tauri/Rust sandbox boundary before any coding-agent tool is implemented.
+
+## Source-level comparison (additional inspection)
+
+### LangGraph.js checkpoint contract
+
+The inspected `libs/checkpoint/src/base.ts` defines versioned checkpoints with an ID, timestamp, channel values, channel versions, and versions-seen metadata. Its saver contract supports retrieving a checkpoint tuple, listing checkpoints, and persisting checkpoint state and pending writes. The package manifest inspected for `@langchain/langgraph-checkpoint` reports version 1.2.2, MIT, Node >=18, and a peer dependency on `@langchain/core`.
+
+**What NEXUS should take:** versioned snapshots, explicit thread/run identity, parent checkpoint linkage, deterministic ordering of pending writes, and a repository port for persistence.
+
+**What NEXUS should not copy yet:** the full Pregel execution engine or the whole LangGraph dependency tree. Our current runtime has no persisted run state; implement a small native checkpoint contract first, then compare an adapter prototype against LangGraph.js. This avoids coupling the application domain to a framework before we know the required semantics.
+
+### Mem0 retrieval implementation
+
+The inspected `mem0/utils/scoring.py` confirms that Mem0's hybrid ranker is not simply a weighted keyword counter. It combines a semantic score with normalized BM25 and an entity boost, applies a semantic threshold before combination, and can expose score details. Its current Python project manifest declares Python >=3.10 and dependencies including Qdrant, Pydantic, OpenAI, HTTPX, SQLAlchemy, and protobuf, with additional vector-store and model integrations as optional extras.
+
+**What NEXUS should take:** independent retrieval signals, explicit thresholds, score explanations, and a future hybrid ranking interface.
+
+**What NEXUS should not claim:** our new local ranker is not BM25 and does not provide embeddings or entity linking. It is a small offline lexical baseline. A future hybrid retriever should expose per-signal score details and keep embedding/vector services optional.
+
+### Adoption result
+
+No upstream runtime dependency was added in this iteration. The source inspection supports keeping NEXUS's TypeScript/Rust core independent while borrowing durable-checkpoint and hybrid-retrieval concepts at the contract level. This is an intentional engineering decision, not an incomplete package installation.
