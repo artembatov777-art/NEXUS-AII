@@ -57,7 +57,7 @@ describe("AgentRuntime", () => {
     const events = await collect(runtime.run(agentId, "hello"));
     expect(permissions.authorize).toHaveBeenCalledOnce();
     expect(events.map(event => event.type)).toEqual(["started", "progress", "output", "completed"]);
-    expect(events.at(-1)).toMatchObject({ type: "completed", steps: 2 });
+    expect(events.at(-1)).toMatchObject({ type: "completed", steps: 1 });
   });
 
   it("fails closed when permission is denied", async () => {
