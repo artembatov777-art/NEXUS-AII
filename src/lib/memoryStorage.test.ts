@@ -46,6 +46,27 @@ describe("LocalStorageMemoryRepository", () => {
     expect(remaining.ok && remaining.value.map(item => item.id)).toEqual([second.id]);
   });
 
+  it("boosts matching tags while reducing the influence of corpus-wide common terms", async () => {
+    const repository = new LocalStorageMemoryRepository(new FakeStorage());
+    const broad = record({
+      id: "broad" as MemoryRecord["id"],
+      content: "Interested in tools and software",
+      tags: ["general"],
+      updatedAt: 500
+    });
+    const specific = record({
+      id: "specific" as MemoryRecord["id"],
+      content: "A note about a project",
+      tags: ["typescript", "architecture"],
+      updatedAt: 100
+    });
+    await repository.save(broad);
+    await repository.save(specific);
+
+    const results = await repository.search("typescript architecture", "all", 10);
+    expect(results.ok && results.value[0].id).toBe(specific.id);
+  });
+
   it("does not silently accept corrupted stored data", async () => {
     const storage = new FakeStorage();
     storage.values.set("nexus-au:memory:v1", "{broken");
@@ -66,5 +87,12 @@ describe("LocalStorageMemoryRepository", () => {
     const results = await repository.search("architecture", "project", 10);
     expect(results.ok && results.value).toHaveLength(1);
     expect(results.ok && results.value[0].scope).toBe("project");
+  });
+
+  it("returns no results for punctuation-only queries", async () => {
+    const repository = new LocalStorageMemoryRepository(new FakeStorage());
+    await repository.save(record());
+    const results = await repository.search("!!! ...", "all", 10);
+    expect(results.ok && results.value).toEqual([]);
   });
 });
