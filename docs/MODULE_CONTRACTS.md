@@ -204,3 +204,38 @@ Events include traceId and runId where applicable. UI rendering must be driven b
 - Persisted records include schemaVersion.
 - Breaking changes require a migration and a note in CHANGELOG.
 - Prefer additive changes; avoid renaming serialized fields casually.
+
+
+## 10. Bounded agent runtime
+
+The first runtime implementation lives in `src/core/agents.ts`. It is provider-neutral and does not import UI, Tauri, model SDKs, or infrastructure adapters.
+
+```ts
+export interface AgentDefinition<Input = unknown> {
+  id: AgentId;
+  version: string;
+  name: string;
+  description: string;
+  requiredPermissions: AgentPermission[];
+  maxSteps: number;
+  timeoutMs: number;
+  execute(input: Input, context: AgentContext): AsyncIterable<AgentOutputEvent>;
+}
+
+export interface AgentContext {
+  runId: AgentRunId;
+  signal: AbortSignal;
+  checkpoint(label: string): void;
+}
+```
+
+Runtime guarantees and current limits:
+- Registration validates identity, version, step budget (1–100), and timeout (1–600 seconds).
+- Required permissions are checked before agent execution; errors fail closed.
+- `ask_user` emits a waiting-for-approval event and stops. Resuming an approval is not implemented yet.
+- Execution has cancellation, a timeout signal, a bounded step/checkpoint budget, and a 20,000-character per-output limit.
+- Agents receive no direct filesystem, shell, browser, or network APIs.
+- This is a single-agent execution primitive, not yet a planner, multi-agent orchestrator, or tool gateway.
+- Agent code must call `context.checkpoint(label)` before each meaningful unit of work. The runtime also counts progress events as steps.
+
+Future tool execution must go through a separate permission-enforcing Tool Gateway. Never pass raw host capabilities into an agent.
