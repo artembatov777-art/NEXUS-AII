@@ -23,6 +23,7 @@ export interface MemoryRecord {
 }
 
 export interface MemoryRepository {
+  list(scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
   search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
   save(record: MemoryRecord): Promise<Result<void>>;
   delete(id: MemoryId): Promise<Result<void>>;
@@ -90,6 +91,13 @@ export class MemoryService {
     const saved = await this.repository.save(record);
     if (!saved.ok) return saved;
     return ok(record);
+  }
+
+  async list(scope: MemoryScope = "all", limit = 50): Promise<Result<MemoryRecord[]>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return err("validation", "Memory list limit must be between 1 and 200.");
+    }
+    return this.repository.list(scope, limit);
   }
 
   async search(query: string, scope: MemoryScope = "all", limit = 10): Promise<Result<MemoryRecord[]>> {
