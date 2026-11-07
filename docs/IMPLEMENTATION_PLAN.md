@@ -10,7 +10,7 @@ The current draft PR #1 remains separate from this architecture work. Do not mer
 - [x] Create modular system design
 - [x] Define module contracts
 - [x] Add initial threat model and permission matrix (security implementation remains incomplete)
-- [ ] Add ADR process and changelog
+- [x] Establish ADR records and changelog
 - [ ] Review contracts with maintainers
 
 Exit criteria: module boundaries, dependency direction, and security defaults are documented.
