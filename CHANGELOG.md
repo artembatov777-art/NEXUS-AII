@@ -5,6 +5,9 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 ## Unreleased
 
 ### Added
+- Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
+- Built-in local workflow agent invokes a non-destructive preview tool only through the Tool Gateway; its UI explicitly states that no LLM or external system is involved.
+- Integration tests covering built-in agent approval, gateway invocation, audit events, persisted completion, and invalid input.
 - Provider-neutral core contracts for conversations, model streaming, memory, bounded agents, and tool execution.
 - User-confirmed memory records with provenance and deterministic local lexical retrieval.
 - Bounded agent runtime with permission checks, cancellation, timeout, step budgets, and output limits.
@@ -29,6 +32,8 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - No provider credentials, shell access, or unrestricted host capabilities were added.
 
 ### Known limitations
+- The built-in workflow agent is a deterministic demonstration, not a model-powered planner. The UI event feed is session-only; checkpoints persist in localStorage, but approval grants are ephemeral. Reopening the app requires fresh approval for waiting runs.
+- Browser preview checkpoint and audit storage remain tamperable and non-transactional; native secure persistence and idempotency are required before sensitive tools are enabled.
 - The resumable step-based agent runtime now has a browser-preview composition root, but it is not yet wired into the application UI. Approval grants are in-memory and require re-approval after restart.
 - LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.
 - SQLite migrations, OS credential vault, MCP, voice, native desktop verification, and hosted proxy remain pending.

@@ -60,11 +60,12 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Add LocalStorage preview audit adapter and explicit non-retryable outcome when completion audit fails
 - [ ] Replace preview audit storage with transactional native persistence and reconciliation
 - [x] Add core one-time, run/agent/permission-bound approval grants and resume validation
-- [ ] Add user-facing approval UI and durable native approval state
+- [x] Add user-facing approval queue with explicit one-time approve/reject actions (browser preview; native durable state remains pending)
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
 - [x] Add a host-identity-bound adapter from resumable agent steps to the permission-enforcing Tool Gateway
 - [x] Compose checkpoint, audit, gateway, bridge, approval authority, and resumable runtime in a fail-closed browser-preview composition root
-- [ ] Wire resumable runtime into the UI and add operation-level idempotency for side effects
+- [x] Wire resumable runtime into the Agent Control Center with start, cancel, resume, checkpoint history, and approval handoff
+- [ ] Add operation-level idempotency for side effects and replace browser preview persistence with transactional native storage
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
@@ -103,6 +104,17 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 - [ ] Deploy only after security review
 
 Exit criteria: public browser clients cannot use a shared secret anonymously or without quotas.
+
+## Phase I — Agent Control Center vertical slice (2026-11-08)
+
+- [x] Add a built-in local workflow agent with an explicit non-LLM/non-network description.
+- [x] Register its harmless preview tool through the Tool Gateway; keep tool permissions default-deny and the preview tool non-destructive.
+- [x] Add an integrated Agent Control Center with run input, progress/output feed, cancellation, approval queue, rejection, persisted checkpoint history, and continuation of interrupted runs.
+- [x] Add integration tests for approval, gateway routing, audit lifecycle, completed checkpoints, and invalid input.
+- [ ] Persist event output and approval grants durably; current approval grants are intentionally ephemeral and output feed is session-only.
+- [ ] Add editable agent definitions, agent version migration, token budgets, and exactly-once side-effect semantics.
+
+**Phase I exit status:** core bounded runtime, UI execution path, approval handoff, local tool gateway, audit events, and checkpoint history are integrated in browser preview. This is not yet production-grade agent autonomy or native desktop persistence.
 
 ## Engineering rules
 
