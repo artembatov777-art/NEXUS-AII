@@ -39,6 +39,14 @@ const makeRuntime = (service: AgentCheckpointService) => {
 };
 
 describe("ResumableAgentRuntime", () => {
+  it("replaces a registered definition with a validated new version", () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const runtime = makeRuntime(service);
+    expect(runtime.replace({ ...makeDefinition(), version: "1.1.0", maxSteps: 2 }).ok).toBe(true);
+    expect(runtime.list()[0]).toMatchObject({ version: "1.1.0", maxSteps: 2 });
+    expect(runtime.replace({ ...makeDefinition(), version: "1.2.0", maxSteps: 0 })).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("exposes a safe metadata-only registry without leaking executable functions", () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const runtime = makeRuntime(service);

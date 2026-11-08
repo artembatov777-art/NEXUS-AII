@@ -1,8 +1,8 @@
 import type { AgentId } from "../core/agents";
 import type { ResumableAgentDefinition } from "../core/resumableAgents";
 import { err, ok, type Result } from "../core/result";
+import { DEFAULT_AGENT_PROFILE, type AgentProfile } from "./agentProfile";
 
-/** Stable IDs are part of the persisted checkpoint contract. */
 export const BUILT_IN_AGENT_IDS = {
   localWorkflow: "nexus.local-workflow" as AgentId
 } as const;
@@ -31,7 +31,39 @@ function validatePreviewInput(input: unknown): Result<PreviewInput> {
   return ok({ task: input.task.trim() });
 }
 
-export function registerBuiltInAgentSuite(runtime: Pick<ReturnType<typeof import("./nexusRuntime").createNexusRuntime>, "agentRuntime" | "toolGateway">): Result<void> {
+export function createLocalWorkflowDefinition(profile: AgentProfile = DEFAULT_AGENT_PROFILE): ResumableAgentDefinition<string> {
+  return {
+    id: BUILT_IN_AGENT_IDS.localWorkflow,
+    version: "1." + profile.revision + ".0",
+    name: profile.name,
+    description: "Runs a bounded local workflow through the Tool Gateway. It does not call an LLM or access external systems.",
+    requiredPermissions: ["tool:execute"],
+    maxSteps: profile.maxSteps,
+    timeoutMs: profile.timeoutMs,
+    createState: task => {
+      if (typeof task !== "string" || !task.trim() || task.length > 1_000) throw new Error("Task must contain 1 to 1,000 characters.");
+      return { task: task.trim() } satisfies WorkflowState;
+    },
+    async step(state, context) {
+      const current = state as unknown as WorkflowState;
+      const result = await context.tools.execute<PreviewOutput>("workspace.preview", { task: current.task }, {
+        runId: context.runId, step: context.step, signal: context.signal
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      return {
+        state: { task: current.task, preview: result.value.preview },
+        done: true,
+        progress: "Prepared a local, non-destructive preview",
+        output: result.value.preview
+      };
+    }
+  };
+}
+
+export function registerBuiltInAgentSuite(
+  runtime: Pick<ReturnType<typeof import("./nexusRuntime").createNexusRuntime>, "agentRuntime" | "toolGateway">,
+  profile: AgentProfile = DEFAULT_AGENT_PROFILE
+): Result<void> {
   const tool = runtime.toolGateway.register<PreviewInput, PreviewOutput>({
     id: "workspace.preview",
     version: "1.0.0",
@@ -55,36 +87,5 @@ export function registerBuiltInAgentSuite(runtime: Pick<ReturnType<typeof import
     })
   });
   if (!tool.ok) return tool;
-
-  const definition: ResumableAgentDefinition<string> = {
-    id: BUILT_IN_AGENT_IDS.localWorkflow,
-    version: "1.0.0",
-    name: "Local workflow demo",
-    requiredPermissions: ["tool:execute"],
-    maxSteps: 3,
-    timeoutMs: 15_000,
-    createState: task => {
-      if (typeof task !== "string" || !task.trim() || task.length > 1_000) {
-        throw new Error("Task must contain 1 to 1,000 characters.");
-      }
-      return { task: task.trim() } satisfies WorkflowState;
-    },
-    async step(state, context) {
-      const current = state as unknown as WorkflowState;
-      const result = await context.tools.execute<PreviewOutput>(
-        "workspace.preview",
-        { task: current.task },
-        { runId: context.runId, step: context.step, signal: context.signal }
-      );
-      if (!result.ok) throw new Error(result.error.message);
-      return {
-        state: { task: current.task, preview: result.value.preview },
-        done: true,
-        progress: "Prepared a local, non-destructive preview",
-        output: result.value.preview
-      };
-    }
-  };
-
-  return runtime.agentRuntime.register(definition);
+  return runtime.agentRuntime.register(createLocalWorkflowDefinition(profile));
 }

@@ -51,3 +51,11 @@
 .agent-saved-output{margin-top:9px;border:1px solid #30394a;border-radius:7px;background:#0e141e;padding:8px}
 .agent-saved-output summary{cursor:pointer;color:#a99ad0;font-size:9px}
 .agent-saved-output pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b9c5d5;font:9px/1.6 'DM Sans';margin:8px 0 0}
+
+.agent-profile-input,.agent-profile-fields input{width:100%;background:#0d121b;border:1px solid #333c4e;border-radius:7px;padding:9px;color:#e9edf5;outline:0;font-size:11px}
+.agent-profile-input{margin:6px 0 10px}
+.agent-profile-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.agent-profile-fields label{font-size:9px;color:#aeb7c6}
+.agent-profile-fields input{display:block;margin-top:6px}
+.agent-profile-input:focus,.agent-profile-fields input:focus{border-color:#816bb7}
+@media(max-width:600px){.agent-profile-fields{grid-template-columns:1fr}}

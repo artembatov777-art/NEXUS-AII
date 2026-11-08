@@ -4,12 +4,13 @@ import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
 import { createBrowserNexusRuntime } from "../lib/nexusRuntime";
-import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, registerBuiltInAgentSuite } from "../lib/agentCatalog";
+import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
+import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
 
 const THREAD_ID = "nexus-agent-control-center";
 
 type RuntimeBundle = ReturnType<typeof createBrowserNexusRuntime>;
-type RuntimeState = { runtime: RuntimeBundle | null; error: string };
+type RuntimeState = { runtime: RuntimeBundle | null; error: string; profile: AgentProfile | null };
 type FeedItem = { id: number; tone: "normal" | "success" | "warning" | "error"; text: string };
 
 function taskFromCheckpoint(checkpoint: AgentCheckpoint): string {
@@ -40,18 +41,21 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
 export function AgentControlCenter({ onClose }: { onClose: () => void }) {
   const [runtimeState] = useState<RuntimeState>(() => {
     try {
+      const loadedProfile = loadAgentProfile(window.localStorage);
+      if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
       const runtime = createBrowserNexusRuntime("local-user", {
         authorizeAgent: async () => "ask_user",
         authorizeTool: async () => "deny"
       });
-      const registered = registerBuiltInAgentSuite(runtime);
+      const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
       if (!registered.ok) throw new Error(registered.error.message);
-      return { runtime, error: "" };
+      return { runtime, error: "", profile: loadedProfile.value };
     } catch (cause) {
-      return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime." };
+      return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
     }
   });
   const [task, setTask] = useState("");
+  const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -112,6 +116,27 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
       setActiveRunId(null);
       await refresh();
     }
+  }
+
+  function saveProfile() {
+    if (!runtime || busy) return;
+    if (checkpoints.some(item => item.status === "running" || item.status === "waiting_for_approval")) {
+      addFeed("Finish or reject active runs before changing the agent version.", "warning");
+      return;
+    }
+    const next: AgentProfile = { ...profile, name: profile.name.trim(), revision: profile.revision + 1, updatedAt: Date.now() };
+    const validation = validateAgentProfile(next);
+    if (validation) { addFeed(validation, "error"); return; }
+    const replaced = runtime.agentRuntime.replace(createLocalWorkflowDefinition(next));
+    if (!replaced.ok) { addFeed(replaced.error.message, "error"); return; }
+    const saved = saveAgentProfile(window.localStorage, next);
+    if (!saved.ok) {
+      runtime.agentRuntime.replace(createLocalWorkflowDefinition(profile));
+      addFeed(saved.error.message, "error");
+      return;
+    }
+    setProfile(next);
+    addFeed("Agent profile saved as version 1." + next.revision + ".0.", "success");
   }
 
   function startAgent() {
@@ -180,6 +205,18 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
             <div className="agent-form-footer"><span>{task.length}/1000 characters</span><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run agent</button></div>
             <div className="agent-disclaimer">This built-in agent is a deterministic integration demo, not an LLM agent. It creates a local preview only and has no external system access.</div>
+          </article>
+
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">AGENT CONFIGURATION</span><h3>Profile settings</h3></div><span className="agent-local-tag">V1.{profile.revision}.0</span></div>
+            <label className="agent-task-label" htmlFor="agent-name">Display name</label>
+            <input id="agent-name" className="agent-profile-input" value={profile.name} maxLength={80} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))}/>
+            <div className="agent-profile-fields">
+              <label>Maximum steps<input type="number" min={1} max={20} value={profile.maxSteps} onChange={event => setProfile(current => ({ ...current, maxSteps: Number(event.target.value) }))}/></label>
+              <label>Timeout (seconds)<input type="number" min={1} max={60} value={Math.round(profile.timeoutMs / 1_000)} onChange={event => setProfile(current => ({ ...current, timeoutMs: Number(event.target.value) * 1_000 }))}/></label>
+            </div>
+            <div className="agent-form-footer"><span>Permission requirement stays fixed: tool:execute</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={saveProfile}>Save profile</button></div>
+            <div className="agent-disclaimer">Changing the profile creates a new agent version. Finish or reject active runs first; older checkpoints cannot resume on a different version.</div>
           </article>
 
           <article className="agent-card">

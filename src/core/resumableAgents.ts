@@ -56,12 +56,28 @@ export class ResumableAgentRuntime {
   ) {}
 
   register<Input>(definition: ResumableAgentDefinition<Input>): Result<void> {
-    if (!definition.id.trim() || !definition.version.trim() || !definition.name.trim()) return err("validation", "Agent id, version, and name are required.");
     if (this.definitions.has(definition.id)) return err("validation", "Agent is already registered.");
-    if (!Number.isInteger(definition.maxSteps) || definition.maxSteps < 1 || definition.maxSteps > 100) return err("validation", "maxSteps must be from 1 to 100.");
-    if (!Number.isInteger(definition.timeoutMs) || definition.timeoutMs < 1_000 || definition.timeoutMs > 600_000) return err("validation", "timeoutMs must be from 1,000 to 600,000.");
+    const validation = this.validateDefinition(definition);
+    if (validation) return err("validation", validation);
     this.definitions.set(definition.id, definition as ResumableAgentDefinition<unknown>);
     return ok(undefined);
+  }
+
+  /** Replace a registered implementation after the host has checked for active runs. */
+  replace<Input>(definition: ResumableAgentDefinition<Input>): Result<void> {
+    if (!this.definitions.has(definition.id)) return err("validation", "Agent is not registered.");
+    const validation = this.validateDefinition(definition);
+    if (validation) return err("validation", validation);
+    this.definitions.set(definition.id, definition as ResumableAgentDefinition<unknown>);
+    return ok(undefined);
+  }
+
+  private validateDefinition(definition: ResumableAgentDefinition<unknown>): string | null {
+    if (!definition.id.trim() || !definition.version.trim() || !definition.name.trim()) return "Agent id, version, and name are required.";
+    if (!Number.isInteger(definition.maxSteps) || definition.maxSteps < 1 || definition.maxSteps > 100) return "maxSteps must be from 1 to 100.";
+    if (!Number.isInteger(definition.timeoutMs) || definition.timeoutMs < 1_000 || definition.timeoutMs > 600_000) return "timeoutMs must be from 1,000 to 600,000.";
+    if (!Array.isArray(definition.requiredPermissions) || definition.requiredPermissions.some(permission => !["memory:read", "conversation:read", "tool:execute"].includes(permission))) return "Agent permissions are invalid.";
+    return null;
   }
 
   list(): Array<Pick<ResumableAgentDefinition, "id" | "version" | "name" | "description" | "requiredPermissions" | "maxSteps" | "timeoutMs">> {
