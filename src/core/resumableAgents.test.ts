@@ -4,6 +4,9 @@ import { ResumableAgentRuntime, type ResumableAgentDefinition } from "./resumabl
 import type { AgentId, AgentRunId } from "./agents";
 import { LocalStorageAgentCheckpointRepository } from "../lib/agentCheckpointStorage";
 import type { StorageLike } from "../lib/memoryStorage";
+import { GatewayAgentToolExecutor } from "./agentToolBridge";
+import { ToolGateway } from "./tools";
+import { ok } from "./result";
 
 class FakeStorage implements StorageLike {
   values = new Map<string, string>();
