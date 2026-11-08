@@ -37,6 +37,12 @@ describe("document ingestion", () => {
     expect(chunks).toHaveLength(0);
   });
 
+  it("supports zero overlap without looping", () => {
+    const chunks = chunkDocumentText("a".repeat(700), 300, 0);
+    expect(chunks.length).toBe(3);
+    expect(chunks.every(chunk => chunk.length <= 300)).toBe(true);
+  });
+
   it("returns no chunks for empty input and validates chunk limits", () => {
     expect(chunkDocumentText(" \n\n ")).toEqual([]);
     expect(() => chunkDocumentText("text", 100, 10)).toThrow();

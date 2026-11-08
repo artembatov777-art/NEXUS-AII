@@ -47,8 +47,7 @@ export function chunkDocumentText(text: string, chunkCharacters = DEFAULTS.chunk
         remaining = remaining.slice(room);
       }
       push();
-      const overlap = chunks[chunks.length - 1]?.slice(-overlapCharacters) ?? "";
-      current = overlap;
+      current = overlapCharacters ? (chunks[chunks.length - 1]?.slice(-overlapCharacters) ?? "") : "";
     }
     if (remaining) {
       const candidate = current ? current + "\n\n" + remaining : remaining;
