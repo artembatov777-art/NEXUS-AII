@@ -278,3 +278,14 @@ The preview adapter in `src/lib/toolAuditStorage.ts` implements the injected `To
 - Production desktop storage must move to a native transactional repository before tools with real side effects are enabled.
 
 If a tool returns successfully but the completion audit cannot be persisted, the gateway returns `side_effect_completed_audit_failed`. Callers must not automatically retry: the side effect may already have happened. Reconciliation and operation-level idempotency remain required.
+
+
+## 14. Agent-to-tool bridge
+
+`src/core/agentToolBridge.ts` provides `GatewayAgentToolExecutor`, an adapter from resumable agent steps to the Tool Gateway.
+
+- The host composition root supplies the actor identity; an agent cannot select its own identity.
+- Each call is forwarded to `ToolGateway.execute`, so tool input validation, per-tool permissions, audit-start persistence, timeout, cancellation, and output limits remain enforced.
+- The step context exposes only the executor port, not raw host APIs or the gateway's internal registry.
+- If the host does not configure an executor, the runtime's default executor denies calls.
+- This bridge is a core integration seam; the desktop application composition root and user-facing approval flow are still pending.
