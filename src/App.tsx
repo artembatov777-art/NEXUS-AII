@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, Check, ChevronDown, Command, Cpu, Menu, MessageSquare, Plus, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { Bot, Check, ChevronDown, Command, Cpu, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap } from "lucide-react";
 import { sendMessage } from "./lib/ai";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { AgentControlCenter } from "./components/AgentControlCenter";
+import { ProjectPanel } from "./components/ProjectPanel";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
@@ -23,6 +24,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -83,11 +86,13 @@ export default function App() {
       <div className="nav-label">WORKSPACE</div>
       <button className="nav-item selected"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
       <button className="nav-item" onClick={() => setMemoryOpen(true)}><Sparkles size={17}/> Memory</button>
+      <button className="nav-item" onClick={() => setProjectsOpen(true)}><FolderKanban size={17}/> Projects</button>
       <button className="nav-item" onClick={() => setAgentsOpen(true)}><Bot size={17}/> Agents</button>
       <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
       <div className="history-heading"><span>RECENT</span><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div>
+      <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
-        {conversations.map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
+        {conversations.filter(c => (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
         {conversations.length === 0 && <p className="empty-history">Your conversations will appear here.</p>}
       </div>
       <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => setSettingsOpen(true)}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
@@ -108,6 +113,7 @@ export default function App() {
     </main>
 
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
+    {projectsOpen && <ProjectPanel onClose={() => setProjectsOpen(false)} />}
     {agentsOpen && <AgentControlCenter onClose={() => setAgentsOpen(false)} />}
     {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. Your API key stays in memory for this session only.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Enter API key (not stored)" autoComplete="off"/></label><div className="security-note"><ShieldCheck size={16}/> The key is sent to the Rust backend only when you submit a message. It is never written to local storage.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => setApiKey("")}>Clear key</button><button className="primary-btn" onClick={() => setSettingsOpen(false)}><Check size={15}/> Save settings</button></div></section></div>}
   </div>;
