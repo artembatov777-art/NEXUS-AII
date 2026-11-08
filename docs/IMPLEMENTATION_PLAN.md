@@ -135,3 +135,26 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - Never commit API keys, cookies, private tokens, or personal data.
 - Keep the desktop and web clients on shared application contracts.
 - Prefer a small working vertical slice over a broad set of fake features.
+
+
+## Phase II — Tools and Intelligence (in progress)
+
+Implemented on `feat/nexus-core-architecture`:
+- [x] Metadata-only Tool Registry with registration, removal, tag search, and gateway-backed execution.
+- [x] MCP JSON-RPC client core with initialization, tool discovery, response correlation, disconnect, and import through Tool Gateway.
+- [x] Reuse the existing Tool Gateway for permission checks, audit, cancellation, timeouts, and bounded JSON inputs/outputs.
+- [x] Agent Planner contract and plan validator for tool allowlists, bounded steps, JSON input size, and dependency ordering.
+- [x] Multi-agent coordination primitive with sequential delegation, explicit per-agent authorization, dependency result passing, and cancellation.
+- [x] In-memory trace sink and operation lifecycle helper with bounded retention and sensitive-attribute filtering.
+- [x] Compose Tool Registry and MCP client into the browser-preview runtime.
+- [x] Add unit tests for registry, MCP protocol flow, plan validation, coordination, tracing, and runtime composition.
+
+Still required before Phase II acceptance:
+- [ ] Add a real MCP transport adapter (stdio/native desktop and/or explicitly configured HTTP transport); current MCP client accepts an injected transport only.
+- [ ] Bind planner to the model router/provider and add model-backed planning tests; current planner consumes a provider-neutral planner port.
+- [ ] Connect multi-agent coordination to registered resumable agent definitions and define approval/resume semantics for delegated tasks.
+- [ ] Add persistent trace storage and a trace inspection UI; current trace sink is in-memory.
+- [ ] Add adversarial tests for malicious MCP metadata/results, transport disconnects, cancellation races, and planner output fuzzing.
+- [ ] Run and pass GitHub Actions for the latest phase commit.
+
+Phase II is **not complete** until these acceptance items are implemented and CI is green. No external MCP server or autonomous model planning is claimed as operational.

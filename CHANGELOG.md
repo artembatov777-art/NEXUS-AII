@@ -42,3 +42,5 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.
 - SQLite migrations, OS credential vault, MCP, voice, native desktop verification, and hosted proxy remain pending.
 - Dependency installation currently reports six npm audit advisories; each requires triage before upgrades.
+
+- Phase II work-in-progress: added ToolRegistry, transport-injected MCP JSON-RPC client, validated AgentPlanner port, sequential multi-agent coordinator, and in-memory trace observability; these are core primitives, not yet a fully connected autonomous workflow.
