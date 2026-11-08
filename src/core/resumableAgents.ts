@@ -2,6 +2,7 @@ import { AgentCheckpointService, type AgentCheckpoint, type JsonValue } from "./
 import type { AgentClock, AgentId, AgentIdFactory, AgentPermission, AgentPermissionService, AgentRunId } from "./agents";
 import { err, ok, type Result } from "./result";
 import type { AgentToolExecutor } from "./agentToolBridge";
+import type { AgentApprovalAuthority } from "./agentApprovals";
 
 export interface ResumableAgentContext {
   readonly runId: AgentRunId;
@@ -49,7 +50,8 @@ export class ResumableAgentRuntime {
     private readonly permissions: AgentPermissionService,
     private readonly ids: AgentIdFactory,
     private readonly clock: AgentClock,
-    private readonly tools: AgentToolExecutor = { execute: async () => err("permission_denied", "Agent tool execution is not configured.") }
+    private readonly tools: AgentToolExecutor = { execute: async () => err("permission_denied", "Agent tool execution is not configured.") },
+    private readonly approvals: AgentApprovalAuthority = { consume: async () => false }
   ) {}
 
   register<Input>(definition: ResumableAgentDefinition<Input>): Result<void> {
@@ -92,14 +94,18 @@ export class ResumableAgentRuntime {
     yield* this.execute(agent, ready, payload, auth.nextIndex, 0, signal);
   }
 
-  async *resume(runId: AgentRunId, approvedPermission: AgentPermission, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+  async *resume(runId: AgentRunId, approvalId: string, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
     const loaded = await this.checkpoints.get(runId);
     if (!loaded.ok || !loaded.value) { yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message }; return; }
     const cp = loaded.value;
     const agent = this.definitions.get(cp.agentId as AgentId);
-    if (!agent || cp.status !== "waiting_for_approval" || cp.pendingApproval?.permission !== approvedPermission || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
-      yield { type: "failed", runId, message: "Checkpoint is not awaiting this approval, or its agent is unavailable." }; return;
+    if (!agent || cp.status !== "waiting_for_approval" || !cp.pendingApproval || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
+      yield { type: "failed", runId, message: "Checkpoint is not awaiting approval, or its agent is unavailable." }; return;
     }
+    let approved = false;
+    try { approved = await this.approvals.consume({ approvalId, runId, agentId: agent.id, permission: cp.pendingApproval.permission as AgentPermission }); }
+    catch { approved = false; }
+    if (!approved) { yield { type: "failed", runId, message: "A valid one-time approval grant is required." }; return; }
     if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled." }; return; }
     const payload = cp.state.payload;
     const nextIndex = cp.state.permissionIndex + 1;
