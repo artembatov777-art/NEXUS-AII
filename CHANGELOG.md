@@ -40,7 +40,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Browser preview checkpoint and audit storage remain tamperable and non-transactional; native secure persistence and idempotency are required before sensitive tools are enabled.
 - The resumable step-based runtime is wired into the Agent Control Center in browser preview. Approval grants are in-memory and require re-approval after restart.
 - LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.
-- SQLite migrations, OS credential vault, MCP, voice, native desktop verification, and hosted proxy remain pending.
+- SQLite migrations, OS credential vault, native stdio MCP transport, voice, native desktop verification, and hosted proxy remain pending.
 - Dependency installation currently reports six npm audit advisories; each requires triage before upgrades.
 
-- Phase II work-in-progress: added ToolRegistry, transport-injected MCP JSON-RPC client, validated AgentPlanner port, sequential multi-agent coordinator, and in-memory trace observability; these are core primitives, not yet a fully connected autonomous workflow.
+- Phase II completed for browser-preview/runtime scope: added ToolRegistry, HTTP-capable MCP JSON-RPC client and schema adapter, ModelRouter-backed planning adapter with plan validation, resumable-agent coordinator with approval pause/resume, persistent local trace sink, Trace Inspector, and runtime factories. CI passed on 2026-11-08 with 22 test files and 77 tests. See IMPLEMENTATION_PLAN.md for explicit production boundaries.

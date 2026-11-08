@@ -137,24 +137,30 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - Prefer a small working vertical slice over a broad set of fake features.
 
 
-## Phase II — Tools and Intelligence (in progress)
+## Phase II — Tools and Intelligence (completed: browser-preview/runtime scope, 2026-11-09)
 
-Implemented on `feat/nexus-core-architecture`:
-- [x] Metadata-only Tool Registry with registration, removal, tag search, and gateway-backed execution.
-- [x] MCP JSON-RPC client core with initialization, tool discovery, response correlation, disconnect, and import through Tool Gateway.
-- [x] Reuse the existing Tool Gateway for permission checks, audit, cancellation, timeouts, and bounded JSON inputs/outputs.
-- [x] Agent Planner contract and plan validator for tool allowlists, bounded steps, JSON input size, and dependency ordering.
-- [x] Multi-agent coordination primitive with sequential delegation, explicit per-agent authorization, dependency result passing, and cancellation.
-- [x] In-memory trace sink and operation lifecycle helper with bounded retention and sensitive-attribute filtering.
-- [x] Compose Tool Registry and MCP client into the browser-preview runtime.
-- [x] Add unit tests for registry, MCP protocol flow, plan validation, coordination, tracing, and runtime composition.
+- [x] Tool Registry: validated registration, metadata-only discovery, tag search, unregister, and execution routed through Tool Gateway.
+- [x] MCP JSON-RPC client: initialize, tool discovery, response correlation, bounded metadata, import and disconnect.
+- [x] Browser HTTP MCP transport: explicit HTTP(S) endpoint, credentials omitted by default, redirects rejected, JSON and finite SSE responses supported.
+- [x] MCP input validation: bounded JSON-Schema subset; unsupported root keywords, unknown properties, missing required fields, and type mismatches fail closed.
+- [x] Safe tool execution: host actor validation, known permission scopes, input/output size limits, timeouts, cancellation, and audit lifecycle.
+- [x] Model-backed planning adapter: `ModelRouterPlanner` uses the provider-neutral `ModelRouter`; generated JSON is then checked by `AgentPlanner` against tool allowlists, budgets, dependencies, and serialized input limits.
+- [x] Multi-agent coordination: sequential delegated execution through registered resumable agents, dependency-result passing, explicit authorization, pause-on-approval and host-triggered resume.
+- [x] Persistent trace sink: bounded localStorage retention, validation and sensitive-attribute filtering.
+- [x] Trace Inspector added to Agent Control Center.
+- [x] Runtime composition exposes MCP HTTP connection/import helpers, optional model-backed planner creation, and coordinator creation.
+- [x] Security and integration tests added for tool registration/identity, MCP transport/schema, model planning, coordination resume, trace persistence, and runtime composition.
+- [x] GitHub Actions run 42524968186 passed: 22 test files, 77 tests, and production TypeScript/Vite build.
 
-Still required before Phase II acceptance:
-- [ ] Add a real MCP transport adapter (stdio/native desktop and/or explicitly configured HTTP transport); current MCP client accepts an injected transport only.
-- [ ] Bind planner to the model router/provider and add model-backed planning tests; current planner consumes a provider-neutral planner port.
-- [ ] Connect multi-agent coordination to registered resumable agent definitions and define approval/resume semantics for delegated tasks.
-- [ ] Add persistent trace storage and a trace inspection UI; current trace sink is in-memory.
-- [ ] Add adversarial tests for malicious MCP metadata/results, transport disconnects, cancellation races, and planner output fuzzing.
-- [ ] Run and pass GitHub Actions for the latest phase commit.
+**Phase II acceptance:** all six roadmap modules are implemented and connected through the runtime composition for the browser-preview scope. CI is green on commit `6971c040cf41ed71110f1a7c910c6dfca95f062d`.
 
-Phase II is **not complete** until these acceptance items are implemented and CI is green. No external MCP server or autonomous model planning is claimed as operational.
+### Phase II boundaries and production follow-up
+
+- MCP currently supports explicit HTTP(S) request/response transport. Native stdio transport, OAuth negotiation, server-initiated notifications, and long-lived streaming sessions are not implemented.
+- Browser MCP servers must permit the app origin through CORS. The HTTP adapter omits browser credentials and rejects redirects; endpoint access is user-configured.
+- The MCP schema adapter intentionally supports a bounded JSON-Schema subset and rejects unsupported root-level keywords. Server-side validation remains authoritative.
+- Model-backed planning is available when the host injects a configured `ModelRouter`. The existing local demo agent remains deterministic; the current preview does not silently convert it into an autonomous LLM agent.
+- Multi-agent pending approval state is in memory. A host must record the user's decision in its permission policy before calling coordinator resume. Durable coordination checkpoints are future hardening.
+- Browser trace/checkpoint/audit storage is localStorage, not encrypted, tamper-proof, or transactional. Native secure storage remains a later phase.
+- The Agent Control Center displays trace events, but a complete visual MCP server manager and plan-review/execution workflow are not part of this phase.
+

@@ -313,3 +313,13 @@ If a tool returns successfully but the completion audit cannot be persisted, the
 - `createBrowserNexusRuntime` is a convenience factory over `window.localStorage`; it is not a production security boundary.
 
 This composition root is intentionally a preview adapter. Browser localStorage is readable and mutable by same-origin scripts, has quota and multi-tab race limitations, and does not provide encryption or transactional durability. Do not enable sensitive real-world tools on this adapter. Before production desktop use, replace persistence with native transactional storage, add OS-backed credential storage, and connect approval decisions to a real UI.
+
+## 17. Tool Registry, MCP, planning, coordination, and traces
+
+- `ToolRegistry` is the metadata catalog; all actual invocations still pass through `ToolGateway`. Registry metadata never exposes executor functions.
+- `McpClient` accepts a transport port. `McpHttpTransport` is the browser HTTP(S) adapter; imported remote tools are wrapped as local Tool Gateway definitions and validated by `BasicMcpSchemaAdapter` unless a stricter host adapter is supplied.
+- MCP permission scopes and risk levels are supplied by the host during import. Do not infer permissions from untrusted server descriptions.
+- `ModelRouterPlanner` turns a selected provider response into a candidate plan. `AgentPlanner` treats that output as untrusted and validates tool IDs, dependency order, step count, and JSON input size before returning it.
+- `MultiAgentCoordinator` delegates each step through `ResumableAgentTaskExecutor`, asks the host policy for authorization, pauses on `ask_user`, and resumes only when the host policy subsequently allows the action. Pending coordinator state is in-memory.
+- `LocalStorageTraceSink` persists bounded trace events for preview use and strips sensitive-looking attribute keys. It is not a tamper-proof audit ledger.
+- The runtime composition root exposes `connectMcpHttp`, `discoverAndImportMcpTools`, `createPlanner`, `createCoordinator`, and `traceSink`. A model router is optional and must be explicitly injected.
