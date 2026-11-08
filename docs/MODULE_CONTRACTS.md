@@ -264,7 +264,7 @@ The checkpoint contract lives in `src/core/agentCheckpoints.ts`.
 - Creation time and run identity are immutable. Terminal states cannot be overwritten.
 - State is JSON data capped at 256 KB. Approval metadata is valid only while the run is waiting for approval.
 - The LocalStorage adapter is a browser-preview persistence adapter, not a substitute for encrypted desktop storage or SQLite.
-- The checkpoint service and adapter are not yet wired into AgentRuntime. Runtime resume and crash recovery remain pending.
+- The checkpoint service and preview adapter are wired into the serializable step runtime in `src/core/resumableAgents.ts`. This runtime can continue persisted JSON state after restart; the legacy async-generator AgentRuntime remains separate.
 
 
 ## 13. Tool audit persistence
@@ -289,3 +289,14 @@ If a tool returns successfully but the completion audit cannot be persisted, the
 - The step context exposes only the executor port, not raw host APIs or the gateway's internal registry.
 - If the host does not configure an executor, the runtime's default executor denies calls.
 - This bridge is a core integration seam; the desktop application composition root and user-facing approval flow are still pending.
+
+
+## 15. One-time agent approval grants
+
+`src/core/agentApprovals.ts` provides an in-memory host-side approval authority.
+
+- A grant can be issued only while the matching checkpoint is waiting for approval.
+- The grant is bound to one run, agent, and exact permission scope.
+- The runtime consumes the opaque grant once before transitioning the checkpoint back to running.
+- Forged, mismatched, replayed, or unknown grants fail closed.
+- Grants are intentionally ephemeral. After an app restart, the user must review and approve the still-pending request again; durable approval UI and native storage are not implemented.
