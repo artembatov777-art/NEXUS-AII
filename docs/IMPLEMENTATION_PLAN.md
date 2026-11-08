@@ -59,7 +59,7 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Add audit events, timeout, cancellation, and input/output limits\n- [x] Add LocalStorage preview audit adapter and explicit non-retryable outcome when completion audit fails\n- [ ] Replace preview audit storage with transactional native persistence and reconciliation
 - [ ] Add approval UI and approval-resume flow
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
-- [ ] Wire resumable runtime into the UI and Tool Gateway; add operation-level idempotency for side effects
+- [x] Add a host-identity-bound adapter from resumable agent steps to the permission-enforcing Tool Gateway\n- [ ] Wire resumable runtime into the UI and add operation-level idempotency for side effects
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
