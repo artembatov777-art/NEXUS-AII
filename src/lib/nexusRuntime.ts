@@ -1,0 +1,117 @@
+import type { AgentId, AgentPermission, AgentPermissionService, AgentRunId, AgentClock, AgentIdFactory } from "../core/agents";
+import { AgentCheckpointService } from "../core/agentCheckpoints";
+import { InMemoryAgentApprovalAuthority, type AgentApprovalIdFactory } from "../core/agentApprovals";
+import { GatewayAgentToolExecutor } from "../core/agentToolBridge";
+import { ResumableAgentRuntime } from "../core/resumableAgents";
+import { err, type Result } from "../core/result";
+import { ToolGateway, type PermissionRequest, type PermissionService, type ToolClock } from "../core/tools";
+import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage";
+import { LocalStorageToolAuditSink } from "./toolAuditStorage";
+import type { StorageLike } from "./memoryStorage";
+
+export interface NexusPermissionPolicy {
+  authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
+  authorizeTool(request: PermissionRequest): Promise<"allow" | "deny" | "ask_user">;
+}
+
+export interface NexusRuntimeIds extends AgentIdFactory, AgentApprovalIdFactory {}
+
+export interface NexusRuntimeOptions {
+  storage: StorageLike;
+  actorId: string;
+  permissions?: NexusPermissionPolicy;
+  ids?: NexusRuntimeIds;
+  clock?: AgentClock & ToolClock;
+}
+
+const denyByDefault: NexusPermissionPolicy = {
+  authorizeAgent: async () => "deny",
+  authorizeTool: async () => "deny"
+};
+
+const systemClock: AgentClock & ToolClock = { now: () => Date.now() };
+
+function createIds(): NexusRuntimeIds {
+  const randomId = (prefix: string) => {
+    if (!globalThis.crypto?.randomUUID) throw new Error("A cryptographically secure UUID source is required.");
+    return `${prefix}_${globalThis.crypto.randomUUID()}`;
+  };
+  return {
+    runId: () => randomId("run") as AgentRunId,
+    approvalId: () => randomId("approval")
+  };
+}
+
+class AgentPermissionAdapter implements AgentPermissionService {
+  constructor(private readonly policy: NexusPermissionPolicy) {}
+  authorize(input: { agentId: AgentId; permission: AgentPermission; reason: string }) {
+    return this.policy.authorizeAgent(input);
+  }
+}
+
+class ToolPermissionAdapter implements PermissionService {
+  constructor(private readonly policy: NexusPermissionPolicy) {}
+  authorize(request: PermissionRequest) {
+    return this.policy.authorizeTool(request);
+  }
+}
+
+/**
+ * Composition root for the local preview runtime.
+ *
+ * Checkpoints and audit events use localStorage and are not secure against
+ * same-origin script access, tampering, quota failures, or concurrent tabs.
+ * Production desktop composition must replace these adapters with native,
+ * access-controlled persistence before enabling sensitive tools.
+ */
+export function createNexusRuntime(options: NexusRuntimeOptions) {
+  if (!options.actorId.trim() || options.actorId.length > 160) {
+    throw new Error("A valid host actor identity is required.");
+  }
+  const ids = options.ids ?? createIds();
+  const clock = options.clock ?? systemClock;
+  const policy = options.permissions ?? denyByDefault;
+
+  const checkpointRepository = new LocalStorageAgentCheckpointRepository(options.storage);
+  const checkpointService = new AgentCheckpointService(checkpointRepository);
+  const auditSink = new LocalStorageToolAuditSink(options.storage);
+  const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
+  const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
+  const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
+  const agentRuntime = new ResumableAgentRuntime(
+    checkpointService,
+    new AgentPermissionAdapter(policy),
+    ids,
+    clock,
+    agentToolExecutor,
+    approvalAuthority
+  );
+
+  return {
+    agentRuntime,
+    toolGateway,
+    checkpointService,
+    checkpointRepository,
+    auditSink,
+    approvalAuthority,
+    /** Call only in response to an explicit user approval action in the UI. */
+    issueApproval: (runId: AgentRunId): Promise<Result<string>> => approvalAuthority.issue(runId)
+  };
+}
+
+export function createBrowserNexusRuntime(
+  actorId: string,
+  permissions?: NexusPermissionPolicy
+): ReturnType<typeof createNexusRuntime> {
+  if (typeof window === "undefined") throw new Error("Browser storage is unavailable in this environment.");
+  try {
+    return createNexusRuntime({ storage: window.localStorage, actorId, permissions });
+  } catch (cause) {
+    if (cause instanceof Error) throw cause;
+    throw new Error("Could not initialize the browser runtime.");
+  }
+}
+
+/** Utility for adapters that need an explicit fail-closed Result. */
+export const denyNexusOperation = (message = "No permission policy was configured."): Result<never> =>
+  err("permission_denied", message);
