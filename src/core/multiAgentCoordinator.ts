@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "./result";
+import type { Result } from "./result";
 import type { AgentId, AgentRunId } from "./agents";
 import type { AgentPlan } from "./agentPlanner";
 import type { TraceSink } from "./observability";
