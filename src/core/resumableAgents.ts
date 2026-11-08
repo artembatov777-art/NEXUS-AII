@@ -1,11 +1,13 @@
 import { AgentCheckpointService, type AgentCheckpoint, type JsonValue } from "./agentCheckpoints";
 import type { AgentClock, AgentId, AgentIdFactory, AgentPermission, AgentPermissionService, AgentRunId } from "./agents";
 import { err, ok, type Result } from "./result";
+import type { AgentToolExecutor } from "./agentToolBridge";
 
 export interface ResumableAgentContext {
   readonly runId: AgentRunId;
   readonly step: number;
   readonly signal: AbortSignal;
+  readonly tools: AgentToolExecutor;
 }
 export interface ResumableAgentStepResult {
   state: JsonValue;
@@ -46,7 +48,8 @@ export class ResumableAgentRuntime {
     private readonly checkpoints: AgentCheckpointService,
     private readonly permissions: AgentPermissionService,
     private readonly ids: AgentIdFactory,
-    private readonly clock: AgentClock
+    private readonly clock: AgentClock,
+    private readonly tools: AgentToolExecutor = { execute: async () => err("permission_denied", "Agent tool execution is not configured.") }
   ) {}
 
   register<Input>(definition: ResumableAgentDefinition<Input>): Result<void> {
@@ -179,7 +182,7 @@ export class ResumableAgentRuntime {
         if (controller.signal.aborted) throw new Error(timedOut ? "Agent timed out." : "Agent was cancelled.");
         const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort",
           () => reject(new Error(timedOut ? "Agent timed out." : "Agent was cancelled.")), { once: true }));
-        const result = await Promise.race([agent.step(state, { runId, step: steps + 1, signal: controller.signal }), abort]);
+        const result = await Promise.race([agent.step(state, { runId, step: steps + 1, signal: controller.signal, tools: this.tools }), abort]);
         if (result.output !== undefined && result.output.length > 20_000) throw new Error("Agent output exceeded the 20,000 character limit.");
         if (result.progress !== undefined && (!result.progress.trim() || result.progress.length > 200)) throw new Error("Progress labels must contain 1 to 200 characters.");
         state = result.state;
