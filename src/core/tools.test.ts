@@ -37,6 +37,15 @@ describe("ToolGateway", () => {
     expect(gateway.register(definition()).ok).toBe(false);
   });
 
+  it("rejects invalid permission scopes and missing host identity", async () => {
+    const { gateway } = setup();
+    const invalid = { ...definition(), requiredPermissions: ["root:access"] as never };
+    expect(gateway.register(invalid).ok).toBe(false);
+    gateway.register(definition());
+    const result = await gateway.execute("sample", { query: "hello" }, context(), " ");
+    expect(result).toMatchObject({ ok: false, error: { code: "permission_denied" } });
+  });
+
   it("validates input before requesting permission", async () => {
     const { gateway, permissions } = setup();
     gateway.register(definition());

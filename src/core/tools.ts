@@ -83,8 +83,15 @@ export class ToolGateway {
   ) {}
 
   register<Input, Output>(definition: ToolDefinition<Input, Output>): Result<void> {
-    if (!definition.id.trim() || !definition.version.trim() || !definition.description.trim()) {
-      return err("validation", "Tool id, version, and description are required.");
+    if (!/^[a-zA-Z0-9._-]{1,120}$/.test(definition.id) || !definition.version.trim() || !definition.description.trim() || definition.description.length > 500) {
+      return err("validation", "Tool id, version, and description are invalid or exceed their limits.");
+    }
+    const scopes: PermissionScope[] = ["conversation:read", "memory:read", "memory:write", "filesystem:read:selected", "filesystem:write:selected", "browser:read", "browser:interact", "github:read", "github:write", "shell:execute"];
+    if (!Array.isArray(definition.requiredPermissions) || definition.requiredPermissions.some(scope => !scopes.includes(scope))) {
+      return err("validation", "Tool permissions contain an unsupported scope.");
+    }
+    if (!["low", "medium", "high"].includes(definition.risk) || typeof definition.validateInput !== "function" || typeof definition.execute !== "function") {
+      return err("validation", "Tool risk, validator, or executor is invalid.");
     }
     if (this.tools.has(definition.id)) return err("validation", `Tool "${definition.id}" is already registered.`);
     if (!Number.isInteger(definition.timeoutMs) || definition.timeoutMs < 100 || definition.timeoutMs > 120_000) {
@@ -108,6 +115,7 @@ export class ToolGateway {
     context: ToolExecutionContext,
     actorId: string
   ): Promise<Result<Output>> {
+    if (typeof actorId !== "string" || !actorId.trim() || actorId.length > 160) return err("permission_denied", "A valid host actor identity is required.");
     const tool = this.tools.get(toolId);
     if (!tool) return err("tool_failed", `Tool "${toolId}" is not registered.`);
 
