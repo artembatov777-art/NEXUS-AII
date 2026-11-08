@@ -43,6 +43,9 @@ describe("createNexusRuntime", () => {
       clock: { now: () => 10_000 }
     });
 
+    expect(runtime.toolRegistry.search().ok).toBe(true);
+    expect(runtime.mcpClient).toBeDefined();
+
     const execute = vi.fn(async (_input: { query: string }, context: ToolExecutionContext) => {
       expect(context.runId).toBe(runId);
       return ok({ answer: "NEXUS" });

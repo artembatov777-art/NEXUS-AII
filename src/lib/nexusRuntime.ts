@@ -8,6 +8,8 @@ import { ToolGateway, type PermissionRequest, type PermissionService, type ToolC
 import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage";
 import { LocalStorageToolAuditSink } from "./toolAuditStorage";
 import type { StorageLike } from "./memoryStorage";
+import { ToolRegistry } from "../core/toolRegistry";
+import { McpClient } from "../core/mcpClient";
 
 export interface NexusPermissionPolicy {
   authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
@@ -76,6 +78,8 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const checkpointService = new AgentCheckpointService(checkpointRepository);
   const auditSink = new LocalStorageToolAuditSink(options.storage);
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
+  const toolRegistry = new ToolRegistry(toolGateway);
+  const mcpClient = new McpClient(toolRegistry, toolGateway);
   const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
   const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
   const agentRuntime = new ResumableAgentRuntime(
@@ -90,6 +94,8 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   return {
     agentRuntime,
     toolGateway,
+    toolRegistry,
+    mcpClient,
     checkpointService,
     checkpointRepository,
     auditSink,
