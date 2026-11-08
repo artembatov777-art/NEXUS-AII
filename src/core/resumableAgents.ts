@@ -20,6 +20,7 @@ export interface ResumableAgentDefinition<Input = unknown> {
   id: AgentId;
   version: string;
   name: string;
+  description?: string;
   requiredPermissions: AgentPermission[];
   maxSteps: number;
   timeoutMs: number;
@@ -61,6 +62,13 @@ export class ResumableAgentRuntime {
     if (!Number.isInteger(definition.timeoutMs) || definition.timeoutMs < 1_000 || definition.timeoutMs > 600_000) return err("validation", "timeoutMs must be from 1,000 to 600,000.");
     this.definitions.set(definition.id, definition as ResumableAgentDefinition<unknown>);
     return ok(undefined);
+  }
+
+  list(): Array<Pick<ResumableAgentDefinition, "id" | "version" | "name" | "description" | "requiredPermissions" | "maxSteps" | "timeoutMs">> {
+    return [...this.definitions.values()].map(({ createState: _createState, step: _step, ...metadata }) => ({
+      ...metadata,
+      requiredPermissions: [...metadata.requiredPermissions]
+    }));
   }
 
   async *start<Input>(agentId: AgentId, input: Input, threadId: string, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {

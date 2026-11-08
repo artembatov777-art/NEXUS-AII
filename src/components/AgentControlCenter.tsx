@@ -19,6 +19,13 @@ function taskFromCheckpoint(checkpoint: AgentCheckpoint): string {
   return payload.task;
 }
 
+function savedOutputFromCheckpoint(checkpoint: AgentCheckpoint): string | null {
+  if (!checkpoint.state || typeof checkpoint.state !== "object" || Array.isArray(checkpoint.state) || !("payload" in checkpoint.state)) return null;
+  const payload = checkpoint.state.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("preview" in payload) || typeof payload.preview !== "string") return null;
+  return payload.preview;
+}
+
 function statusLabel(status: AgentCheckpoint["status"]): string {
   const labels: Record<AgentCheckpoint["status"], string> = {
     running: "Running",
@@ -52,6 +59,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
+  const registeredAgents = runtime?.agentRuntime.list() ?? [];
 
   const addFeed = useCallback((text: string, tone: FeedItem["tone"] = "normal") => {
     feedSequence.current += 1;
@@ -161,12 +169,12 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
       <div className="agent-center-grid">
         <section className="agent-main-column">
           <article className="agent-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENT</span><h3>{BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">LOCAL DEMO</span></div>
-            <p>{BUILT_IN_AGENT_CATALOG[0].description}</p>
+            <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENTS · {registeredAgents.length}</span><h3>{registeredAgents[0]?.name ?? BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">LOCAL DEMO</span></div>
+            <p>{registeredAgents[0]?.description ?? BUILT_IN_AGENT_CATALOG[0].description}</p>
             <div className="agent-metadata">
-              <span><Activity size={13}/> {BUILT_IN_AGENT_CATALOG[0].maxSteps} max steps</span>
-              <span><Clock3 size={13}/> 15 sec limit</span>
-              <span><Shield size={13}/> Approval required</span>
+              <span><Activity size={13}/> {registeredAgents[0]?.maxSteps ?? 3} max steps</span>
+              <span><Clock3 size={13}/> {Math.round((registeredAgents[0]?.timeoutMs ?? 15_000) / 1_000)} sec limit</span>
+              <span><Shield size={13}/> {(registeredAgents[0]?.requiredPermissions ?? []).join(", ") || "No permissions"}</span>
             </div>
             <label className="agent-task-label" htmlFor="agent-task">Task input</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
@@ -198,6 +206,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
               <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
+                {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>View saved result</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
                 {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>Continue checkpoint</button>}
               </div>)}</div>}
           </article>

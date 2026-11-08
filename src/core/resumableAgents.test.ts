@@ -39,6 +39,16 @@ const makeRuntime = (service: AgentCheckpointService) => {
 };
 
 describe("ResumableAgentRuntime", () => {
+  it("exposes a safe metadata-only registry without leaking executable functions", () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const runtime = makeRuntime(service);
+    expect(runtime.list()).toEqual([{
+      id: agentId, version: "1.0.0", name: "Step agent", requiredPermissions: [], maxSteps: 5, timeoutMs: 5_000
+    }]);
+    expect(runtime.list()[0]).not.toHaveProperty("step");
+    expect(runtime.list()[0]).not.toHaveProperty("createState");
+  });
+
   it("continues after a consumer/process interruption without replaying completed steps", async () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const firstRuntime = makeRuntime(service);

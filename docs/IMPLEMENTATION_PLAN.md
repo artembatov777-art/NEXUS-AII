@@ -111,7 +111,7 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Register its harmless preview tool through the Tool Gateway; keep tool permissions default-deny and the preview tool non-destructive.
 - [x] Add an integrated Agent Control Center with run input, progress/output feed, cancellation, approval queue, rejection, persisted checkpoint history, and continuation of interrupted runs.
 - [x] Add integration tests for approval, gateway routing, audit lifecycle, completed checkpoints, and invalid input.
-- [ ] Persist event output and approval grants durably; current approval grants are intentionally ephemeral and output feed is session-only.
+- [ ] Persist the full event log and approval grants durably; checkpointed state/final preview persist, while the live event feed is session-only and grants are ephemeral.
 - [ ] Add editable agent definitions, agent version migration, token budgets, and exactly-once side-effect semantics.
 
 **Phase I exit status:** core bounded runtime, UI execution path, approval handoff, local tool gateway, audit events, and checkpoint history are integrated in browser preview. This is not yet production-grade agent autonomy or native desktop persistence.
