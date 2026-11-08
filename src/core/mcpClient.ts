@@ -1,3 +1,4 @@
+import { BasicMcpSchemaAdapter } from "./mcpSchemaAdapter";
 import { err, ok, type Result } from "./result";
 import type { PermissionScope, ToolDefinition, ToolGateway, ToolRisk } from "./tools";
 import type { ToolRegistry } from "./toolRegistry";
@@ -7,7 +8,7 @@ export interface McpTransport { request(request:McpRequest,signal:AbortSignal):P
 export interface McpServerConfig { id:string; name:string; version:string; transport:McpTransport; }
 export interface McpRemoteTool { name:string; description?:string; inputSchema?:unknown; }
 export interface McpToolAdapter { validate(serverId:string,tool:McpRemoteTool,input:unknown):Result<unknown>; }
-export interface McpImportedToolOptions { permissions:PermissionScope[]; risk:ToolRisk; timeoutMs:number; adapter:McpToolAdapter; }
+export interface McpImportedToolOptions { permissions:PermissionScope[]; risk:ToolRisk; timeoutMs:number; adapter?:McpToolAdapter; }
 const validId=(value:string)=>/^[a-zA-Z0-9._-]{1,80}$/.test(value);
 export class McpClient {
  private sequence=0; private readonly servers=new Map<string,McpServerConfig>();
@@ -29,13 +30,20 @@ export class McpClient {
  importTool(serverId:string,tool:McpRemoteTool,options:McpImportedToolOptions):Result<void>{
   if(!this.servers.has(serverId)||!validId(tool.name))return err("validation","MCP server or tool is invalid.");
   const id=`mcp.${serverId}.${tool.name}`;
+  const adapter=options.adapter??new BasicMcpSchemaAdapter();
   const definition:ToolDefinition<unknown,unknown>={id,version:"mcp-1",description:(tool.description||`MCP tool ${tool.name}`).slice(0,500),requiredPermissions:[...options.permissions],risk:options.risk,timeoutMs:options.timeoutMs,
-   validateInput:input=>options.adapter.validate(serverId,tool,input),
+   validateInput:input=>adapter.validate(serverId,tool,input),
    execute:async(input,context)=>{const server=this.servers.get(serverId);if(!server)return err("provider_unavailable","MCP server disconnected.");
     const response=await this.rpc(server,"tools/call",{name:tool.name,arguments:input},context.signal);if(!response.ok)return response;
     const payload=response.value as {isError?:unknown};if(payload?.isError===true)return err("tool_failed","MCP tool reported an execution error.");return ok(payload);}
   };
   const registered=this.registry.register(definition,"mcp",["mcp",serverId]);return registered.ok?ok(undefined):registered;
+ }
+ async discoverAndImport(serverId:string,signal:AbortSignal,defaults:{permissions:PermissionScope[];risk:ToolRisk;timeoutMs:number}):Promise<Result<{discovered:number;imported:string[];rejected:Array<{name:string;reason:string}>}>>{
+  const listed=await this.listTools(serverId,signal);if(!listed.ok)return listed;
+  const imported:string[]=[],rejected:Array<{name:string;reason:string}>=[];
+  for(const tool of listed.value){const result=this.importTool(serverId,tool,{...defaults});if(result.ok)imported.push(tool.name);else rejected.push({name:tool.name,reason:result.error.message});}
+  return ok({discovered:listed.value.length,imported,rejected});
  }
  async disconnect(serverId:string):Promise<void>{const server=this.servers.get(serverId);if(!server)return;this.servers.delete(serverId);await server.transport.close?.();}
  private async rpc(server:McpServerConfig,method:string,params:unknown,signal:AbortSignal):Promise<Result<unknown>>{

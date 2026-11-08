@@ -82,6 +82,10 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>) {
     for await (const event of events) {
+      if (runtime) {
+        const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
+        await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
+      }
       if (event.type === "started") {
         setActiveRunId(event.runId);
         addFeed("Agent run started: " + event.runId);
