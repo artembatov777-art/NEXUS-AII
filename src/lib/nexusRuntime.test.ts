@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ok } from "../core/result";
 import type { AgentId, AgentRunId } from "../core/agents";
-import type { JsonValue } from "../core/agentCheckpoints";
 import type { ResumableAgentDefinition } from "../core/resumableAgents";
 import type { ToolExecutionContext } from "../core/tools";
 import type { StorageLike } from "./memoryStorage";
