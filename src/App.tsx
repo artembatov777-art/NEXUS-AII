@@ -12,6 +12,8 @@ import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/pr
 import { KnowledgeRetrievalService } from "./core/knowledge";
 import { LocalStorageProjectRepository } from "./lib/projectStorage";
 import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
+import { MemoryService, type MemoryId } from "./core/memory";
+import { LocalStorageMemoryRepository } from "./lib/memoryStorage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 const makeId = () => crypto.randomUUID();
@@ -47,6 +49,11 @@ export default function App() {
   ), []);
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
     new LocalStorageKnowledgeRepository(window.localStorage)
+  ), []);
+  const memoryService = useMemo(() => new MemoryService(
+    new LocalStorageMemoryRepository(window.localStorage),
+    { memoryId: () => crypto.randomUUID() as MemoryId },
+    { now: () => Date.now() }
   ), []);
   async function refreshProjects() {
     const result = await projectService.list();
@@ -92,13 +99,20 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      let knowledgeContext = "";
+      const contextParts: string[] = [];
+      const remembered = await memoryService.search(text, "profile", 5);
+      if (!remembered.ok) throw new Error(`Could not retrieve saved memory: ${remembered.error.message}`);
+      if (remembered.value.length) {
+        contextParts.push("Relevant user-approved memories:\\n" + remembered.value.map((item, index) =>
+          `[Memory ${index + 1}: ${item.category}; source: ${item.source.label}]\\n${item.content}`
+        ).join("\\n\\n"));
+      }
       if (selectedProjectId) {
         const retrieved = await knowledgeService.retrieve(text, selectedProjectId, 6);
         if (!retrieved.ok) throw new Error(`Could not retrieve project knowledge: ${retrieved.error.message}`);
-        knowledgeContext = retrieved.value.context;
+        if (retrieved.value.context) contextParts.push("Selected project knowledge:\\n" + retrieved.value.context);
       }
-      const answer = await sendMessage(provider, apiKey, next, knowledgeContext);
+      const answer = await sendMessage(provider, apiKey, next, contextParts.join("\\n\\n"));
       updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now() }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
