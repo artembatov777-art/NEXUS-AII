@@ -6,6 +6,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 
 ### Added
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
+- Resumable agent registry exposes metadata-only descriptors, and the Control Center displays registered agent limits plus checkpointed final preview output.
 - Built-in local workflow agent invokes a non-destructive preview tool only through the Tool Gateway; its UI explicitly states that no LLM or external system is involved.
 - Integration tests covering built-in agent approval, gateway invocation, audit events, persisted completion, and invalid input.
 - Provider-neutral core contracts for conversations, model streaming, memory, bounded agents, and tool execution.
