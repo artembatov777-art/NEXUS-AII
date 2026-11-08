@@ -125,6 +125,29 @@ export class ResumableAgentRuntime {
     yield* this.execute(agent, ready, payload, auth.nextIndex, signal);
   }
 
+  /** Claims an interrupted running checkpoint with CAS, then continues from its saved state. */
+  async *continue(runId: AgentRunId, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+    const loaded = await this.checkpoints.get(runId);
+    if (!loaded.ok || !loaded.value) {
+      yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message };
+      return;
+    }
+    const cp = loaded.value;
+    const agent = this.definitions.get(cp.agentId as AgentId);
+    if (!agent || cp.status !== "running" || !isStoredAgentState(cp.state)) {
+      yield { type: "failed", runId, message: "Only a running checkpoint with a registered agent can be continued." };
+      return;
+    }
+    if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled." }; return; }
+    const claimed: AgentCheckpoint = { ...cp, sequence: cp.sequence + 1, updatedAt: this.clock.now() };
+    const saved = await this.checkpoints.persist(claimed);
+    if (!saved.ok) {
+      yield { type: "failed", runId, message: "Checkpoint could not be claimed; another worker may already be continuing it." };
+      return;
+    }
+    yield* this.execute(agent, claimed, cp.state.payload, cp.state.permissionIndex, signal);
+  }
+
   private async authorizeRemaining(agent: ResumableAgentDefinition<unknown>, startIndex: number):
     Promise<{ kind: "allowed"; nextIndex: number } | { kind: "approval"; permission: AgentPermission; nextIndex: number } | { kind: "denied" }> {
     for (let index = startIndex; index < agent.requiredPermissions.length; index += 1) {
