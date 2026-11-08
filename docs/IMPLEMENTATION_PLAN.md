@@ -56,7 +56,7 @@ Exit criteria: the system can explain which memory records influenced a response
 ## Milestone 5 — Permissions and tool gateway
 - [x] Define permission service port and default-deny gateway behavior
 - [x] Add tool registry and input validation port
-- [x] Add audit events, timeout, cancellation, and input/output limits
+- [x] Add audit events, timeout, cancellation, and input/output limits\n- [x] Add LocalStorage preview audit adapter and explicit non-retryable outcome when completion audit fails\n- [ ] Replace preview audit storage with transactional native persistence and reconciliation
 - [ ] Add approval UI and approval-resume flow
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
 - [ ] Wire resumable runtime into the UI and Tool Gateway; add operation-level idempotency for side effects
