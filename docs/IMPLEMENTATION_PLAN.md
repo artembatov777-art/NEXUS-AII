@@ -173,13 +173,17 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Add project domain service and local project metadata repository.
 - [x] Add memory revision API preserving original creation time and provenance.
 - [x] Compose memory, retrieval, project, and knowledge services through the runtime.
+- [x] Add bounded TXT/Markdown ingestion, paragraph-aware chunking, provenance, and project-scoped removal.
+- [x] Add Knowledge Base UI for import, search, source inspection, document listing, and deletion.
+- [x] Add Memory UI controls to edit content, category, scope, tags, and provenance, or delete records.
+- [x] Connect relevant user-approved profile memories and selected-project knowledge to native chat requests as bounded context.
+- [x] Add explicit project selection in chat; retrieval is restricted to that selected project.
 - [ ] Configure and ship a real embedding provider and durable vector index.
-- [ ] Add document ingestion (PDF/DOCX/MD/TXT), parsing, chunking, deduplication, and re-index lifecycle.
-- [ ] Connect retrieved memory/knowledge context and citations to the actual chat request/response pipeline.
-- [ ] Add UI to inspect/edit/delete memory provenance and manage knowledge documents.
-- [ ] Add cross-project context controls and project-level permission boundaries.
+- [ ] Add PDF/DOCX parsing and document deduplication/re-index lifecycle.
+- [ ] Add project-bound memory ownership and permission policies; current project separation is repository/query scoping, not a security boundary.
+- [ ] Render returned source citations as structured, inspectable chat references.
 
-**Current boundary:** semantic retrieval is a provider-neutral extension point, not an enabled embedding model. The default browser runtime falls back to lexical retrieval. Knowledge chunks can be stored/retrieved by project, but no document parser/import UI is shipped yet. Do not describe this as production RAG until ingestion, model integration, and citation display are connected.
+**Current boundary:** the browser runtime uses lexical retrieval; embedding/vector ports are extension points, not a configured semantic search engine. Imports are TXT/Markdown only. Retrieved context is sent only through the native Tauri chat path; browser preview still returns its offline-preview message. Project filtering prevents accidental cross-project retrieval in the current UI, but localStorage is not a security boundary and does not enforce project permissions. This phase must remain marked in progress until the remaining acceptance items are implemented and tested.
 
 ## Phase IV — Full application (in progress)
 
