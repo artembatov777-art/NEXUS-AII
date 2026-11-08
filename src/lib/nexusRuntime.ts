@@ -24,6 +24,7 @@ import { ProjectService, type ProjectId } from "../core/projects";
 import { LocalStorageMemoryRepository } from "./memoryStorage";
 import { LocalStorageProjectRepository } from "./projectStorage";
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
+import { DocumentIngestionService } from "../core/documentIngestion";
 
 export interface NexusPermissionPolicy {
   authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
@@ -103,6 +104,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const projectService = new ProjectService(projectRepository, () => ids.runId().replace("run_", "project_") as ProjectId, clock.now);
   const knowledgeRepository = new LocalStorageKnowledgeRepository(options.storage);
   const knowledgeService = new KnowledgeRetrievalService(knowledgeRepository);
+  const documentIngestionService = new DocumentIngestionService(knowledgeRepository);
   const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
   const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
   const agentRuntime = new ResumableAgentRuntime(
@@ -125,6 +127,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     projectService,
     knowledgeRepository,
     knowledgeService,
+    documentIngestionService,
     connectMcpHttp: (input: { id: string; name: string; version: string; endpoint: string }, signal: AbortSignal) => mcpClient.connect({ ...input, transport: new McpHttpTransport({ endpoint: input.endpoint }) }, signal),
     discoverAndImportMcpTools: (serverId: string, signal: AbortSignal, defaults: { permissions: PermissionScope[]; risk: ToolRisk; timeoutMs: number }) => mcpClient.discoverAndImport(serverId, signal, defaults),
     createPlanner: (providerId: string, model: string) => options.models
