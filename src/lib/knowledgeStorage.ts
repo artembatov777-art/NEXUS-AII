@@ -3,7 +3,7 @@ import { err, ok, type Result } from "../core/result";
 import type { StorageLike } from "./memoryStorage";
 const KEY="nexus-au:knowledge:v1";
 function valid(value:unknown):value is KnowledgeChunk {if(!value||typeof value!=="object")return false;const c=value as Partial<KnowledgeChunk>;return typeof c.id==="string"&&typeof c.documentId==="string"&&typeof c.projectId==="string"&&typeof c.text==="string"&&typeof c.sourceLabel==="string"&&c.text.length<=12000;}
-const terms=(s:string)=>s.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[];
+const terms=(s:string):string[]=>Array.from(s.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[]);
 export class LocalStorageKnowledgeRepository implements KnowledgeRepository{
  constructor(private readonly storage:StorageLike,private readonly key=KEY){}
  async add(chunks:KnowledgeChunk[]):Promise<Result<void>>{if(chunks.length>500||!chunks.every(valid))return err("validation","Knowledge chunks are invalid or exceed the import limit.");const current=this.read();if(!current.ok)return current;try{const ids=new Set(chunks.map(c=>c.id));this.storage.setItem(this.key,JSON.stringify([...current.value.filter(c=>!ids.has(c.id)),...chunks]));return ok(undefined);}catch{return err("storage_failed","Could not store knowledge chunks.",true);}}
