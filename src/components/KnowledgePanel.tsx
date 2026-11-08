@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, FileText, Search, Upload, X } from "lucide-react";
+import { BookOpen, FileText, Search, Upload, X, Trash2 } from "lucide-react";
 import { DocumentIngestionService } from "../core/documentIngestion";
 import { KnowledgeRetrievalService, type KnowledgeCitation } from "../core/knowledge";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
-import { LocalStorageKnowledgeRepository } from "../lib/knowledgeStorage";
+import { LocalStorageKnowledgeRepository, type KnowledgeDocumentSummary } from "../lib/knowledgeStorage";
 import { LocalStorageProjectRepository } from "../lib/projectStorage";
 
 export function KnowledgePanel({ onClose }: { onClose: () => void }) {
@@ -16,6 +16,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const ingestion = useMemo(() => new DocumentIngestionService(repository), [repository]);
   const retrieval = useMemo(() => new KnowledgeRetrievalService(repository), [repository]);
   const [items, setItems] = useState<WorkspaceProject[]>([]);
+  const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [projectId, setProjectId] = useState("");
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("");
@@ -32,6 +33,28 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       } else setError(result.error.message);
     });
   }, [projects]);
+
+  async function refreshDocuments(targetProjectId = projectId) {
+    if (!targetProjectId) { setDocuments([]); return; }
+    const result = await repository.listDocuments(targetProjectId);
+    if (result.ok) setDocuments(result.value);
+    else setError(result.error.message);
+  }
+
+  useEffect(() => { void refreshDocuments(); }, [projectId, repository]);
+
+  async function removeDocument(documentId: string) {
+    if (!projectId || working) return;
+    setWorking(true); setError(""); setStatus("");
+    const result = await ingestion.remove(documentId, projectId);
+    if (!result.ok) setError(result.error.message);
+    else {
+      setStatus("Document removed from this project's knowledge base.");
+      await refreshDocuments(projectId);
+      setAnswer(""); setCitations([]);
+    }
+    setWorking(false);
+  }
 
   async function importFile(file?: File) {
     if (!file || !projectId || working) return;
@@ -50,7 +73,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         mediaType, content
       });
       if (!result.ok) setError(result.error.message);
-      else setStatus(`Imported ${result.value.fileName}: ${result.value.chunkCount} searchable chunks (${result.value.characterCount.toLocaleString()} characters).`);
+      else { setStatus(`Imported ${result.value.fileName}: ${result.value.chunkCount} searchable chunks (${result.value.characterCount.toLocaleString()} characters).`); await refreshDocuments(projectId); }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not read this file.");
     } finally { setWorking(false); }
@@ -92,10 +115,17 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
           <button className="primary-btn" disabled={!query.trim() || working} onClick={() => void searchKnowledge()}><Search size={14}/> Search</button></div>
         </div>
       </>}
+      {documents.length > 0 && <div className="knowledge-documents">
+        <div className="knowledge-documents-heading"><strong>Project documents</strong><span>{documents.length} files</span></div>
+        {documents.map(document => <div className="knowledge-document" key={document.documentId}>
+          <div><FileText size={14}/><span><strong>{document.fileName}</strong><small>{document.chunkCount} chunks · {document.characterCount.toLocaleString()} characters</small></span></div>
+          <button className="icon-btn" disabled={working} onClick={() => void removeDocument(document.documentId)} aria-label={"Remove " + document.fileName}><Trash2 size={14}/></button>
+        </div>)}
+      </div>}
       {status && <div className="knowledge-status">{status}</div>}
       {error && <div className="error-banner">{error}</div>}
       {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
-      <footer className="project-footnote">Stored locally in this browser profile. Imports are currently limited to .txt and .md; retrieved text is a preview and is not yet automatically injected into chat prompts.</footer>
+      <footer className="project-footnote">Stored locally in this browser profile. Imports are limited to .txt and .md. Select the same project in the chat workspace to use retrieved passages as model context.</footer>
     </section>
   </div>;
 }
