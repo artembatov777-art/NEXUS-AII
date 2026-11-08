@@ -8,7 +8,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Provider-neutral core contracts for conversations, model streaming, memory, bounded agents, and tool execution.
 - User-confirmed memory records with provenance and deterministic local lexical retrieval.
 - Bounded agent runtime with permission checks, cancellation, timeout, step budgets, and output limits.
-- Permission-enforcing Tool Gateway with input/output limits and audit lifecycle port.\n- LocalStorage preview audit sink with bounded append/list operations and stored-record validation.\n- Explicit non-retryable error when a tool side effect completes but its completion audit cannot be persisted.
+- Permission-enforcing Tool Gateway with input/output limits and audit lifecycle port.\n- LocalStorage preview audit sink with bounded append/list operations and stored-record validation.\n- Explicit non-retryable error when a tool side effect completes but its completion audit cannot be persisted.\n- Host-identity-bound bridge that lets resumable agent steps invoke tools only through the permission-enforcing Tool Gateway.
 - Versioned agent checkpoint contract, compare-and-swap sequence protection, and LocalStorage preview adapter.
 - Initial upstream research and architecture decisions for LangGraph.js, Mem0, LlamaIndex, OpenHands, and awesome-llm-apps.
 - Initial threat model and capability permission matrix.
