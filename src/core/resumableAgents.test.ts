@@ -77,6 +77,46 @@ describe("ResumableAgentRuntime", () => {
     expect(resumed.at(-1)).toMatchObject({ type: "completed" });
   });
 
+  it("executes agent tool calls through the host-bound gateway and records audit events", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const agentPermissions = { authorize: vi.fn().mockResolvedValue("allow") };
+    const toolPermissions = { authorize: vi.fn().mockResolvedValue("allow") };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+    const gateway = new ToolGateway(toolPermissions, audit, { now: () => 3_000 });
+    const toolExecute = vi.fn().mockResolvedValue(ok({ note: "found" }));
+    gateway.register({
+      id: "notes.search", version: "1", description: "Search local notes",
+      requiredPermissions: ["memory:read"], risk: "low", timeoutMs: 1_000,
+      validateInput: (input: unknown) => input !== null && typeof input === "object" && "query" in input
+        ? ok(input as { query: string })
+        : { ok: false as const, error: { code: "validation" as const, message: "Invalid input", retryable: false } },
+      execute: toolExecute
+    });
+    const executor = new GatewayAgentToolExecutor(gateway, "host-user");
+    const runtime = new ResumableAgentRuntime(
+      service, agentPermissions, { runId: () => runId }, { now: () => 3_000 }, executor
+    );
+    runtime.register({
+      ...makeDefinition(),
+      async step(state, context) {
+        const result = await context.tools.execute<{ note: string }>("notes.search", { query: "NEXUS" }, {
+          runId: context.runId, step: context.step, signal: context.signal
+        });
+        if (!result.ok) throw new Error(result.error.message);
+        return { state, done: true, output: result.value.note };
+      }
+    });
+    const events = await collect(runtime.start(agentId, 0, "thread-tools"));
+    expect(events.map(event => event.type)).toEqual(["started", "output", "completed"]);
+    expect(events.find(event => event.type === "output")).toMatchObject({ content: "found" });
+    expect(agentPermissions.authorize).not.toHaveBeenCalled();
+    expect(toolPermissions.authorize).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: "host-user", scope: "memory:read", resource: "notes.search"
+    }));
+    expect(toolExecute).toHaveBeenCalledOnce();
+    expect(audit.record.mock.calls.map(call => call[0].status)).toEqual(["started", "completed"]);
+  });
+
   it("rejects a second concurrent continuation through checkpoint compare-and-swap", async () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const runtime = makeRuntime(service);
