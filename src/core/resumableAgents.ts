@@ -31,13 +31,13 @@ export type ResumableAgentEvent =
   | { type: "completed"; runId: AgentRunId; steps: number }
   | { type: "failed"; runId: AgentRunId; message: string };
 
-interface StoredAgentState { payload: JsonValue; permissionIndex: number; }
+interface StoredAgentState { payload: JsonValue; permissionIndex: number; agentVersion: string; steps: number; }
 const isStoredAgentState = (value: JsonValue): value is StoredAgentState =>
   value !== null && typeof value === "object" && !Array.isArray(value) &&
   "payload" in value && "permissionIndex" in value &&
-  Number.isInteger(value.permissionIndex) && Number(value.permissionIndex) >= 0;
-const packState = (payload: JsonValue, permissionIndex: number): JsonValue =>
-  ({ payload, permissionIndex } as JsonValue);
+  Number.isInteger(value.permissionIndex) && Number(value.permissionIndex) >= 0 && typeof value.agentVersion === "string" && Number.isInteger(value.steps) && Number(value.steps) >= 0;
+const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0): JsonValue =>
+  ({ payload, permissionIndex, agentVersion, steps } as JsonValue);
 
 /** Serializable step execution. Each successful step is persisted before its events are emitted. */
 export class ResumableAgentRuntime {
@@ -69,7 +69,7 @@ export class ResumableAgentRuntime {
 
     const now = this.clock.now();
     const initial: AgentCheckpoint = { schemaVersion: 1, runId, agentId, threadId, sequence: 1,
-      status: "running", state: packState(payload, 0), createdAt: now, updatedAt: now };
+      status: "running", state: packState(payload, 0, agent.version), createdAt: now, updatedAt: now };
     const auth = await this.authorizeRemaining(agent, 0);
     if (auth.kind === "denied") {
       const saved = await this.checkpoints.persist({ ...initial, status: "failed" });
@@ -78,15 +78,15 @@ export class ResumableAgentRuntime {
     if (auth.kind === "approval") {
       const waiting: AgentCheckpoint = { ...initial, status: "waiting_for_approval",
         pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
-        state: packState(payload, auth.nextIndex) };
+        state: packState(payload, auth.nextIndex, agent.version) };
       const saved = await this.checkpoints.persist(waiting);
       if (!saved.ok) { yield { type: "failed", runId, message: saved.error.message }; return; }
       yield { type: "waiting_for_approval", runId, permission: auth.permission }; return;
     }
-    const ready = { ...initial, state: packState(payload, auth.nextIndex) };
+    const ready = { ...initial, state: packState(payload, auth.nextIndex, agent.version) };
     const saved = await this.checkpoints.persist(ready);
     if (!saved.ok) { yield { type: "failed", runId, message: saved.error.message }; return; }
-    yield* this.execute(agent, ready, payload, auth.nextIndex, signal);
+    yield* this.execute(agent, ready, payload, auth.nextIndex, 0, signal);
   }
 
   async *resume(runId: AgentRunId, approvedPermission: AgentPermission, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
@@ -94,14 +94,14 @@ export class ResumableAgentRuntime {
     if (!loaded.ok || !loaded.value) { yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message }; return; }
     const cp = loaded.value;
     const agent = this.definitions.get(cp.agentId as AgentId);
-    if (!agent || cp.status !== "waiting_for_approval" || cp.pendingApproval?.permission !== approvedPermission || !isStoredAgentState(cp.state)) {
+    if (!agent || cp.status !== "waiting_for_approval" || cp.pendingApproval?.permission !== approvedPermission || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
       yield { type: "failed", runId, message: "Checkpoint is not awaiting this approval, or its agent is unavailable." }; return;
     }
     if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled." }; return; }
     const payload = cp.state.payload;
     const nextIndex = cp.state.permissionIndex + 1;
     const resumed: AgentCheckpoint = { ...cp, sequence: cp.sequence + 1, status: "running",
-      state: packState(payload, nextIndex), updatedAt: this.clock.now() };
+      state: packState(payload, nextIndex, agent.version, cp.state.steps), updatedAt: this.clock.now() };
     delete resumed.pendingApproval;
     const saved = await this.checkpoints.persist(resumed);
     if (!saved.ok) { yield { type: "failed", runId, message: saved.error.message }; return; }
@@ -110,7 +110,7 @@ export class ResumableAgentRuntime {
     if (auth.kind === "denied") { yield* this.finishFailure(resumed, runId, "A required permission was denied."); return; }
     if (auth.kind === "approval") {
       const waiting: AgentCheckpoint = { ...resumed, sequence: resumed.sequence + 1, status: "waiting_for_approval",
-        state: packState(payload, auth.nextIndex), pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
+        state: packState(payload, auth.nextIndex, agent.version), pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
         updatedAt: this.clock.now() };
       const result = await this.checkpoints.persist(waiting);
       if (!result.ok) { yield { type: "failed", runId, message: result.error.message }; return; }
@@ -118,11 +118,11 @@ export class ResumableAgentRuntime {
     }
     let ready = resumed;
     if (auth.nextIndex !== nextIndex) {
-      ready = { ...resumed, sequence: resumed.sequence + 1, state: packState(payload, auth.nextIndex), updatedAt: this.clock.now() };
+      ready = { ...resumed, sequence: resumed.sequence + 1, state: packState(payload, auth.nextIndex, agent.version), updatedAt: this.clock.now() };
       const result = await this.checkpoints.persist(ready);
       if (!result.ok) { yield { type: "failed", runId, message: result.error.message }; return; }
     }
-    yield* this.execute(agent, ready, payload, auth.nextIndex, signal);
+    yield* this.execute(agent, ready, payload, auth.nextIndex, cp.state.steps, signal);
   }
 
   /** Claims an interrupted running checkpoint with CAS, then continues from its saved state. */
@@ -134,7 +134,7 @@ export class ResumableAgentRuntime {
     }
     const cp = loaded.value;
     const agent = this.definitions.get(cp.agentId as AgentId);
-    if (!agent || cp.status !== "running" || !isStoredAgentState(cp.state)) {
+    if (!agent || cp.status !== "running" || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
       yield { type: "failed", runId, message: "Only a running checkpoint with a registered agent can be continued." };
       return;
     }
@@ -145,7 +145,7 @@ export class ResumableAgentRuntime {
       yield { type: "failed", runId, message: "Checkpoint could not be claimed; another worker may already be continuing it." };
       return;
     }
-    yield* this.execute(agent, claimed, cp.state.payload, cp.state.permissionIndex, signal);
+    yield* this.execute(agent, claimed, cp.state.payload, cp.state.permissionIndex, cp.state.steps, signal);
   }
 
   private async authorizeRemaining(agent: ResumableAgentDefinition<unknown>, startIndex: number):
@@ -162,16 +162,17 @@ export class ResumableAgentRuntime {
   }
 
   private async *execute(agent: ResumableAgentDefinition<unknown>, checkpoint: AgentCheckpoint,
-    initialState: JsonValue, permissionIndex: number, externalSignal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+    initialState: JsonValue, permissionIndex: number, completedSteps: number, externalSignal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
     const runId = checkpoint.runId as AgentRunId;
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     externalSignal?.addEventListener("abort", onAbort, { once: true });
     let state = initialState;
     let sequence = checkpoint.sequence;
-    let steps = 0;
+    let steps = completedSteps;
     let timedOut = false;
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, agent.timeoutMs);
+    const remainingTimeout = Math.max(0, agent.timeoutMs - (this.clock.now() - checkpoint.createdAt));
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, remainingTimeout);
     yield { type: "started", runId, agentId: agent.id };
     try {
       while (steps < agent.maxSteps) {
@@ -184,7 +185,7 @@ export class ResumableAgentRuntime {
         state = result.state;
         steps += 1;
         const next: AgentCheckpoint = { ...checkpoint, sequence: sequence + 1, status: result.done ? "completed" : "running",
-          state: packState(state, permissionIndex), updatedAt: this.clock.now() };
+          state: packState(state, permissionIndex, agent.version, steps), updatedAt: this.clock.now() };
         delete next.pendingApproval;
         const persisted = await this.checkpoints.persist(next);
         if (!persisted.ok) throw new Error(persisted.error.message);
