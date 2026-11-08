@@ -110,6 +110,19 @@ export class MemoryService {
     return this.repository.search(normalized, scope, limit);
   }
 
+  async revise(id: MemoryId, changes: Partial<Pick<MemoryRecord, "content" | "category" | "scope" | "tags" | "source">>): Promise<Result<MemoryRecord>> {
+    const current = await this.repository.list("all", 200);
+    if (!current.ok) return current;
+    const existing = current.value.find(item => item.id === id);
+    if (!existing) return err("validation", "Memory record was not found.");
+    const content = changes.content === undefined ? existing.content : changes.content.trim();
+    if (!content || content.length > 4_000) return err("validation", "Memory content must contain 1 to 4,000 characters.");
+    const next: MemoryRecord = { ...existing, ...changes, content, tags: changes.tags ? [...new Set(changes.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20) : existing.tags, source: changes.source ? { ...changes.source, label: changes.source.label.trim() } : existing.source, updatedAt: this.clock.now() };
+    if (!next.source.label) return err("validation", "A memory source label is required.");
+    const saved = await this.repository.save(next);
+    return saved.ok ? ok(next) : saved;
+  }
+
   async forget(id: MemoryId): Promise<Result<void>> {
     return this.repository.delete(id);
   }

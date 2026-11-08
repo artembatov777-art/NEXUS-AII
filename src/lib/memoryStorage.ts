@@ -118,6 +118,13 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
     }
   }
 
+  async getByIds(ids: string[]): Promise<Result<MemoryRecord[]>> {
+    const loaded = this.readAll();
+    if (!loaded.ok) return loaded;
+    const selected = new Set(ids);
+    return ok(loaded.value.filter(record => selected.has(record.id)));
+  }
+
   async delete(id: MemoryRecord["id"]): Promise<Result<void>> {
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;

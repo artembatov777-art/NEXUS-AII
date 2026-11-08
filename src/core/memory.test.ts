@@ -90,6 +90,21 @@ describe("MemoryService", () => {
     expect(repository.records.size).toBe(0);
   });
 
+  it("revises an existing memory while preserving its original provenance and creation time", async () => {
+    const { service } = setup();
+    const saved = await service.remember(input, { confirmedByUser: true });
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+    const revised = await service.revise(saved.value.id, { content: "Updated preference", tags: ["updated"] });
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.content).toBe("Updated preference");
+      expect(revised.value.createdAt).toBe(saved.value.createdAt);
+      expect(revised.value.source).toEqual(saved.value.source);
+      expect(revised.value.tags).toEqual(["updated"]);
+    }
+  });
+
   it("passes repository failures through unchanged", async () => {
     const failing: MemoryRepository = {
       list: async () => err("storage_failed", "Storage unavailable"),
