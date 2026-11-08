@@ -288,7 +288,7 @@ If a tool returns successfully but the completion audit cannot be persisted, the
 - Each call is forwarded to `ToolGateway.execute`, so tool input validation, per-tool permissions, audit-start persistence, timeout, cancellation, and output limits remain enforced.
 - The step context exposes only the executor port, not raw host APIs or the gateway's internal registry.
 - If the host does not configure an executor, the runtime's default executor denies calls.
-- This bridge is a core integration seam; the desktop application composition root and user-facing approval flow are still pending.
+- This bridge is composed by `src/lib/nexusRuntime.ts` for the browser preview runtime. The desktop/native composition root and user-facing approval flow are still pending.
 
 
 ## 15. One-time agent approval grants
@@ -300,3 +300,16 @@ If a tool returns successfully but the completion audit cannot be persisted, the
 - The runtime consumes the opaque grant once before transitioning the checkpoint back to running.
 - Forged, mismatched, replayed, or unknown grants fail closed.
 - Grants are intentionally ephemeral. After an app restart, the user must review and approve the still-pending request again; durable approval UI and native storage are not implemented.
+
+
+## 16. Local runtime composition
+
+`src/lib/nexusRuntime.ts` is the composition root for the browser-preview agent vertical slice.
+
+- It constructs the checkpoint repository/service, Tool Gateway, LocalStorage audit sink, host-bound agent tool executor, in-memory approval authority, and resumable agent runtime from one options object.
+- Agent and tool permission decisions are supplied through separate methods on a host-owned `NexusPermissionPolicy`. If no policy is supplied, both paths deny by default.
+- The actor identity is supplied by the host and validated before construction; it is never accepted from agent input.
+- `issueApproval(runId)` is a host-only operation and must be called only as the result of an explicit user approval interaction. The returned opaque grant is one-time and bound by the approval authority.
+- `createBrowserNexusRuntime` is a convenience factory over `window.localStorage`; it is not a production security boundary.
+
+This composition root is intentionally a preview adapter. Browser localStorage is readable and mutable by same-origin scripts, has quota and multi-tab race limitations, and does not provide encryption or transactional durability. Do not enable sensitive real-world tools on this adapter. Before production desktop use, replace persistence with native transactional storage, add OS-backed credential storage, and connect approval decisions to a real UI.
