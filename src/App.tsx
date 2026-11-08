@@ -5,6 +5,7 @@ import { sendMessage } from "./lib/ai";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { AgentControlCenter } from "./components/AgentControlCenter";
 import { ProjectPanel } from "./components/ProjectPanel";
+import { VoiceControls } from "./components/VoiceControls";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
@@ -108,7 +109,7 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
-        <div className="composer-wrap"><div className="composer"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is session-only and is not saved</span><button className="send-btn" disabled={!draft.trim() || busy} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is session-only and is not saved</span><button className="send-btn" disabled={!draft.trim() || busy} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
       </section>
     </main>
 

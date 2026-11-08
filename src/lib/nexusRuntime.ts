@@ -120,6 +120,11 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     toolRegistry,
     mcpClient,
     traceSink,
+    memoryService,
+    memoryRetriever,
+    projectService,
+    knowledgeRepository,
+    knowledgeService,
     connectMcpHttp: (input: { id: string; name: string; version: string; endpoint: string }, signal: AbortSignal) => mcpClient.connect({ ...input, transport: new McpHttpTransport({ endpoint: input.endpoint }) }, signal),
     discoverAndImportMcpTools: (serverId: string, signal: AbortSignal, defaults: { permissions: PermissionScope[]; risk: ToolRisk; timeoutMs: number }) => mcpClient.discoverAndImport(serverId, signal, defaults),
     createPlanner: (providerId: string, model: string) => options.models
