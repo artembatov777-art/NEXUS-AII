@@ -71,3 +71,15 @@ Implemented in `src/core/agentCheckpoints.ts` and `src/lib/agentCheckpointStorag
 - JSON-only state payload capped at 256 KB and approval metadata validation.
 
 This is a persistence contract and LocalStorage preview adapter. It is **not yet connected to AgentRuntime**, does not resume an interrupted iterator, and does not provide crash-safe SQLite durability. Those require a serializable agent state machine and explicit resume semantics; replaying arbitrary generator code would be unsafe and incorrect.
+
+
+## Serializable step runtime
+
+Implemented in `src/core/resumableAgents.ts` with tests in `src/core/resumableAgents.test.ts`.
+- Agent work is expressed as a deterministic state transition: JSON state in, one bounded step out.
+- Each step's next state is persisted before progress/output events are emitted.
+- A running checkpoint can be claimed with compare-and-swap and continued by a fresh runtime instance after restart.
+- Approval pauses persist the requested permission; resume requires the exact pending permission and consumes the waiting state before execution.
+- The runtime applies a step budget, per-execution timeout, output/progress bounds, and fails closed on permission-service errors.
+
+Important limits: this is a core runtime contract, not yet wired to the UI, Tool Gateway, SQLite, or native secure storage. The current checkpoint adapter is browser LocalStorage preview storage. A crash after a step's external side effect but before its checkpoint is committed can still cause that step to be retried; side-effecting steps must remain idempotent until operation-level idempotency and durable transactions are implemented. Agent definitions must be re-registered after restart.
