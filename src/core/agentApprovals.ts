@@ -38,6 +38,10 @@ export class InMemoryAgentApprovalAuthority implements AgentApprovalAuthority {
     if (!checkpoint || checkpoint.status !== "waiting_for_approval" || !checkpoint.pendingApproval) {
       return err("validation", "This run is not waiting for user approval.");
     }
+    const permission = checkpoint.pendingApproval.permission;
+    if (!["memory:read", "conversation:read", "tool:execute"].includes(permission)) {
+      return err("validation", "The pending permission is not recognized.");
+    }
     const approvalId = this.ids.approvalId();
     if (!approvalId.trim() || approvalId.length > 160 || this.grants.has(approvalId)) {
       return err("validation", "Approval id is invalid or already in use.");
@@ -45,7 +49,7 @@ export class InMemoryAgentApprovalAuthority implements AgentApprovalAuthority {
     this.grants.set(approvalId, {
       runId,
       agentId: checkpoint.agentId as AgentId,
-      permission: checkpoint.pendingApproval.permission as AgentPermission
+      permission: permission as AgentPermission
     });
     return ok(approvalId);
   }
