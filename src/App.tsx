@@ -8,6 +8,10 @@ import { ProjectPanel } from "./components/ProjectPanel";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 import { VoiceControls } from "./components/VoiceControls";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
+import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
+import { KnowledgeRetrievalService } from "./core/knowledge";
+import { LocalStorageProjectRepository } from "./lib/projectStorage";
+import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 const makeId = () => crypto.randomUUID();
@@ -34,6 +38,25 @@ export default function App() {
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const projectService = useMemo(() => new ProjectService(
+    new LocalStorageProjectRepository(window.localStorage),
+    () => crypto.randomUUID() as ProjectId,
+    () => Date.now()
+  ), []);
+  const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
+    new LocalStorageKnowledgeRepository(window.localStorage)
+  ), []);
+  async function refreshProjects() {
+    const result = await projectService.list();
+    if (result.ok) {
+      setWorkspaceProjects(result.value);
+      setSelectedProjectId(current => result.value.some(project => project.id === current)
+        ? current : result.value[0]?.id ?? "");
+    }
+  }
+  useEffect(() => { void refreshProjects(); }, [projectService]);
 
   useEffect(() => { saveConversations(conversations); }, [conversations]);
   useEffect(() => { saveProvider(provider); }, [provider]);
@@ -69,7 +92,13 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const answer = await sendMessage(provider, apiKey, next);
+      let knowledgeContext = "";
+      if (selectedProjectId) {
+        const retrieved = await knowledgeService.retrieve(text, selectedProjectId, 6);
+        if (!retrieved.ok) throw new Error(`Could not retrieve project knowledge: ${retrieved.error.message}`);
+        knowledgeContext = retrieved.value.context;
+      }
+      const answer = await sendMessage(provider, apiKey, next, knowledgeContext);
       updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now() }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -105,7 +134,14 @@ export default function App() {
     <main className="main-panel">
       <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="model-pill"><span className="status-dot"/>{provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
       <section className="chat-area">
-        <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><h1>{active?.title ?? "What are we building today?"}</h1><p>Your models, tools and ideas. Connected in one workspace.</p></div>
+        <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><h1>{active?.title ?? "What are we building today?"}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
+          <label className="chat-project-context">Project context
+            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+              <option value="">No project context</option>
+              {workspaceProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
+        </div>
         <div className="messages">
           {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : "YOU"} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="message-content">{m.content}</div></div></div>)}
           {busy && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">NEXUS</div><div className="typing"><i/><i/><i/> Connecting to provider…</div></div></div>}
@@ -117,7 +153,7 @@ export default function App() {
     </main>
 
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
-    {projectsOpen && <ProjectPanel onClose={() => setProjectsOpen(false)} />}
+    {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {agentsOpen && <AgentControlCenter onClose={() => setAgentsOpen(false)} />}
     {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. Your API key stays in memory for this session only.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Enter API key (not stored)" autoComplete="off"/></label><div className="security-note"><ShieldCheck size={16}/> The key is sent to the Rust backend only when you submit a message. It is never written to local storage.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => setApiKey("")}>Clear key</button><button className="primary-btn" onClick={() => setSettingsOpen(false)}><Check size={15}/> Save settings</button></div></section></div>}
