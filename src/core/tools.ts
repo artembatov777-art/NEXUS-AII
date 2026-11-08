@@ -172,7 +172,12 @@ export class ToolGateway {
         return err("tool_failed", "Tool output must be valid JSON and no larger than 64 KB.");
       }
       const auditCompleted = await this.writeAudit(tool.id, context, "completed");
-      if (!auditCompleted.ok) return err("storage_failed", "Tool completed, but its completion audit could not be recorded.");
+      if (!auditCompleted.ok) {
+        return err(
+          "side_effect_completed_audit_failed",
+          "The tool completed successfully, but its completion audit could not be persisted. Do not automatically retry: the side effect may already have happened."
+        );
+      }
       return result as Result<Output>;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Tool execution failed.";
