@@ -41,7 +41,7 @@ Last reviewed: 2026-11-08.
 | Privilege escalation | Agent requests shell or filesystem access | Default-deny permission service; per-action approval; no raw host APIs in agents | Core gateway foundation exists |
 | Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway foundation implemented |
 | Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Local preview sink and explicit uncertain-outcome error implemented; production transactional store and reconciliation pending |
-| State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Checkpoint foundation implemented; runtime wiring pending |
+| State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Checkpoint service, preview adapter, and resumable step runtime implemented; SQLite durability pending |
 | Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Not implemented |
 | Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Partial; dependency audit currently reports 6 advisories |
 | Web content abuse | Browser agent visits untrusted URL | Domain policy, navigation restrictions, isolated browser context | Not implemented |
@@ -81,8 +81,8 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 ## 7. Known gaps and next controls
 
 1. Replace the LocalStorage preview audit adapter with a transactional native store; add reconciliation and operation-level idempotency for uncertain side effects.
-2. Implement an approval request store and resume flow with one-time, run-bound approval tokens.
-3. Integrate checkpoints into a serializable step-based agent runtime; do not attempt to serialize async-generator internals.
+2. Add a user-facing approval queue and durable native approval state. The core currently supports ephemeral, one-time, run/agent/permission-bound grants; restart requires re-approval.
+3. Add operation-level idempotency and a durable event outbox to the serializable step-based agent runtime; do not attempt to serialize async-generator internals.
 4. Add Tauri command allowlists, argument validation, CSP review, and native build verification.
 5. Add OS keychain integration and remove any temptation to store provider secrets in browser storage.
 6. Add dependency audit triage; do not apply force upgrades without reviewing breaking changes.
