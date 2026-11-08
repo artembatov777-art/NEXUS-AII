@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, Check, ChevronDown, Command, Cpu, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap } from "lucide-react";
 import { sendMessage } from "./lib/ai";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { AgentControlCenter } from "./components/AgentControlCenter";
 import { ProjectPanel } from "./components/ProjectPanel";
+import { KnowledgePanel } from "./components/KnowledgePanel";
 import { VoiceControls } from "./components/VoiceControls";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
@@ -26,6 +27,7 @@ export default function App() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,6 +90,7 @@ export default function App() {
       <button className="nav-item selected"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
       <button className="nav-item" onClick={() => setMemoryOpen(true)}><Sparkles size={17}/> Memory</button>
       <button className="nav-item" onClick={() => setProjectsOpen(true)}><FolderKanban size={17}/> Projects</button>
+      <button className="nav-item" onClick={() => setKnowledgeOpen(true)}><BookOpen size={17}/> Knowledge base</button>
       <button className="nav-item" onClick={() => setAgentsOpen(true)}><Bot size={17}/> Agents</button>
       <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
       <div className="history-heading"><span>RECENT</span><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div>
@@ -115,6 +118,7 @@ export default function App() {
 
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
     {projectsOpen && <ProjectPanel onClose={() => setProjectsOpen(false)} />}
+    {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {agentsOpen && <AgentControlCenter onClose={() => setAgentsOpen(false)} />}
     {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. Your API key stays in memory for this session only.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Enter API key (not stored)" autoComplete="off"/></label><div className="security-note"><ShieldCheck size={16}/> The key is sent to the Rust backend only when you submit a message. It is never written to local storage.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => setApiKey("")}>Clear key</button><button className="primary-btn" onClick={() => setSettingsOpen(false)}><Check size={15}/> Save settings</button></div></section></div>}
   </div>;
