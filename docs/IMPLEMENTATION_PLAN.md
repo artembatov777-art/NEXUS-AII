@@ -70,6 +70,7 @@ Exit criteria: no tool can execute outside the gateway; high-risk actions requir
 - [x] Enforce step and time budgets (token budget pending)
 - [x] Add cancellation, stop conditions, and approval handoff (resume pending)
 - [x] Add deterministic runtime tests and a mock Tool Gateway integration test
+- [x] Add composition-root integration coverage for approval, tool execution, checkpoint completion, audit events, and default-deny behavior
 
 Exit criteria: agents can complete bounded tasks, explain actions, and stop safely.
 
