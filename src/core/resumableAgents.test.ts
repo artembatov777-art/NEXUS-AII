@@ -7,6 +7,7 @@ import type { StorageLike } from "../lib/memoryStorage";
 import { GatewayAgentToolExecutor } from "./agentToolBridge";
 import { ToolGateway } from "./tools";
 import { ok } from "./result";
+import { InMemoryAgentApprovalAuthority } from "./agentApprovals";
 
 class FakeStorage implements StorageLike {
   values = new Map<string, string>();
@@ -64,17 +65,23 @@ describe("ResumableAgentRuntime", () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const permission = "tool:execute" as const;
     let decision: "ask_user" | "allow" = "ask_user";
+    const approvals = new InMemoryAgentApprovalAuthority(service, { approvalId: () => "approval-once-1" });
     const runtime = new ResumableAgentRuntime(service,
       { authorize: vi.fn().mockImplementation(async () => decision) },
-      { runId: () => runId }, { now: () => 2_000 });
+      { runId: () => runId }, { now: () => 2_000 }, undefined, approvals);
     runtime.register({ ...makeDefinition(), requiredPermissions: [permission] });
     const started = await collect(runtime.start(agentId, 0, "thread-approval"));
     expect(started).toEqual([{ type: "waiting_for_approval", runId, permission }]);
-    const wrongApproval = await collect(runtime.resume(runId, "conversation:read"));
-    expect(wrongApproval.at(-1)).toMatchObject({ type: "failed" });
+    const wrongApproval = await collect(runtime.resume(runId, "forged-approval"));
+    expect(wrongApproval.at(-1)).toMatchObject({ type: "failed", message: "A valid one-time approval grant is required." });
     decision = "allow";
-    const resumed = await collect(runtime.resume(runId, permission));
+    const issued = await approvals.issue(runId);
+    expect(issued.ok).toBe(true);
+    if (!issued.ok) throw new Error("Approval grant was not issued.");
+    const resumed = await collect(runtime.resume(runId, issued.value));
     expect(resumed.at(-1)).toMatchObject({ type: "completed" });
+    const replay = await collect(runtime.resume(runId, issued.value));
+    expect(replay.at(-1)).toMatchObject({ type: "failed" });
   });
 
   it("executes agent tool calls through the host-bound gateway and records audit events", async () => {
