@@ -265,3 +265,16 @@ The checkpoint contract lives in `src/core/agentCheckpoints.ts`.
 - State is JSON data capped at 256 KB. Approval metadata is valid only while the run is waiting for approval.
 - The LocalStorage adapter is a browser-preview persistence adapter, not a substitute for encrypted desktop storage or SQLite.
 - The checkpoint service and adapter are not yet wired into AgentRuntime. Runtime resume and crash recovery remain pending.
+
+
+## 13. Tool audit persistence
+
+The preview adapter in `src/lib/toolAuditStorage.ts` implements the injected `ToolAuditSink` port.
+
+- Events are append-only through the adapter API and include tool, run, trace, status, timestamp, and optional bounded detail.
+- The adapter validates records on read and write, retains the newest 5,000 events, and limits serialized storage to 4 MB.
+- `list({ runId, limit })` supports bounded inspection without exposing mutation.
+- This adapter uses browser `localStorage` and is **preview-only**: it is neither encrypted nor tamper-proof, and it does not provide atomic multi-tab transactions.
+- Production desktop storage must move to a native transactional repository before tools with real side effects are enabled.
+
+If a tool returns successfully but the completion audit cannot be persisted, the gateway returns `side_effect_completed_audit_failed`. Callers must not automatically retry: the side effect may already have happened. Reconciliation and operation-level idempotency remain required.
