@@ -32,7 +32,7 @@ export type ResumableAgentEvent =
   | { type: "failed"; runId: AgentRunId; message: string };
 
 interface StoredAgentState { payload: JsonValue; permissionIndex: number; agentVersion: string; steps: number; }
-const isStoredAgentState = (value: JsonValue): value is StoredAgentState =>
+const isStoredAgentState = (value: JsonValue): value is JsonValue & StoredAgentState =>
   value !== null && typeof value === "object" && !Array.isArray(value) &&
   "payload" in value && "permissionIndex" in value &&
   Number.isInteger(value.permissionIndex) && Number(value.permissionIndex) >= 0 && typeof value.agentVersion === "string" && Number.isInteger(value.steps) && Number(value.steps) >= 0;
@@ -213,7 +213,7 @@ export class ResumableAgentRuntime {
     }
   }
 
-  private async *finishFailure(checkpoint: AgentCheckpoint, runId: string, message: string): AsyncIterable<ResumableAgentEvent> {
+  private async *finishFailure(checkpoint: AgentCheckpoint, runId: AgentRunId, message: string): AsyncIterable<ResumableAgentEvent> {
     const saved = await this.checkpoints.persist({ ...checkpoint, sequence: checkpoint.sequence + 1,
       status: "failed", updatedAt: this.clock.now() });
     yield { type: "failed", runId, message: saved.ok ? message : saved.error.message };
