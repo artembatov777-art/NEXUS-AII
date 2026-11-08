@@ -8,6 +8,7 @@ export type AppErrorCode =
   | "cancelled"
   | "tool_failed"
   | "storage_failed"
+  | "side_effect_completed_audit_failed"
   | "internal";
 
 export interface AppError {
