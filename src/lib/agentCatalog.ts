@@ -1,5 +1,5 @@
 import type { AgentId } from "../core/agents";
-import type { ResumableAgentDefinition, ResumableAgentRuntime } from "../core/resumableAgents";
+import type { ResumableAgentDefinition } from "../core/resumableAgents";
 import { err, ok, type Result } from "../core/result";
 
 /** Stable IDs are part of the persisted checkpoint contract. */
@@ -70,7 +70,7 @@ export function registerBuiltInAgentSuite(runtime: Pick<ReturnType<typeof import
       return { task: task.trim() } satisfies WorkflowState;
     },
     async step(state, context) {
-      const current = state as WorkflowState;
+      const current = state as unknown as WorkflowState;
       const result = await context.tools.execute<PreviewOutput>(
         "workspace.preview",
         { task: current.task },
