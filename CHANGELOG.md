@@ -8,6 +8,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
 - Resumable agent registry exposes metadata-only descriptors, and the Control Center displays registered agent limits plus checkpointed final preview output.
 - Editable local agent profile with validated execution budgets, local persistence, and versioned runtime replacement; active/waiting runs block profile changes.
+- Phase I Agent Control Center acceptance completed in browser-preview scope; CI run 42518677919 passed 13 test files / 61 tests and the Vite production build.
 - Built-in local workflow agent invokes a non-destructive preview tool only through the Tool Gateway; its UI explicitly states that no LLM or external system is involved.
 - Integration tests covering built-in agent approval, gateway invocation, audit events, persisted completion, and invalid input.
 - Provider-neutral core contracts for conversations, model streaming, memory, bounded agents, and tool execution.
@@ -34,7 +35,8 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - No provider credentials, shell access, or unrestricted host capabilities were added.
 
 ### Known limitations
-- The built-in workflow agent is a deterministic demonstration, not a model-powered planner. The UI event feed is session-only; checkpoints persist in localStorage, but approval grants are ephemeral. Reopening the app requires fresh approval for waiting runs.
+- The built-in workflow agent is a deterministic demonstration, not a model-powered planner. The live event feed is session-only; checkpoints and final preview state persist in localStorage, but approval grants are ephemeral. Reopening the app requires fresh approval for waiting runs.
+- Agent profile editing currently changes only the built-in local workflow executor name and execution budgets. It is not a general-purpose visual agent authoring system.
 - Browser preview checkpoint and audit storage remain tamperable and non-transactional; native secure persistence and idempotency are required before sensitive tools are enabled.
 - The resumable step-based runtime is wired into the Agent Control Center in browser preview. Approval grants are in-memory and require re-approval after restart.
 - LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.

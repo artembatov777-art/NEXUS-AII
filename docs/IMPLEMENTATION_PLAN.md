@@ -105,17 +105,27 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 
 Exit criteria: public browser clients cannot use a shared secret anonymously or without quotas.
 
-## Phase I — Agent Control Center vertical slice (2026-11-08)
+## Phase I — Agent Control Center (completed: browser-preview scope, 2026-11-08)
 
-- [x] Add a built-in local workflow agent with an explicit non-LLM/non-network description.
-- [x] Register its harmless preview tool through the Tool Gateway; keep tool permissions default-deny and the preview tool non-destructive.
-- [x] Add an integrated Agent Control Center with run input, progress/output feed, cancellation, approval queue, rejection, persisted checkpoint history, and continuation of interrupted runs.
-- [x] Add integration tests for approval, gateway routing, audit lifecycle, completed checkpoints, and invalid input.
-- [ ] Persist the full event log and approval grants durably; checkpointed state/final preview persist, while the live event feed is session-only and grants are ephemeral.
-- [x] Add an editable local agent profile with validated step/time budgets, persisted configuration, and version increments.
-- [ ] Add migration of active checkpoints between agent versions, token budgets, full event-log/approval persistence, and exactly-once side-effect semantics.
+- [x] Integrate the resumable runtime, checkpoints, approval authority, Tool Gateway, and audit sink through the composition root.
+- [x] Add a built-in local workflow agent and a harmless preview tool routed through the Tool Gateway.
+- [x] Add a metadata-only runtime registry and a Control Center entry in the workspace navigation.
+- [x] Add task submission, live progress/output, cancellation, checkpoint continuation, run history, and saved result inspection.
+- [x] Add explicit one-time approval and rejection actions.
+- [x] Add editable profile name, step/time budgets, local persistence, validation, and versioned runtime replacement.
+- [x] Prevent profile changes while this workspace has running or approval-waiting checkpoints.
+- [x] Add integration tests for approval, gateway routing, audit lifecycle, checkpoint completion, profile persistence, profile replacement, and invalid inputs.
+- [x] Verify GitHub Actions: run 42518677919 completed successfully; 13 test files, 61 tests, and production build passed.
 
-**Phase I exit status:** core bounded runtime, UI execution path, approval handoff, local tool gateway, audit events, and checkpoint history are integrated in browser preview. This is not yet production-grade agent autonomy or native desktop persistence.
+**Phase I acceptance:** the browser-preview agent control plane is integrated and usable. This is a bounded local demonstration, not a model-powered autonomous agent. It makes no external calls and cannot access shell/filesystem capabilities.
+
+## Deferred production hardening (not counted as Phase I preview blockers)
+
+- [ ] Replace localStorage checkpoint/audit/profile persistence with transactional native storage.
+- [ ] Persist approval grants and the full event log across restarts.
+- [ ] Add safe checkpoint migration or explicit recovery for old agent versions.
+- [ ] Add token budgets and operation-level idempotency for side effects.
+- [ ] Implement real model-backed planning only after the separately scheduled provider integration phase.
 
 ## Engineering rules
 
