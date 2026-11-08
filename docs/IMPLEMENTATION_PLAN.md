@@ -58,7 +58,8 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Add tool registry and input validation port
 - [x] Add audit events, timeout, cancellation, and input/output limits
 - [ ] Add approval UI and approval-resume flow
-- [ ] Wire checkpoint persistence into AgentRuntime and implement safe resume
+- [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
+- [ ] Wire resumable runtime into the UI and Tool Gateway; add operation-level idempotency for side effects
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 
