@@ -150,9 +150,9 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Trace Inspector added to Agent Control Center.
 - [x] Runtime composition exposes MCP HTTP connection/import helpers, optional model-backed planner creation, and coordinator creation.
 - [x] Security and integration tests added for tool registration/identity, MCP transport/schema, model planning, coordination resume, trace persistence, and runtime composition.
-- [x] GitHub Actions run 42524968186 passed: 22 test files, 77 tests, and production TypeScript/Vite build.
+- [x] GitHub Actions run 42525214016 passed: 22 test files, 81 tests, and production TypeScript/Vite build.
 
-**Phase II acceptance:** all six roadmap modules are implemented and connected through the runtime composition for the browser-preview scope. CI is green on commit `6971c040cf41ed71110f1a7c910c6dfca95f062d`.
+**Phase II acceptance:** all six roadmap modules are implemented and connected through the runtime composition for the browser-preview scope. CI is green on code commit `9859f133a31b1ed61684faf55e9f18374e0aad1f`.
 
 ### Phase II boundaries and production follow-up
 
