@@ -10,6 +10,8 @@ import { LocalStorageToolAuditSink } from "./toolAuditStorage";
 import type { StorageLike } from "./memoryStorage";
 import { ToolRegistry } from "../core/toolRegistry";
 import { McpClient } from "../core/mcpClient";
+import { McpHttpTransport } from "../core/mcpHttpTransport";
+import type { PermissionScope, ToolRisk } from "../core/tools";
 import { AgentPlanner } from "../core/agentPlanner";
 import { ModelRouterPlanner } from "../core/modelPlanner";
 import { MultiAgentCoordinator } from "../core/multiAgentCoordinator";
@@ -105,6 +107,8 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     toolRegistry,
     mcpClient,
     traceSink,
+    connectMcpHttp: (input: { id: string; name: string; version: string; endpoint: string }, signal: AbortSignal) => mcpClient.connect({ ...input, transport: new McpHttpTransport({ endpoint: input.endpoint }) }, signal),
+    discoverAndImportMcpTools: (serverId: string, signal: AbortSignal, defaults: { permissions: PermissionScope[]; risk: ToolRisk; timeoutMs: number }) => mcpClient.discoverAndImport(serverId, signal, defaults),
     createPlanner: (providerId: string, model: string) => options.models
       ? new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model))
       : null,
@@ -124,11 +128,12 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
 
 export function createBrowserNexusRuntime(
   actorId: string,
-  permissions?: NexusPermissionPolicy
+  permissions?: NexusPermissionPolicy,
+  models?: ModelRouter
 ): ReturnType<typeof createNexusRuntime> {
   if (typeof window === "undefined") throw new Error("Browser storage is unavailable in this environment.");
   try {
-    return createNexusRuntime({ storage: window.localStorage, actorId, permissions });
+    return createNexusRuntime({ storage: window.localStorage, actorId, permissions, models });
   } catch (cause) {
     if (cause instanceof Error) throw cause;
     throw new Error("Could not initialize the browser runtime.");

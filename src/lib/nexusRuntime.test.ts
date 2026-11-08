@@ -46,6 +46,10 @@ describe("createNexusRuntime", () => {
     expect(runtime.toolRegistry.search().ok).toBe(true);
     expect(runtime.mcpClient).toBeDefined();
 
+    expect(runtime.traceSink).toBeDefined();
+    expect(runtime.createPlanner("provider", "model")).toBeNull();
+    expect(runtime.createCoordinator()).toBeDefined();
+
     const execute = vi.fn(async (_input: { query: string }, context: ToolExecutionContext) => {
       expect(context.runId).toBe(runId);
       return ok({ answer: "NEXUS" });
