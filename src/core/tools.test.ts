@@ -78,6 +78,19 @@ describe("ToolGateway", () => {
     expect(tool.execute).not.toHaveBeenCalled();
   });
 
+  it("does not recommend retry when the tool completed but completion audit failed", async () => {
+    const { gateway, audit } = setup();
+    audit.record.mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err("storage_failed", "offline"));
+    const tool = definition();
+    gateway.register(tool);
+    const result = await gateway.execute("sample", { query: "hello" }, context(), "user-1");
+    expect(tool.execute).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "side_effect_completed_audit_failed", retryable: false }
+    });
+  });
+
   it("rejects oversized input and output", async () => {
     const { gateway } = setup();
     gateway.register(definition());
