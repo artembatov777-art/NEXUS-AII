@@ -57,7 +57,8 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Define permission service port and default-deny gateway behavior
 - [x] Add tool registry and input validation port
 - [x] Add audit events, timeout, cancellation, and input/output limits\n- [x] Add LocalStorage preview audit adapter and explicit non-retryable outcome when completion audit fails\n- [ ] Replace preview audit storage with transactional native persistence and reconciliation
-- [ ] Add approval UI and approval-resume flow
+- [x] Add core one-time, run/agent/permission-bound approval grants and resume validation
+- [ ] Add user-facing approval UI and durable native approval state
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
 - [x] Add a host-identity-bound adapter from resumable agent steps to the permission-enforcing Tool Gateway\n- [ ] Wire resumable runtime into the UI and add operation-level idempotency for side effects
 
@@ -68,7 +69,7 @@ Exit criteria: no tool can execute outside the gateway; high-risk actions requir
 - [x] Add agent registration and metadata registry
 - [x] Enforce step and time budgets (token budget pending)
 - [x] Add cancellation, stop conditions, and approval handoff (resume pending)
-- [x] Add deterministic runtime tests (mock tool gateway pending)
+- [x] Add deterministic runtime tests and a mock Tool Gateway integration test
 
 Exit criteria: agents can complete bounded tasks, explain actions, and stop safely.
 
