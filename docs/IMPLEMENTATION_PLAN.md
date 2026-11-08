@@ -164,3 +164,36 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - Browser trace/checkpoint/audit storage is localStorage, not encrypted, tamper-proof, or transactional. Native secure storage remains a later phase.
 - The Agent Control Center displays trace events, but a complete visual MCP server manager and plan-review/execution workflow are not part of this phase.
 
+
+## Phase III — Memory and Knowledge (in progress)
+
+- [x] Add hybrid retrieval contract with optional embeddings/vector index and lexical fallback.
+- [x] Add knowledge chunk/repository contracts and RAG context builder with explicit source/page/section citations.
+- [x] Add local project-scoped knowledge chunk storage adapter and bounded lexical retrieval.
+- [x] Add project domain service and local project metadata repository.
+- [x] Add memory revision API preserving original creation time and provenance.
+- [x] Compose memory, retrieval, project, and knowledge services through the runtime.
+- [ ] Configure and ship a real embedding provider and durable vector index.
+- [ ] Add document ingestion (PDF/DOCX/MD/TXT), parsing, chunking, deduplication, and re-index lifecycle.
+- [ ] Connect retrieved memory/knowledge context and citations to the actual chat request/response pipeline.
+- [ ] Add UI to inspect/edit/delete memory provenance and manage knowledge documents.
+- [ ] Add cross-project context controls and project-level permission boundaries.
+
+**Current boundary:** semantic retrieval is a provider-neutral extension point, not an enabled embedding model. The default browser runtime falls back to lexical retrieval. Knowledge chunks can be stored/retrieved by project, but no document parser/import UI is shipped yet. Do not describe this as production RAG until ingestion, model integration, and citation display are connected.
+
+## Phase IV — Full application (in progress)
+
+- [x] Add local project creation/listing/archiving UI and project metadata service.
+- [x] Add conversation-history search across titles and message content.
+- [x] Add optional push-to-talk-style speech recognition control and text-to-speech playback using browser/WebView speech APIs.
+- [ ] Add project-aware workspace routing, project-specific conversations, files, and context isolation.
+- [ ] Add conversation/message repository migration from localStorage to SQLite.
+- [ ] Add versioned SQLite schema, transactional migrations, backup/export/import, and recovery tests.
+- [ ] Add native OS credential vault; remove API keys from ad-hoc command payloads and use scoped credential handles.
+- [ ] Add native desktop file, notification, clipboard, and deep-link integrations behind explicit permission gates.
+- [ ] Verify Tauri builds and runtime tests on supported desktop platforms.
+- [ ] Add voice streaming, interruption, device selection, and native speech adapters where supported.
+- [ ] Add app-wide search, data export/import UI, accessibility and keyboard navigation audit.
+- [ ] Complete security review, dependency audit, CSP/capability review, and release packaging.
+
+**Current boundary:** voice is optional browser/WebView speech API support; availability and recognition privacy depend on the host OS/browser. It is not a native offline speech engine. Project UI currently manages project metadata but does not yet bind chats/documents into isolated project workspaces. Browser localStorage remains the persistence adapter; native SQLite and credential vault are not implemented. Phase IV is not complete.

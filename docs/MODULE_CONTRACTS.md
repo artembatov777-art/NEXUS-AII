@@ -323,3 +323,16 @@ This composition root is intentionally a preview adapter. Browser localStorage i
 - `MultiAgentCoordinator` delegates each step through `ResumableAgentTaskExecutor`, asks the host policy for authorization, pauses on `ask_user`, and resumes only when the host policy subsequently allows the action. Pending coordinator state is in-memory.
 - `LocalStorageTraceSink` persists bounded trace events for preview use and strips sensitive-looking attribute keys. It is not a tamper-proof audit ledger.
 - The runtime composition root exposes `connectMcpHttp`, `discoverAndImportMcpTools`, `createPlanner`, `createCoordinator`, and `traceSink`. A model router is optional and must be explicitly injected.
+
+## 18. Memory and Knowledge retrieval
+
+- Memory writes require explicit user confirmation. Revision preserves original creation time and source provenance.
+- `HybridMemoryRetriever` accepts an optional embedding provider and vector index. Without them it uses the existing offline lexical search. Embedding failure falls back to lexical retrieval; malformed vectors fail validation.
+- Knowledge retrieval is project-scoped and returns both context text and structured citations. Retrieved content is untrusted data and must never be treated as system/developer instructions.
+- LocalStorage knowledge persistence is a preview adapter, not a durable document database. It enforces bounded chunk sizes/counts but does not parse source documents.
+
+## 19. Projects and voice
+
+- Project metadata is local and versioned. Archiving hides a project from the default list; it does not delete associated data.
+- Browser/WebView speech recognition is optional and host-dependent. Microphone access starts only after a user click; speech recognition may use OS/browser services and is not guaranteed to be offline.
+- TTS uses the host speech synthesis implementation. Both features must remain optional and degrade gracefully when unsupported.
