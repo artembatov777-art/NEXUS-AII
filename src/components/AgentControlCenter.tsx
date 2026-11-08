@@ -66,6 +66,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
   }, [runtime, addFeed]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => () => { controller.current?.abort(); }, []);
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>) {
     for await (const event of events) {

@@ -73,7 +73,7 @@ Exit criteria: no tool can execute outside the gateway; high-risk actions requir
 - [x] Implement bounded single-agent runtime primitive
 - [x] Add agent registration and metadata registry
 - [x] Enforce step and time budgets (token budget pending)
-- [x] Add cancellation, stop conditions, and approval handoff (resume pending)
+- [x] Add cancellation, stop conditions, approval handoff, and checkpoint resume
 - [x] Add deterministic runtime tests and a mock Tool Gateway integration test
 - [x] Add composition-root integration coverage for approval, tool execution, checkpoint completion, audit events, and default-deny behavior
 
