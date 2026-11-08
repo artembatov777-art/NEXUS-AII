@@ -83,3 +83,7 @@ Implemented in `src/core/resumableAgents.ts` with tests in `src/core/resumableAg
 - The runtime preserves its total step budget across resume and applies timeouts to active execution segments, pins checkpoints to the registered agent version, bounds output/progress, and fails closed on permission-service errors.
 
 Important limits: this is a core runtime contract, not yet wired to the UI, Tool Gateway, SQLite, or native secure storage. The current checkpoint adapter is browser LocalStorage preview storage. A crash after a step's external side effect but before its checkpoint is committed can still cause that step to be retried; side-effecting steps must remain idempotent until operation-level idempotency and durable transactions are implemented. A crash after a checkpoint is committed but before its output event is delivered can lose that event; a durable event outbox is still needed for reliable delivery. Agent definitions must be re-registered after restart.
+
+## Agent tool access
+
+Resumable agent steps may receive an `AgentToolExecutor` port. The provided `GatewayAgentToolExecutor` adapter forwards calls through the Tool Gateway using a host-supplied actor identity. Agents do not receive direct filesystem, shell, browser, network, or raw Tauri capabilities. If no executor is configured, tool calls are denied. This is not yet wired into the application UI or a user approval dialog.
