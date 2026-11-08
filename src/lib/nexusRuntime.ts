@@ -10,6 +10,12 @@ import { LocalStorageToolAuditSink } from "./toolAuditStorage";
 import type { StorageLike } from "./memoryStorage";
 import { ToolRegistry } from "../core/toolRegistry";
 import { McpClient } from "../core/mcpClient";
+import { AgentPlanner } from "../core/agentPlanner";
+import { ModelRouterPlanner } from "../core/modelPlanner";
+import { MultiAgentCoordinator } from "../core/multiAgentCoordinator";
+import { ResumableAgentTaskExecutor } from "../core/resumableAgentExecutor";
+import { LocalStorageTraceSink } from "./traceStorage";
+import type { ModelRouter } from "../core/model";
 
 export interface NexusPermissionPolicy {
   authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
@@ -24,6 +30,7 @@ export interface NexusRuntimeOptions {
   permissions?: NexusPermissionPolicy;
   ids?: NexusRuntimeIds;
   clock?: AgentClock & ToolClock;
+  models?: ModelRouter;
 }
 
 const denyByDefault: NexusPermissionPolicy = {
@@ -80,6 +87,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
   const toolRegistry = new ToolRegistry(toolGateway);
   const mcpClient = new McpClient(toolRegistry, toolGateway);
+  const traceSink = new LocalStorageTraceSink(options.storage);
   const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
   const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
   const agentRuntime = new ResumableAgentRuntime(
@@ -96,6 +104,15 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     toolGateway,
     toolRegistry,
     mcpClient,
+    traceSink,
+    createPlanner: (providerId: string, model: string) => options.models
+      ? new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model))
+      : null,
+    createCoordinator: (threadId = "nexus-multi-agent") => new MultiAgentCoordinator(
+      new ResumableAgentTaskExecutor(agentRuntime, threadId),
+      { authorize: async (agentId, reason) => policy.authorizeAgent({ agentId, permission: "tool:execute", reason }) },
+      traceSink, clock
+    ),
     checkpointService,
     checkpointRepository,
     auditSink,

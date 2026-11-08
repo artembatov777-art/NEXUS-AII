@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "./result";
 import type { AgentId, AgentRunId } from "./agents";
-import type { ResumableAgentRuntime, ResumableAgentEvent } from "./resumableAgents";
+import type { ResumableAgentRuntime } from "./resumableAgents";
 import type { AgentTaskExecutor } from "./multiAgentCoordinator";
 
 /** Adapts the checkpointed agent runtime to the coordinator. It never bypasses the runtime's permission checks. */
