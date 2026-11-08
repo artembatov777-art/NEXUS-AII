@@ -3,10 +3,15 @@ import type { TraceEvent, TraceSink } from "../core/observability";
 import type { StorageLike } from "./memoryStorage";
 const KEY="nexus.trace-events.v1";
 const MAX_EVENTS=5000;
+const safeAttributes=(attributes:TraceEvent["attributes"]):TraceEvent["attributes"]=>{
+ if(!attributes)return undefined;const safe:NonNullable<TraceEvent["attributes"]>={};
+ for(const [key,value] of Object.entries(attributes)){if(/key|token|secret|password|authorization|content|prompt/i.test(key))continue;if(key.length<=60&&(typeof value==="string"?value.length<=200:typeof value==="number"||typeof value==="boolean"))safe[key]=value;}
+ return safe;
+};
 export class LocalStorageTraceSink implements TraceSink {
  constructor(private readonly storage:StorageLike){}
  async append(event:TraceEvent):Promise<Result<void>>{
-  try{const current=this.read();if(!current.ok)return current;const next=[...current.value,event].slice(-MAX_EVENTS);const encoded=JSON.stringify(next);
+  try{const current=this.read();if(!current.ok)return current;const next=[...current.value,{...event,attributes:safeAttributes(event.attributes)}].slice(-MAX_EVENTS);const encoded=JSON.stringify(next);
    if(encoded.length>2_000_000)return err("storage_failed","Trace history exceeded the 2 MB storage budget.");
    this.storage.setItem(KEY,encoded);return ok(undefined);
   }catch{return err("storage_failed","Could not persist trace event.");}
