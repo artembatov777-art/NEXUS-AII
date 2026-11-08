@@ -63,6 +63,7 @@ Exit criteria: the system can explain which memory records influenced a response
 - [ ] Add user-facing approval UI and durable native approval state
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
 - [x] Add a host-identity-bound adapter from resumable agent steps to the permission-enforcing Tool Gateway
+- [x] Compose checkpoint, audit, gateway, bridge, approval authority, and resumable runtime in a fail-closed browser-preview composition root
 - [ ] Wire resumable runtime into the UI and add operation-level idempotency for side effects
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
