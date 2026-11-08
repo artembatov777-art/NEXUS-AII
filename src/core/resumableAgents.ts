@@ -171,8 +171,8 @@ export class ResumableAgentRuntime {
     let sequence = checkpoint.sequence;
     let steps = completedSteps;
     let timedOut = false;
-    const remainingTimeout = Math.max(0, agent.timeoutMs - (this.clock.now() - checkpoint.createdAt));
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, remainingTimeout);
+    // The timeout applies to active execution, not time spent waiting for user approval or app restart.
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, agent.timeoutMs);
     yield { type: "started", runId, agentId: agent.id };
     try {
       while (steps < agent.maxSteps) {
