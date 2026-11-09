@@ -61,10 +61,10 @@ export function createLocalWorkflowDefinition(profile: AgentProfile = DEFAULT_AG
 }
 
 export function registerBuiltInAgentSuite(
-  runtime: Pick<ReturnType<typeof import("./nexusRuntime").createNexusRuntime>, "agentRuntime" | "toolGateway">,
+  runtime: Pick<ReturnType<typeof import("./nexusRuntime").createNexusRuntime>, "agentRuntime" | "toolGateway" | "toolRegistry">,
   profile: AgentProfile = DEFAULT_AGENT_PROFILE
 ): Result<void> {
-  const tool = runtime.toolGateway.register<PreviewInput, PreviewOutput>({
+  const tool = runtime.toolRegistry.register<PreviewInput, PreviewOutput>({
     id: "workspace.preview",
     version: "1.0.0",
     description: "Create a local, non-destructive preview of a task.",
@@ -85,7 +85,7 @@ export function registerBuiltInAgentSuite(
         "This preview was generated locally. No model, network, file, or system action was used."
       ].join("\n")
     })
-  });
+  }, "builtin", ["preview", "local"]);
   if (!tool.ok) return tool;
   return runtime.agentRuntime.register(createLocalWorkflowDefinition(profile));
 }
