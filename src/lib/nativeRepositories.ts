@@ -24,16 +24,21 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
   constructor(storage: StorageLike) { this.local = new LocalStorageMemoryRepository(storage); }
   private async all(): Promise<MemoryRecord[]> {
     if (!isTauri()) { const result=await this.local.list("all",200); if(!result.ok) throw new Error(result.error.message); return result.value; }
-    this.migration ??= (async () => {
-      let records = await invoke<MemoryRecord[]>("load_memories");
-      if (!records.length) {
+    if (!this.migration) {
+      const pending = (async () => {
+        const records = await invoke<MemoryRecord[]>("load_memories");
         const legacy = await this.local.list("all",200);
         if (!legacy.ok) throw new Error(legacy.error.message);
-        for (const record of legacy.value) await invoke("save_memory",{record});
-        records = legacy.value;
-      }
-      return records;
-    })();
+        const existing = new Set(records.map(record => record.id));
+        // Import only missing IDs: retries after a partial migration are safe
+        // and never overwrite newer native edits with stale browser data.
+        for (const record of legacy.value) {
+          if (!existing.has(record.id)) await invoke("save_memory",{record});
+        }
+        return records.length ? [...records, ...legacy.value.filter(record => !existing.has(record.id))] : legacy.value;
+      })();
+      this.migration = pending.catch(error => { this.migration = undefined; throw error; });
+    }
     return this.migration;
   }
   async list(scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
@@ -60,15 +65,20 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   constructor(storage:StorageLike){this.local=new LocalStorageKnowledgeRepository(storage);}
   private async all():Promise<KnowledgeChunk[]> {
     if(!isTauri()){const exported=await this.local.exportAll();if(!exported.ok)throw new Error(exported.error.message);return exported.value;}
-    this.migration ??= (async()=>{
-      let chunks=await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
-      if(!chunks.length){
-        const legacy=await this.local.exportAll(); if(!legacy.ok)throw new Error(legacy.error.message);
-        if(legacy.value.length) await invoke("save_knowledge_chunks",{chunks:legacy.value});
-        chunks=legacy.value;
-      }
-      return chunks;
-    })();
+    if (!this.migration) {
+      const pending = (async()=>{
+        const chunks=await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
+        const legacy=await this.local.exportAll();
+        if(!legacy.ok)throw new Error(legacy.error.message);
+        const existing = new Set(chunks.map(chunk => chunk.id));
+        const missing = legacy.value.filter(chunk => !existing.has(chunk.id));
+        // Upsert only missing chunks so interrupted first-launch migrations
+        // can resume without replacing newer native document versions.
+        if(missing.length) await invoke("save_knowledge_chunks",{chunks:missing});
+        return chunks.length ? [...chunks, ...missing] : legacy.value;
+      })();
+      this.migration = pending.catch(error => { this.migration = undefined; throw error; });
+    }
     return this.migration;
   }
   private async persist(chunks:KnowledgeChunk[]):Promise<Result<void>> {

@@ -24,14 +24,17 @@ export class WorkspaceProjectRepository implements ProjectRepository {
  async list(includeArchived: boolean): Promise<Result<WorkspaceProject[]>> {
   if (!isNativeDesktop()) return this.local.list(includeArchived);
   try {
-   let projects = await invoke<WorkspaceProject[]>("load_projects");
-   if (projects.length === 0) {
-    const legacy = await this.local.list(true);
-    if (!legacy.ok) return legacy;
-    for (const project of legacy.value) await invoke("save_project", { project });
-    projects = legacy.value;
+   const projects = await invoke<WorkspaceProject[]>("load_projects");
+   const legacy = await this.local.list(true);
+   if (!legacy.ok) return legacy;
+   const existing = new Set(projects.map(project => project.id));
+   // A partially completed migration is resumed on the next read. Native
+   // records win when an ID already exists, preserving newer native edits.
+   for (const project of legacy.value) {
+    if (!existing.has(project.id)) await invoke("save_project", { project });
    }
-   return ok(projects.filter(project => includeArchived || !project.archived).sort((a,b) => b.updatedAt-a.updatedAt));
+   const merged = projects.length ? [...projects, ...legacy.value.filter(project => !existing.has(project.id))] : legacy.value;
+   return ok(merged.filter(project => includeArchived || !project.archived).sort((a,b) => b.updatedAt-a.updatedAt));
   } catch (error) {
    return err("storage_failed", error instanceof Error ? error.message : "Could not load native projects.", true);
   }
