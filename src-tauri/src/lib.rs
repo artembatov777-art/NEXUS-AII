@@ -356,6 +356,22 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
     tx.commit().map_err(|e|e.to_string())
 }
 
+
+#[tauri::command]
+fn write_clipboard(text: String) -> Result<(), String> {
+    if text.len() > 1_000_000 { return Err("Clipboard text exceeds the 1 MB limit.".into()); }
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| format!("Clipboard is unavailable: {e}"))?;
+    clipboard.set_text(text).map_err(|e| format!("Could not write clipboard: {e}"))
+}
+
+#[tauri::command]
+fn read_clipboard() -> Result<String, String> {
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| format!("Clipboard is unavailable: {e}"))?;
+    let text = clipboard.get_text().map_err(|e| format!("Could not read clipboard: {e}"))?;
+    if text.len() > 1_000_000 { return Err("Clipboard text exceeds the 1 MB limit.".into()); }
+    Ok(text)
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -430,7 +446,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
