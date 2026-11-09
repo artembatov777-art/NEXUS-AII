@@ -192,13 +192,14 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Add optional push-to-talk-style speech recognition control and text-to-speech playback using browser/WebView speech APIs.
 - [x] Add project-aware conversation ownership, workspace-scoped history filtering, conversation reassignment, and legacy conversation storage migration.
 - [ ] Add project-specific file ownership and enforce context isolation across all retrieval paths.
-- [ ] Add conversation/message repository migration from localStorage to SQLite.
-- [ ] Add versioned SQLite schema, transactional migrations, backup/export/import, and recovery tests.
+- [x] Add native SQLite conversation/message persistence with transactional writes and first-launch migration from browser storage.
+- [x] Add versioned SQLite schema migrations for conversations, messages, and projects; test schema version and foreign-key behavior.
+- [ ] Add backup/export/import and recovery tests.
 - [ ] Add native OS credential vault; remove API keys from ad-hoc command payloads and use scoped credential handles.
 - [ ] Add native desktop file, notification, clipboard, and deep-link integrations behind explicit permission gates.
-- [ ] Verify Tauri builds and runtime tests on supported desktop platforms.
+- [ ] Verify Tauri runtime builds on supported desktop platforms and run native SQLite integration tests.
 - [ ] Add voice streaming, interruption, device selection, and native speech adapters where supported.
 - [ ] Add app-wide search, data export/import UI, accessibility and keyboard navigation audit.
 - [ ] Complete security review, dependency audit, CSP/capability review, and release packaging.
 
-**Current boundary:** voice is optional browser/WebView speech API support; availability and recognition privacy depend on the host OS/browser. It is not a native offline speech engine. Project UI currently manages project metadata but does not yet bind chats/documents into isolated project workspaces. Browser localStorage remains the persistence adapter; native SQLite and credential vault are not implemented. Phase IV is not complete.
+**Current boundary:** voice is optional browser/WebView speech API support; availability and recognition privacy depend on the host OS/browser. It is not a native offline speech engine. Project metadata and conversations are now attached to project workspaces and stored in native SQLite on desktop. Knowledge documents and memories still use browser storage; full isolation, credential vault, backup/restore, and native runtime verification remain open. Phase IV is not complete.
