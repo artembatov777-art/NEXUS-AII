@@ -216,18 +216,21 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] GitHub Actions passed for commit `03a99e74c88fa73251dd5cafc9c5eafcf2f6243a`: frontend Quality and Native desktop quality matrix (Windows, macOS, Linux).
 - [x] Fixed all-scope Memory listing so project memories are not silently hidden when the caller requests all scopes.
 - [x] Added a 2 MB streaming response cap to the MCP HTTP transport and tests for declared and undeclared oversized responses.
+- [x] Enforced the native provider response limit incrementally while streaming chunks, with a boundary unit test.
+- [x] Added strict coordinator-boundary validation for unique step IDs, prior-step dependencies, exact assignment coverage, and bounded plan size, with negative tests.
+- [x] Added workspace backup import/export controls in Settings; imports require confirmation and clear stale semantic vectors to prevent results from an older backup leaking into restored project searches.
 
 ### Remaining acceptance work
 - [ ] Add persistent native integration tests for SQLite CRUD, project cleanup, document replacement, backup import/export, and schema upgrades.
 - [ ] Make Memory and Knowledge migration idempotent under partial failure and concurrent startup.
-- [ ] Verify IndexedDB vector-index lifecycle on document replacement/deletion and project deletion; add rebuild/reconciliation.
-- [ ] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, output bounds, and cancellation).
+- [x] Clear stale IndexedDB semantic vectors after backup restore; [ ] complete project/document deletion cleanup and re-index reconciliation.
+- [x] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, and plan-size bounds); [ ] add bounded delegated-output handling and cancellation edge-case tests.
 - [ ] Complete MCP protocol lifecycle, server capability negotiation, bounded SSE framing, reconnect/health state, and adversarial schema tests.
 - [ ] Connect model-backed planning to the resumable permission-gated runtime, not just standalone planner primitives.
 - [ ] Persist agent checkpoints, approvals, audit events, and traces transactionally in native SQLite.
 - [ ] Finish workspace-wide search across conversations, memories, and project knowledge with explicit scope.
 - [ ] Finish voice state/error handling and document WebView/browser host limitations; native speech adapters remain a separate integration.
-- [ ] Add verified backup/restore UI with schema validation, confirmation, and rollback on import failure.
+- [x] Add backup/restore UI with schema validation, confirmation, and transactional native import; [ ] add round-trip and corruption-recovery integration tests.
 - [ ] Complete cross-platform credential vault UX and security review.
 - [ ] Run end-to-end tests across real Tauri desktop builds and document platform-specific limitations.
 
