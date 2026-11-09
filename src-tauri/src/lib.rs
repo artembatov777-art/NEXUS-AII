@@ -61,6 +61,37 @@ struct StoredProject {
     schema_version: i64,
 }
 
+
+fn valid_memory_record(record: &serde_json::Value) -> bool {
+    let id=record.get("id").and_then(|v|v.as_str());
+    let content=record.get("content").and_then(|v|v.as_str());
+    let category=record.get("category").and_then(|v|v.as_str());
+    let scope=record.get("scope").and_then(|v|v.as_str());
+    let source=record.get("source");
+    let tags=record.get("tags").and_then(|v|v.as_array());
+    let valid_source=source.map_or(false,|v|{
+        let kind=v.get("type").and_then(|x|x.as_str());
+        let label=v.get("label").and_then(|x|x.as_str());
+        ["user_confirmed","conversation","import"].contains(&kind.unwrap_or("")) && label.map_or(false,|x|!x.trim().is_empty()&&x.len()<=200)
+    });
+    id.map_or(false,|v|!v.is_empty()&&v.len()<=128)
+        && content.map_or(false,|v|!v.trim().is_empty()&&v.len()<=4000)
+        && ["preference","goal","fact","workflow","project"].contains(&category.unwrap_or(""))
+        && ["profile","project","conversation"].contains(&scope.unwrap_or(""))
+        && record.get("createdAt").and_then(|v|v.as_i64()).is_some()
+        && record.get("updatedAt").and_then(|v|v.as_i64()).is_some()
+        && record.get("schemaVersion").and_then(|v|v.as_i64())==Some(1)
+        && valid_source
+        && tags.map_or(false,|items|items.len()<=20&&items.iter().all(|v|v.as_str().map_or(false,|x|x.len()<=64)))
+        && (scope != Some("project") || record.get("projectId").and_then(|v|v.as_str()).map_or(false,|v|!v.is_empty()&&v.len()<=128))
+}
+fn valid_knowledge_chunk(chunk: &serde_json::Value) -> bool {
+    let field=|name:&str,max:usize|chunk.get(name).and_then(|v|v.as_str()).map_or(false,|v|!v.is_empty()&&v.len()<=max);
+    field("id",160)&&field("documentId",160)&&field("projectId",128)&&field("text",12000)&&field("sourceLabel",300)
+        && chunk.get("page").map_or(true,|v|v.as_u64().map_or(false,|n|n>0))
+        && chunk.get("section").map_or(true,|v|v.as_str().map_or(false,|x|x.len()<=300))
+}
+
 struct AppDatabase(Mutex<Connection>);
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -200,20 +231,18 @@ fn load_memories(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Val
 
 #[tauri::command]
 fn save_memory(database: State<'_, AppDatabase>, record: serde_json::Value) -> Result<(), String> {
-    let id = record.get("id").and_then(|v| v.as_str()).ok_or("Memory ID is required.")?;
-    let content = record.get("content").and_then(|v| v.as_str()).ok_or("Memory content is required.")?;
-    let scope = record.get("scope").and_then(|v| v.as_str()).ok_or("Memory scope is required.")?;
-    let project_id = record.get("projectId").and_then(|v| v.as_str());
-    let updated_at = record.get("updatedAt").and_then(|v| v.as_i64()).ok_or("Memory timestamp is invalid.")?;
-    if id.is_empty() || id.len() > 128 || content.is_empty() || content.len() > 4000 || !["profile","project","conversation"].contains(&scope) || (scope == "project" && project_id.is_none()) {
-        return Err("Memory data is invalid or exceeds limits.".into());
-    }
-    let payload = serde_json::to_string(&record).map_err(|e| e.to_string())?;
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
-    connection.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,project_id=excluded.project_id,updated_at=excluded.updated_at,payload=excluded.payload", params![id,scope,project_id,updated_at,payload]).map_err(|e| e.to_string())?;
+    if !valid_memory_record(&record) { return Err("Memory data is invalid or exceeds limits.".into()); }
+    let id=record["id"].as_str().unwrap();
+    let scope=record["scope"].as_str().unwrap();
+    let project_id=record.get("projectId").and_then(|v|v.as_str());
+    let updated_at=record["updatedAt"].as_i64().unwrap();
+    let payload=serde_json::to_string(&record).map_err(|e|e.to_string())?;
+    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    connection.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,project_id=excluded.project_id,updated_at=excluded.updated_at,payload=excluded.payload",params![id,scope,project_id,updated_at,payload]).map_err(|e|e.to_string())?;
     Ok(())
 }
 
+#[tauri::command]
 #[tauri::command]
 fn delete_memory(database: State<'_, AppDatabase>, id: String) -> Result<(), String> {
     if id.is_empty() || id.len() > 128 { return Err("Memory ID is invalid.".into()); }
@@ -235,31 +264,26 @@ fn load_knowledge_chunks(database: State<'_, AppDatabase>) -> Result<Vec<serde_j
 
 #[tauri::command]
 fn save_knowledge_chunks(database: State<'_, AppDatabase>, chunks: Vec<serde_json::Value>) -> Result<(), String> {
-    if chunks.len() > 100000 { return Err("Knowledge base exceeds the chunk limit.".into()); }
-    let mut ids = HashSet::new();
+    if chunks.len()>50000 { return Err("Knowledge base exceeds the chunk limit.".into()); }
+    let mut ids=HashSet::new();
+    let mut total_bytes:usize=0;
     for chunk in &chunks {
-        let id = chunk.get("id").and_then(|v| v.as_str()).ok_or("Chunk ID is required.")?;
-        let document_id = chunk.get("documentId").and_then(|v| v.as_str()).ok_or("Document ID is required.")?;
-        let project_id = chunk.get("projectId").and_then(|v| v.as_str()).ok_or("Project ID is required.")?;
-        let text = chunk.get("text").and_then(|v| v.as_str()).ok_or("Chunk text is required.")?;
-        if id.is_empty() || id.len() > 160 || document_id.is_empty() || document_id.len() > 160 || project_id.is_empty() || project_id.len() > 128 || text.is_empty() || text.len() > 12000 || !ids.insert(id.to_string()) {
-            return Err("Knowledge chunk is invalid, duplicated, or exceeds limits.".into());
-        }
+        if !valid_knowledge_chunk(chunk) { return Err("Knowledge chunk is invalid or exceeds limits.".into()); }
+        if !ids.insert(chunk["id"].as_str().unwrap().to_string()) { return Err("Knowledge chunk IDs must be unique.".into()); }
+        total_bytes=total_bytes.saturating_add(chunk["text"].as_str().unwrap().len());
+        if total_bytes>50_000_000 { return Err("Knowledge base exceeds the 50 MB text limit.".into()); }
     }
-    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
-    let transaction = connection.transaction().map_err(|e| e.to_string())?;
-    transaction.execute("DELETE FROM knowledge_chunks", []).map_err(|e| e.to_string())?;
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    let transaction=connection.transaction().map_err(|e|e.to_string())?;
+    transaction.execute("DELETE FROM knowledge_chunks",[]).map_err(|e|e.to_string())?;
     for chunk in chunks {
-        let id = chunk["id"].as_str().unwrap();
-        let document_id = chunk["documentId"].as_str().unwrap();
-        let project_id = chunk["projectId"].as_str().unwrap();
-        let payload = serde_json::to_string(&chunk).map_err(|e| e.to_string())?;
-        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)", params![id,document_id,project_id,payload]).map_err(|e| e.to_string())?;
+        let payload=serde_json::to_string(&chunk).map_err(|e|e.to_string())?;
+        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![chunk["id"].as_str().unwrap(),chunk["documentId"].as_str().unwrap(),chunk["projectId"].as_str().unwrap(),payload]).map_err(|e|e.to_string())?;
     }
-    transaction.commit().map_err(|e| e.to_string())
+    transaction.commit().map_err(|e|e.to_string())
 }
 
-
+#[tauri::command]
 fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
     if handle != "default" { return Err("Unknown credential handle.".into()); }
     keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
@@ -282,6 +306,19 @@ fn delete_provider_key() -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(format!("Could not delete API key from the OS credential vault: {e}"))
+    }
+
+    #[test]
+    fn rejects_invalid_memory_and_knowledge_payloads() {
+        let memory=serde_json::json!({"id":"m1","content":"A saved fact","category":"fact","scope":"profile","source":{"type":"user_confirmed","label":"Manual"},"tags":["test"],"createdAt":1,"updatedAt":1,"schemaVersion":1});
+        assert!(valid_memory_record(&memory));
+        let mut invalid_memory=memory.clone();
+        invalid_memory["source"]["label"]=serde_json::json!("");
+        assert!(!valid_memory_record(&invalid_memory));
+        let chunk=serde_json::json!({"id":"k1","documentId":"d1","projectId":"p1","text":"A source passage","sourceLabel":"notes.md"});
+        assert!(valid_knowledge_chunk(&chunk));
+        let invalid_chunk=serde_json::json!({"id":"k1","documentId":"d1","projectId":"p1","text":"x".repeat(12001),"sourceLabel":"notes.md"});
+        assert!(!valid_knowledge_chunk(&invalid_chunk));
     }
 }
 
@@ -323,25 +360,25 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
     let conversations:Vec<StoredConversation>=serde_json::from_value(backup.get("conversations").cloned().ok_or("Backup conversations are missing.")?).map_err(|e|e.to_string())?;
     let memories=backup.get("memories").and_then(|v|v.as_array()).ok_or("Backup memories are missing.")?;
     let chunks=backup.get("knowledgeChunks").and_then(|v|v.as_array()).ok_or("Backup knowledge chunks are missing.")?;
-    if projects.len()>10000 || conversations.len()>10000 || memories.len()>10000 || chunks.len()>100000 { return Err("Backup exceeds import limits.".into()); }
+    if projects.len()>10000 || conversations.len()>10000 || memories.len()>10000 || chunks.len()>50000 { return Err("Backup exceeds import limits.".into()); }
     let project_ids:HashSet<&str>=projects.iter().map(|p|p.id.as_str()).collect();
     if project_ids.len()!=projects.len() || projects.iter().any(|p|p.id.is_empty()||p.id.len()>128||p.name.trim().is_empty()||p.name.len()>80||p.description.len()>500||p.schema_version!=1) { return Err("Backup contains invalid or duplicate projects.".into()); }
     let conversation_ids:HashSet<&str>=conversations.iter().map(|c|c.id.as_str()).collect();
     if conversation_ids.len()!=conversations.len() || conversations.iter().any(|c|c.id.is_empty()||c.id.len()>128||c.title.len()>120||c.messages.len()>20000||c.project_id.as_deref().map_or(false,|id|!project_ids.contains(id))) { return Err("Backup contains invalid or duplicate conversations.".into()); }
     for c in &conversations { for m in &c.messages { if m.id.is_empty()||m.id.len()>128||m.content.len()>100000||!["user","assistant"].contains(&m.role.as_str()) { return Err("Backup contains invalid messages.".into()); } } }
     for m in memories {
-        let id=m.get("id").and_then(|v|v.as_str()).ok_or("Memory ID missing.")?;
-        let content=m.get("content").and_then(|v|v.as_str()).ok_or("Memory content missing.")?;
-        let scope=m.get("scope").and_then(|v|v.as_str()).ok_or("Memory scope missing.")?;
+        if !valid_memory_record(m) { return Err("Backup contains invalid memories.".into()); }
+        let scope=m["scope"].as_str().unwrap();
         let pid=m.get("projectId").and_then(|v|v.as_str());
-        if id.is_empty()||id.len()>128||content.is_empty()||content.len()>4000||!["profile","project","conversation"].contains(&scope)||(scope=="project"&&pid.map_or(true,|p|!project_ids.contains(p))) { return Err("Backup contains invalid memories.".into()); }
+        if scope=="project"&&pid.map_or(true,|p|!project_ids.contains(p)) { return Err("Backup memory references an unknown project.".into()); }
     }
+    let mut backup_chunk_bytes:usize=0;
     for c in chunks {
-        let id=c.get("id").and_then(|v|v.as_str()).ok_or("Chunk ID missing.")?;
-        let doc=c.get("documentId").and_then(|v|v.as_str()).ok_or("Document ID missing.")?;
-        let pid=c.get("projectId").and_then(|v|v.as_str()).ok_or("Chunk project missing.")?;
-        let body=c.get("text").and_then(|v|v.as_str()).ok_or("Chunk text missing.")?;
-        if id.is_empty()||id.len()>160||doc.is_empty()||doc.len()>160||!project_ids.contains(pid)||body.is_empty()||body.len()>12000 { return Err("Backup contains invalid knowledge chunks.".into()); }
+        if !valid_knowledge_chunk(c) { return Err("Backup contains invalid knowledge chunks.".into()); }
+        backup_chunk_bytes=backup_chunk_bytes.saturating_add(c["text"].as_str().unwrap().len());
+        if backup_chunk_bytes>50_000_000 { return Err("Backup knowledge exceeds the 50 MB text limit.".into()); }
+        let pid=c["projectId"].as_str().unwrap();
+        if !project_ids.contains(pid) { return Err("Backup knowledge chunk references an unknown project.".into()); }
     }
     let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
     let tx=connection.transaction().map_err(|e|e.to_string())?;
