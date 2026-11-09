@@ -7,6 +7,7 @@ function valid(value:unknown):value is KnowledgeChunk {if(!value||typeof value!=
 const terms=(s:string):string[]=>Array.from(s.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[]);
 export class LocalStorageKnowledgeRepository implements KnowledgeRepository{
  constructor(private readonly storage:StorageLike,private readonly key=KEY){}
+ async exportAll():Promise<Result<KnowledgeChunk[]>>{return this.read();}
  async replaceDocument(documentId:string,projectId:string,chunks:KnowledgeChunk[]):Promise<Result<void>>{
   if(chunks.length>500||!chunks.every(valid)||chunks.some(c=>c.documentId!==documentId||c.projectId!==projectId))return err("validation","Replacement document chunks are invalid.");
   const current=this.read();if(!current.ok)return current;

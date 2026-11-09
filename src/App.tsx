@@ -11,9 +11,9 @@ import { loadConversations, loadProvider, saveConversations, saveProvider } from
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
 import { KnowledgeRetrievalService } from "./core/knowledge";
 import { WorkspaceProjectRepository } from "./lib/projectStorage";
-import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
+import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/nativeRepositories";
 import { MemoryService, type MemoryId } from "./core/memory";
-import { LocalStorageMemoryRepository } from "./lib/memoryStorage";
+
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
@@ -50,14 +50,14 @@ export default function App() {
     () => crypto.randomUUID() as ProjectId,
     () => Date.now()
   ), []);
-  const knowledgeRepository = useMemo(() => new LocalStorageKnowledgeRepository(window.localStorage), []);
+  const knowledgeRepository = useMemo(() => new WorkspaceKnowledgeRepository(window.localStorage), []);
   const embeddings = useMemo(() => new LocalTransformerEmbeddingProvider(), []);
   const vectors = useMemo(() => new IndexedDbKnowledgeVectorIndex(), []);
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
     knowledgeRepository, embeddings, vectors
   ), [knowledgeRepository, embeddings, vectors]);
   const memoryService = useMemo(() => new MemoryService(
-    new LocalStorageMemoryRepository(window.localStorage),
+    new WorkspaceMemoryRepository(window.localStorage),
     { memoryId: () => crypto.randomUUID() as MemoryId },
     { now: () => Date.now() }
   ), []);

@@ -78,6 +78,14 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         transaction.pragma_update(None, "user_version", 2)?;
         transaction.commit()?;
     }
+
+    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if current_version < 3 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch("CREATE TABLE memory_records (id TEXT PRIMARY KEY NOT NULL, scope TEXT NOT NULL, project_id TEXT, updated_at INTEGER NOT NULL, payload TEXT NOT NULL, CHECK(scope != 'project' OR project_id IS NOT NULL)); CREATE INDEX idx_memory_scope_project_updated ON memory_records(scope,project_id,updated_at DESC); CREATE TABLE knowledge_chunks (id TEXT PRIMARY KEY NOT NULL, document_id TEXT NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, payload TEXT NOT NULL); CREATE INDEX idx_knowledge_project_document ON knowledge_chunks(project_id,document_id);")?;
+        transaction.pragma_update(None, "user_version", 3)?;
+        transaction.commit()?;
+    }
     Ok(())
 }
 
@@ -170,6 +178,79 @@ fn delete_project(database: State<'_, AppDatabase>, id: String) -> Result<(), St
     Ok(())
 }
 
+
+#[tauri::command]
+fn load_memories(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let mut statement = connection.prepare("SELECT payload FROM memory_records ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|e| e.to_string())?;
+        serde_json::from_str(&payload).map_err(|e| e.to_string())
+    }).collect()
+}
+
+#[tauri::command]
+fn save_memory(database: State<'_, AppDatabase>, record: serde_json::Value) -> Result<(), String> {
+    let id = record.get("id").and_then(|v| v.as_str()).ok_or("Memory ID is required.")?;
+    let content = record.get("content").and_then(|v| v.as_str()).ok_or("Memory content is required.")?;
+    let scope = record.get("scope").and_then(|v| v.as_str()).ok_or("Memory scope is required.")?;
+    let project_id = record.get("projectId").and_then(|v| v.as_str());
+    let updated_at = record.get("updatedAt").and_then(|v| v.as_i64()).ok_or("Memory timestamp is invalid.")?;
+    if id.is_empty() || id.len() > 128 || content.is_empty() || content.len() > 4000 || !["profile","project","conversation"].contains(&scope) || (scope == "project" && project_id.is_none()) {
+        return Err("Memory data is invalid or exceeds limits.".into());
+    }
+    let payload = serde_json::to_string(&record).map_err(|e| e.to_string())?;
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    connection.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,project_id=excluded.project_id,updated_at=excluded.updated_at,payload=excluded.payload", params![id,scope,project_id,updated_at,payload]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_memory(database: State<'_, AppDatabase>, id: String) -> Result<(), String> {
+    if id.is_empty() || id.len() > 128 { return Err("Memory ID is invalid.".into()); }
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    connection.execute("DELETE FROM memory_records WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_knowledge_chunks(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let mut statement = connection.prepare("SELECT payload FROM knowledge_chunks ORDER BY rowid").map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|e| e.to_string())?;
+        serde_json::from_str(&payload).map_err(|e| e.to_string())
+    }).collect()
+}
+
+#[tauri::command]
+fn save_knowledge_chunks(database: State<'_, AppDatabase>, chunks: Vec<serde_json::Value>) -> Result<(), String> {
+    if chunks.len() > 100000 { return Err("Knowledge base exceeds the chunk limit.".into()); }
+    let mut ids = HashSet::new();
+    for chunk in &chunks {
+        let id = chunk.get("id").and_then(|v| v.as_str()).ok_or("Chunk ID is required.")?;
+        let document_id = chunk.get("documentId").and_then(|v| v.as_str()).ok_or("Document ID is required.")?;
+        let project_id = chunk.get("projectId").and_then(|v| v.as_str()).ok_or("Project ID is required.")?;
+        let text = chunk.get("text").and_then(|v| v.as_str()).ok_or("Chunk text is required.")?;
+        if id.is_empty() || id.len() > 160 || document_id.is_empty() || document_id.len() > 160 || project_id.is_empty() || project_id.len() > 128 || text.is_empty() || text.len() > 12000 || !ids.insert(id.to_string()) {
+            return Err("Knowledge chunk is invalid, duplicated, or exceeds limits.".into());
+        }
+    }
+    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    transaction.execute("DELETE FROM knowledge_chunks", []).map_err(|e| e.to_string())?;
+    for chunk in chunks {
+        let id = chunk["id"].as_str().unwrap();
+        let document_id = chunk["documentId"].as_str().unwrap();
+        let project_id = chunk["projectId"].as_str().unwrap();
+        let payload = serde_json::to_string(&chunk).map_err(|e| e.to_string())?;
+        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)", params![id,document_id,project_id,payload]).map_err(|e| e.to_string())?;
+    }
+    transaction.commit().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -246,7 +327,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
@@ -259,7 +340,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);

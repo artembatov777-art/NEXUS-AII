@@ -4,18 +4,18 @@ import { DocumentIngestionService } from "../core/documentIngestion";
 import { parseKnowledgeFile } from "../lib/documentParsers";
 import { KnowledgeRetrievalService, type KnowledgeCitation } from "../core/knowledge";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
-import { LocalStorageKnowledgeRepository, type KnowledgeDocumentSummary } from "../lib/knowledgeStorage";
-import { LocalStorageProjectRepository } from "../lib/projectStorage";
+import { WorkspaceKnowledgeRepository, type KnowledgeDocumentSummary } from "../lib/nativeRepositories";
+import { WorkspaceProjectRepository } from "../lib/projectStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "../lib/knowledgeVectorIndex";
 
 export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const projects = useMemo(() => new ProjectService(
-    new LocalStorageProjectRepository(window.localStorage),
+    new WorkspaceProjectRepository(window.localStorage),
     () => crypto.randomUUID() as ProjectId,
     () => Date.now()
   ), []);
-  const repository = useMemo(() => new LocalStorageKnowledgeRepository(window.localStorage), []);
+  const repository = useMemo(() => new WorkspaceKnowledgeRepository(window.localStorage), []);
   const embeddings = useMemo(() => new LocalTransformerEmbeddingProvider(), []);
   const vectors = useMemo(() => new IndexedDbKnowledgeVectorIndex(), []);
   const ingestion = useMemo(() => new DocumentIngestionService(repository, {}, embeddings, vectors), [repository, embeddings, vectors]);
@@ -119,7 +119,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       {status && <div className="knowledge-status">{status}</div>}
       {error && <div className="error-banner">{error}</div>}
       {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
-      <footer className="project-footnote">Stored locally in this browser profile. Imports support TXT, Markdown, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
+      <footer className="project-footnote">Stored in the desktop SQLite database (browser preview uses local storage). Imports support TXT, Markdown, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
     </section>
   </div>;
 }

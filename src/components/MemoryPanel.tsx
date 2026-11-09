@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Brain, Plus, Search, Trash2, X, Pencil, Check } from "lucide-react";
 import { MemoryService, type MemoryCategory, type MemoryRecord, type MemoryScope, type MemoryId } from "../core/memory";
-import { LocalStorageMemoryRepository } from "../lib/memoryStorage";
+import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
-import { LocalStorageProjectRepository } from "../lib/projectStorage";
+import { WorkspaceProjectRepository } from "../lib/projectStorage";
 
 interface MemoryPanelProps {
   onClose: () => void;
@@ -11,7 +11,7 @@ interface MemoryPanelProps {
 
 export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const service = useMemo(() => new MemoryService(
-    new LocalStorageMemoryRepository(window.localStorage),
+    new WorkspaceMemoryRepository(window.localStorage),
     { memoryId: () => crypto.randomUUID() as MemoryId },
     { now: () => Date.now() }
   ), []);
@@ -23,7 +23,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [tags, setTags] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const projects = useMemo(() => new ProjectService(new LocalStorageProjectRepository(window.localStorage), () => crypto.randomUUID() as ProjectId, () => Date.now()), []);
+  const projects = useMemo(() => new ProjectService(new WorkspaceProjectRepository(window.localStorage), () => crypto.randomUUID() as ProjectId, () => Date.now()), []);
   const [projectOptions, setProjectOptions] = useState<WorkspaceProject[]>([]);
   const [projectId, setProjectId] = useState("");
   const [editing, setEditing] = useState<MemoryRecord | null>(null);
