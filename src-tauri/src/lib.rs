@@ -1,8 +1,12 @@
 use serde::{Deserialize, Serialize};
+use rusqlite::{params, Connection};
+use std::collections::HashSet;
+use std::sync::Mutex;
+use tauri::{Manager, State};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatMessage {
+struct ProviderInputMessage {
     role: String,
     content: String,
 }
@@ -23,6 +27,39 @@ struct Choice {
     message: ProviderMessage,
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredMessage {
+    id: String,
+    role: String,
+    content: String,
+    created_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_references: Option<serde_json::Value>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredConversation {
+    id: String,
+    title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project_id: Option<String>,
+    messages: Vec<StoredMessage>,
+    updated_at: i64,
+}
+struct AppDatabase(Mutex<Connection>);
+fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
+    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 1 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch("CREATE TABLE conversations (id TEXT PRIMARY KEY NOT NULL,title TEXT NOT NULL,project_id TEXT,updated_at INTEGER NOT NULL); CREATE TABLE messages (id TEXT PRIMARY KEY NOT NULL,conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,role TEXT NOT NULL CHECK(role IN ('user','assistant')),content TEXT NOT NULL,created_at INTEGER NOT NULL,source_references TEXT); CREATE INDEX idx_conversations_project_updated ON conversations(project_id,updated_at DESC); CREATE INDEX idx_messages_conversation_created ON messages(conversation_id,created_at);")?;
+        transaction.pragma_update(None, "user_version", 1)?;
+        transaction.commit()?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -33,7 +70,7 @@ async fn send_chat(
     base_url: String,
     api_key: String,
     model: String,
-    messages: Vec<ChatMessage>,
+    messages: Vec<ProviderInputMessage>,
 ) -> Result<String, String> {
     let base = base_url.trim().trim_end_matches('/');
     if !(base.starts_with("https://") || base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1")) {
