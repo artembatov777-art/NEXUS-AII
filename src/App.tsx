@@ -205,15 +205,20 @@ export default function App() {
       }
       if (!window.confirm("Importing a backup replaces the current projects, conversations, memories, and knowledge. Export a backup of the current workspace first if you need to keep it. Continue?")) return;
       await invoke("import_workspace", { backup });
-      // Imported documents may reuse project/document IDs with different text.
-      // Clear stale vectors so lexical retrieval remains correct until re-indexed.
-      await vectors.clear();
-      await reconcileSemanticIndex();
+      // Database restore is authoritative. Vector maintenance is recoverable and
+      // must not make a successful transactional restore appear to have failed.
+      let vectorWarning = "";
+      try {
+        await vectors.clear();
+        await reconcileSemanticIndex();
+      } catch {
+        vectorWarning = "Workspace restored, but the semantic index could not be rebuilt. Lexical document search remains available.";
+      }
       const restored = await loadConversations();
       setConversations(restored);
       await refreshProjects();
       setActiveId(restored[0]?.id ?? null);
-      setError("");
+      setError(vectorWarning);
       setSettingsOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not import workspace backup.");
