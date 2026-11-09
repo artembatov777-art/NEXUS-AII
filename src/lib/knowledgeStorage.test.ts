@@ -24,6 +24,24 @@ describe("LocalStorageKnowledgeRepository", () => {
     ]);
   });
 
+  it("atomically replaces a document index without leaving old chunks", async () => {
+    const repository = new LocalStorageKnowledgeRepository(new MemoryStorage());
+    await repository.add([
+      { id: "doc:1", documentId: "doc", projectId: "p1", text: "old passage", sourceLabel: "notes.txt" },
+      { id: "doc:2", documentId: "doc", projectId: "p1", text: "old second passage", sourceLabel: "notes.txt" }
+    ]);
+    const replaced = await repository.replaceDocument("doc", "p1", [
+      { id: "doc:1", documentId: "doc", projectId: "p1", text: "updated content", sourceLabel: "notes.txt" }
+    ]);
+    expect(replaced.ok).toBe(true);
+    const documents = await repository.listDocuments("p1");
+    expect(documents.ok && documents.value).toEqual([
+      { documentId: "doc", fileName: "notes.txt", chunkCount: 1, characterCount: 15 }
+    ]);
+    const search = await repository.search("old", "p1", 10);
+    expect(search.ok && search.value).toEqual([]);
+  });
+
   it("removes only the selected document in the selected project", async () => {
     const repository = new LocalStorageKnowledgeRepository(new MemoryStorage());
     await repository.add([
