@@ -190,7 +190,8 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Add local project creation/listing/archiving UI and project metadata service.
 - [x] Add conversation-history search across titles and message content.
 - [x] Add optional push-to-talk-style speech recognition control and text-to-speech playback using browser/WebView speech APIs.
-- [ ] Add project-aware workspace routing, project-specific conversations, files, and context isolation.
+- [x] Add project-aware conversation ownership, workspace-scoped history filtering, conversation reassignment, and legacy conversation storage migration.
+- [ ] Add project-specific file ownership and enforce context isolation across all retrieval paths.
 - [ ] Add conversation/message repository migration from localStorage to SQLite.
 - [ ] Add versioned SQLite schema, transactional migrations, backup/export/import, and recovery tests.
 - [ ] Add native OS credential vault; remove API keys from ad-hoc command payloads and use scoped credential handles.

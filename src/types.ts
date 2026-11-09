@@ -15,6 +15,8 @@ export interface ChatMessage {
 }
 export interface Conversation {
   id: string;
+  /** Workspace owner; absent means the personal, unassigned workspace. */
+  projectId?: string;
   title: string;
   messages: ChatMessage[];
   updatedAt: number;

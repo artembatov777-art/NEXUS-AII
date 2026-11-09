@@ -78,7 +78,7 @@ export default function App() {
   const messages = active?.messages ?? [welcome];
 
   function newChat() {
-    const item: Conversation = { id: makeId(), title: "New conversation", messages: [welcome], updatedAt: Date.now() };
+    const item: Conversation = { id: makeId(), title: "New conversation", messages: [welcome], updatedAt: Date.now(), ...(selectedProjectId ? { projectId: selectedProjectId } : {}) };
     setConversations(current => [item, ...current]);
     setActiveId(item.id);
     setError("");
@@ -93,7 +93,7 @@ export default function App() {
     if (!text || busy) return;
     let target = active;
     if (!target) {
-      target = { id: makeId(), title: text.slice(0, 36), messages: [welcome], updatedAt: Date.now() };
+      target = { id: makeId(), title: text.slice(0, 36), messages: [welcome], updatedAt: Date.now(), ...(selectedProjectId ? { projectId: selectedProjectId } : {}) };
       setConversations(current => [target!, ...current]);
       setActiveId(target.id);
     }
@@ -147,8 +147,8 @@ export default function App() {
       <div className="history-heading"><span>RECENT</span><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div>
       <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
-        {conversations.filter(c => (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
-        {conversations.length === 0 && <p className="empty-history">Your conversations will appear here.</p>}
+        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
+        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId).length === 0 && <p className="empty-history">No conversations in this workspace yet.</p>}
       </div>
       <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => setSettingsOpen(true)}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
@@ -158,11 +158,12 @@ export default function App() {
       <section className="chat-area">
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><h1>{active?.title ?? "What are we building today?"}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <label className="chat-project-context">Project context
-            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+            <select value={selectedProjectId} onChange={e => { setSelectedProjectId(e.target.value); setActiveId(null); setError(""); }}>
               <option value="">No project context</option>
               {workspaceProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </label>
+          {active && <button className="workspace-move" onClick={() => { setConversations(current => current.map(item => item.id === active.id ? (selectedProjectId ? { ...item, projectId: selectedProjectId, updatedAt: Date.now() } : { id: item.id, title: item.title, messages: item.messages, updatedAt: Date.now() }) : item)); setActiveId(null); }}>Move conversation here</button>}
         </div>
         <div className="messages">
           {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : "YOU"} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="message-content">{m.content}</div>{m.sourceReferences?.length ? <div className="message-sources"><strong>Sources</strong>{m.sourceReferences.map(source => <span key={source.chunkId}>{source.sourceLabel}{source.page ? ` · p. ${source.page}` : ""}{source.section ? ` · ${source.section}` : ""}</span>)}</div> : null}</div></div>)}
