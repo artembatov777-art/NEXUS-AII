@@ -62,7 +62,12 @@ export function chunkDocumentText(text: string, chunkCharacters = DEFAULTS.chunk
 
 export class DocumentIngestionService {
   private readonly limits: typeof DEFAULTS;
-  constructor(private readonly repository: KnowledgeRepository, options: DocumentIngestionOptions = {}) {
+  constructor(
+    private readonly repository: KnowledgeRepository,
+    options: DocumentIngestionOptions = {},
+    private readonly embeddings?: import("./knowledge").EmbeddingProvider,
+    private readonly vectors?: import("./knowledge").KnowledgeVectorIndex
+  ) {
     this.limits = { ...DEFAULTS, ...options };
     if (!Number.isInteger(this.limits.maxCharacters) || this.limits.maxCharacters < 1 ||
         !Number.isInteger(this.limits.maxChunks) || this.limits.maxChunks < 1) {
@@ -101,11 +106,22 @@ export class DocumentIngestionService {
       ? await this.repository.replaceDocument(input.id, input.projectId, chunks)
       : await this.repository.add(chunks);
     if (!saved.ok) return saved;
+    if (this.embeddings && this.vectors) {
+      try {
+        const embedded = await this.embeddings.embed(chunks.map(chunk => chunk.text));
+        if (embedded.ok && embedded.value.length === chunks.length) {
+          await this.vectors.removeDocument(input.id, input.projectId);
+          await Promise.all(chunks.map((chunk, index) => this.vectors!.upsert(chunk, embedded.value[index])));
+        }
+      } catch { /* Preserve lexical search if semantic indexing is unavailable. */ }
+    }
     return ok({ documentId: input.id, projectId: input.projectId, fileName, chunkCount: chunks.length, characterCount: normalized.length });
   }
 
   async remove(documentId: string, projectId: string): Promise<Result<void>> {
     if (!documentId.trim() || !projectId.trim()) return err("validation", "Document and project identifiers are required.");
-    return this.repository.removeDocument(documentId, projectId);
+    const removed = await this.repository.removeDocument(documentId, projectId);
+    if (removed.ok && this.vectors) await this.vectors.removeDocument(documentId, projectId);
+    return removed;
   }
 }

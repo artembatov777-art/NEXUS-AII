@@ -77,19 +77,43 @@ export interface KnowledgeRepository {
   search(query: string, projectId: string, limit: number): Promise<Result<KnowledgeChunk[]>>;
   removeDocument(documentId: string, projectId: string): Promise<Result<void>>;
 }
+export interface KnowledgeVectorIndex {
+  upsert(chunk: KnowledgeChunk, vector: number[]): Promise<void>;
+  removeDocument(documentId: string, projectId: string): Promise<void>;
+  search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>>;
+}
 export interface KnowledgeCitation { documentId: string; sourceLabel: string; page?: number; section?: string; chunkId: string; }
 export interface RetrievedKnowledge { context: string; citations: KnowledgeCitation[]; }
 /** RAG context builder returns explicit provenance; it never treats retrieved text as instructions. */
 export class KnowledgeRetrievalService {
-  constructor(private readonly repository: KnowledgeRepository) {}
+  constructor(private readonly repository: KnowledgeRepository, private readonly embeddings?: EmbeddingProvider, private readonly vectors?: KnowledgeVectorIndex) {}
   async retrieve(query: string, projectId: string, limit = 8): Promise<Result<RetrievedKnowledge>> {
     if (!query.trim() || !projectId.trim() || !Number.isInteger(limit) || limit < 1 || limit > 20) return err("validation", "Knowledge query, project, or limit is invalid.");
-    const found = await this.repository.search(query, projectId, limit);
+    const found = await this.repository.search(query, projectId, Math.min(100, limit * 4));
     if (!found.ok) return found;
+    let selected = found.value.slice(0, limit);
+    if (this.embeddings && this.vectors && this.repository.getByIds) {
+      try {
+        const embedded = await this.embeddings.embed([query]);
+        if (embedded.ok && embedded.value[0]?.length) {
+          const semantic = await this.vectors.search(embedded.value[0], projectId, Math.min(100, limit * 4));
+          const lexicalScores = new Map(found.value.map((chunk, index) => [chunk.id, 1 / (index + 1)]));
+          const semanticScores = new Map(semantic.map(item => [item.id, Math.max(0, Math.min(1, item.score))]));
+          const ids = [...new Set([...lexicalScores.keys(), ...semanticScores.keys()])];
+          const loaded = await this.repository.getByIds(ids);
+          if (loaded.ok) {
+            const chunks = loaded.value.filter(chunk => chunk.projectId === projectId);
+            const lexicalMax = Math.max(1, ...lexicalScores.values());
+            selected = chunks.map(chunk => ({ chunk, score: 0.4 * ((lexicalScores.get(chunk.id) ?? 0) / lexicalMax) + 0.6 * (semanticScores.get(chunk.id) ?? 0) }))
+              .filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map(item => item.chunk);
+          }
+        }
+      } catch { /* Lexical retrieval remains available if the local model or index is unavailable. */ }
+    }
     return ok({
-      context: found.value.map((chunk, index) => `[Source ${index + 1}: ${chunk.sourceLabel}${chunk.page ? `, page ${chunk.page}` : ""}]
+      context: selected.map((chunk, index) => `[Source ${index + 1}: ${chunk.sourceLabel}${chunk.page ? `, page ${chunk.page}` : ""}]
 ${chunk.text}`).join("\n\n"),
-      citations: found.value.map(chunk => ({ documentId: chunk.documentId, sourceLabel: chunk.sourceLabel, page: chunk.page, section: chunk.section, chunkId: chunk.id }))
+      citations: selected.map(chunk => ({ documentId: chunk.documentId, sourceLabel: chunk.sourceLabel, page: chunk.page, section: chunk.section, chunkId: chunk.id }))
     });
   }
 }
