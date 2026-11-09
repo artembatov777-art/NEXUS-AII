@@ -10,6 +10,9 @@ import { ToolGateway, type PermissionRequest, type PermissionService, type ToolC
 import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage";
 import { NativeAgentCheckpointRepository } from "./nativeAgentCheckpointRepository";
 import { LocalStorageToolAuditSink } from "./toolAuditStorage";
+import { NativeToolAuditSink, NativeTraceSink } from "./nativeEventRepositories";
+import type { ToolAuditSink } from "../core/tools";
+import type { TraceSink } from "../core/observability";
 import type { StorageLike } from "./memoryStorage";
 import { ToolRegistry } from "../core/toolRegistry";
 import { McpClient } from "../core/mcpClient";
@@ -45,6 +48,8 @@ export interface NexusRuntimeOptions {
   clock?: AgentClock & ToolClock;
   models?: ModelRouter;
   checkpointRepository?: AgentCheckpointRepository;
+  auditSink?: ToolAuditSink;
+  traceSink?: TraceSink;
 }
 
 const denyByDefault: NexusPermissionPolicy = {
@@ -89,11 +94,11 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const policy = options.permissions ?? denyByDefault;
   const checkpointRepository = options.checkpointRepository ?? new LocalStorageAgentCheckpointRepository(options.storage);
   const checkpointService = new AgentCheckpointService(checkpointRepository);
-  const auditSink = new LocalStorageToolAuditSink(options.storage);
+  const auditSink = options.auditSink ?? new LocalStorageToolAuditSink(options.storage);
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
   const toolRegistry = new ToolRegistry(toolGateway);
   const mcpClient = new McpClient(toolRegistry, toolGateway);
-  const traceSink = new LocalStorageTraceSink(options.storage);
+  const traceSink = options.traceSink ?? new LocalStorageTraceSink(options.storage);
   const memoryRepository = new LocalStorageMemoryRepository(options.storage);
   const memoryService = new MemoryService(memoryRepository, { memoryId: () => ids.runId().replace("run_", "memory_") as MemoryId }, clock);
   const memoryRetriever = new HybridMemoryRetriever(memoryRepository);
@@ -172,7 +177,11 @@ export function createWorkspaceNexusRuntime(actorId: string, permissions?: Nexus
   if (typeof window === "undefined") throw new Error("Workspace storage is unavailable in this environment.");
   return createNexusRuntime({
     storage: window.localStorage, actorId, permissions, models,
-    ...(isTauri() ? { checkpointRepository: new NativeAgentCheckpointRepository() } : {})
+    ...(isTauri() ? {
+      checkpointRepository: new NativeAgentCheckpointRepository(),
+      auditSink: new NativeToolAuditSink(),
+      traceSink: new NativeTraceSink()
+    } : {})
   });
 }
 export function createBrowserNexusRuntime(actorId: string, permissions?: NexusPermissionPolicy, models?: ModelRouter): ReturnType<typeof createNexusRuntime> {
