@@ -10,7 +10,7 @@ import { VoiceControls } from "./components/VoiceControls";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
 import { KnowledgeRetrievalService } from "./core/knowledge";
-import { LocalStorageProjectRepository } from "./lib/projectStorage";
+import { WorkspaceProjectRepository } from "./lib/projectStorage";
 import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
 import { MemoryService, type MemoryId } from "./core/memory";
 import { LocalStorageMemoryRepository } from "./lib/memoryStorage";
@@ -46,7 +46,7 @@ export default function App() {
   const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const projectService = useMemo(() => new ProjectService(
-    new LocalStorageProjectRepository(window.localStorage),
+    new WorkspaceProjectRepository(window.localStorage),
     () => crypto.randomUUID() as ProjectId,
     () => Date.now()
   ), []);

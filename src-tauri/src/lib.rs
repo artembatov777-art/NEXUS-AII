@@ -48,6 +48,19 @@ struct StoredConversation {
     messages: Vec<StoredMessage>,
     updated_at: i64,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredProject {
+    id: String,
+    name: String,
+    description: String,
+    created_at: i64,
+    updated_at: i64,
+    archived: bool,
+    schema_version: i64,
+}
+
 struct AppDatabase(Mutex<Connection>);
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -55,6 +68,14 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         let transaction = connection.transaction()?;
         transaction.execute_batch("CREATE TABLE conversations (id TEXT PRIMARY KEY NOT NULL,title TEXT NOT NULL,project_id TEXT,updated_at INTEGER NOT NULL); CREATE TABLE messages (id TEXT PRIMARY KEY NOT NULL,conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,role TEXT NOT NULL CHECK(role IN ('user','assistant')),content TEXT NOT NULL,created_at INTEGER NOT NULL,source_references TEXT); CREATE INDEX idx_conversations_project_updated ON conversations(project_id,updated_at DESC); CREATE INDEX idx_messages_conversation_created ON messages(conversation_id,created_at);")?;
         transaction.pragma_update(None, "user_version", 1)?;
+        transaction.commit()?;
+    }
+
+    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if current_version < 2 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch("CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL,name TEXT NOT NULL,description TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,archived INTEGER NOT NULL DEFAULT 0,schema_version INTEGER NOT NULL); CREATE INDEX idx_projects_updated ON projects(updated_at DESC);")?;
+        transaction.pragma_update(None, "user_version", 2)?;
         transaction.commit()?;
     }
     Ok(())
@@ -117,6 +138,36 @@ fn save_conversations(database: State<'_, AppDatabase>, conversations: Vec<Store
         }
     }
     transaction.commit().map_err(|e| e.to_string())
+}
+
+
+#[tauri::command]
+fn load_projects(database: State<'_, AppDatabase>) -> Result<Vec<StoredProject>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let mut statement = connection.prepare("SELECT id,name,description,created_at,updated_at,archived,schema_version FROM projects ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], |row| Ok(StoredProject {
+        id: row.get(0)?, name: row.get(1)?, description: row.get(2)?, created_at: row.get(3)?,
+        updated_at: row.get(4)?, archived: row.get::<_,i64>(5)? != 0, schema_version: row.get(6)?
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_project(database: State<'_, AppDatabase>, project: StoredProject) -> Result<(), String> {
+    if project.id.is_empty() || project.id.len() > 128 || project.name.trim().is_empty() || project.name.len() > 80 || project.description.len() > 500 || project.schema_version != 1 {
+        return Err("Project data is invalid or exceeds limits.".into());
+    }
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    connection.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,updated_at=excluded.updated_at,archived=excluded.archived,schema_version=excluded.schema_version", params![project.id,project.name,project.description,project.created_at,project.updated_at,project.archived as i64,project.schema_version]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_project(database: State<'_, AppDatabase>, id: String) -> Result<(), String> {
+    if id.is_empty() || id.len() > 128 { return Err("Project ID is invalid.".into()); }
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    connection.execute("DELETE FROM projects WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -195,7 +246,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
