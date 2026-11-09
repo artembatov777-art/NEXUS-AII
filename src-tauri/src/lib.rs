@@ -466,11 +466,13 @@ fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
         serde_json::to_vec(value).map_or(false, |bytes| bytes.len() <= MAX_AGENT_CHECKPOINT_BYTES)
     });
     let pending_is_valid = checkpoint.get("pendingApproval").map_or(true, |pending| {
-        status == "waiting_for_approval"
-            && pending.get("permission").and_then(|value| value.as_str())
-                .map_or(false, |value| !value.trim().is_empty() && value.len() <= 160)
-            && pending.get("requestedAt").and_then(|value| value.as_f64())
-                .map_or(false, |value| value.is_finite())
+        pending.is_null() || (
+            status == "waiting_for_approval"
+                && pending.get("permission").and_then(|value| value.as_str())
+                    .map_or(false, |value| !value.trim().is_empty() && value.len() <= 160)
+                && pending.get("requestedAt").and_then(|value| value.as_f64())
+                    .map_or(false, |value| value.is_finite())
+        )
     });
     checkpoint.get("schemaVersion").and_then(|value| value.as_i64()) == Some(1)
         && bounded_string("runId", 160)
