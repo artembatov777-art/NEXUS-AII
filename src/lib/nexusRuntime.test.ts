@@ -105,7 +105,7 @@ describe("createNexusRuntime", () => {
       clock: { now: () => 20_000 }
     });
     const execute = vi.fn(async (input: { query: string }) => ok({ matches: [input.query], count: 1 }));
-    expect(runtime.toolGateway.register({
+    expect(runtime.toolRegistry.register({
       id: "notes.search", version: "1", description: "Search local notes",
       requiredPermissions: ["memory:read"], risk: "low", timeoutMs: 1_000,
       validateInput: (input: unknown) => input !== null && typeof input === "object" && "query" in input
