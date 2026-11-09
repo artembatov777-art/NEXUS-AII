@@ -619,6 +619,122 @@ fn delete_agent_checkpoint(database: State<'_, AppDatabase>, run_id: String) -> 
     delete_agent_checkpoint_record(&connection, &run_id)
 }
 
+
+const MAX_PERSISTED_EVENTS: i64 = 5_000;
+
+fn event_string(event: &serde_json::Value, field: &str, max: usize) -> Result<String, String> {
+    event.get(field).and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty() && value.len() <= max)
+        .map(str::to_string).ok_or_else(|| format!("Invalid event field: {field}."))
+}
+
+fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json::Value) -> Result<(), String> {
+    let tool_id = event_string(&event, "toolId", 160)?;
+    let run_id = event_string(&event, "runId", 160)?;
+    let trace_id = event_string(&event, "traceId", 160)?;
+    let status = event_string(&event, "status", 20)?;
+    if !["started", "completed", "failed", "denied"].contains(&status.as_str()) { return Err("Invalid audit status.".into()); }
+    let timestamp = event.get("timestamp").and_then(|v|v.as_f64()).filter(|v|v.is_finite()).ok_or("Invalid audit timestamp.")?;
+    let detail = match event.get("detail") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(v) => Some(v.as_str().filter(|s|s.len()<=1000).ok_or("Invalid audit detail.")?.to_string())
+    };
+    let tx=connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES(?1,?2,?3,?4,?5,?6)",params![tool_id,run_id,trace_id,status,timestamp,detail]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM tool_audit_events WHERE id NOT IN (SELECT id FROM tool_audit_events ORDER BY id DESC LIMIT ?1)",params![MAX_PERSISTED_EVENTS]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())
+}
+
+fn list_tool_audit_event_records(connection: &Connection, run_id: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    if !(1..=MAX_PERSISTED_EVENTS).contains(&limit) || run_id.map_or(false,|v|v.trim().is_empty()||v.len()>160) {
+        return Err("Audit filter or limit is invalid.".into());
+    }
+    let mut statement=connection.prepare("SELECT tool_id,run_id,trace_id,status,timestamp,detail FROM tool_audit_events WHERE (?1 IS NULL OR run_id=?1) ORDER BY id DESC LIMIT ?2").map_err(|e|e.to_string())?;
+    let rows=statement.query_map(params![run_id,limit],|r|Ok(serde_json::json!({
+        "toolId":r.get::<_,String>(0)?,"runId":r.get::<_,String>(1)?,"traceId":r.get::<_,String>(2)?,
+        "status":r.get::<_,String>(3)?,"timestamp":r.get::<_,f64>(4)?,"detail":r.get::<_,Option<String>>(5)?
+    }))).map_err(|e|e.to_string())?;
+    let mut output=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+    output.reverse();
+    Ok(output)
+}
+
+fn trace_attributes(value: Option<&serde_json::Value>) -> Result<Option<serde_json::Value>, String> {
+    let Some(value)=value else { return Ok(None); };
+    let object=value.as_object().ok_or("Trace attributes must be an object.")?;
+    let mut safe=serde_json::Map::new();
+    for (key,item) in object {
+        let lower=key.to_lowercase();
+        if key.len()>60 || ["key","token","secret","password","authorization","content","prompt"].iter().any(|p|lower.contains(p)) { continue; }
+        let valid=match item {
+            serde_json::Value::String(s)=>s.len()<=200,
+            serde_json::Value::Number(n)=>n.as_f64().map_or(false,|v|v.is_finite()),
+            serde_json::Value::Bool(_)=>true,
+            _=>false
+        };
+        if valid { safe.insert(key.clone(),item.clone()); }
+    }
+    let encoded=serde_json::to_vec(&safe).map_err(|e|e.to_string())?;
+    if encoded.len()>16_000 { return Err("Trace attributes exceed the 16 KB limit.".into()); }
+    Ok(Some(serde_json::Value::Object(safe)))
+}
+
+fn append_trace_event_record(connection: &mut Connection, event: serde_json::Value) -> Result<(), String> {
+    let trace_id=event_string(&event,"traceId",160)?;
+    let run_id=event_string(&event,"runId",160)?;
+    let name=event_string(&event,"name",160)?;
+    let status=event_string(&event,"status",32)?;
+    if !["started","progress","waiting_for_approval","completed","failed","cancelled"].contains(&status.as_str()) { return Err("Invalid trace status.".into()); }
+    let timestamp=event.get("timestamp").and_then(|v|v.as_f64()).filter(|v|v.is_finite()).ok_or("Invalid trace timestamp.")?;
+    let parent=event.get("parentTraceId").and_then(|v|v.as_str());
+    if parent.map_or(false,|v|v.trim().is_empty()||v.len()>160) { return Err("Invalid parent trace id.".into()); }
+    let duration=event.get("durationMs").and_then(|v|v.as_f64());
+    if duration.map_or(false,|v|!v.is_finite()||v<0.0) { return Err("Invalid trace duration.".into()); }
+    let attributes=trace_attributes(event.get("attributes"))?;
+    let mut safe_event=event.clone();
+    if let Some(object)=safe_event.as_object_mut() {
+        if let Some(value)=&attributes { object.insert("attributes".into(),value.clone()); } else { object.remove("attributes"); }
+    }
+    let payload=serde_json::to_string(&safe_event).map_err(|e|e.to_string())?;
+    if payload.len()>32_000 { return Err("Trace event exceeds the 32 KB limit.".into()); }
+    let attributes_json=attributes.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
+    let tx=connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO trace_events(trace_id,run_id,parent_trace_id,name,status,timestamp,duration_ms,attributes,payload) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![trace_id,run_id,parent,name,status,timestamp,duration,attributes_json,payload]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM trace_events WHERE id NOT IN (SELECT id FROM trace_events ORDER BY id DESC LIMIT ?1)",params![MAX_PERSISTED_EVENTS]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())
+}
+
+fn list_trace_event_records(connection: &Connection, run_id: Option<&str>, trace_id: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    if !(1..=1_000).contains(&limit) || run_id.map_or(false,|v|v.trim().is_empty()||v.len()>160) ||
+        trace_id.map_or(false,|v|v.trim().is_empty()||v.len()>160) { return Err("Trace filter or limit is invalid.".into()); }
+    let mut statement=connection.prepare("SELECT payload FROM trace_events WHERE (?1 IS NULL OR run_id=?1) AND (?2 IS NULL OR trace_id=?2) ORDER BY id DESC LIMIT ?3").map_err(|e|e.to_string())?;
+    let rows=statement.query_map(params![run_id,trace_id,limit],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
+    let mut output=rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect::<Result<Vec<serde_json::Value>,String>>()?;
+    output.reverse();
+    Ok(output)
+}
+
+#[tauri::command]
+fn record_tool_audit_event(database: State<'_, AppDatabase>, event: serde_json::Value) -> Result<(), String> {
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    record_tool_audit_event_record(&mut connection,event)
+}
+#[tauri::command]
+fn list_tool_audit_events(database: State<'_, AppDatabase>, run_id: Option<String>, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    list_tool_audit_event_records(&connection,run_id.as_deref(),limit)
+}
+#[tauri::command]
+fn append_trace_event(database: State<'_, AppDatabase>, event: serde_json::Value) -> Result<(), String> {
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    append_trace_event_record(&mut connection,event)
+}
+#[tauri::command]
+fn list_trace_events(database: State<'_, AppDatabase>, run_id: Option<String>, trace_id: Option<String>, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    list_trace_event_records(&connection,run_id.as_deref(),trace_id.as_deref(),limit)
+}
+
 #[tauri::command]
 fn write_clipboard(text: String) -> Result<(), String> {
     if text.len() > 1_000_000 { return Err("Clipboard text exceeds the 1 MB limit.".into()); }
@@ -734,7 +850,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
@@ -784,6 +900,32 @@ mod database_tests {
                 "text": "A source passage", "sourceLabel": "notes.md"
             }]
         })
+    }
+
+
+    #[test]
+    fn native_audit_and_trace_events_round_trip_with_filtering_and_redaction() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let audit=serde_json::json!({"toolId":"notes.search","runId":"run-1","traceId":"trace-1","status":"completed","timestamp":12.0,"detail":"done"});
+        record_tool_audit_event_record(&mut connection,audit.clone()).expect("record audit");
+        assert_eq!(list_tool_audit_event_records(&connection,Some("run-1"),10).expect("list audit"),vec![audit]);
+        let trace=serde_json::json!({"traceId":"trace-1","runId":"run-1","name":"agent.step","status":"completed","timestamp":13.0,"durationMs":5.0,"attributes":{"step":2,"apiKey":"must-not-persist","label":"safe"}});
+        append_trace_event_record(&mut connection,trace).expect("append trace");
+        let listed=list_trace_event_records(&connection,Some("run-1"),Some("trace-1"),10).expect("list trace");
+        assert_eq!(listed.len(),1);
+        assert_eq!(listed[0]["attributes"]["step"],2);
+        assert_eq!(listed[0]["attributes"]["label"],"safe");
+        assert!(listed[0]["attributes"].get("apiKey").is_none());
+    }
+
+    #[test]
+    fn native_audit_and_trace_storage_reject_invalid_events() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        assert!(record_tool_audit_event_record(&mut connection,serde_json::json!({"toolId":"x","runId":"r","traceId":"t","status":"unknown","timestamp":1})).is_err());
+        assert!(append_trace_event_record(&mut connection,serde_json::json!({"traceId":"t","runId":"r","name":"event","status":"unknown","timestamp":1})).is_err());
+        assert!(list_trace_event_records(&connection,None,None,0).is_err());
     }
 
     #[test]
