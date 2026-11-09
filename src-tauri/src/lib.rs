@@ -459,53 +459,80 @@ async fn send_chat(
     model: String,
     messages: Vec<ProviderInputMessage>,
 ) -> Result<String, String> {
-    let base = base_url.trim().trim_end_matches('/');
-    if !(base.starts_with("https://") || base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1")) {
-        return Err("Provider URL must use HTTPS (HTTP is allowed only for localhost).".into());
+    let mut endpoint = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "Provider URL is invalid.".to_string())?;
+    let host = endpoint.host_str().unwrap_or_default();
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false);
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && loopback) {
+        return Err("Provider URL must use HTTPS (HTTP is allowed only for loopback hosts).".into());
     }
-    let api_key = credential_entry(&credential_handle)?.get_password().map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
-    if model.trim().is_empty() || messages.is_empty() {
-        return Err("A model and at least one message are required.".into());
+    if !endpoint.username().is_empty() || endpoint.password().is_some()
+        || endpoint.query().is_some() || endpoint.fragment().is_some() {
+        return Err("Provider URL cannot contain credentials, query parameters, or fragments.".into());
     }
-
-    let endpoint = if base.ends_with("/chat/completions") {
-        base.to_string()
+    if endpoint.path().trim_end_matches('/').ends_with("/chat/completions") {
+        // The configured endpoint already includes the OpenAI-compatible route.
     } else {
-        format!("{base}/chat/completions")
-    };
+        let path = format!("{}/chat/completions", endpoint.path().trim_end_matches('/'));
+        endpoint.set_path(&path);
+    }
+    if model.trim().is_empty() || model.len() > 128 || messages.is_empty() || messages.len() > 100 {
+        return Err("A valid model and between 1 and 100 messages are required.".into());
+    }
+    let mut total_bytes = 0usize;
+    for message in &messages {
+        if !["system", "user", "assistant"].contains(&message.role.as_str())
+            || message.content.len() > 100_000 {
+            return Err("Chat message role or content is invalid.".into());
+        }
+        total_bytes = total_bytes.saturating_add(message.content.len());
+        if total_bytes > 1_000_000 {
+            return Err("Chat request exceeds the 1 MB content limit.".into());
+        }
+    }
 
+    let api_key = credential_entry(&credential_handle)?
+        .get_password()
+        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
+    if api_key.is_empty() || api_key.len() > 8192 {
+        return Err("Stored provider credential is invalid.".into());
+    }
     let payload = serde_json::json!({
-        "model": model,
+        "model": model.trim(),
         "messages": messages.iter().map(|m| serde_json::json!({
             "role": m.role,
             "content": m.content
         })).collect::<Vec<_>>()
     });
-
-    let response = reqwest::Client::new()
-        .post(endpoint)
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| format!("Could not configure provider client: {e}"))?;
+    let response = client.post(endpoint)
         .bearer_auth(&api_key)
         .json(&payload)
         .send()
         .await
         .map_err(|e| format!("Provider request failed: {e}"))?;
-
     let status = response.status();
+    if response.content_length().map_or(false, |length| length > 2_000_000) {
+        return Err("Provider response exceeded the 2 MB limit.".into());
+    }
+    let body = response.bytes().await
+        .map_err(|e| format!("Could not read provider response: {e}"))?;
+    if body.len() > 2_000_000 {
+        return Err("Provider response exceeded the 2 MB limit.".into());
+    }
     if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        let excerpt: String = body.chars().take(500).collect();
+        let raw = String::from_utf8_lossy(&body).replace(&api_key, "[redacted]");
+        let excerpt: String = raw.chars().take(500).collect();
         return Err(format!("Provider returned HTTP {status}: {excerpt}"));
     }
-
-    let data: ChatCompletionResponse = response
-        .json()
-        .await
+    let data: ChatCompletionResponse = serde_json::from_slice(&body)
         .map_err(|e| format!("Could not parse provider response: {e}"))?;
-
-    data.choices
-        .into_iter()
-        .next()
-        .map(|choice| choice.message.content)
+    data.choices.into_iter().next().map(|choice| choice.message.content)
         .ok_or_else(|| "Provider returned an empty response.".into())
 }
 
