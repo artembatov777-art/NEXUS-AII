@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, X } from "lucide-react";
+import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, Sparkles, X } from "lucide-react";
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
+import type { ProviderSettings } from "../types";
+import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
+import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
 import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
 import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
@@ -38,15 +41,16 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
   return labels[status];
 }
 
-export function AgentControlCenter({ onClose }: { onClose: () => void }) {
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean }) {
   const [runtimeState] = useState<RuntimeState>(() => {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
       if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
+      const models = hasProviderKey ? createTauriModelRouter(providerSettings) : null;
       const runtime = createWorkspaceNexusRuntime("local-user", {
-        authorizeAgent: async () => "ask_user",
+        authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow || agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async () => "deny"
-      });
+      }, models ?? undefined);
       const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
       if (!registered.ok) throw new Error(registered.error.message);
       return { runtime, error: "", profile: loadedProfile.value };
@@ -63,6 +67,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned") ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
 
   const addFeed = useCallback((text: string, tone: FeedItem["tone"] = "normal") => {
@@ -143,6 +148,44 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
     addFeed("Agent profile saved as version 1." + next.revision + ".0.", "success");
   }
 
+  async function startPlannedWorkflow() {
+    if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
+    const goal = task.trim();
+    setTask("");
+    setFeed([]);
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setBusy(true);
+    try {
+      addFeed("Sending the task to the configured model planner…");
+      const planned = await plannedWorkflow.plan(goal, nextController.signal);
+      if (!planned.ok) {
+        addFeed("Planning failed: " + planned.error.message, "error");
+        return;
+      }
+      addFeed("Validated plan: " + planned.value.steps.length + " bounded tool step(s).", "success");
+      const coordinationId = crypto.randomUUID() as AgentRunId;
+      setActiveRunId(coordinationId);
+      for await (const event of plannedWorkflow.run(planned.value, coordinationId, nextController.signal)) {
+        if (event.type === "started") addFeed("Planned workflow started: " + event.runId);
+        else if (event.type === "agent_started") addFeed("Executing step " + event.step + " with " + event.agentId + "…");
+        else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.", "success");
+        else if (event.type === "waiting_for_approval") addFeed("Approval required for step " + event.step + ".", "warning");
+        else if (event.type === "completed") addFeed(event.detail ?? "Planned workflow completed.", "success");
+        else if (event.type === "failed") addFeed(event.detail ?? "Planned workflow failed.", "error");
+      }
+      await refresh();
+    } catch (cause) {
+      addFeed(cause instanceof Error ? cause.message : "Planned workflow failed.", "error");
+      await refresh();
+    } finally {
+      controller.current = null;
+      setBusy(false);
+      setActiveRunId(null);
+      await refresh();
+    }
+  }
+
   function startAgent() {
     if (!runtime || !task.trim() || task.trim().length > 1_000) return;
     const input = task.trim();
@@ -207,8 +250,8 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
             </div>
             <label className="agent-task-label" htmlFor="agent-task">Task input</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
-            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run agent</button></div>
-            <div className="agent-disclaimer">This built-in agent is a deterministic integration demo, not an LLM agent. It creates a local preview only and has no external system access.</div>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow ? "Create a model plan and execute registered tools through the permission-gated runtime" : "Save a provider API key in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can execute only registered tools through the permission-gated runtime; unapproved external tools remain blocked.</div>
           </article>
 
           <article className="agent-card">
@@ -253,7 +296,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
           </article>
         </aside>
       </div>
-      <footer className="agent-center-footer"><span>Storage: browser localStorage preview · approval grants: in-memory and one-time</span><span>Default-deny tool policy</span></footer>
+      <footer className="agent-center-footer"><span>Storage: native SQLite checkpoints, audit and traces · approval grants: one-time</span><span>Default-deny tool policy</span></footer>
     </section>
   </div>;
 }
