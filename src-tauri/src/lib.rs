@@ -60,6 +60,29 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+
+#[tauri::command]
+fn load_conversations(database: State<'_, AppDatabase>) -> Result<Vec<StoredConversation>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let metadata = {
+        let mut statement = connection.prepare("SELECT id,title,project_id,updated_at FROM conversations ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+        statement.query_map([], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,Option<String>>(2)?,row.get::<_,i64>(3)?))).map_err(|e| e.to_string())?
+            .collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+    };
+    let mut conversations = Vec::with_capacity(metadata.len());
+    for (id,title,project_id,updated_at) in metadata {
+        let messages = {
+            let mut statement = connection.prepare("SELECT id,role,content,created_at,source_references FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e| e.to_string())?;
+            statement.query_map(params![id], |row| {
+                let source_json: Option<String> = row.get(4)?;
+                Ok(StoredMessage { id: row.get(0)?, role: row.get(1)?, content: row.get(2)?, created_at: row.get(3)?, source_references: source_json.and_then(|json| serde_json::from_str(&json).ok()) })
+            }).map_err(|e| e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+        };
+        conversations.push(StoredConversation { id,title,project_id,messages,updated_at });
+    }
+    Ok(conversations)
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
