@@ -127,6 +127,17 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [ ] Add token budgets and operation-level idempotency for side effects.
 - [ ] Implement real model-backed planning only after the separately scheduled provider integration phase.
 
+
+### Native agent checkpoint persistence (implemented: 2026-11-09)
+
+- [x] Add SQLite schema v5 for agent checkpoints and a thread/update index.
+- [x] Add native load, list, save, and delete commands.
+- [x] Enforce bounded JSON payloads, valid statuses, immutable run identity/creation time, terminal-state immutability, and transactional compare-and-swap sequence checks in the Rust host.
+- [x] Route the desktop Agent Control Center through the native repository; browser preview continues to use localStorage.
+- [x] Add Rust persistence/CAS/validation tests and TypeScript command-adapter tests.
+
+**Boundary:** checkpoint state now survives desktop restarts. Tool audit and trace history still use localStorage. Approval grants are deliberately not persisted: a pending checkpoint can be loaded after restart, but the user must explicitly approve again to obtain a fresh one-time grant.
+
 ## Engineering rules
 
 - Every milestone is a pull request.
@@ -227,7 +238,8 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, and plan-size bounds); [ ] add bounded delegated-output handling and cancellation edge-case tests.
 - [ ] Complete MCP protocol lifecycle, server capability negotiation, bounded SSE framing, reconnect/health state, and adversarial schema tests.
 - [ ] Connect model-backed planning to the resumable permission-gated runtime, not just standalone planner primitives.
-- [ ] Persist agent checkpoints, approvals, audit events, and traces transactionally in native SQLite.
+- [x] Persist resumable agent checkpoints transactionally in native SQLite with a versioned migration, bounded payload validation, compare-and-swap sequence enforcement, and thread-scoped listing.
+- [ ] Move tool audit events and traces to transactional native SQLite; one-time approval grants intentionally remain ephemeral and must be re-issued by the user after restart.
 - [ ] Finish workspace-wide search across conversations, memories, and project knowledge with explicit scope.
 - [ ] Finish voice state/error handling and document WebView/browser host limitations; native speech adapters remain a separate integration.
 - [x] Add backup/restore UI with schema validation, confirmation, and transactional native import; [ ] add round-trip and corruption-recovery integration tests.
