@@ -109,7 +109,7 @@ export class McpClient {
         name: (result.serverInfo as Record<string, string>).name.slice(0, 120),
         version: (result.serverInfo as Record<string, string>).version.slice(0, 40)
       },
-      capabilities,
+      capabilities: capabilities as Record<string, unknown>,
       health: "healthy",
       importedToolIds: new Set()
     });
