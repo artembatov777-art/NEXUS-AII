@@ -498,10 +498,6 @@ fn agent_checkpoint_validation_error(checkpoint: &serde_json::Value) -> Option<&
     None
 }
 
-fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
-    agent_checkpoint_validation_error(checkpoint).is_none()
-}
-
 fn load_agent_checkpoint_record(connection: &Connection, run_id: &str) -> Result<Option<serde_json::Value>, String> {
     if run_id.trim().is_empty() || run_id.len() > 160 {
         return Err("Agent checkpoint run id is invalid.".into());
