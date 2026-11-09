@@ -243,7 +243,11 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Finish workspace-wide search across all conversations, all memories, and project knowledge across every project, with explicit per-category scope toggles and bounded results.
 - [x] Harden voice input/output lifecycle, permission and host error handling, cancellation/unmount cleanup, and document WebView/browser service limitations; native speech adapters remain a separate integration.
 - [x] Add backup/restore UI with schema validation, confirmation, transactional native import, round-trip tests, and rollback/recovery tests for validation and mid-transaction failures.
-- [ ] Complete cross-platform credential vault UX and security review.
-- [ ] Run end-to-end tests across real Tauri desktop builds and document platform-specific limitations.
+- [x] Implement native credential-vault status states (available/missing/unavailable), browser-preview fail-closed messaging, platform backend selection, and provider-key input validation with unit tests.
+- [x] Add a source-level security review covering trust boundaries, provider/MCP controls, storage, permissions, CSP, and residual risks.
+- [x] Document platform-specific WebView, keyring, speech, build, and persistence limitations.
+- [x] Add a repeatable Windows/macOS/Linux manual desktop smoke-test procedure in docs/PLATFORM_SMOKE_TESTS.md.
+- [ ] Execute and record credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions; CI cannot validate an unlocked interactive keyring.
+- [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
 **Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. No OmniRoute work is included here.
