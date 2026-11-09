@@ -147,7 +147,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
      * Tool Registry and whose steps execute via ResumableAgentRuntime + Tool Gateway.
      * Approval-waiting coordination must be resumed on this same workflow instance.
      */
-    createAgentWorkflow: (providerId: string, model: string, threadId = "nexus-planned-workflow") => {
+    createAgentWorkflow: (providerId: string, model: string, threadId = "nexus-planned-workflow", allowedToolIds?: string[]) => {
       if (!options.models) return null;
       if (!agentRuntime.list().some(agent => agent.id === TOOL_INVOCATION_AGENT_ID)) {
         const registered = agentRuntime.register(createToolInvocationAgent());
@@ -159,7 +159,10 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
         plan: async (goal: string, signal: AbortSignal): Promise<Result<ValidatedPlan>> => {
           const available = toolRegistry.search("", 100);
           if (!available.ok) return available;
-          return planner.plan(goal, available.value, signal);
+          const allowed = allowedToolIds ? new Set(allowedToolIds) : null;
+          const tools = allowed ? available.value.filter(tool => allowed.has(tool.id)) : available.value;
+          if (allowed && tools.length === 0) return err("validation", "No tools allowed for this workflow are registered.");
+          return planner.plan(goal, tools, signal);
         },
         run: (plan: ValidatedPlan, runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => {
           const assignments = Object.fromEntries(plan.steps.map(step => [step.id, TOOL_INVOCATION_AGENT_ID])) as Record<string, AgentId>;
