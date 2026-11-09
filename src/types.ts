@@ -1,9 +1,17 @@
 export type Role = "user" | "assistant";
+export interface ChatSourceReference {
+  documentId: string;
+  sourceLabel: string;
+  page?: number;
+  section?: string;
+  chunkId: string;
+}
 export interface ChatMessage {
   id: string;
   role: Role;
   content: string;
   createdAt: number;
+  sourceReferences?: ChatSourceReference[];
 }
 export interface Conversation {
   id: string;

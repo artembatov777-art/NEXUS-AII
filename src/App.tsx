@@ -12,6 +12,8 @@ import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/pr
 import { KnowledgeRetrievalService } from "./core/knowledge";
 import { LocalStorageProjectRepository } from "./lib/projectStorage";
 import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
+import { MemoryService, type MemoryId } from "./core/memory";
+import { LocalStorageMemoryRepository } from "./lib/memoryStorage";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 const makeId = () => crypto.randomUUID();
@@ -47,6 +49,11 @@ export default function App() {
   ), []);
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
     new LocalStorageKnowledgeRepository(window.localStorage)
+  ), []);
+  const memoryService = useMemo(() => new MemoryService(
+    new LocalStorageMemoryRepository(window.localStorage),
+    { memoryId: () => crypto.randomUUID() as MemoryId },
+    { now: () => Date.now() }
   ), []);
   async function refreshProjects() {
     const result = await projectService.list();
@@ -92,14 +99,24 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      let knowledgeContext = "";
+      const contextParts: string[] = [];
+      const remembered = await memoryService.search(text, "profile", 5);
+      if (!remembered.ok) throw new Error(`Could not retrieve saved memory: ${remembered.error.message}`);
+      if (remembered.value.length) contextParts.push("Relevant user-approved memories:\\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\\n${item.content}`).join("\\n\\n"));
+      let sourceReferences: import("./types").ChatSourceReference[] = [];
       if (selectedProjectId) {
-        const retrieved = await knowledgeService.retrieve(text, selectedProjectId, 6);
+        const [retrieved, projectMemories] = await Promise.all([
+          knowledgeService.retrieve(text, selectedProjectId, 6),
+          memoryService.search(text, "project", 5, selectedProjectId)
+        ]);
         if (!retrieved.ok) throw new Error(`Could not retrieve project knowledge: ${retrieved.error.message}`);
-        knowledgeContext = retrieved.value.context;
+        if (!projectMemories.ok) throw new Error(`Could not retrieve project memories: ${projectMemories.error.message}`);
+        if (retrieved.value.context) contextParts.push("Selected project knowledge:\\n" + retrieved.value.context);
+        sourceReferences = retrieved.value.citations;
+        if (projectMemories.value.length) contextParts.push("Selected project memories:\\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\\n${item.content}`).join("\\n\\n"));
       }
-      const answer = await sendMessage(provider, apiKey, next, knowledgeContext);
-      updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now() }]);
+      const answer = await sendMessage(provider, apiKey, next, contextParts.join("\\n\\n"));
+      updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -143,7 +160,7 @@ export default function App() {
           </label>
         </div>
         <div className="messages">
-          {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : "YOU"} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="message-content">{m.content}</div></div></div>)}
+          {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : "YOU"} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="message-content">{m.content}</div>{m.sourceReferences?.length ? <div className="message-sources"><strong>Sources</strong>{m.sourceReferences.map(source => <span key={source.chunkId}>{source.sourceLabel}{source.page ? ` · p. ${source.page}` : ""}{source.section ? ` · ${source.section}` : ""}</span>)}</div> : null}</div></div></div>)}
           {busy && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">NEXUS</div><div className="typing"><i/><i/><i/> Connecting to provider…</div></div></div>}
           {error && <div className="error-banner">{error}</div>}
         </div>
