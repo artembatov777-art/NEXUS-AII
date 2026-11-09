@@ -88,7 +88,7 @@ export class DocumentIngestionService {
     }
     const normalized = normalizeText(input.content);
     if (!normalized) return err("validation", "The document contains no readable text.");
-    const sourceSegments = input.pages?.length ? input.pages.map((page, index) => ({ ...page, text: normalizeText(page.text), page: page.page ?? index + 1 })) : [{ text: normalized }];
+    const sourceSegments: Array<{ text: string; page?: number; section?: string }> = input.pages?.length ? input.pages.map((page, index) => ({ ...page, text: normalizeText(page.text), page: page.page ?? index + 1 })) : [{ text: normalized }];
     const prepared = sourceSegments.flatMap(segment => chunkDocumentText(segment.text, this.limits.chunkCharacters, this.limits.overlapCharacters).map((text, index) => ({ text, page: segment.page, section: segment.section ?? `Chunk ${index + 1}` })));
     if (!prepared.length || prepared.length > this.limits.maxChunks) {
       return err("validation", "Document creates too many chunks for a single import.");

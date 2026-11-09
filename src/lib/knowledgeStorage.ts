@@ -2,6 +2,7 @@ import type { KnowledgeChunk, KnowledgeRepository } from "../core/knowledge";
 import { err, ok, type Result } from "../core/result";
 import type { StorageLike } from "./memoryStorage";
 const KEY="nexus-au:knowledge:v1";
+export interface KnowledgeDocumentSummary { documentId: string; fileName: string; chunkCount: number; characterCount: number; }
 function valid(value:unknown):value is KnowledgeChunk {if(!value||typeof value!=="object")return false;const c=value as Partial<KnowledgeChunk>;return typeof c.id==="string"&&typeof c.documentId==="string"&&typeof c.projectId==="string"&&typeof c.text==="string"&&typeof c.sourceLabel==="string"&&c.text.length<=12000;}
 const terms=(s:string):string[]=>Array.from(s.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[]);
 export class LocalStorageKnowledgeRepository implements KnowledgeRepository{

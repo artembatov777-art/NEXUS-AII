@@ -28,14 +28,14 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
-        const text = textContent.items.map(item => "str" in item ? item.str : "").join(" ").replace(/\\s+/g, " ").trim();
+        const text = textContent.items.map(item => "str" in item ? item.str : "").join(" ").replace(/\s+/g, " ").trim();
         total += text.length;
         if (total > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted PDF text exceeds the 1 MB limit.");
         if (text) pages.push({ text, page: pageNumber, section: `Page ${pageNumber}` });
       }
     } finally { await pdf.destroy(); }
     if (!pages.length) throw new Error("No selectable text was found in this PDF. Scanned-image OCR is not supported.");
-    return { mediaType: "text/plain", content: pages.map(page => page.text).join("\\n\\n"), pages };
+    return { mediaType: "text/plain", content: pages.map(page => page.text).join("\n\n"), pages };
   }
   if (name.endsWith(".docx")) {
     const arrayBuffer = await file.arrayBuffer();
