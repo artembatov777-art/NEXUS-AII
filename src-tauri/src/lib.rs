@@ -452,19 +452,37 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
 
 const MAX_AGENT_CHECKPOINT_BYTES: usize = 256 * 1024;
 
-fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
+fn agent_checkpoint_validation_error(checkpoint: &serde_json::Value) -> Option<&'static str> {
     let bounded_string = |field: &str, max: usize| {
         checkpoint.get(field).and_then(|value| value.as_str())
             .map_or(false, |value| !value.trim().is_empty() && value.len() <= max)
     };
-    let sequence = checkpoint.get("sequence").and_then(|value| value.as_i64());
+    if checkpoint.get("schemaVersion").and_then(|value| value.as_i64()) != Some(1) {
+        return Some("unsupported schema version");
+    }
+    if !bounded_string("runId", 160) || !bounded_string("agentId", 160) || !bounded_string("threadId", 160) {
+        return Some("invalid run, agent, or thread identity");
+    }
+    if checkpoint.get("sequence").and_then(|value| value.as_i64()).map_or(true, |value| value <= 0) {
+        return Some("invalid checkpoint sequence");
+    }
     let status = checkpoint.get("status").and_then(|value| value.as_str()).unwrap_or("");
+    if !["running", "waiting_for_approval", "completed", "failed", "cancelled"].contains(&status) {
+        return Some("invalid checkpoint status");
+    }
     let created_at = checkpoint.get("createdAt").and_then(|value| value.as_f64());
     let updated_at = checkpoint.get("updatedAt").and_then(|value| value.as_f64());
-    let state = checkpoint.get("state");
-    let state_is_bounded = state.map_or(false, |value| {
+    if created_at.map_or(true, |value| !value.is_finite())
+        || updated_at.map_or(true, |value| !value.is_finite())
+        || updated_at.zip(created_at).map_or(true, |(updated, created)| updated < created) {
+        return Some("invalid checkpoint timestamps");
+    }
+    let state_is_bounded = checkpoint.get("state").map_or(false, |value| {
         serde_json::to_vec(value).map_or(false, |bytes| bytes.len() <= MAX_AGENT_CHECKPOINT_BYTES)
     });
+    if !state_is_bounded {
+        return Some("missing or oversized checkpoint state");
+    }
     let pending_is_valid = checkpoint.get("pendingApproval").map_or(true, |pending| {
         pending.is_null() || (
             status == "waiting_for_approval"
@@ -474,17 +492,14 @@ fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
                     .map_or(false, |value| value.is_finite())
         )
     });
-    checkpoint.get("schemaVersion").and_then(|value| value.as_i64()) == Some(1)
-        && bounded_string("runId", 160)
-        && bounded_string("agentId", 160)
-        && bounded_string("threadId", 160)
-        && sequence.map_or(false, |value| value > 0)
-        && ["running", "waiting_for_approval", "completed", "failed", "cancelled"].contains(&status)
-        && created_at.map_or(false, |value| value.is_finite())
-        && updated_at.map_or(false, |value| value.is_finite())
-        && updated_at.zip(created_at).map_or(false, |(updated, created)| updated >= created)
-        && state_is_bounded
-        && pending_is_valid
+    if !pending_is_valid {
+        return Some("invalid pending approval metadata");
+    }
+    None
+}
+
+fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
+    agent_checkpoint_validation_error(checkpoint).is_none()
 }
 
 fn load_agent_checkpoint_record(connection: &Connection, run_id: &str) -> Result<Option<serde_json::Value>, String> {
@@ -519,8 +534,8 @@ fn save_agent_checkpoint_record(
     checkpoint: serde_json::Value,
     expected_previous_sequence: Option<i64>
 ) -> Result<(), String> {
-    if !valid_agent_checkpoint(&checkpoint) {
-        return Err("Agent checkpoint is invalid or exceeds the 256 KB state limit.".into());
+    if let Some(reason) = agent_checkpoint_validation_error(&checkpoint) {
+        return Err(format!("Agent checkpoint is invalid: {reason}."));
     }
     let run_id = checkpoint["runId"].as_str().unwrap();
     let agent_id = checkpoint["agentId"].as_str().unwrap();
