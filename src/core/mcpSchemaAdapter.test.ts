@@ -17,6 +17,7 @@ describe("BasicMcpSchemaAdapter", () => {
     expect(adapter.validate("s", tool, { query: "x", limit: 3 }).ok).toBe(true);
     expect(adapter.validate("s", tool, { limit: 3 }).ok).toBe(false);
     expect(adapter.validate("s", tool, { query: 3 }).ok).toBe(false);
+    expect(adapter.validate("s", { name: "bad-array", inputSchema: { type: "object", properties: { items: { type: "array", items: { type: "string" }, properties: {} } } } }, { items: [] }).ok).toBe(false);
   });
 
   it("rejects additional properties and unsupported schema keywords at every depth", () => {

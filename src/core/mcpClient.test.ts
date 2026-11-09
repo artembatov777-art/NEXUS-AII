@@ -126,6 +126,23 @@ describe("McpClient", () => {
     expect(cancelled).toMatchObject({ ok: false, error: { code: "cancelled" } });
   });
 
+  it("rejects duplicate tool names across paginated discovery results", async () => {
+    const tools = gateway();
+    const client = new McpClient(new ToolRegistry(tools), tools);
+    const transport: McpTransport = {
+      request: async request => request.method === "initialize"
+        ? { jsonrpc: "2.0", id: request.id, result: initializeResult() }
+        : request.params && "cursor" in (request.params as object)
+          ? { jsonrpc: "2.0", id: request.id, result: { tools: [{ name: "same" }] } }
+          : { jsonrpc: "2.0", id: request.id, result: { tools: [{ name: "same" }], nextCursor: "next" } },
+      notify: async () => undefined
+    };
+    await client.connect({ id: "duplicates", name: "Duplicates", version: "1", transport }, new AbortController().signal);
+    expect(await client.listTools("duplicates", new AbortController().signal)).toMatchObject({
+      ok: false, error: { message: "MCP server returned duplicate tool names." }
+    });
+  });
+
   it("rejects malformed tool metadata from an MCP server", async () => {
     const tools = gateway();
     const client = new McpClient(new ToolRegistry(tools), tools);

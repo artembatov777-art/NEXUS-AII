@@ -146,6 +146,7 @@ export class McpClient {
     if (!server) return err("validation", "MCP server is not connected.");
     if (!("tools" in server.capabilities)) return err("validation", "MCP server did not advertise the tools capability.");
     const output: McpRemoteTool[] = [];
+    const toolNames = new Set<string>();
     const cursors = new Set<string>();
     let cursor: string | undefined;
     for (let page = 0; page < 10; page += 1) {
@@ -169,6 +170,8 @@ export class McpClient {
         if (raw.inputSchema !== undefined && (!safeSchema || typeof safeSchema !== "object" || Array.isArray(safeSchema))) {
           return err("tool_failed", "MCP tool input schema is invalid or exceeds its size limit.");
         }
+        if (toolNames.has(raw.name)) return err("tool_failed", "MCP server returned duplicate tool names.");
+        toolNames.add(raw.name);
         output.push({
           name: raw.name,
           ...(typeof raw.description === "string" ? { description: raw.description } : {}),

@@ -23,7 +23,7 @@ function validSchema(schema: unknown, depth = 0): schema is Schema {
   if (schema.title !== undefined && (typeof schema.title !== "string" || schema.title.length > 120)) return false;
 
   if (schema.type === "object") {
-    if (!plainObject(schema.properties) || Object.keys(schema.properties).length > MAX_PROPERTIES) return false;
+    if (schema.items !== undefined || !plainObject(schema.properties) || Object.keys(schema.properties).length > MAX_PROPERTIES) return false;
     if (schema.additionalProperties !== undefined && typeof schema.additionalProperties !== "boolean") return false;
     if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.length > MAX_PROPERTIES ||
         schema.required.some(key => typeof key !== "string" || !Object.prototype.hasOwnProperty.call(schema.properties, key)) ||
@@ -32,7 +32,7 @@ function validSchema(schema: unknown, depth = 0): schema is Schema {
       key !== "__proto__" && key !== "constructor" && key !== "prototype" && validSchema(child, depth + 1)
     );
   }
-  if (schema.type === "array") return validSchema(schema.items, depth + 1);
+  if (schema.type === "array") return schema.properties === undefined && schema.required === undefined && schema.additionalProperties === undefined && validSchema(schema.items, depth + 1);
   return schema.properties === undefined && schema.required === undefined &&
     schema.additionalProperties === undefined && schema.items === undefined;
 }
