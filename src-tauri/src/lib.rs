@@ -297,7 +297,10 @@ fn store_provider_key(api_key: String) -> Result<(), String> {
 
 #[tauri::command]
 fn has_provider_key() -> bool {
-    credential_entry("default").and_then(|entry| entry.get_password().map(|_| ())).is_ok()
+    match credential_entry("default") {
+        Ok(entry) => entry.get_password().is_ok(),
+        Err(_) => false,
+    }
 }
 
 #[tauri::command]
