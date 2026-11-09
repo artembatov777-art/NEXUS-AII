@@ -8,6 +8,7 @@ export interface DocumentInput {
   fileName: string;
   mediaType: SupportedDocumentType;
   content: string;
+  pages?: Array<{ text: string; page?: number; section?: string }>;
 }
 export interface IngestionSummary {
   documentId: string;
@@ -82,19 +83,23 @@ export class DocumentIngestionService {
     }
     const normalized = normalizeText(input.content);
     if (!normalized) return err("validation", "The document contains no readable text.");
-    const texts = chunkDocumentText(normalized, this.limits.chunkCharacters, this.limits.overlapCharacters);
-    if (!texts.length || texts.length > this.limits.maxChunks) {
+    const sourceSegments = input.pages?.length ? input.pages.map((page, index) => ({ ...page, text: normalizeText(page.text), page: page.page ?? index + 1 })) : [{ text: normalized }];
+    const prepared = sourceSegments.flatMap(segment => chunkDocumentText(segment.text, this.limits.chunkCharacters, this.limits.overlapCharacters).map((text, index) => ({ text, page: segment.page, section: segment.section ?? `Chunk ${index + 1}` })));
+    if (!prepared.length || prepared.length > this.limits.maxChunks) {
       return err("validation", "Document creates too many chunks for a single import.");
     }
-    const chunks: KnowledgeChunk[] = texts.map((text, index) => ({
+    const chunks: KnowledgeChunk[] = prepared.map((segment, index) => ({
       id: `${input.id}:chunk:${index + 1}`,
       documentId: input.id,
       projectId: input.projectId,
-      text,
+      text: segment.text,
       sourceLabel: fileName,
-      section: `Chunk ${index + 1}`
+      ...(segment.page !== undefined ? { page: segment.page } : {}),
+      section: segment.section
     }));
-    const saved = await this.repository.add(chunks);
+    const saved = this.repository.replaceDocument
+      ? await this.repository.replaceDocument(input.id, input.projectId, chunks)
+      : await this.repository.add(chunks);
     if (!saved.ok) return saved;
     return ok({ documentId: input.id, projectId: input.projectId, fileName, chunkCount: chunks.length, characterCount: normalized.length });
   }

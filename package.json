@@ -15,7 +15,9 @@
     "@tauri-apps/api": "^2.5.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "mammoth": "^1.9.0",
+    "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
