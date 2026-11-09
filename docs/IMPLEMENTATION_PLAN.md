@@ -222,7 +222,7 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 
 ### Remaining acceptance work
 - [ ] Add persistent native integration tests for SQLite CRUD, project cleanup, document replacement, backup import/export, and schema upgrades.
-- [ ] Make Memory and Knowledge migration idempotent under partial failure and concurrent startup.
+- [x] Make Memory, Knowledge, and Project local-to-SQLite migrations retry-safe after partial failure; missing IDs are imported without overwriting existing native records. Concurrent cross-instance startup still needs a native transaction-level migration lock.
 - [x] Clear stale IndexedDB semantic vectors after backup restore; [ ] complete project/document deletion cleanup and re-index reconciliation.
 - [x] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, and plan-size bounds); [ ] add bounded delegated-output handling and cancellation edge-case tests.
 - [ ] Complete MCP protocol lifecycle, server capability negotiation, bounded SSE framing, reconnect/health state, and adversarial schema tests.
