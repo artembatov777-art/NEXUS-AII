@@ -19,6 +19,8 @@ import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
+type ProviderVaultStatus = "loading" | "available" | "missing" | "unavailable";
+
 const makeId = () => crypto.randomUUID();
 const welcome: ChatMessage = {
   id: "welcome",
@@ -34,6 +36,7 @@ export default function App() {
   const [provider, setProvider] = useState<ProviderSettings>(loadProvider);
   const [apiKey, setApiKey] = useState("");
   const [hasProviderKey, setHasProviderKey] = useState(false);
+  const [providerVaultStatus, setProviderVaultStatus] = useState<ProviderVaultStatus>("loading");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
@@ -87,7 +90,13 @@ export default function App() {
   }, []);
   useEffect(() => { if (conversationsReady) void saveConversations(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady]);
   useEffect(() => { saveProvider(provider); }, [provider]);
-  useEffect(() => { void invoke<boolean>("has_provider_key").then(setHasProviderKey).catch(() => setHasProviderKey(false)); }, []);
+  useEffect(() => {
+    void invoke<ProviderVaultStatus>("provider_vault_status").then(status => {
+      const safeStatus: ProviderVaultStatus = ["available", "missing", "unavailable"].includes(status) ? status : "unavailable";
+      setProviderVaultStatus(safeStatus);
+      setHasProviderKey(safeStatus === "available");
+    }).catch(() => { setProviderVaultStatus("unavailable"); setHasProviderKey(false); });
+  }, []);
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
@@ -153,14 +162,14 @@ export default function App() {
 
   async function saveProviderSettings() {
     try {
-      if (apiKey.trim()) { await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); }
+      if (apiKey.trim()) { await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); setProviderVaultStatus("available"); }
       saveProvider(provider);
       setSettingsOpen(false);
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save provider credentials."); }
   }
   async function deleteProviderKey() {
-    try { await invoke("delete_provider_key"); setHasProviderKey(false); setApiKey(""); }
+    try { await invoke("delete_provider_key"); setHasProviderKey(false); setProviderVaultStatus("missing"); setApiKey(""); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
@@ -273,7 +282,7 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
-        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is stored in the OS credential vault</span><button className="send-btn" disabled={!draft.trim() || busy || !conversationsReady} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> {providerVaultStatus === "available" ? "API key is stored in the OS credential vault" : providerVaultStatus === "unavailable" ? "OS credential vault unavailable · provider requests disabled" : providerVaultStatus === "loading" ? "Checking OS credential vault…" : "Provider key is not configured"}</span><button className="send-btn" disabled={!draft.trim() || busy || !conversationsReady} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
       </section>
     </main>
 
@@ -282,6 +291,6 @@ export default function App() {
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} onDeleted={async () => { await refreshProjects(); setConversations(await loadConversations()); await reconcileSemanticIndex(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {agentsOpen && <AgentControlCenter key={`${provider.baseUrl}|${provider.model}|${hasProviderKey}`} onClose={() => setAgentsOpen(false)} providerSettings={provider} hasProviderKey={hasProviderKey} />}
-    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. API keys are stored in the operating system credential vault, not in the application database.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{hasProviderKey ? "A provider key is saved securely on this device." : "No provider key is saved."}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div><div className="settings-backup"><h3>Workspace backup</h3><p>Export projects, conversations, memories, and knowledge. Provider credentials are never included.</p><div className="modal-actions"><button className="secondary-btn" onClick={() => void exportWorkspaceBackup()}>Export backup</button><label className="secondary-btn">Import backup<input type="file" accept="application/json,.json" hidden onChange={e => { void importWorkspaceBackup(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div></section></div>}
+    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. API keys are stored in the operating system credential vault, not in the application database.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{providerVaultStatus === "available" ? "A provider key is saved in the OS credential vault on this device." : providerVaultStatus === "missing" ? "No provider key is saved." : providerVaultStatus === "unavailable" ? "The OS credential vault is unavailable. NEXUS will not fall back to plaintext storage. On Linux, check that your Secret Service/keyring session is running." : "Checking the OS credential vault…"}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself. macOS uses Keychain, Windows uses Credential Manager, and Linux requires a working Secret Service-compatible keyring.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div><div className="settings-backup"><h3>Workspace backup</h3><p>Export projects, conversations, memories, and knowledge. Provider credentials are never included.</p><div className="modal-actions"><button className="secondary-btn" onClick={() => void exportWorkspaceBackup()}>Export backup</button><label className="secondary-btn">Import backup<input type="file" accept="application/json,.json" hidden onChange={e => { void importWorkspaceBackup(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div></section></div>}
   </div>;
 }
