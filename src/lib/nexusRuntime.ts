@@ -1,4 +1,6 @@
 import type { AgentId, AgentPermission, AgentPermissionService, AgentRunId, AgentClock, AgentIdFactory } from "../core/agents";
+import type { AgentCheckpointRepository } from "../core/agentCheckpoints";
+import { isTauri } from "@tauri-apps/api/core";
 import { AgentCheckpointService } from "../core/agentCheckpoints";
 import { InMemoryAgentApprovalAuthority, type AgentApprovalIdFactory } from "../core/agentApprovals";
 import { GatewayAgentToolExecutor } from "../core/agentToolBridge";
@@ -6,6 +8,7 @@ import { ResumableAgentRuntime } from "../core/resumableAgents";
 import { err, type Result } from "../core/result";
 import { ToolGateway, type PermissionRequest, type PermissionService, type ToolClock } from "../core/tools";
 import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage";
+import { NativeAgentCheckpointRepository } from "./nativeAgentCheckpointRepository";
 import { LocalStorageToolAuditSink } from "./toolAuditStorage";
 import type { StorageLike } from "./memoryStorage";
 import { ToolRegistry } from "../core/toolRegistry";
@@ -40,6 +43,7 @@ export interface NexusRuntimeOptions {
   ids?: NexusRuntimeIds;
   clock?: AgentClock & ToolClock;
   models?: ModelRouter;
+  checkpointRepository?: AgentCheckpointRepository;
 }
 
 const denyByDefault: NexusPermissionPolicy = {
@@ -90,7 +94,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const clock = options.clock ?? systemClock;
   const policy = options.permissions ?? denyByDefault;
 
-  const checkpointRepository = new LocalStorageAgentCheckpointRepository(options.storage);
+  const checkpointRepository = options.checkpointRepository ?? new LocalStorageAgentCheckpointRepository(options.storage);
   const checkpointService = new AgentCheckpointService(checkpointRepository);
   const auditSink = new LocalStorageToolAuditSink(options.storage);
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
@@ -145,6 +149,21 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     /** Call only in response to an explicit user approval action in the UI. */
     issueApproval: (runId: AgentRunId): Promise<Result<string>> => approvalAuthority.issue(runId)
   };
+}
+
+export function createWorkspaceNexusRuntime(
+  actorId: string,
+  permissions?: NexusPermissionPolicy,
+  models?: ModelRouter
+): ReturnType<typeof createNexusRuntime> {
+  if (typeof window === "undefined") throw new Error("Workspace storage is unavailable in this environment.");
+  return createNexusRuntime({
+    storage: window.localStorage,
+    actorId,
+    permissions,
+    models,
+    ...(isTauri() ? { checkpointRepository: new NativeAgentCheckpointRepository() } : {})
+  });
 }
 
 export function createBrowserNexusRuntime(
