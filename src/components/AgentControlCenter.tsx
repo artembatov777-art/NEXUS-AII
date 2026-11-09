@@ -3,13 +3,13 @@ import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, X
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
-import { createBrowserNexusRuntime } from "../lib/nexusRuntime";
+import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
 import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
 import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
 
 const THREAD_ID = "nexus-agent-control-center";
 
-type RuntimeBundle = ReturnType<typeof createBrowserNexusRuntime>;
+type RuntimeBundle = ReturnType<typeof createWorkspaceNexusRuntime>;
 type RuntimeState = { runtime: RuntimeBundle | null; error: string; profile: AgentProfile | null };
 type FeedItem = { id: number; tone: "normal" | "success" | "warning" | "error"; text: string };
 
@@ -43,7 +43,7 @@ export function AgentControlCenter({ onClose }: { onClose: () => void }) {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
       if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
-      const runtime = createBrowserNexusRuntime("local-user", {
+      const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async () => "ask_user",
         authorizeTool: async () => "deny"
       });
