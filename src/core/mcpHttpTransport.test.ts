@@ -12,7 +12,7 @@ describe("McpHttpTransport", () => {
   });
 
   it("sends JSON-RPC notifications without an id and requires HTTP 202", async () => {
-    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
       return new Response(null, { status: 202 });
     });
