@@ -132,6 +132,11 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 5;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 6 {
+        transaction.execute_batch("CREATE TABLE tool_audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,tool_id TEXT NOT NULL,run_id TEXT NOT NULL,trace_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','completed','failed','denied')),timestamp REAL NOT NULL,detail TEXT); CREATE INDEX idx_tool_audit_run_id ON tool_audit_events(run_id,id DESC); CREATE TABLE trace_events (id INTEGER PRIMARY KEY AUTOINCREMENT,trace_id TEXT NOT NULL,run_id TEXT NOT NULL,parent_trace_id TEXT,name TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','progress','waiting_for_approval','completed','failed','cancelled')),timestamp REAL NOT NULL,duration_ms REAL,attributes TEXT,payload TEXT NOT NULL); CREATE INDEX idx_trace_events_run_id ON trace_events(run_id,id DESC); CREATE INDEX idx_trace_events_trace_id ON trace_events(trace_id,id DESC);")?;
+        version = 6;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
