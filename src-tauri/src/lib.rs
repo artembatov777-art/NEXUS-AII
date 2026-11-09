@@ -976,17 +976,19 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_five() {
+    fn upgrades_schema_version_four_atomically_to_six() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
         connection.execute_batch("DROP TABLE agent_checkpoints;").expect("remove v5 table");
-        migrate_database(&mut connection).expect("upgrade v4 to v5");
+        migrate_database(&mut connection).expect("upgrade v4 to v6");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
         assert_eq!(table, 1);
+        let audit: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tool_audit_events'", [], |row| row.get(0)).expect("audit table");
+        assert_eq!(audit, 1);
     }
 
     #[test]
