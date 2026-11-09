@@ -107,7 +107,7 @@ export default function App() {
       const contextParts: string[] = [];
       const remembered = await memoryService.search(text, "profile", 5);
       if (!remembered.ok) throw new Error(`Could not retrieve saved memory: ${remembered.error.message}`);
-      if (remembered.value.length) contextParts.push("Relevant user-approved memories:\\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\\n${item.content}`).join("\\n\\n"));
+      if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
       let sourceReferences: import("./types").ChatSourceReference[] = [];
       if (selectedProjectId) {
         const [retrieved, projectMemories] = await Promise.all([
@@ -116,11 +116,11 @@ export default function App() {
         ]);
         if (!retrieved.ok) throw new Error(`Could not retrieve project knowledge: ${retrieved.error.message}`);
         if (!projectMemories.ok) throw new Error(`Could not retrieve project memories: ${projectMemories.error.message}`);
-        if (retrieved.value.context) contextParts.push("Selected project knowledge:\\n" + retrieved.value.context);
+        if (retrieved.value.context) contextParts.push("Selected project knowledge:\n" + retrieved.value.context);
         sourceReferences = retrieved.value.citations;
-        if (projectMemories.value.length) contextParts.push("Selected project memories:\\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\\n${item.content}`).join("\\n\\n"));
+        if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
       }
-      const answer = await sendMessage(provider, apiKey, next, contextParts.join("\\n\\n"));
+      const answer = await sendMessage(provider, apiKey, next, contextParts.join("\n\n"));
       updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
