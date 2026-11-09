@@ -158,6 +158,45 @@ export default function App() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
+  async function exportWorkspaceBackup() {
+    try {
+      const backup = await invoke<Record<string, unknown>>("export_workspace");
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `nexus-au-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not export workspace backup.");
+    }
+  }
+
+  async function importWorkspaceBackup(file?: File) {
+    if (!file) return;
+    if (file.size > 60 * 1024 * 1024) { setError("Backup file exceeds the 60 MB limit."); return; }
+    try {
+      const backup: unknown = JSON.parse(await file.text());
+      if (!backup || typeof backup !== "object" || (backup as { format?: unknown }).format !== "nexus-au-backup") {
+        throw new Error("This file is not a NEXUS AU workspace backup.");
+      }
+      if (!window.confirm("Importing a backup replaces the current projects, conversations, memories, and knowledge. Export a backup of the current workspace first if you need to keep it. Continue?")) return;
+      await invoke("import_workspace", { backup });
+      const restored = await loadConversations();
+      setConversations(restored);
+      await refreshProjects();
+      setActiveId(restored[0]?.id ?? null);
+      setError("");
+      setSettingsOpen(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not import workspace backup.");
+    }
+  }
+
 
   async function copyText(text: string) {
     try { await invoke("write_clipboard", { text }); setError(""); }
@@ -206,7 +245,7 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
-        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is session-only and is not saved</span><button className="send-btn" disabled={!draft.trim() || busy || !conversationsReady} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> API key is stored in the OS credential vault</span><button className="send-btn" disabled={!draft.trim() || busy || !conversationsReady} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
       </section>
     </main>
 
@@ -215,6 +254,6 @@ export default function App() {
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {agentsOpen && <AgentControlCenter onClose={() => setAgentsOpen(false)} />}
-    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. API keys are stored in the operating system credential vault, not in the application database.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{hasProviderKey ? "A provider key is saved securely on this device." : "No provider key is saved."}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div></section></div>}
+    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. API keys are stored in the operating system credential vault, not in the application database.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{hasProviderKey ? "A provider key is saved securely on this device." : "No provider key is saved."}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div><div className="settings-backup"><h3>Workspace backup</h3><p>Export projects, conversations, memories, and knowledge. Provider credentials are never included.</p><div className="modal-actions"><button className="secondary-btn" onClick={() => void exportWorkspaceBackup()}>Export backup</button><label className="secondary-btn">Import backup<input type="file" accept="application/json,.json" hidden onChange={e => { void importWorkspaceBackup(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div></section></div>}
   </div>;
 }
