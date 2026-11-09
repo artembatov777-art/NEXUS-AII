@@ -337,10 +337,18 @@ fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
 }
 
+fn validate_provider_key(api_key: &str) -> Result<&str, &'static str> {
+    let normalized = api_key.trim();
+    if normalized.is_empty() { return Err("API key cannot be empty."); }
+    if normalized.len() > 8192 { return Err("API key exceeds the 8 KB limit."); }
+    if normalized.chars().any(char::is_control) { return Err("API key contains unsupported control characters."); }
+    Ok(normalized)
+}
+
 #[tauri::command]
 fn store_provider_key(api_key: String) -> Result<(), String> {
-    if api_key.trim().is_empty() || api_key.len() > 8192 { return Err("API key is empty or exceeds the size limit.".into()); }
-    credential_entry("default")?.set_password(api_key.trim()).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
+    let normalized = validate_provider_key(&api_key).map_err(str::to_owned)?;
+    credential_entry("default")?.set_password(normalized).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
 }
 
 fn classify_provider_vault_status(entry_available: bool, credential_present: Option<bool>) -> &'static str {
@@ -382,6 +390,14 @@ fn delete_provider_key() -> Result<(), String> {
 #[cfg(test)]
 mod payload_validation_tests {
     use super::*;
+    #[test]
+    fn provider_key_validation_rejects_empty_oversized_and_control_values() {
+        assert_eq!(validate_provider_key("  key-value  "), Ok("key-value"));
+        assert!(validate_provider_key("  ").is_err());
+        assert!(validate_provider_key(&"x".repeat(8193)).is_err());
+        assert!(validate_provider_key("key\\nvalue").is_err());
+    }
+
     #[test]
     fn credential_vault_status_distinguishes_missing_and_unavailable() {
         assert_eq!(classify_provider_vault_status(false,None),"unavailable");
