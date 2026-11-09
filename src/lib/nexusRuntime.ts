@@ -11,7 +11,7 @@ import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage"
 import { NativeAgentCheckpointRepository } from "./nativeAgentCheckpointRepository";
 import { LocalStorageToolAuditSink } from "./toolAuditStorage";
 import { NativeToolAuditSink, NativeTraceSink } from "./nativeEventRepositories";
-import type { ToolAuditSink } from "../core/tools";
+import type { ToolAuditEvent, ToolAuditSink } from "../core/tools";
 import type { TraceSink } from "../core/observability";
 import type { StorageLike } from "./memoryStorage";
 import { ToolRegistry } from "../core/toolRegistry";
@@ -40,6 +40,10 @@ export interface NexusPermissionPolicy {
 
 export interface NexusRuntimeIds extends AgentIdFactory, AgentApprovalIdFactory {}
 
+export interface NexusAuditSink extends ToolAuditSink {
+  list(options?: { runId?: string; limit?: number }): Promise<Result<ToolAuditEvent[]>>;
+}
+
 export interface NexusRuntimeOptions {
   storage: StorageLike;
   actorId: string;
@@ -48,7 +52,7 @@ export interface NexusRuntimeOptions {
   clock?: AgentClock & ToolClock;
   models?: ModelRouter;
   checkpointRepository?: AgentCheckpointRepository;
-  auditSink?: ToolAuditSink;
+  auditSink?: NexusAuditSink;
   traceSink?: TraceSink;
 }
 
