@@ -117,6 +117,12 @@ describe("createNexusRuntime", () => {
     const workflow = runtime.createAgentWorkflow("test-provider", "test-model", "planned-thread");
     expect(workflow).not.toBeNull();
     if (!workflow) throw new Error("Workflow should be available when a model router is configured.");
+    const restricted = runtime.createAgentWorkflow("test-provider", "test-model", "restricted-thread", ["not-registered"]);
+    expect(restricted).not.toBeNull();
+    if (!restricted) throw new Error("Restricted workflow should be available.");
+    const blocked = await restricted.plan("Find a note", new AbortController().signal);
+    expect(blocked).toMatchObject({ ok: false, error: { message: "No tools allowed for this workflow are registered." } });
+
     const planned = await workflow.plan("Find a note", new AbortController().signal);
     expect(planned.ok).toBe(true);
     if (!planned.ok) throw new Error(planned.error.message);
