@@ -11,6 +11,17 @@ describe("McpHttpTransport", () => {
     expect(fetcher).toHaveBeenCalledWith("https://mcp.example/tools", expect.objectContaining({ credentials: "omit", redirect: "error" }));
   });
 
+  it("sends JSON-RPC notifications without an id and requires HTTP 202", async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
+      return new Response(null, { status: 202 });
+    });
+    const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
+    await expect(transport.notify("notifications/initialized", {}, new AbortController().signal)).resolves.toBeUndefined();
+    fetcher.mockImplementation(async () => new Response("unexpected", { status: 200 }));
+    await expect(transport.notify("notifications/initialized", {}, new AbortController().signal)).rejects.toThrow(/HTTP 202/);
+  });
+
   it("rejects URLs with embedded credentials", () => {
     expect(() => new McpHttpTransport({ endpoint: "https://user:pass@example.com" })).toThrow();
   });

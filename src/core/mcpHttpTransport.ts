@@ -89,6 +89,26 @@ export class McpHttpTransport implements McpTransport {
     }
   }
 
+  async notify(method: string, params: unknown, signal: AbortSignal): Promise<void> {
+    if (!method.trim() || method.length > 160) throw new Error("MCP notification method is invalid.");
+    const response = await this.fetcher(this.endpoint.toString(), {
+      method: "POST",
+      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers },
+      body: JSON.stringify({ jsonrpc: "2.0", method, params }),
+      signal,
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store"
+    });
+    if (response.status !== 202) throw new Error(`MCP notification must be acknowledged with HTTP 202 (received ${response.status}).`);
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (declaredLength > 0) throw new Error("MCP notification response must not contain a body.");
+    if (response.body) {
+      const body = await readBoundedText(response);
+      if (body.length > 0) throw new Error("MCP notification response must not contain a body.");
+    }
+  }
+
   async request(request: McpRequest, signal: AbortSignal): Promise<McpResponse> {
     const response = await this.fetcher(this.endpoint.toString(), {
       method: "POST",
