@@ -165,24 +165,25 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - The Agent Control Center displays trace events, but a complete visual MCP server manager and plan-review/execution workflow are not part of this phase.
 
 
-## Phase III — Memory and Knowledge (implementation substantially complete; acceptance verification in progress)
+## Phase III — Memory and Knowledge (complete)
 
-- [x] Hybrid lexical/semantic retrieval contract with lexical fallback.
-- [x] Local sentence-transformer embedding provider (Xenova/all-MiniLM-L6-v2), lazy model loading, and input validation.
-- [x] Durable IndexedDB vector storage with cosine ranking and strict project filtering.
+- [x] Hybrid lexical/semantic retrieval with lexical fallback.
+- [x] Local sentence-transformer embedding provider (Xenova/all-MiniLM-L6-v2), lazy model loading, and bounded input validation.
+- [x] Durable IndexedDB vector storage with cosine ranking and project-filtered search.
 - [x] Local project-scoped knowledge storage, document listing, atomic replacement, and deletion.
-- [x] TXT, Markdown, PDF, and DOCX extraction with size limits; PDF page provenance is preserved. Scanned PDF OCR is not supported.
-- [x] Bounded chunking, paragraph-aware overlap, source metadata, and deterministic per-project/per-filename document identity for re-indexing.
-- [x] Knowledge UI for import, search, source inspection, listing, and deletion.
+- [x] TXT, Markdown, PDF, and DOCX extraction with size limits; PDF page provenance is preserved.
+- [x] Bounded paragraph-aware chunking, overlap, provenance, and deterministic project/file identity for re-indexing.
+- [x] Knowledge UI for import, search, source inspection, document listing, and deletion.
 - [x] Project-scoped memories with required project IDs and repository-level filtering.
-- [x] Memory editing, provenance labels, and deletion UI.
-- [x] Automatic retrieval of approved profile memories and selected-project memories/documents in the chat pipeline.
-- [x] Structured source references displayed below assistant messages.
-- [x] Explicit project selector in chat and project knowledge panel.
+- [x] Memory editing for content, category, scope, project assignment, tags, and source provenance; deletion controls.
+- [x] Automatic retrieval of approved profile memories and selected-project memories/documents in the chat request pipeline.
+- [x] Structured source references displayed with assistant responses.
+- [x] Explicit project selection in chat and project knowledge panel.
+- [x] CI acceptance: 29 test files / 102 tests passed; TypeScript production build and Vite build passed (GitHub Actions run 42545054890).
 
-**Runtime boundaries:** the first semantic operation downloads the sentence-transformer model from the configured Hugging Face model repository; embeddings run locally after download. Lexical retrieval remains the fallback if model loading or IndexedDB is unavailable. PDF extraction handles selectable text only, not OCR. Project IDs are enforced by application repositories and retrieval paths, but browser localStorage/IndexedDB are not a security boundary against same-origin code or a compromised device. Native encrypted storage and OS-level project ACLs remain outside this phase's local-preview scope.
+**Defined limitations:** the first semantic operation downloads the sentence-transformer model from Hugging Face; embeddings run locally after download. Lexical retrieval remains available if model loading or IndexedDB is unavailable. PDF extraction supports selectable text only; scanned-image OCR is not included. Project filtering is enforced by application repositories and retrieval paths, but browser localStorage/IndexedDB are not security boundaries against same-origin code or a compromised device. Native encrypted storage and OS-level project ACLs belong to Phase IV/V hardening.
 
-**Acceptance gate:** Phase III is not marked fully complete until the latest GitHub Actions run passes unit tests and the TypeScript production build, including PDF/DOCX parser bundling and local embedding dependency checks.
+**Release risk carried forward:** npm install reported 11 dependency vulnerabilities (3 moderate, 6 high, 2 critical) during CI. The dependency tree must be audited and remediated as part of Phase V security/stabilization before a production release.
 
 ## Phase IV — Full application (in progress)
 
