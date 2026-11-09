@@ -103,46 +103,36 @@ fn append_bounded_response(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), Strin
 
 struct AppDatabase(Mutex<Connection>);
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
-    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    // One exclusive transaction serializes concurrent first-launch upgrades and
+    // prevents another process from observing a partially migrated schema.
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Exclusive)?;
+    let mut version: i64 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version < 1 {
-        let transaction = connection.transaction()?;
         transaction.execute_batch("CREATE TABLE conversations (id TEXT PRIMARY KEY NOT NULL,title TEXT NOT NULL,project_id TEXT,updated_at INTEGER NOT NULL); CREATE TABLE messages (id TEXT PRIMARY KEY NOT NULL,conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,role TEXT NOT NULL CHECK(role IN ('user','assistant')),content TEXT NOT NULL,created_at INTEGER NOT NULL,source_references TEXT); CREATE INDEX idx_conversations_project_updated ON conversations(project_id,updated_at DESC); CREATE INDEX idx_messages_conversation_created ON messages(conversation_id,created_at);")?;
-        transaction.pragma_update(None, "user_version", 1)?;
-        transaction.commit()?;
+        version = 1;
+        transaction.pragma_update(None, "user_version", version)?;
     }
-
-    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if current_version < 2 {
-        let transaction = connection.transaction()?;
+    if version < 2 {
         transaction.execute_batch("CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL,name TEXT NOT NULL,description TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,archived INTEGER NOT NULL DEFAULT 0,schema_version INTEGER NOT NULL); CREATE INDEX idx_projects_updated ON projects(updated_at DESC);")?;
-        transaction.pragma_update(None, "user_version", 2)?;
-        transaction.commit()?;
+        version = 2;
+        transaction.pragma_update(None, "user_version", version)?;
     }
-
-    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if current_version < 3 {
-        let transaction = connection.transaction()?;
+    if version < 3 {
         transaction.execute_batch("CREATE TABLE memory_records (id TEXT PRIMARY KEY NOT NULL, scope TEXT NOT NULL, project_id TEXT, updated_at INTEGER NOT NULL, payload TEXT NOT NULL, CHECK(scope != 'project' OR project_id IS NOT NULL)); CREATE INDEX idx_memory_scope_project_updated ON memory_records(scope,project_id,updated_at DESC); CREATE TABLE knowledge_chunks (id TEXT PRIMARY KEY NOT NULL, document_id TEXT NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, payload TEXT NOT NULL); CREATE INDEX idx_knowledge_project_document ON knowledge_chunks(project_id,document_id);")?;
-        transaction.pragma_update(None, "user_version", 3)?;
-        transaction.commit()?;
+        version = 3;
+        transaction.pragma_update(None, "user_version", version)?;
     }
-
-    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if current_version < 4 {
-        let transaction = connection.transaction()?;
+    if version < 4 {
         transaction.execute_batch("CREATE TRIGGER validate_conversation_project_insert BEFORE INSERT ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_conversation_project_update BEFORE UPDATE OF project_id ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_insert BEFORE INSERT ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_update BEFORE UPDATE OF project_id,scope ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER cleanup_project_data AFTER DELETE ON projects BEGIN DELETE FROM conversations WHERE project_id=OLD.id; DELETE FROM memory_records WHERE project_id=OLD.id; END;")?;
-        transaction.pragma_update(None, "user_version", 4)?;
-        transaction.commit()?;
+        version = 4;
+        transaction.pragma_update(None, "user_version", version)?;
     }
-
-    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if current_version < 5 {
-        let transaction = connection.transaction()?;
+    if version < 5 {
         transaction.execute_batch("CREATE TABLE agent_checkpoints (run_id TEXT PRIMARY KEY NOT NULL,agent_id TEXT NOT NULL,thread_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence >= 1),status TEXT NOT NULL CHECK(status IN ('running','waiting_for_approval','completed','failed','cancelled')),updated_at REAL NOT NULL,payload TEXT NOT NULL); CREATE INDEX idx_agent_checkpoints_thread_updated ON agent_checkpoints(thread_id,updated_at DESC,run_id);")?;
-        transaction.pragma_update(None, "user_version", 5)?;
-        transaction.commit()?;
+        version = 5;
+        transaction.pragma_update(None, "user_version", version)?;
     }
-    Ok(())
+    transaction.commit()
 }
 
 
@@ -378,9 +368,7 @@ mod payload_validation_tests {
 }
 
 
-#[tauri::command]
-fn export_workspace(database: State<'_, AppDatabase>) -> Result<serde_json::Value, String> {
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+fn export_workspace_record(connection: &Connection) -> Result<serde_json::Value, String> {
     let projects: Vec<StoredProject> = {
         let mut stmt=connection.prepare("SELECT id,name,description,created_at,updated_at,archived,schema_version FROM projects ORDER BY created_at").map_err(|e|e.to_string())?;
         let rows=stmt.query_map([],|r|Ok(StoredProject{id:r.get(0)?,name:r.get(1)?,description:r.get(2)?,created_at:r.get(3)?,updated_at:r.get(4)?,archived:r.get::<_,i64>(5)?!=0,schema_version:r.get(6)?})).map_err(|e|e.to_string())?;
@@ -409,7 +397,12 @@ fn export_workspace(database: State<'_, AppDatabase>) -> Result<serde_json::Valu
 }
 
 #[tauri::command]
-fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value) -> Result<(), String> {
+fn export_workspace(database: State<'_, AppDatabase>) -> Result<serde_json::Value, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    export_workspace_record(&connection)
+}
+
+fn import_workspace_record(connection: &mut Connection, backup: serde_json::Value) -> Result<(), String> {
     if backup.get("format").and_then(|v|v.as_str())!=Some("nexus-au-backup") || backup.get("schemaVersion").and_then(|v|v.as_i64())!=Some(1) { return Err("Unsupported or invalid NEXUS AU backup file.".into()); }
     let projects:Vec<StoredProject>=serde_json::from_value(backup.get("projects").cloned().ok_or("Backup projects are missing.")?).map_err(|e|e.to_string())?;
     let conversations:Vec<StoredConversation>=serde_json::from_value(backup.get("conversations").cloned().ok_or("Backup conversations are missing.")?).map_err(|e|e.to_string())?;
@@ -435,7 +428,6 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
         let pid=c["projectId"].as_str().unwrap();
         if !project_ids.contains(pid) { return Err("Backup knowledge chunk references an unknown project.".into()); }
     }
-    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
     let tx=connection.transaction().map_err(|e|e.to_string())?;
     tx.execute_batch("DELETE FROM knowledge_chunks; DELETE FROM memory_records; DELETE FROM conversations; DELETE FROM projects;").map_err(|e|e.to_string())?;
     for p in projects { tx.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![p.id,p.name,p.description,p.created_at,p.updated_at,p.archived as i64,p.schema_version]).map_err(|e|e.to_string())?; }
@@ -446,6 +438,12 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
     for m in memories { let id=m["id"].as_str().unwrap();let scope=m["scope"].as_str().unwrap();let pid=m.get("projectId").and_then(|v|v.as_str());let updated=m["updatedAt"].as_i64().unwrap_or(0);tx.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5)",params![id,scope,pid,updated,serde_json::to_string(m).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
     for c in chunks { tx.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![c["id"].as_str().unwrap(),c["documentId"].as_str().unwrap(),c["projectId"].as_str().unwrap(),serde_json::to_string(c).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
     tx.commit().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value) -> Result<(), String> {
+    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    import_workspace_record(&mut connection, backup)
 }
 
 
@@ -753,6 +751,95 @@ mod database_tests {
                 Some(serde_json::json!({"permission":"tool:execute","requestedAt":1000 + sequence}))
             } else { None }
         })
+    }
+
+
+    fn sample_backup() -> serde_json::Value {
+        serde_json::json!({
+            "format": "nexus-au-backup",
+            "schemaVersion": 1,
+            "exportedAt": 123,
+            "projects": [{
+                "id": "project-1", "name": "Project", "description": "Test",
+                "createdAt": 1, "updatedAt": 2, "archived": false, "schemaVersion": 1
+            }],
+            "conversations": [{
+                "id": "conversation-1", "title": "Chat", "projectId": "project-1",
+                "updatedAt": 3,
+                "messages": [{"id": "message-1", "role": "user", "content": "Hello", "createdAt": 3}]
+            }],
+            "memories": [{
+                "id": "memory-1", "content": "A saved fact", "category": "fact",
+                "scope": "project", "projectId": "project-1",
+                "source": {"type": "user_confirmed", "label": "Manual"},
+                "tags": ["test"], "createdAt": 1, "updatedAt": 2, "schemaVersion": 1
+            }],
+            "knowledgeChunks": [{
+                "id": "chunk-1", "documentId": "document-1", "projectId": "project-1",
+                "text": "A source passage", "sourceLabel": "notes.md"
+            }]
+        })
+    }
+
+    #[test]
+    fn workspace_backup_import_export_round_trip_preserves_all_user_data() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
+        migrate_database(&mut connection).expect("apply migrations");
+        import_workspace_record(&mut connection, sample_backup()).expect("import backup");
+        let exported = export_workspace_record(&connection).expect("export backup");
+        assert_eq!(exported["format"], "nexus-au-backup");
+        assert_eq!(exported["schemaVersion"], 1);
+        assert_eq!(exported["projects"][0]["id"], "project-1");
+        assert_eq!(exported["conversations"][0]["messages"][0]["content"], "Hello");
+        assert_eq!(exported["memories"][0]["content"], "A saved fact");
+        assert_eq!(exported["knowledgeChunks"][0]["text"], "A source passage");
+        assert!(exported.get("providerKeys").is_none(), "provider credentials must never be exported");
+    }
+
+    #[test]
+    fn invalid_backup_and_transaction_failure_leave_existing_workspace_untouched() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
+        migrate_database(&mut connection).expect("apply migrations");
+        import_workspace_record(&mut connection, sample_backup()).expect("seed workspace");
+        let before = export_workspace_record(&connection).expect("export baseline");
+
+        let mut invalid = sample_backup();
+        invalid["knowledgeChunks"][0]["projectId"] = serde_json::json!("unknown-project");
+        assert!(import_workspace_record(&mut connection, invalid).is_err());
+        let after_validation_failure = export_workspace_record(&connection).expect("export after validation failure");
+        assert_eq!(before["projects"], after_validation_failure["projects"]);
+        assert_eq!(before["conversations"], after_validation_failure["conversations"]);
+
+        // Duplicate message primary keys pass the shape checks but fail during
+        // insertion after the transaction has already deleted the old rows.
+        let mut duplicate = sample_backup();
+        duplicate["conversations"].as_array_mut().unwrap().push(serde_json::json!({
+            "id": "conversation-2", "title": "Second", "projectId": "project-1",
+            "updatedAt": 4,
+            "messages": [{"id": "message-1", "role": "user", "content": "duplicate", "createdAt": 4}]
+        }));
+        assert!(import_workspace_record(&mut connection, duplicate).is_err());
+        let after_rollback = export_workspace_record(&connection).expect("export after rollback");
+        assert_eq!(before["projects"], after_rollback["projects"]);
+        assert_eq!(before["conversations"], after_rollback["conversations"]);
+        assert_eq!(before["memories"], after_rollback["memories"]);
+        assert_eq!(before["knowledgeChunks"], after_rollback["knowledgeChunks"]);
+    }
+
+    #[test]
+    fn upgrades_schema_version_four_atomically_to_five() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
+        migrate_database(&mut connection).expect("create current schema");
+        connection.pragma_update(None, "user_version", 4).expect("simulate v4");
+        connection.execute_batch("DROP TABLE agent_checkpoints;").expect("remove v5 table");
+        migrate_database(&mut connection).expect("upgrade v4 to v5");
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
+        assert_eq!(version, 5);
+        let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
+        assert_eq!(table, 1);
     }
 
     #[test]
