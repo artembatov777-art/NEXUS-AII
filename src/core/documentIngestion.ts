@@ -110,13 +110,15 @@ export class DocumentIngestionService {
     let semanticIndexed = false;
     if (this.embeddings && this.vectors) {
       try {
+        await this.vectors.removeDocument(input.id, input.projectId);
         const embedded = await this.embeddings.embed(chunks.map(chunk => chunk.text));
         if (embedded.ok && embedded.value.length === chunks.length) {
-          await this.vectors.removeDocument(input.id, input.projectId);
           await Promise.all(chunks.map((chunk, index) => this.vectors!.upsert(chunk, embedded.value[index])));
           semanticIndexed = true;
         }
-      } catch { /* Preserve lexical search if semantic indexing is unavailable. */ }
+      } catch {
+        try { await this.vectors.removeDocument(input.id, input.projectId); } catch { /* Lexical index remains authoritative. */ }
+      }
     }
     return ok({ documentId: input.id, projectId: input.projectId, fileName, chunkCount: chunks.length, characterCount: normalized.length, semanticIndexed });
   }
@@ -124,7 +126,9 @@ export class DocumentIngestionService {
   async remove(documentId: string, projectId: string): Promise<Result<void>> {
     if (!documentId.trim() || !projectId.trim()) return err("validation", "Document and project identifiers are required.");
     const removed = await this.repository.removeDocument(documentId, projectId);
-    if (removed.ok && this.vectors) await this.vectors.removeDocument(documentId, projectId);
+    if (removed.ok && this.vectors) {
+      try { await this.vectors.removeDocument(documentId, projectId); } catch { /* Removed chunks cannot be returned by repository lookup. */ }
+    }
     return removed;
   }
 }

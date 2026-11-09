@@ -30,6 +30,10 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [editContent, setEditContent] = useState("");
   const [editTags, setEditTags] = useState("");
   const [editSource, setEditSource] = useState("");
+  const [editSourceReference, setEditSourceReference] = useState("");
+  const [editCategory, setEditCategory] = useState<MemoryCategory>("fact");
+  const [editScope, setEditScope] = useState<Exclude<MemoryScope, "all">>("profile");
+  const [editProjectId, setEditProjectId] = useState("");
 
   async function refresh(search = query) {
     const result = search.trim()
@@ -67,11 +71,11 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
     await refresh("");
   }
 
-  function beginEdit(record: MemoryRecord) { setEditing(record); setEditContent(record.content); setEditTags(record.tags.join(", ")); setEditSource(record.source.label); setError(""); }
+  function beginEdit(record: MemoryRecord) { setEditing(record); setEditContent(record.content); setEditTags(record.tags.join(", ")); setEditSource(record.source.label); setEditSourceReference(record.source.referenceId ?? ""); setEditCategory(record.category); setEditScope(record.scope); setEditProjectId(record.projectId ?? ""); setError(""); }
   async function saveEdit() {
     if (!editing || saving) return;
     setSaving(true);
-    const result = await service.revise(editing.id, { content: editContent, tags: editTags.split(","), source: { ...editing.source, label: editSource } });
+    const result = await service.revise(editing.id, { content: editContent, category: editCategory, scope: editScope, projectId: editScope === "project" ? editProjectId : undefined, tags: editTags.split(","), source: { ...editing.source, label: editSource, referenceId: editSourceReference.trim() || undefined } });
     setSaving(false);
     if (!result.ok) setError(result.error.message); else { setEditing(null); await refresh(""); }
   }
@@ -100,7 +104,16 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
         {records.map(record => <article className="memory-record" key={record.id}>
           <div className="memory-record-top"><span>{record.category} · {record.scope}</span><div><button className="icon-btn" onClick={() => beginEdit(record)} aria-label="Edit memory"><Pencil size={14}/></button><button className="icon-btn" onClick={() => void removeMemory(record.id)} aria-label="Delete memory"><Trash2 size={15}/></button></div></div>
           <p>{record.content}</p>
-          {editing?.id === record.id && <div className="memory-edit-form"><textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3}/><input value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="Tags, separated by commas"/><input value={editSource} onChange={e => setEditSource(e.target.value)} placeholder="Source label"/><div><button className="secondary-btn" onClick={() => setEditing(null)}>Cancel</button><button className="primary-btn" disabled={!editContent.trim() || !editSource.trim() || saving} onClick={() => void saveEdit()}><Check size={14}/> Save</button></div></div>}
+          {editing?.id === record.id && <div className="memory-edit-form">
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3}/>
+            <div className="memory-fields"><label>Category<select value={editCategory} onChange={e => setEditCategory(e.target.value as MemoryCategory)}><option value="fact">Fact</option><option value="preference">Preference</option><option value="goal">Goal</option><option value="workflow">Workflow</option><option value="project">Project</option></select></label>
+            <label>Scope<select value={editScope} onChange={e => setEditScope(e.target.value as Exclude<MemoryScope, "all">)}><option value="profile">Profile</option><option value="project">Project</option><option value="conversation">Conversation</option></select></label></div>
+            {editScope === "project" && <label>Project<select value={editProjectId} onChange={e => setEditProjectId(e.target.value)}><option value="">Select project…</option>{projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
+            <input value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="Tags, separated by commas"/>
+            <input value={editSource} onChange={e => setEditSource(e.target.value)} placeholder="Source label"/>
+            <input value={editSourceReference} onChange={e => setEditSourceReference(e.target.value)} placeholder="Source reference (optional)"/>
+            <div><button className="secondary-btn" onClick={() => setEditing(null)}>Cancel</button><button className="primary-btn" disabled={!editContent.trim() || !editSource.trim() || saving || (editScope === "project" && !editProjectId)} onClick={() => void saveEdit()}><Check size={14}/> Save</button></div>
+          </div>}
           <div className="memory-record-meta">{record.tags.map(tag => <span key={tag}>#{tag}</span>)}<small>Source: {record.source.label}</small></div>
         </article>)}
         {records.length === 0 && <div className="memory-empty">No saved memories found. Add one below, or change your search.</div>}
