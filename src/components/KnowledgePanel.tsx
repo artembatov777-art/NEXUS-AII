@@ -67,7 +67,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         mediaType: parsed.mediaType, content: parsed.content, pages: parsed.pages
       });
       if (!result.ok) setError(result.error.message);
-      else { setStatus(`Imported ${result.value.fileName}: ${result.value.chunkCount} searchable chunks (${result.value.characterCount.toLocaleString()} characters).`); await refreshDocuments(projectId); }
+      else { setStatus(`Imported ${result.value.fileName}: ${result.value.chunkCount} chunks. ${result.value.semanticIndexed ? "Local semantic index ready." : "Lexical search ready; semantic indexing unavailable."}`); await refreshDocuments(projectId); }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not read this file.");
     } finally { setWorking(false); }

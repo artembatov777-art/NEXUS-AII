@@ -16,6 +16,7 @@ export interface IngestionSummary {
   fileName: string;
   chunkCount: number;
   characterCount: number;
+  semanticIndexed: boolean;
 }
 export interface DocumentIngestionOptions {
   maxCharacters?: number;
@@ -106,16 +107,18 @@ export class DocumentIngestionService {
       ? await this.repository.replaceDocument(input.id, input.projectId, chunks)
       : await this.repository.add(chunks);
     if (!saved.ok) return saved;
+    let semanticIndexed = false;
     if (this.embeddings && this.vectors) {
       try {
         const embedded = await this.embeddings.embed(chunks.map(chunk => chunk.text));
         if (embedded.ok && embedded.value.length === chunks.length) {
           await this.vectors.removeDocument(input.id, input.projectId);
           await Promise.all(chunks.map((chunk, index) => this.vectors!.upsert(chunk, embedded.value[index])));
+          semanticIndexed = true;
         }
       } catch { /* Preserve lexical search if semantic indexing is unavailable. */ }
     }
-    return ok({ documentId: input.id, projectId: input.projectId, fileName, chunkCount: chunks.length, characterCount: normalized.length });
+    return ok({ documentId: input.id, projectId: input.projectId, fileName, chunkCount: chunks.length, characterCount: normalized.length, semanticIndexed });
   }
 
   async remove(documentId: string, projectId: string): Promise<Result<void>> {

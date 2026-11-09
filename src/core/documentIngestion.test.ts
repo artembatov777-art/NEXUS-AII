@@ -37,6 +37,21 @@ describe("document ingestion", () => {
     expect(chunks).toHaveLength(0);
   });
 
+  it("reports semantic indexing only when all vectors are stored", async () => {
+    const { repo } = repository();
+    const embeddings = { embed: async (texts: string[]) => ok(texts.map(() => [1, 0])) };
+    const indexed: string[] = [];
+    const vectors = {
+      upsert: async (chunk: KnowledgeChunk) => { indexed.push(chunk.id); },
+      removeDocument: async () => undefined,
+      search: async () => []
+    };
+    const service = new DocumentIngestionService(repo, {}, embeddings, vectors);
+    const result = await service.ingest({ id: "semantic-doc", projectId: "p", fileName: "x.txt", mediaType: "text/plain", content: "A short document." });
+    expect(result.ok && result.value.semanticIndexed).toBe(true);
+    expect(indexed).toHaveLength(1);
+  });
+
   it("supports zero overlap without looping", () => {
     const chunks = chunkDocumentText("a".repeat(700), 300, 0);
     expect(chunks.length).toBe(3);
