@@ -127,7 +127,10 @@ describe("createNexusRuntime", () => {
     expect(await runtime.checkpointService.listByThread("planned-thread")).toMatchObject({
       ok: true, value: [expect.objectContaining({ status: "completed", agentId: "nexus.tool-invocation" })]
     });
-    expect(await runtime.auditSink.list()).toMatchObject({ ok: true, value: [expect.objectContaining({ status: "completed", toolId: "notes.search" })] });
+    expect(await runtime.auditSink.list()).toMatchObject({ ok: true, value: [
+      expect.objectContaining({ status: "started", toolId: "notes.search" }),
+      expect.objectContaining({ status: "completed", toolId: "notes.search" })
+    ] });
   });
 
   it("uses default-deny permissions when no host policy is supplied", async () => {

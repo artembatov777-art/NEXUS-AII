@@ -661,6 +661,7 @@ fn list_tool_audit_event_records(connection: &Connection, run_id: Option<&str>, 
 
 fn trace_attributes(value: Option<&serde_json::Value>) -> Result<Option<serde_json::Value>, String> {
     let Some(value)=value else { return Ok(None); };
+    if value.is_null() { return Ok(None); }
     let object=value.as_object().ok_or("Trace attributes must be an object.")?;
     let mut safe=serde_json::Map::new();
     for (key,item) in object {
