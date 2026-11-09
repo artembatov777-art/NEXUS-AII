@@ -34,7 +34,7 @@ describe("conversation workspace storage", () => {
       { ...base, messages: [{ id: "bad", role: "system", content: "x", createdAt: 1 }, base.messages[0]] },
       { id: "broken" }
     ]));
-    const loaded = loadConversations(storage);
+    const loaded = await loadConversations(storage);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.messages).toHaveLength(1);
   });
