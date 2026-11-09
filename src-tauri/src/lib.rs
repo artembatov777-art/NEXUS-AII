@@ -92,6 +92,15 @@ fn valid_knowledge_chunk(chunk: &serde_json::Value) -> bool {
         && chunk.get("section").map_or(true,|v|v.as_str().map_or(false,|x|x.len()<=300))
 }
 
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 2_000_000;
+fn append_bounded_response(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), String> {
+    if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
+        return Err("Provider response exceeded the 2 MB limit.".into());
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
+}
+
 struct AppDatabase(Mutex<Connection>);
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -510,20 +519,19 @@ async fn send_chat(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("Could not configure provider client: {e}"))?;
-    let response = client.post(endpoint)
+    let mut response = client.post(endpoint)
         .bearer_auth(&api_key)
         .json(&payload)
         .send()
         .await
         .map_err(|e| format!("Provider request failed: {e}"))?;
     let status = response.status();
-    if response.content_length().map_or(false, |length| length > 2_000_000) {
+    if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
         return Err("Provider response exceeded the 2 MB limit.".into());
     }
-    let body = response.bytes().await
-        .map_err(|e| format!("Could not read provider response: {e}"))?;
-    if body.len() > 2_000_000 {
-        return Err("Provider response exceeded the 2 MB limit.".into());
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| format!("Could not read provider response: {e}"))? {
+        append_bounded_response(&mut body, &chunk)?;
     }
     if !status.is_success() {
         let raw = String::from_utf8_lossy(&body).replace(&api_key, "[redacted]");
@@ -555,6 +563,14 @@ pub fn run() {
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    #[test]
+    fn provider_response_limit_is_enforced_incrementally() {
+        let mut body = Vec::new();
+        append_bounded_response(&mut body, &vec![0; MAX_PROVIDER_RESPONSE_BYTES]).expect("exact limit is accepted");
+        assert_eq!(body.len(), MAX_PROVIDER_RESPONSE_BYTES);
+        assert!(append_bounded_response(&mut body, &[1]).is_err(), "one byte over the limit must be rejected");
+    }
+
     #[test]
     fn creates_versioned_schema_and_foreign_key_constraints() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
