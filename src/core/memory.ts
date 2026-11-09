@@ -15,6 +15,7 @@ export interface MemoryRecord {
   content: string;
   category: MemoryCategory;
   scope: Exclude<MemoryScope, "all">;
+  projectId?: string;
   source: MemorySource;
   tags: string[];
   createdAt: number;
@@ -23,8 +24,8 @@ export interface MemoryRecord {
 }
 
 export interface MemoryRepository {
-  list(scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
-  search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
+  list(scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
+  search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
   save(record: MemoryRecord): Promise<Result<void>>;
   delete(id: MemoryId): Promise<Result<void>>;
 }
@@ -43,6 +44,7 @@ export interface RememberInput {
   scope: Exclude<MemoryScope, "all">;
   source: MemorySource;
   tags?: string[];
+  projectId?: string;
 }
 
 /**
@@ -72,6 +74,7 @@ export class MemoryService {
     if (!content) return err("validation", "Memory content cannot be empty.");
     if (content.length > 4_000) return err("validation", "Memory content must be 4,000 characters or fewer.");
 
+    if (input.scope === "project" && !input.projectId?.trim()) return err("validation", "Project-scoped memories require a project ID.");
     const label = input.source.label.trim();
     if (!label) return err("validation", "A memory source label is required.");
 
@@ -81,6 +84,7 @@ export class MemoryService {
       content,
       category: input.category,
       scope: input.scope,
+      ...(input.projectId ? { projectId: input.projectId } : {}),
       source: { ...input.source, label },
       tags: [...new Set((input.tags ?? []).map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20),
       createdAt: now,
@@ -93,30 +97,32 @@ export class MemoryService {
     return ok(record);
   }
 
-  async list(scope: MemoryScope = "all", limit = 50): Promise<Result<MemoryRecord[]>> {
+  async list(scope: MemoryScope = "all", limit = 50, projectId?: string): Promise<Result<MemoryRecord[]>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
       return err("validation", "Memory list limit must be between 1 and 200.");
     }
-    return this.repository.list(scope, limit);
+    return this.repository.list(scope, limit, projectId);
   }
 
-  async search(query: string, scope: MemoryScope = "all", limit = 10): Promise<Result<MemoryRecord[]>> {
+  async search(query: string, scope: MemoryScope = "all", limit = 10, projectId?: string): Promise<Result<MemoryRecord[]>> {
     const normalized = query.trim();
     if (!normalized) return err("validation", "Memory search query cannot be empty.");
     if (normalized.length > 500) return err("validation", "Memory search query is too long.");
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
       return err("validation", "Memory search limit must be between 1 and 50.");
     }
-    return this.repository.search(normalized, scope, limit);
+    if (scope === "project" && !projectId?.trim()) return err("validation", "Project-scoped memory search requires a project ID.");
+    return this.repository.search(normalized, scope, limit, projectId);
   }
 
-  async revise(id: MemoryId, changes: Partial<Pick<MemoryRecord, "content" | "category" | "scope" | "tags" | "source">>): Promise<Result<MemoryRecord>> {
+  async revise(id: MemoryId, changes: Partial<Pick<MemoryRecord, "content" | "category" | "scope" | "projectId" | "tags" | "source">>): Promise<Result<MemoryRecord>> {
     const current = await this.repository.list("all", 200);
     if (!current.ok) return current;
     const existing = current.value.find(item => item.id === id);
     if (!existing) return err("validation", "Memory record was not found.");
     const content = changes.content === undefined ? existing.content : changes.content.trim();
     if (!content || content.length > 4_000) return err("validation", "Memory content must contain 1 to 4,000 characters.");
+    if ((changes.scope ?? existing.scope) === "project" && !(changes.projectId ?? existing.projectId)?.trim()) return err("validation", "Project-scoped memories require a project ID.");
     const next: MemoryRecord = { ...existing, ...changes, content, tags: changes.tags ? [...new Set(changes.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20) : existing.tags, source: changes.source ? { ...changes.source, label: changes.source.label.trim() } : existing.source, updatedAt: this.clock.now() };
     if (!next.source.label) return err("validation", "A memory source label is required.");
     const saved = await this.repository.save(next);
