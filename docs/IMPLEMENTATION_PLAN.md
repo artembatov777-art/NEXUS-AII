@@ -165,25 +165,24 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - The Agent Control Center displays trace events, but a complete visual MCP server manager and plan-review/execution workflow are not part of this phase.
 
 
-## Phase III — Memory and Knowledge (in progress)
+## Phase III — Memory and Knowledge (implementation substantially complete; acceptance verification in progress)
 
-- [x] Add hybrid retrieval contract with optional embeddings/vector index and lexical fallback.
-- [x] Add knowledge chunk/repository contracts and RAG context builder with explicit source/page/section citations.
-- [x] Add local project-scoped knowledge chunk storage adapter and bounded lexical retrieval.
-- [x] Add project domain service and local project metadata repository.
-- [x] Add memory revision API preserving original creation time and provenance.
-- [x] Compose memory, retrieval, project, and knowledge services through the runtime.
-- [x] Add bounded TXT/Markdown ingestion, paragraph-aware chunking, provenance, and project-scoped removal.
-- [x] Add Knowledge Base UI for import, search, source inspection, document listing, and deletion.
-- [x] Add Memory UI controls to edit content, category, scope, tags, and provenance, or delete records.
-- [x] Connect relevant user-approved profile memories and selected-project knowledge to native chat requests as bounded context.
-- [x] Add explicit project selection in chat; retrieval is restricted to that selected project.
-- [ ] Configure and ship a real embedding provider and durable vector index.
-- [ ] Add PDF/DOCX parsing and document deduplication/re-index lifecycle.
-- [ ] Add project-bound memory ownership and permission policies; current project separation is repository/query scoping, not a security boundary.
-- [ ] Render returned source citations as structured, inspectable chat references.
+- [x] Hybrid lexical/semantic retrieval contract with lexical fallback.
+- [x] Local sentence-transformer embedding provider (Xenova/all-MiniLM-L6-v2), lazy model loading, and input validation.
+- [x] Durable IndexedDB vector storage with cosine ranking and strict project filtering.
+- [x] Local project-scoped knowledge storage, document listing, atomic replacement, and deletion.
+- [x] TXT, Markdown, PDF, and DOCX extraction with size limits; PDF page provenance is preserved. Scanned PDF OCR is not supported.
+- [x] Bounded chunking, paragraph-aware overlap, source metadata, and deterministic per-project/per-filename document identity for re-indexing.
+- [x] Knowledge UI for import, search, source inspection, listing, and deletion.
+- [x] Project-scoped memories with required project IDs and repository-level filtering.
+- [x] Memory editing, provenance labels, and deletion UI.
+- [x] Automatic retrieval of approved profile memories and selected-project memories/documents in the chat pipeline.
+- [x] Structured source references displayed below assistant messages.
+- [x] Explicit project selector in chat and project knowledge panel.
 
-**Current boundary:** the browser runtime uses lexical retrieval; embedding/vector ports are extension points, not a configured semantic search engine. Imports are TXT/Markdown only. Retrieved context is sent only through the native Tauri chat path; browser preview still returns its offline-preview message. Project filtering prevents accidental cross-project retrieval in the current UI, but localStorage is not a security boundary and does not enforce project permissions. This phase must remain marked in progress until the remaining acceptance items are implemented and tested.
+**Runtime boundaries:** the first semantic operation downloads the sentence-transformer model from the configured Hugging Face model repository; embeddings run locally after download. Lexical retrieval remains the fallback if model loading or IndexedDB is unavailable. PDF extraction handles selectable text only, not OCR. Project IDs are enforced by application repositories and retrieval paths, but browser localStorage/IndexedDB are not a security boundary against same-origin code or a compromised device. Native encrypted storage and OS-level project ACLs remain outside this phase's local-preview scope.
+
+**Acceptance gate:** Phase III is not marked fully complete until the latest GitHub Actions run passes unit tests and the TypeScript production build, including PDF/DOCX parser bundling and local embedding dependency checks.
 
 ## Phase IV — Full application (in progress)
 

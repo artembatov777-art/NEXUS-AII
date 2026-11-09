@@ -81,10 +81,11 @@ describe("LocalStorageMemoryRepository", () => {
     await repository.save(record({
       id: "memory-2" as MemoryRecord["id"],
       scope: "project",
+      projectId: "project-1",
       content: "NEXUS project architecture notes"
     }));
 
-    const results = await repository.search("architecture", "project", 10);
+    const results = await repository.search("architecture", "project", 10, "project-1");
     expect(results.ok && results.value).toHaveLength(1);
     expect(results.ok && results.value[0].scope).toBe("project");
   });
