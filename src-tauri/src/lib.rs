@@ -66,17 +66,18 @@ fn load_conversations(database: State<'_, AppDatabase>) -> Result<Vec<StoredConv
     let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
     let metadata = {
         let mut statement = connection.prepare("SELECT id,title,project_id,updated_at FROM conversations ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
-        statement.query_map([], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,Option<String>>(2)?,row.get::<_,i64>(3)?))).map_err(|e| e.to_string())?
-            .collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+        let rows = statement.query_map([], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,Option<String>>(2)?,row.get::<_,i64>(3)?))).map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
     };
     let mut conversations = Vec::with_capacity(metadata.len());
     for (id,title,project_id,updated_at) in metadata {
         let messages = {
             let mut statement = connection.prepare("SELECT id,role,content,created_at,source_references FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e| e.to_string())?;
-            statement.query_map(params![id], |row| {
+            let rows = statement.query_map(params![id], |row| {
                 let source_json: Option<String> = row.get(4)?;
                 Ok(StoredMessage { id: row.get(0)?, role: row.get(1)?, content: row.get(2)?, created_at: row.get(3)?, source_references: source_json.and_then(|json| serde_json::from_str(&json).ok()) })
-            }).map_err(|e| e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+            }).map_err(|e| e.to_string())?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
         };
         conversations.push(StoredConversation { id,title,project_id,messages,updated_at });
     }
@@ -107,7 +108,8 @@ fn save_conversations(database: State<'_, AppDatabase>, conversations: Vec<Store
     }
     let existing: Vec<String> = {
         let mut statement = transaction.prepare("SELECT id FROM conversations").map_err(|e| e.to_string())?;
-        statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+        let rows = statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
     };
     for id in existing {
         if !ids.contains(id.as_str()) {
@@ -188,6 +190,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let mut connection = Connection::open(data_dir.join("nexus-au.sqlite"))?;
+            connection.execute_batch("PRAGMA foreign_keys = ON;")?;
             migrate_database(&mut connection)?;
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
@@ -195,4 +198,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
+}
+#[cfg(test)]
+mod database_tests {
+    use super::*;
+    #[test]
+    fn creates_versioned_schema_and_foreign_key_constraints() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
+        migrate_database(&mut connection).expect("apply initial migration");
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
+        assert_eq!(version, 1);
+        let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
+        assert!(result.is_err(), "message must reference an existing conversation");
+    }
 }
