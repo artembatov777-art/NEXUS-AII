@@ -195,6 +195,7 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Add native SQLite persistence for conversations, messages, projects, memories, and knowledge chunks, with first-launch migration from browser storage.
 - [x] Add versioned SQLite migrations through schema v4; add project-reference validation and cascade-cleanup tests.
 - [x] Add versioned workspace JSON backup export/import with bounded validation and transactional restore; expose backup controls in desktop settings.
+- [ ] Add automated backup/restore round-trip and corruption-recovery integration tests.
 - [x] Add native OS credential vault adapters for Windows Credential Manager, macOS Keychain, and Linux Secret Service; provider requests use a scoped credential handle rather than an API-key command argument.
 - [x] Add explicit user-triggered system clipboard read/write commands with 1 MB bounds and copy/paste controls.
 - [ ] Add native file-picker workflows, notifications, and deep-link integrations with explicit permissions.
