@@ -981,7 +981,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
-        connection.execute_batch("DROP TABLE agent_checkpoints;").expect("remove v5 table");
+        connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints;").expect("remove v5 and v6 tables");
         migrate_database(&mut connection).expect("upgrade v4 to v6");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
         assert_eq!(version, 6);
