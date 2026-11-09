@@ -20,5 +20,10 @@ export class ProjectService {
   const all=await this.repository.list(true);if(!all.ok)return all;const current=all.value.find(item=>item.id===id);if(!current)return err("validation","Project not found.");
   return this.repository.save({...current,archived:true,updatedAt:this.now()});
  }
+ async delete(id:ProjectId):Promise<Result<void>>{
+  const all=await this.repository.list(true);if(!all.ok)return all;
+  if(!all.value.some(item=>item.id===id))return err("validation","Project not found.");
+  return this.repository.delete(id);
+ }
  list(includeArchived=false){return this.repository.list(includeArchived);}
 }

@@ -83,6 +83,8 @@ export interface KnowledgeVectorIndex {
   removeDocument(documentId: string, projectId: string): Promise<void>;
   search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>>;
   hasProject?(projectId: string): Promise<boolean>;
+  removeProject?(projectId: string): Promise<void>;
+  reconcile?(chunks: KnowledgeChunk[]): Promise<KnowledgeChunk[]>;
 }
 export interface KnowledgeCitation { documentId: string; sourceLabel: string; page?: number; section?: string; chunkId: string; }
 export interface RetrievedKnowledge { context: string; citations: KnowledgeCitation[]; }

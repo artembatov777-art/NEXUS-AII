@@ -2,6 +2,7 @@ import type { KnowledgeChunk, KnowledgeVectorIndex } from "../core/knowledge";
 
 interface VectorRow {
   id: string;
+  chunkId?: string;
   projectId: string;
   documentId: string;
   vector: number[];
@@ -9,6 +10,33 @@ interface VectorRow {
 }
 const DATABASE = "nexus-au-knowledge-vectors";
 const STORE = "vectors";
+
+export function vectorStorageKey(projectId: string, chunkId: string): string {
+  return `${projectId}\u0000${chunkId}`;
+}
+
+export function planVectorReconciliation(rows: VectorRow[], chunks: KnowledgeChunk[]): {
+  staleIds: string[];
+  missingChunks: KnowledgeChunk[];
+} {
+  const expected = new Map(chunks.map(chunk => [vectorStorageKey(chunk.projectId, chunk.id), chunk]));
+  const indexed = new Set<string>();
+  const staleIds: string[] = [];
+  for (const row of rows) {
+    const chunkId = row.chunkId ?? row.id;
+    const key = vectorStorageKey(row.projectId, chunkId);
+    const chunk = expected.get(key);
+    if (!chunk || row.id !== key || row.documentId !== chunk.documentId) {
+      staleIds.push(row.id);
+      continue;
+    }
+    indexed.add(key);
+  }
+  return {
+    staleIds,
+    missingChunks: chunks.filter(chunk => !indexed.has(vectorStorageKey(chunk.projectId, chunk.id)))
+  };
+}
 
 export function cosineSimilarity(left: number[], right: number[]): number {
   if (!left.length || left.length !== right.length) return 0;
@@ -22,7 +50,7 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return Math.max(0, Math.min(1, dot / Math.sqrt(leftNorm * rightNorm)));
 }
 
-/** Durable browser vector store. Data is scoped by project and never searched across project IDs. */
+/** Durable browser vector store with composite project/chunk keys and repairable indexing. */
 export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
   private database?: Promise<IDBDatabase>;
 
@@ -30,7 +58,12 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     if (!vector.length || vector.some(value => !Number.isFinite(value))) throw new Error("Invalid embedding vector.");
     const db = await this.open();
     await this.write(db, "readwrite", store => store.put({
-      id: chunk.id, projectId: chunk.projectId, documentId: chunk.documentId, vector, updatedAt: Date.now()
+      id: vectorStorageKey(chunk.projectId, chunk.id),
+      chunkId: chunk.id,
+      projectId: chunk.projectId,
+      documentId: chunk.documentId,
+      vector,
+      updatedAt: Date.now()
     } satisfies VectorRow));
   }
 
@@ -40,6 +73,25 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     const ids = rows.filter(row => row.documentId === documentId && row.projectId === projectId).map(row => row.id);
     if (!ids.length) return;
     await this.write(db, "readwrite", store => { for (const id of ids) store.delete(id); });
+  }
+
+  async removeProject(projectId: string): Promise<void> {
+    const db = await this.open();
+    const rows = await this.readAll(db);
+    const ids = rows.filter(row => row.projectId === projectId).map(row => row.id);
+    if (!ids.length) return;
+    await this.write(db, "readwrite", store => { for (const id of ids) store.delete(id); });
+  }
+
+  /** Removes vectors for deleted/changed chunks and returns chunks that need embeddings. */
+  async reconcile(chunks: KnowledgeChunk[]): Promise<KnowledgeChunk[]> {
+    const db = await this.open();
+    const rows = await this.readAll(db);
+    const plan = planVectorReconciliation(rows, chunks);
+    if (plan.staleIds.length) {
+      await this.write(db, "readwrite", store => { for (const id of plan.staleIds) store.delete(id); });
+    }
+    return plan.missingChunks;
   }
 
   async clear(): Promise<void> {
@@ -57,7 +109,7 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     const db = await this.open();
     const rows = await this.readAll(db);
     return rows.filter(row => row.projectId === projectId)
-      .map(row => ({ id: row.id, score: cosineSimilarity(vector, row.vector) }))
+      .map(row => ({ id: row.chunkId ?? row.id, score: cosineSimilarity(vector, row.vector) }))
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, Math.max(1, Math.min(100, limit)));

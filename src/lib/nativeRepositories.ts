@@ -94,6 +94,7 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
       return ok(undefined);
     } catch(e) { return failure(e,"Could not replace project knowledge document."); }
   }
+  async exportAll():Promise<Result<KnowledgeChunk[]>> { return this.readResult(); }
   async getByIds(ids:string[]):Promise<Result<KnowledgeChunk[]>> {const all=await this.readResult();if(!all.ok)return all;const set=new Set(ids);return ok(all.value.filter(c=>set.has(c.id)));}
   async search(query:string,projectId:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
     if(!isTauri())return this.local.search(query,projectId,limit);
