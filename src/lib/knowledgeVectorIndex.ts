@@ -42,6 +42,11 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     await this.write(db, "readwrite", store => { for (const id of ids) store.delete(id); });
   }
 
+  async clear(): Promise<void> {
+    const db = await this.open();
+    await this.write(db, "readwrite", store => store.clear());
+  }
+
   async hasProject(projectId: string): Promise<boolean> {
     const db = await this.open();
     const rows = await this.readAll(db);

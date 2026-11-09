@@ -186,6 +186,9 @@ export default function App() {
       }
       if (!window.confirm("Importing a backup replaces the current projects, conversations, memories, and knowledge. Export a backup of the current workspace first if you need to keep it. Continue?")) return;
       await invoke("import_workspace", { backup });
+      // Imported documents may reuse project/document IDs with different text.
+      // Clear stale vectors so lexical retrieval remains correct until re-indexed.
+      await vectors.clear();
       const restored = await loadConversations();
       setConversations(restored);
       await refreshProjects();
