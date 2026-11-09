@@ -343,12 +343,30 @@ fn store_provider_key(api_key: String) -> Result<(), String> {
     credential_entry("default")?.set_password(api_key.trim()).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
 }
 
+fn classify_provider_vault_status(entry_available: bool, credential_present: Option<bool>) -> &'static str {
+    if !entry_available { return "unavailable"; }
+    match credential_present {
+        Some(true) => "available",
+        Some(false) => "missing",
+        None => "unavailable"
+    }
+}
+
+#[tauri::command]
+fn provider_vault_status() -> &'static str {
+    match credential_entry("default") {
+        Ok(entry) => match entry.get_password() {
+            Ok(secret) => classify_provider_vault_status(true, Some(!secret.is_empty())),
+            Err(keyring::Error::NoEntry) => classify_provider_vault_status(true, Some(false)),
+            Err(_) => classify_provider_vault_status(true, None)
+        },
+        Err(_) => classify_provider_vault_status(false, None)
+    }
+}
+
 #[tauri::command]
 fn has_provider_key() -> bool {
-    match credential_entry("default") {
-        Ok(entry) => entry.get_password().is_ok(),
-        Err(_) => false,
-    }
+    provider_vault_status() == "available"
 }
 
 #[tauri::command]
@@ -364,6 +382,14 @@ fn delete_provider_key() -> Result<(), String> {
 #[cfg(test)]
 mod payload_validation_tests {
     use super::*;
+    #[test]
+    fn credential_vault_status_distinguishes_missing_and_unavailable() {
+        assert_eq!(classify_provider_vault_status(false,None),"unavailable");
+        assert_eq!(classify_provider_vault_status(true,None),"unavailable");
+        assert_eq!(classify_provider_vault_status(true,Some(false)),"missing");
+        assert_eq!(classify_provider_vault_status(true,Some(true)),"available");
+    }
+
     #[test]
     fn rejects_invalid_memory_and_knowledge_payloads() {
         let memory=serde_json::json!({"id":"m1","content":"A saved fact","category":"fact","scope":"profile","source":{"type":"user_confirmed","label":"Manual"},"tags":["test"],"createdAt":1,"updatedAt":1,"schemaVersion":1});
@@ -862,7 +888,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
