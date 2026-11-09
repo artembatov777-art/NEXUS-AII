@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, Sparkles, X } from "lucide-react";
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
@@ -297,7 +298,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
           </article>
         </aside>
       </div>
-      <footer className="agent-center-footer"><span>Storage: native SQLite checkpoints, audit and traces · approval grants: one-time</span><span>Default-deny tool policy</span></footer>
+      <footer className="agent-center-footer"><span>{isTauri() ? "Storage: native SQLite checkpoints, audit and traces" : "Storage: browser localStorage preview"} · approval grants: one-time</span><span>Default-deny tool policy</span></footer>
     </section>
   </div>;
 }
