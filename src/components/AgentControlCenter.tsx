@@ -48,7 +48,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
       if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
       const models = hasProviderKey ? createTauriModelRouter(providerSettings) : null;
       const runtime = createWorkspaceNexusRuntime("local-user", {
-        authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow || agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
+        authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async () => "deny"
       }, models ?? undefined);
       const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
@@ -151,6 +151,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   async function startPlannedWorkflow() {
     if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
     const goal = task.trim();
+    if (!window.confirm("Send this task to your configured AI provider? The planner may execute only the built-in local preview tool. No external tool or system action is permitted.")) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
