@@ -181,7 +181,7 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Explicit project selection in chat and project knowledge panel.
 - [x] CI acceptance: 29 test files / 102 tests passed; TypeScript production build and Vite build passed (GitHub Actions run 42545054890).
 
-**Defined limitations:** the first semantic operation downloads the sentence-transformer model from Hugging Face; embeddings run locally after download. Lexical retrieval remains available if model loading or IndexedDB is unavailable. PDF extraction supports selectable text only; scanned-image OCR is not included. Project filtering is enforced by application repositories and retrieval paths, but browser localStorage/IndexedDB are not security boundaries against same-origin code or a compromised device. Native encrypted storage and OS-level project ACLs belong to Phase IV/V hardening.
+**Defined limitations:** the first semantic operation downloads the sentence-transformer model from Hugging Face; embeddings run locally after download. Lexical retrieval remains available if model loading or IndexedDB is unavailable. PDF extraction supports selectable text only; scanned-image OCR is not included. Project filtering is enforced by application repositories and retrieval paths, but browser localStorage/IndexedDB are not security boundaries against same-origin code or a compromised device. Native desktop memory and document records now use SQLite with project ownership checks and project-delete cleanup. Browser localStorage/IndexedDB remain preview stores and are not security boundaries against same-origin code or a compromised device; native vector embeddings still use the WebView IndexedDB store.
 
 **Release risk carried forward:** npm install reported 11 dependency vulnerabilities (3 moderate, 6 high, 2 critical) during CI. The dependency tree must be audited and remediated as part of Phase V security/stabilization before a production release.
 
@@ -191,15 +191,16 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Add conversation-history search across titles and message content.
 - [x] Add optional push-to-talk-style speech recognition control and text-to-speech playback using browser/WebView speech APIs.
 - [x] Add project-aware conversation ownership, workspace-scoped history filtering, conversation reassignment, and legacy conversation storage migration.
-- [ ] Add project-specific file ownership and enforce context isolation across all retrieval paths.
-- [x] Add native SQLite conversation/message persistence with transactional writes and first-launch migration from browser storage.
-- [x] Add versioned SQLite schema migrations for conversations, messages, and projects; test schema version and foreign-key behavior.
-- [ ] Add backup/export/import and recovery tests.
-- [ ] Add native OS credential vault; remove API keys from ad-hoc command payloads and use scoped credential handles.
-- [ ] Add native desktop file, notification, clipboard, and deep-link integrations behind explicit permission gates.
-- [ ] Verify Tauri runtime builds on supported desktop platforms and run native SQLite integration tests.
-- [ ] Add voice streaming, interruption, device selection, and native speech adapters where supported.
-- [ ] Add app-wide search, data export/import UI, accessibility and keyboard navigation audit.
+- [x] Add project-specific ownership for conversations, memories, and knowledge chunks; enforce project references in SQLite and delete project-owned records when a project is deleted.
+- [x] Add native SQLite persistence for conversations, messages, projects, memories, and knowledge chunks, with first-launch migration from browser storage.
+- [x] Add versioned SQLite migrations through schema v4; add project-reference validation and cascade-cleanup tests.
+- [x] Add versioned workspace JSON backup export/import with bounded validation and transactional restore; expose backup controls in desktop settings.
+- [x] Add native OS credential vault adapters for Windows Credential Manager, macOS Keychain, and Linux Secret Service; provider requests use a scoped credential handle rather than an API-key command argument.
+- [x] Add explicit user-triggered system clipboard read/write commands with 1 MB bounds and copy/paste controls.
+- [ ] Add native file-picker workflows, notifications, and deep-link integrations with explicit permissions.
+- [ ] Verify full Tauri application builds and runtime behavior on Windows, macOS, and Linux; run native SQLite backup/restore integration tests.
+- [ ] Add streaming voice, device selection, and native speech adapters where supported; current browser/WebView speech controls remain optional and host-dependent.
+- [x] Add desktop workspace data export/import UI; [ ] add app-wide search, accessibility and keyboard-navigation audit.
 - [ ] Complete security review, dependency audit, CSP/capability review, and release packaging.
 
-**Current boundary:** voice is optional browser/WebView speech API support; availability and recognition privacy depend on the host OS/browser. It is not a native offline speech engine. Project metadata and conversations are now attached to project workspaces and stored in native SQLite on desktop. Knowledge documents and memories still use browser storage; full isolation, credential vault, backup/restore, and native runtime verification remain open. Phase IV is not complete.
+**Current boundary:** native desktop records for chats, projects, memories, and knowledge chunks are stored in SQLite. Project ownership is checked in SQLite and project deletion cleans associated records. Vector embeddings still use IndexedDB in the WebView; lexical retrieval remains available if semantic indexing is unavailable. API keys are stored in the platform credential vault and provider requests pass only a fixed scoped handle. Backups cover structured workspace data but intentionally exclude provider credentials and cached vector embeddings. Clipboard actions require an explicit user click. Voice remains browser/WebView-based, not a native offline engine. Windows native CI is being expanded; macOS/Linux runtime verification and the remaining integrations/audits are still open. Phase IV is not complete.
