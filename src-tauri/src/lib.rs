@@ -251,6 +251,32 @@ fn save_knowledge_chunks(database: State<'_, AppDatabase>, chunks: Vec<serde_jso
     transaction.commit().map_err(|e| e.to_string())
 }
 
+
+fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
+    if handle != "default" { return Err("Unknown credential handle.".into()); }
+    keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
+}
+
+#[tauri::command]
+fn store_provider_key(api_key: String) -> Result<(), String> {
+    if api_key.trim().is_empty() || api_key.len() > 8192 { return Err("API key is empty or exceeds the size limit.".into()); }
+    credential_entry("default")?.set_password(api_key.trim()).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
+}
+
+#[tauri::command]
+fn has_provider_key() -> bool {
+    credential_entry("default").and_then(|entry| entry.get_password().map(|_| ())).is_ok()
+}
+
+#[tauri::command]
+fn delete_provider_key() -> Result<(), String> {
+    match credential_entry("default")?.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("Could not delete API key from the OS credential vault: {e}"))
+    }
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -259,7 +285,7 @@ fn get_app_version() -> &'static str {
 #[tauri::command]
 async fn send_chat(
     base_url: String,
-    api_key: String,
+    credential_handle: String,
     model: String,
     messages: Vec<ProviderInputMessage>,
 ) -> Result<String, String> {
@@ -267,9 +293,7 @@ async fn send_chat(
     if !(base.starts_with("https://") || base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1")) {
         return Err("Provider URL must use HTTPS (HTTP is allowed only for localhost).".into());
     }
-    if api_key.trim().is_empty() {
-        return Err("API key is required.".into());
-    }
+    let api_key = credential_entry(&credential_handle)?.get_password().map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
     if model.trim().is_empty() || messages.is_empty() {
         return Err("A model and at least one message are required.".into());
     }
@@ -290,7 +314,7 @@ async fn send_chat(
 
     let response = reqwest::Client::new()
         .post(endpoint)
-        .bearer_auth(api_key)
+        .bearer_auth(&api_key)
         .json(&payload)
         .send()
         .await

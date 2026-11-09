@@ -32,6 +32,7 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [provider, setProvider] = useState<ProviderSettings>(loadProvider);
   const [apiKey, setApiKey] = useState("");
+  const [hasProviderKey, setHasProviderKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
@@ -78,6 +79,7 @@ export default function App() {
   }, []);
   useEffect(() => { if (conversationsReady) void saveConversations(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady]);
   useEffect(() => { saveProvider(provider); }, [provider]);
+  useEffect(() => { void invoke<boolean>("has_provider_key").then(setHasProviderKey).catch(() => setHasProviderKey(false)); }, []);
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
@@ -127,7 +129,7 @@ export default function App() {
         sourceReferences = retrieved.value.citations;
         if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
       }
-      const answer = await sendMessage(provider, apiKey, next, contextParts.join("\n\n"));
+      const answer = await sendMessage(provider, next, contextParts.join("\n\n"));
       updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -138,6 +140,20 @@ export default function App() {
   function removeConversation(id: string) {
     setConversations(current => current.filter(c => c.id !== id));
     if (activeId === id) setActiveId(null);
+  }
+
+
+  async function saveProviderSettings() {
+    try {
+      if (apiKey.trim()) { await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); }
+      saveProvider(provider);
+      setSettingsOpen(false);
+      setError("");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save provider credentials."); }
+  }
+  async function deleteProviderKey() {
+    try { await invoke("delete_provider_key"); setHasProviderKey(false); setApiKey(""); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
   return <div className="app-shell">
@@ -186,6 +202,6 @@ export default function App() {
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {agentsOpen && <AgentControlCenter onClose={() => setAgentsOpen(false)} />}
-    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. Your API key stays in memory for this session only.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Enter API key (not stored)" autoComplete="off"/></label><div className="security-note"><ShieldCheck size={16}/> The key is sent to the Rust backend only when you submit a message. It is never written to local storage.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => setApiKey("")}>Clear key</button><button className="primary-btn" onClick={() => setSettingsOpen(false)}><Check size={15}/> Save settings</button></div></section></div>}
+    {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2>Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible API endpoint. API keys are stored in the operating system credential vault, not in the application database.</p><label>Base URL<input value={provider.baseUrl} onChange={e => setProvider(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://api.openai.com/v1"/></label><label>Model<input value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="gpt-4o-mini"/></label><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{hasProviderKey ? "A provider key is saved securely on this device." : "No provider key is saved."}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div></section></div>}
   </div>;
 }
