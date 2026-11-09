@@ -232,17 +232,17 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Added workspace backup import/export controls in Settings; imports require confirmation and clear stale semantic vectors to prevent results from an older backup leaking into restored project searches.
 
 ### Remaining acceptance work
-- [ ] Add persistent native integration tests for SQLite CRUD, project cleanup, document replacement, backup import/export, and schema upgrades.
-- [x] Make Memory, Knowledge, and Project local-to-SQLite migrations retry-safe after partial failure; missing IDs are imported without overwriting existing native records. Concurrent cross-instance startup still needs a native transaction-level migration lock.
-- [x] Clear stale IndexedDB semantic vectors after backup restore; [ ] complete project/document deletion cleanup and re-index reconciliation.
-- [x] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, and plan-size bounds); [ ] add bounded delegated-output handling and cancellation edge-case tests.
-- [ ] Complete MCP protocol lifecycle, server capability negotiation, bounded SSE framing, reconnect/health state, and adversarial schema tests.
-- [ ] Connect model-backed planning to the resumable permission-gated runtime, not just standalone planner primitives.
+- [x] Added native SQLite integration tests for project/conversation/memory/knowledge cleanup, transactional document replacement and rollback, backup round-trip and failed-import recovery, checkpoint persistence, audit/trace persistence, and schema upgrades through v6.
+- [x] Make Memory, Knowledge, and Project local-to-SQLite migrations retry-safe after partial failure; missing IDs are imported without overwriting existing native records. Schema migrations now run inside one SQLite `EXCLUSIVE` transaction to serialize concurrent startup upgrades.
+- [x] Clear stale IndexedDB semantic vectors after backup restore and remove document vectors during replacement/deletion; [ ] complete project deletion cleanup and startup re-index reconciliation.
+- [x] Validate multi-agent plans at the coordinator boundary and enforce 64 KB delegated-output limits, JSON-only handoff, cancellation checks after awaited operations, and exception-to-failure conversion with negative tests.
+- [x] Complete the supported MCP lifecycle: initialize/capability validation, initialized notification, bounded paginated tool discovery, reconnect and health state, correlated bounded SSE framing, disconnect cleanup, and nested schema/input adversarial tests.
+- [x] Connect model-backed planning to a bounded tool-invocation agent, ResumableAgentRuntime, coordinator approval gate, and Tool Gateway permission/audit checks; an integration test exercises the full path with a fake model and tool.
 - [x] Persist resumable agent checkpoints transactionally in native SQLite with a versioned migration, bounded payload validation, compare-and-swap sequence enforcement, and thread-scoped listing.
-- [ ] Move tool audit events and traces to transactional native SQLite; one-time approval grants intentionally remain ephemeral and must be re-issued by the user after restart.
-- [ ] Finish workspace-wide search across conversations, memories, and project knowledge with explicit scope.
-- [ ] Finish voice state/error handling and document WebView/browser host limitations; native speech adapters remain a separate integration.
-- [x] Add backup/restore UI with schema validation, confirmation, and transactional native import; [ ] add round-trip and corruption-recovery integration tests.
+- [x] Move tool audit events and traces to bounded transactional native SQLite tables with filtering, retention caps, attribute redaction, and native adapters. One-time approval grants intentionally remain ephemeral and must be re-issued by the user after restart.
+- [x] Finish workspace-wide search across all conversations, all memories, and project knowledge across every project, with explicit per-category scope toggles and bounded results.
+- [x] Harden voice input/output lifecycle, permission and host error handling, cancellation/unmount cleanup, and document WebView/browser service limitations; native speech adapters remain a separate integration.
+- [x] Add backup/restore UI with schema validation, confirmation, transactional native import, round-trip tests, and rollback/recovery tests for validation and mid-transaction failures.
 - [ ] Complete cross-platform credential vault UX and security review.
 - [ ] Run end-to-end tests across real Tauri desktop builds and document platform-specific limitations.
 
