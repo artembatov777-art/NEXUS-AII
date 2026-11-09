@@ -1,49 +1,111 @@
 import type { McpRequest, McpResponse, McpTransport } from "./mcpClient";
 
-export interface McpHttpTransportOptions { endpoint:string; fetcher?:typeof fetch; headers?:Record<string,string>; }
+export interface McpHttpTransportOptions { endpoint: string; fetcher?: typeof fetch; headers?: Record<string, string>; }
 const MAX_RESPONSE_BYTES = 2_000_000;
+const MAX_SSE_EVENT_BYTES = 256_000;
+const MAX_SSE_EVENTS = 1_000;
 
-async function readBoundedText(response:Response):Promise<string>{
- if(!response.body) return "";
- const reader=response.body.getReader();
- const chunks:Uint8Array[]=[];
- let total=0;
- try{
-  while(true){
-   const {done,value}=await reader.read();
-   if(done)break;
-   total+=value.byteLength;
-   if(total>MAX_RESPONSE_BYTES){await reader.cancel();throw new Error("MCP response exceeded the 2 MB limit.");}
-   chunks.push(value);
+async function readBoundedText(response: Response): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error("MCP response exceeded the 2 MB limit.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
   }
- }finally{reader.releaseLock();}
- const merged=new Uint8Array(total);
- let offset=0;
- for(const chunk of chunks){merged.set(chunk,offset);offset+=chunk.byteLength;}
- return new TextDecoder().decode(merged);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+}
+
+/** Parses bounded SSE frames and selects the JSON-RPC response correlated to this request. */
+export function parseMcpSseResponse(body: string, expectedId: number): McpResponse {
+  const lines = body.split(/\r?\n/);
+  let dataLines: string[] = [];
+  let frameBytes = 0;
+  let frameCount = 0;
+  let matched: McpResponse | undefined;
+
+  const flush = () => {
+    if (dataLines.length === 0) return;
+    frameCount += 1;
+    if (frameCount > MAX_SSE_EVENTS) throw new Error("MCP SSE response contains too many events.");
+    const data = dataLines.join("\n");
+    dataLines = [];
+    frameBytes = 0;
+    if (data === "[DONE]") return;
+    let parsed: unknown;
+    try { parsed = JSON.parse(data); }
+    catch { throw new Error("MCP SSE event contained invalid JSON."); }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    const message = parsed as Partial<McpResponse>;
+    if (message.id !== expectedId) return;
+    if (matched) throw new Error("MCP SSE response contains duplicate correlated responses.");
+    matched = parsed as McpResponse;
+  };
+
+  for (const line of lines) {
+    if (line === "") { flush(); continue; }
+    if (line.startsWith(":")) continue;
+    if (line.startsWith("data:")) {
+      const value = line.slice(5).replace(/^ /, "");
+      frameBytes += new TextEncoder().encode(value).byteLength;
+      if (frameBytes > MAX_SSE_EVENT_BYTES) throw new Error("MCP SSE event exceeded the 256 KB limit.");
+      dataLines.push(value);
+    }
+  }
+  flush();
+  if (!matched) throw new Error("MCP SSE response contained no JSON-RPC response for this request.");
+  return matched;
 }
 
 export class McpHttpTransport implements McpTransport {
- private readonly endpoint:URL;private readonly fetcher:typeof fetch;private readonly headers:Record<string,string>;
- constructor(options:McpHttpTransportOptions){
-  const url=new URL(options.endpoint);
-  if(!["http:","https:"].includes(url.protocol)||url.username||url.password||url.hash)throw new Error("MCP endpoint must be an HTTP(S) URL without embedded credentials or fragments.");
-  this.endpoint=url;this.fetcher=options.fetcher??fetch;this.headers={...(options.headers??{})};
-  for(const key of Object.keys(this.headers))if(/^(host|content-length|cookie|origin)$/i.test(key))throw new Error(`Header "${key}" cannot be overridden.`);
- }
- async request(request:McpRequest,signal:AbortSignal):Promise<McpResponse>{
-  const response=await this.fetcher(this.endpoint.toString(),{method:"POST",headers:{"content-type":"application/json","accept":"application/json, text/event-stream",...this.headers},body:JSON.stringify(request),signal,credentials:"omit",redirect:"error",cache:"no-store"});
-  if(!response.ok)throw new Error(`MCP HTTP request failed with status ${response.status}.`);
-  const declaredLength=Number(response.headers.get("content-length")??0);
-  if(declaredLength>MAX_RESPONSE_BYTES)throw new Error("MCP response exceeded the 2 MB limit.");
-  const type=response.headers.get("content-type")??"";
-  const body=await readBoundedText(response);
-  if(type.includes("application/json"))return JSON.parse(body) as McpResponse;
-  if(type.includes("text/event-stream")){
-   const data=body.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).filter(Boolean).at(-1);
-   if(!data)throw new Error("MCP SSE response contained no JSON data event.");
-   return JSON.parse(data) as McpResponse;
+  private readonly endpoint: URL;
+  private readonly fetcher: typeof fetch;
+  private readonly headers: Record<string, string>;
+
+  constructor(options: McpHttpTransportOptions) {
+    const url = new URL(options.endpoint);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) {
+      throw new Error("MCP endpoint must be an HTTP(S) URL without embedded credentials or fragments.");
+    }
+    this.endpoint = url;
+    this.fetcher = options.fetcher ?? fetch;
+    this.headers = { ...(options.headers ?? {}) };
+    for (const key of Object.keys(this.headers)) {
+      if (/^(host|content-length|cookie|origin)$/i.test(key)) throw new Error(`Header "${key}" cannot be overridden.`);
+    }
   }
-  throw new Error("MCP server returned an unsupported content type.");
- }
+
+  async request(request: McpRequest, signal: AbortSignal): Promise<McpResponse> {
+    const response = await this.fetcher(this.endpoint.toString(), {
+      method: "POST",
+      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers },
+      body: JSON.stringify(request),
+      signal,
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`MCP HTTP request failed with status ${response.status}.`);
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (declaredLength > MAX_RESPONSE_BYTES) throw new Error("MCP response exceeded the 2 MB limit.");
+    const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    const body = await readBoundedText(response);
+    if (type === "application/json") return JSON.parse(body) as McpResponse;
+    if (type === "text/event-stream") return parseMcpSseResponse(body, request.id);
+    throw new Error("MCP server returned an unsupported content type.");
+  }
 }
