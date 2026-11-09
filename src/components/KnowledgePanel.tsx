@@ -6,6 +6,8 @@ import { KnowledgeRetrievalService, type KnowledgeCitation } from "../core/knowl
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
 import { LocalStorageKnowledgeRepository, type KnowledgeDocumentSummary } from "../lib/knowledgeStorage";
 import { LocalStorageProjectRepository } from "../lib/projectStorage";
+import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
+import { IndexedDbKnowledgeVectorIndex } from "../lib/knowledgeVectorIndex";
 
 export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const projects = useMemo(() => new ProjectService(
@@ -14,8 +16,10 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     () => Date.now()
   ), []);
   const repository = useMemo(() => new LocalStorageKnowledgeRepository(window.localStorage), []);
-  const ingestion = useMemo(() => new DocumentIngestionService(repository), [repository]);
-  const retrieval = useMemo(() => new KnowledgeRetrievalService(repository), [repository]);
+  const embeddings = useMemo(() => new LocalTransformerEmbeddingProvider(), []);
+  const vectors = useMemo(() => new IndexedDbKnowledgeVectorIndex(), []);
+  const ingestion = useMemo(() => new DocumentIngestionService(repository, {}, embeddings, vectors), [repository, embeddings, vectors]);
+  const retrieval = useMemo(() => new KnowledgeRetrievalService(repository, embeddings, vectors), [repository, embeddings, vectors]);
   const [items, setItems] = useState<WorkspaceProject[]>([]);
   const [projectId, setProjectId] = useState("");
   const [query, setQuery] = useState("");
@@ -53,7 +57,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
 
   async function importFile(file?: File) {
     if (!file || !projectId || working) return;
-    setWorking(true); setError(""); setStatus("");
+    setWorking(true); setError(""); setStatus("Parsing document and preparing local semantic index. First use downloads the embedding model.");
     try {
       const parsed = await parseKnowledgeFile(file);
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(projectId + ":" + file.name.toLocaleLowerCase()));
@@ -115,7 +119,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       {status && <div className="knowledge-status">{status}</div>}
       {error && <div className="error-banner">{error}</div>}
       {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
-      <footer className="project-footnote">Stored locally in this browser profile. Imports support TXT, Markdown, PDF, and DOCX. Re-importing a file with the same name in the same project replaces its previous index.</footer>
+      <footer className="project-footnote">Stored locally in this browser profile. Imports support TXT, Markdown, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
     </section>
   </div>;
 }

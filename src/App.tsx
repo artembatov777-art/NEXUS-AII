@@ -14,6 +14,8 @@ import { LocalStorageProjectRepository } from "./lib/projectStorage";
 import { LocalStorageKnowledgeRepository } from "./lib/knowledgeStorage";
 import { MemoryService, type MemoryId } from "./core/memory";
 import { LocalStorageMemoryRepository } from "./lib/memoryStorage";
+import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
+import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 const makeId = () => crypto.randomUUID();
@@ -47,9 +49,12 @@ export default function App() {
     () => crypto.randomUUID() as ProjectId,
     () => Date.now()
   ), []);
+  const knowledgeRepository = useMemo(() => new LocalStorageKnowledgeRepository(window.localStorage), []);
+  const embeddings = useMemo(() => new LocalTransformerEmbeddingProvider(), []);
+  const vectors = useMemo(() => new IndexedDbKnowledgeVectorIndex(), []);
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
-    new LocalStorageKnowledgeRepository(window.localStorage)
-  ), []);
+    knowledgeRepository, embeddings, vectors
+  ), [knowledgeRepository, embeddings, vectors]);
   const memoryService = useMemo(() => new MemoryService(
     new LocalStorageMemoryRepository(window.localStorage),
     { memoryId: () => crypto.randomUUID() as MemoryId },
