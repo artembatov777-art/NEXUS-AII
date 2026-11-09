@@ -6,12 +6,31 @@ export interface AgentTaskExecutor { execute(agentId:AgentId,input:unknown,signa
 export interface CoordinatorPolicy { authorize(agentId:AgentId,reason:string):Promise<"allow"|"deny"|"ask_user">; }
 export type CoordinationEvent={type:"started"|"agent_started"|"agent_completed"|"waiting_for_approval"|"completed"|"failed";runId:AgentRunId;agentId?:AgentId;step?:number;detail?:string};
 interface PendingCoordination { plan:AgentPlan; assignments:Record<string,AgentId>; nextIndex:number; outputs:Map<string,unknown>; }
+function validateCoordinationInput(plan:AgentPlan,assignments:Record<string,AgentId>,maxAgents:number):string|undefined {
+ if(!plan||typeof plan.goal!=="string"||!plan.goal.trim()||plan.goal.length>2000||!Array.isArray(plan.steps)||plan.steps.length===0||plan.steps.length>maxAgents)return "Coordination plan is empty or exceeds the agent budget.";
+ let serialized:string;
+ try{serialized=JSON.stringify(plan);}catch{return "Coordination plan is not serializable.";}
+ if(serialized.length>64_000)return "Coordination plan exceeds the 64 KB limit.";
+ const known=new Set<string>();
+ for(const step of plan.steps){
+  if(!step||typeof step.id!=="string"||!/^[a-zA-Z0-9_-]{1,80}$/.test(step.id)||known.has(step.id))return "Coordination step IDs must be unique and valid.";
+  if(typeof step.toolId!=="string"||!step.toolId.trim()||step.toolId.length>160||typeof step.purpose!=="string"||!step.purpose.trim()||step.purpose.length>500||!Array.isArray(step.dependsOn)||step.dependsOn.length>maxAgents)return "Coordination step metadata is invalid.";
+  if(step.dependsOn.some(dep=>typeof dep!=="string"||dep===step.id||!known.has(dep))||new Set(step.dependsOn).size!==step.dependsOn.length)return "Dependencies must reference unique, previously declared steps.";
+  known.add(step.id);
+ }
+ const assignmentKeys=Object.keys(assignments??{});
+ if(assignmentKeys.length!==known.size||assignmentKeys.some(id=>!known.has(id)))return "Every plan step must have exactly one agent assignment.";
+ if(Object.values(assignments).some(id=>typeof id!=="string"||!id.trim()||id.length>128))return "Agent assignments contain an invalid agent ID.";
+ return undefined;
+}
+
 export class MultiAgentCoordinator {
  private readonly pending=new Map<AgentRunId,PendingCoordination>();
  constructor(private readonly executor:AgentTaskExecutor,private readonly policy:CoordinatorPolicy,private readonly traces:TraceSink,private readonly clock:{now():number},private readonly maxAgents=4){}
  async *run(runId:AgentRunId,plan:AgentPlan,assignments:Record<string,AgentId>,signal:AbortSignal):AsyncIterable<CoordinationEvent>{
   if(this.pending.has(runId)){yield {type:"failed",runId,detail:"A coordination with this run ID is already waiting for approval."};return;}
-  if(!plan||!Array.isArray(plan.steps)||plan.steps.length===0||plan.steps.length>this.maxAgents){yield {type:"failed",runId,detail:"Coordination plan is empty or exceeds the agent budget."};return;}
+  const invalid=validateCoordinationInput(plan,assignments,this.maxAgents);
+  if(invalid){yield {type:"failed",runId,detail:invalid};return;}
   const outputs=new Map<string,unknown>();yield {type:"started",runId};
   await this.trace(runId,"started");
   yield* this.executeFrom(runId,plan,assignments,0,outputs,signal);
