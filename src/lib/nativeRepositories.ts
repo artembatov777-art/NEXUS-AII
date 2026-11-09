@@ -37,7 +37,7 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
     return this.migration;
   }
   async list(scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
-    try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(r.scope!=="project"||(!!projectId&&r.projectId===projectId))).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
+    try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(r.scope!=="project"||!projectId||r.projectId===projectId)).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
     catch(e){return failure(e,"Could not load memories.");}
   }
   async search(query:string,scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {

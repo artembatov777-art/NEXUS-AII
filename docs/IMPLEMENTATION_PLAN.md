@@ -205,3 +205,30 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [ ] Complete security review, dependency audit, CSP/capability review, and release packaging.
 
 **Current boundary:** native desktop records for chats, projects, memories, and knowledge chunks are stored in SQLite. Project ownership is checked in SQLite and project deletion cleans associated records. Vector embeddings still use IndexedDB in the WebView; lexical retrieval remains available if semantic indexing is unavailable. API keys are stored in the platform credential vault and provider requests pass only a fixed scoped handle. Backups cover structured workspace data but intentionally exclude provider credentials and cached vector embeddings. Clipboard actions require an explicit user click. Voice remains browser/WebView-based, not a native offline engine. Windows, macOS, and Linux CI matrix has been added and is running; platform build/runtime verification is not considered complete until all matrix jobs pass. The remaining native integrations and audits are still open. Phase IV is not complete.
+
+
+## Phase VI — Completion and hardening of Phases II–IV (active)
+
+### Verified baseline and completed work
+- [x] Repaired duplicate Tauri command registration and credential-vault command exposure.
+- [x] Added project/document-scoped transactional Knowledge replacement and deletion; no global document wipe on a single-document update.
+- [x] Hardened native provider requests: HTTPS required except loopback HTTP, embedded URL credentials/query/fragment rejected, redirects disabled, request/response bounds enforced, supported message roles validated, and provider keys redacted from error excerpts.
+- [x] GitHub Actions passed for commit `03a99e74c88fa73251dd5cafc9c5eafcf2f6243a`: frontend Quality and Native desktop quality matrix (Windows, macOS, Linux).
+- [x] Fixed all-scope Memory listing so project memories are not silently hidden when the caller requests all scopes.
+- [x] Added a 2 MB streaming response cap to the MCP HTTP transport and tests for declared and undeclared oversized responses.
+
+### Remaining acceptance work
+- [ ] Add persistent native integration tests for SQLite CRUD, project cleanup, document replacement, backup import/export, and schema upgrades.
+- [ ] Make Memory and Knowledge migration idempotent under partial failure and concurrent startup.
+- [ ] Verify IndexedDB vector-index lifecycle on document replacement/deletion and project deletion; add rebuild/reconciliation.
+- [ ] Validate multi-agent plans at coordinator boundary (unique step IDs, dependency graph, assignment coverage, output bounds, and cancellation).
+- [ ] Complete MCP protocol lifecycle, server capability negotiation, bounded SSE framing, reconnect/health state, and adversarial schema tests.
+- [ ] Connect model-backed planning to the resumable permission-gated runtime, not just standalone planner primitives.
+- [ ] Persist agent checkpoints, approvals, audit events, and traces transactionally in native SQLite.
+- [ ] Finish workspace-wide search across conversations, memories, and project knowledge with explicit scope.
+- [ ] Finish voice state/error handling and document WebView/browser host limitations; native speech adapters remain a separate integration.
+- [ ] Add verified backup/restore UI with schema validation, confirmation, and rollback on import failure.
+- [ ] Complete cross-platform credential vault UX and security review.
+- [ ] Run end-to-end tests across real Tauri desktop builds and document platform-specific limitations.
+
+**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. No OmniRoute work is included here.
