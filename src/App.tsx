@@ -73,6 +73,12 @@ export default function App() {
     }
   }
   useEffect(() => { void refreshProjects(); }, [projectService]);
+  useEffect(() => {
+    let active = true;
+    void reconcileSemanticIndex(() => active).catch(() => undefined);
+    return () => { active = false; };
+  }, [knowledgeRepository, embeddings, vectors]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -158,6 +164,19 @@ export default function App() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
+
+  async function reconcileSemanticIndex(isActive: () => boolean = () => true) {
+    const loaded = await knowledgeRepository.exportAll();
+    if (!loaded.ok || !isActive()) return;
+    const missing = await vectors.reconcile(loaded.value);
+    for (let offset = 0; offset < missing.length; offset += 16) {
+      if (!isActive()) return;
+      const batch = missing.slice(offset, offset + 16);
+      const embedded = await embeddings.embed(batch.map(chunk => chunk.text));
+      if (!embedded.ok || embedded.value.length !== batch.length) return;
+      await Promise.all(batch.map((chunk, index) => vectors.upsert(chunk, embedded.value[index])));
+    }
+  }
   async function exportWorkspaceBackup() {
     try {
       const backup = await invoke<Record<string, unknown>>("export_workspace");
@@ -189,6 +208,7 @@ export default function App() {
       // Imported documents may reuse project/document IDs with different text.
       // Clear stale vectors so lexical retrieval remains correct until re-indexed.
       await vectors.clear();
+      await reconcileSemanticIndex();
       const restored = await loadConversations();
       setConversations(restored);
       await refreshProjects();
