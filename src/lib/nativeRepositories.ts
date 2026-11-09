@@ -78,8 +78,11 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   async add(chunks:KnowledgeChunk[]):Promise<Result<void>> {const all=await this.readResult();if(!all.ok)return all;const ids=new Set(chunks.map(c=>c.id));return this.persist([...all.value.filter(c=>!ids.has(c.id)),...chunks]);}
   async replaceDocument(documentId:string,projectId:string,chunks:KnowledgeChunk[]):Promise<Result<void>> {
     if(!isTauri())return this.local.replaceDocument(documentId,projectId,chunks);
-    const all=await this.readResult();if(!all.ok)return all;
-    return this.persist([...all.value.filter(c=>c.documentId!==documentId||c.projectId!==projectId),...chunks]);
+    try {
+      await invoke("replace_knowledge_document",{documentId,projectId,chunks});
+      this.migration=undefined;
+      return ok(undefined);
+    } catch(e) { return failure(e,"Could not replace project knowledge document."); }
   }
   async getByIds(ids:string[]):Promise<Result<KnowledgeChunk[]>> {const all=await this.readResult();if(!all.ok)return all;const set=new Set(ids);return ok(all.value.filter(c=>set.has(c.id)));}
   async search(query:string,projectId:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
@@ -91,8 +94,11 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   }
   async removeDocument(documentId:string,projectId:string):Promise<Result<void>> {
     if(!isTauri())return this.local.removeDocument(documentId,projectId);
-    const all=await this.readResult();if(!all.ok)return all;
-    return this.persist(all.value.filter(c=>c.documentId!==documentId||c.projectId!==projectId));
+    try {
+      await invoke("delete_knowledge_document",{documentId,projectId});
+      this.migration=undefined;
+      return ok(undefined);
+    } catch(e) { return failure(e,"Could not remove project knowledge document."); }
   }
   async listDocuments(projectId:string):Promise<Result<KnowledgeDocumentSummary[]>> {
     const all=await this.readResult();if(!all.ok)return all;

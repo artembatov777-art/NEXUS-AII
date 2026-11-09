@@ -243,7 +243,6 @@ fn save_memory(database: State<'_, AppDatabase>, record: serde_json::Value) -> R
 }
 
 #[tauri::command]
-#[tauri::command]
 fn delete_memory(database: State<'_, AppDatabase>, id: String) -> Result<(), String> {
     if id.is_empty() || id.len() > 128 { return Err("Memory ID is invalid.".into()); }
     let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
@@ -275,15 +274,46 @@ fn save_knowledge_chunks(database: State<'_, AppDatabase>, chunks: Vec<serde_jso
     }
     let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
     let transaction=connection.transaction().map_err(|e|e.to_string())?;
-    transaction.execute("DELETE FROM knowledge_chunks",[]).map_err(|e|e.to_string())?;
     for chunk in chunks {
         let payload=serde_json::to_string(&chunk).map_err(|e|e.to_string())?;
-        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![chunk["id"].as_str().unwrap(),chunk["documentId"].as_str().unwrap(),chunk["projectId"].as_str().unwrap(),payload]).map_err(|e|e.to_string())?;
+        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET document_id=excluded.document_id,project_id=excluded.project_id,payload=excluded.payload",params![chunk["id"].as_str().unwrap(),chunk["documentId"].as_str().unwrap(),chunk["projectId"].as_str().unwrap(),payload]).map_err(|e|e.to_string())?;
     }
     transaction.commit().map_err(|e|e.to_string())
 }
 
 #[tauri::command]
+fn replace_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String, chunks: Vec<serde_json::Value>) -> Result<(), String> {
+    if document_id.is_empty() || document_id.len()>160 || project_id.is_empty() || project_id.len()>128 || chunks.len()>5000 {
+        return Err("Knowledge document replacement exceeds limits.".into());
+    }
+    let mut ids=HashSet::new();
+    let mut total_bytes=0usize;
+    for chunk in &chunks {
+        if !valid_knowledge_chunk(chunk) || chunk["documentId"].as_str()!=Some(document_id.as_str()) || chunk["projectId"].as_str()!=Some(project_id.as_str()) {
+            return Err("Replacement chunks must belong to the selected document and project.".into());
+        }
+        if !ids.insert(chunk["id"].as_str().unwrap().to_string()) { return Err("Knowledge chunk IDs must be unique.".into()); }
+        total_bytes=total_bytes.saturating_add(chunk["text"].as_str().unwrap().len());
+        if total_bytes>10_000_000 { return Err("Document exceeds the 10 MB text limit.".into()); }
+    }
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    let transaction=connection.transaction().map_err(|e|e.to_string())?;
+    transaction.execute("DELETE FROM knowledge_chunks WHERE document_id=?1 AND project_id=?2",params![document_id,project_id]).map_err(|e|e.to_string())?;
+    for chunk in chunks {
+        let payload=serde_json::to_string(&chunk).map_err(|e|e.to_string())?;
+        transaction.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![chunk["id"].as_str().unwrap(),document_id,project_id,payload]).map_err(|e|e.to_string())?;
+    }
+    transaction.commit().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+fn delete_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String) -> Result<(), String> {
+    if document_id.is_empty() || document_id.len()>160 || project_id.is_empty() || project_id.len()>128 { return Err("Knowledge document identity is invalid.".into()); }
+    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    connection.execute("DELETE FROM knowledge_chunks WHERE document_id=?1 AND project_id=?2",params![document_id,project_id]).map_err(|e|e.to_string())?;
+    Ok(())
+}
+
 fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
     if handle != "default" { return Err("Unknown credential handle.".into()); }
     keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
@@ -311,6 +341,11 @@ fn delete_provider_key() -> Result<(), String> {
         Err(e) => Err(format!("Could not delete API key from the OS credential vault: {e}"))
     }
 
+}
+
+#[cfg(test)]
+mod payload_validation_tests {
+    use super::*;
     #[test]
     fn rejects_invalid_memory_and_knowledge_payloads() {
         let memory=serde_json::json!({"id":"m1","content":"A saved fact","category":"fact","scope":"profile","source":{"type":"user_confirmed","label":"Manual"},"tags":["test"],"createdAt":1,"updatedAt":1,"schemaVersion":1});
@@ -486,7 +521,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
