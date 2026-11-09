@@ -293,8 +293,7 @@ fn save_knowledge_chunks(database: State<'_, AppDatabase>, chunks: Vec<serde_jso
     transaction.commit().map_err(|e|e.to_string())
 }
 
-#[tauri::command]
-fn replace_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String, chunks: Vec<serde_json::Value>) -> Result<(), String> {
+fn replace_knowledge_document_record(connection: &mut Connection, document_id: String, project_id: String, chunks: Vec<serde_json::Value>) -> Result<(), String> {
     if document_id.is_empty() || document_id.len()>160 || project_id.is_empty() || project_id.len()>128 || chunks.len()>5000 {
         return Err("Knowledge document replacement exceeds limits.".into());
     }
@@ -308,7 +307,6 @@ fn replace_knowledge_document(database: State<'_, AppDatabase>, document_id: Str
         total_bytes=total_bytes.saturating_add(chunk["text"].as_str().unwrap().len());
         if total_bytes>10_000_000 { return Err("Document exceeds the 10 MB text limit.".into()); }
     }
-    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
     let transaction=connection.transaction().map_err(|e|e.to_string())?;
     transaction.execute("DELETE FROM knowledge_chunks WHERE document_id=?1 AND project_id=?2",params![document_id,project_id]).map_err(|e|e.to_string())?;
     for chunk in chunks {
@@ -317,13 +315,21 @@ fn replace_knowledge_document(database: State<'_, AppDatabase>, document_id: Str
     }
     transaction.commit().map_err(|e|e.to_string())
 }
-
 #[tauri::command]
-fn delete_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String) -> Result<(), String> {
+fn replace_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String, chunks: Vec<serde_json::Value>) -> Result<(), String> {
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    replace_knowledge_document_record(&mut connection,document_id,project_id,chunks)
+}
+
+fn delete_knowledge_document_record(connection: &Connection, document_id: String, project_id: String) -> Result<(), String> {
     if document_id.is_empty() || document_id.len()>160 || project_id.is_empty() || project_id.len()>128 { return Err("Knowledge document identity is invalid.".into()); }
-    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
     connection.execute("DELETE FROM knowledge_chunks WHERE document_id=?1 AND project_id=?2",params![document_id,project_id]).map_err(|e|e.to_string())?;
     Ok(())
+}
+#[tauri::command]
+fn delete_knowledge_document(database: State<'_, AppDatabase>, document_id: String, project_id: String) -> Result<(), String> {
+    let connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    delete_knowledge_document_record(&connection,document_id,project_id)
 }
 
 fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
@@ -903,6 +909,35 @@ mod database_tests {
         })
     }
 
+
+
+    #[test]
+    fn knowledge_document_replacement_is_transactional_and_scoped() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
+        migrate_database(&mut connection).expect("apply migrations");
+        connection.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES('p1','Project','',1,1,0,1)",[]).expect("create project");
+        let old=serde_json::json!({"id":"doc:old","documentId":"doc","projectId":"p1","text":"old passage","sourceLabel":"notes.md"});
+        connection.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params!["doc:old","doc","p1",old.to_string()]).expect("seed old chunk");
+        let next=serde_json::json!({"id":"doc:new","documentId":"doc","projectId":"p1","text":"new passage","sourceLabel":"notes.md"});
+        replace_knowledge_document_record(&mut connection,"doc".into(),"p1".into(),vec![next.clone()]).expect("replace document");
+        let stored:String=connection.query_row("SELECT payload FROM knowledge_chunks WHERE id='doc:new'",[],|r|r.get(0)).expect("load replacement");
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&stored).unwrap(),next);
+        let old_count:i64=connection.query_row("SELECT COUNT(*) FROM knowledge_chunks WHERE id='doc:old'",[],|r|r.get(0)).expect("old chunk count");
+        assert_eq!(old_count,0);
+
+        let collision=serde_json::json!({"id":"collision","documentId":"other","projectId":"p1","text":"other document","sourceLabel":"other.md"});
+        connection.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params!["collision","other","p1",collision.to_string()]).expect("seed collision");
+        let conflicting=serde_json::json!({"id":"collision","documentId":"doc","projectId":"p1","text":"replacement conflict","sourceLabel":"notes.md"});
+        assert!(replace_knowledge_document_record(&mut connection,"doc".into(),"p1".into(),vec![conflicting]).is_err());
+        let retained:String=connection.query_row("SELECT payload FROM knowledge_chunks WHERE id='doc:new'",[],|r|r.get(0)).expect("old replacement must survive rollback");
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&retained).unwrap(),next);
+        delete_knowledge_document_record(&connection,"doc".into(),"p1".into()).expect("delete selected document");
+        let remaining:i64=connection.query_row("SELECT COUNT(*) FROM knowledge_chunks WHERE project_id='p1' AND document_id='doc'",[],|r|r.get(0)).expect("deleted document count");
+        assert_eq!(remaining,0);
+        let other_count:i64=connection.query_row("SELECT COUNT(*) FROM knowledge_chunks WHERE id='collision'",[],|r|r.get(0)).expect("other document remains");
+        assert_eq!(other_count,1);
+    }
 
     #[test]
     fn native_audit_and_trace_events_round_trip_with_filtering_and_redaction() {
