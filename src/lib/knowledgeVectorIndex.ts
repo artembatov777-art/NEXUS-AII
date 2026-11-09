@@ -42,6 +42,12 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     await this.write(db, "readwrite", store => { for (const id of ids) store.delete(id); });
   }
 
+  async hasProject(projectId: string): Promise<boolean> {
+    const db = await this.open();
+    const rows = await this.readAll(db);
+    return rows.some(row => row.projectId === projectId);
+  }
+
   async search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>> {
     const db = await this.open();
     const rows = await this.readAll(db);

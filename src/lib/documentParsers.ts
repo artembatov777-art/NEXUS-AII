@@ -1,6 +1,4 @@
-import * as mammoth from "mammoth";
-import { getDocument } from "pdfjs-dist";
-
+ 
 export type ParsedKnowledgeFile = {
   mediaType: "text/plain" | "text/markdown";
   content: string;
@@ -20,7 +18,10 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
   }
   if (name.endsWith(".pdf")) {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const pdf = await getDocument({ data: bytes, isEvalSupported: false, useWorkerFetch: false }).promise;
+    const pdfjs = await import("pdfjs-dist");
+    const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+    const pdf = await pdfjs.getDocument({ data: bytes, isEvalSupported: false, useWorkerFetch: false }).promise;
     const pages: Array<{ text: string; page: number; section: string }> = [];
     let total = 0;
     try {
@@ -38,6 +39,7 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
   }
   if (name.endsWith(".docx")) {
     const arrayBuffer = await file.arrayBuffer();
+    const mammoth = await import("mammoth");
     const result = await mammoth.extractRawText({ arrayBuffer });
     if (result.value.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted DOCX text exceeds the 1 MB limit.");
     if (!result.value.trim()) throw new Error("No readable text was found in this DOCX file.");

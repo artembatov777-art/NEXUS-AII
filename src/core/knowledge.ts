@@ -81,6 +81,7 @@ export interface KnowledgeVectorIndex {
   upsert(chunk: KnowledgeChunk, vector: number[]): Promise<void>;
   removeDocument(documentId: string, projectId: string): Promise<void>;
   search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>>;
+  hasProject?(projectId: string): Promise<boolean>;
 }
 export interface KnowledgeCitation { documentId: string; sourceLabel: string; page?: number; section?: string; chunkId: string; }
 export interface RetrievedKnowledge { context: string; citations: KnowledgeCitation[]; }
@@ -92,7 +93,7 @@ export class KnowledgeRetrievalService {
     const found = await this.repository.search(query, projectId, Math.min(100, limit * 4));
     if (!found.ok) return found;
     let selected = found.value.slice(0, limit);
-    if (this.embeddings && this.vectors && this.repository.getByIds) {
+    if (this.embeddings && this.vectors && this.repository.getByIds && (!this.vectors.hasProject || await this.vectors.hasProject(projectId))) {
       try {
         const embedded = await this.embeddings.embed([query]);
         if (embedded.ok && embedded.value[0]?.length) {
