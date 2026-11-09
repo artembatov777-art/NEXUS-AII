@@ -81,6 +81,18 @@ describe("McpClient", () => {
     expect(listed).toMatchObject({ ok: true, value: [{ name: "first" }, { name: "second" }] });
   });
 
+  it("reconnects a disconnected server with a fresh transport", async () => {
+    const tools = gateway();
+    const client = new McpClient(new ToolRegistry(tools), tools);
+    const first = transportWith(request => ({ jsonrpc: "2.0", id: request.id, result: initializeResult() }));
+    await client.connect({ id: "reconnect", name: "Reconnect", version: "1", transport: first }, new AbortController().signal);
+    await client.disconnect("reconnect");
+    const replacement = transportWith(request => ({ jsonrpc: "2.0", id: request.id, result: initializeResult() }));
+    const connected = await client.reconnect({ id: "reconnect", name: "Reconnect", version: "1", transport: replacement }, new AbortController().signal);
+    expect(connected.ok).toBe(true);
+    expect(client.listServers()).toMatchObject([{ id: "reconnect", health: "healthy" }]);
+  });
+
   it("updates server health on ping failure and recovers on a later ping", async () => {
     const tools = gateway();
     const client = new McpClient(new ToolRegistry(tools), tools);
