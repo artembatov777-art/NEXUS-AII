@@ -2,7 +2,6 @@ import type { ProjectId, ProjectRepository, WorkspaceProject } from "../core/pro
 import { err, ok, type Result } from "../core/result";
 import type { StorageLike } from "./memoryStorage";
 import { invoke } from "@tauri-apps/api/core";
-import { err, ok } from "../core/result";
 const KEY="nexus-au:projects:v1";
 function valid(value:unknown):value is WorkspaceProject { if(!value||typeof value!=="object")return false;const p=value as Partial<WorkspaceProject>;return typeof p.id==="string"&&typeof p.name==="string"&&typeof p.description==="string"&&typeof p.createdAt==="number"&&typeof p.updatedAt==="number"&&typeof p.archived==="boolean"&&p.schemaVersion===1; }
 export class LocalStorageProjectRepository implements ProjectRepository {
