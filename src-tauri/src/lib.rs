@@ -83,6 +83,40 @@ fn load_conversations(database: State<'_, AppDatabase>) -> Result<Vec<StoredConv
     Ok(conversations)
 }
 
+
+#[tauri::command]
+fn save_conversations(database: State<'_, AppDatabase>, conversations: Vec<StoredConversation>) -> Result<(), String> {
+    if conversations.len() > 10000 { return Err("Too many conversations to save.".into()); }
+    let ids: HashSet<&str> = conversations.iter().map(|item| item.id.as_str()).collect();
+    if ids.len() != conversations.len() { return Err("Conversation IDs must be unique.".into()); }
+    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    for conversation in &conversations {
+        if conversation.id.is_empty() || conversation.id.len() > 128 || conversation.title.len() > 120 || conversation.messages.len() > 20000 {
+            return Err("Conversation data exceeds database limits.".into());
+        }
+        transaction.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET title=excluded.title,project_id=excluded.project_id,updated_at=excluded.updated_at", params![conversation.id,conversation.title,conversation.project_id,conversation.updated_at]).map_err(|e| e.to_string())?;
+        transaction.execute("DELETE FROM messages WHERE conversation_id=?1", params![conversation.id]).map_err(|e| e.to_string())?;
+        for message in &conversation.messages {
+            if message.id.is_empty() || message.id.len() > 128 || message.content.len() > 100000 || (message.role != "user" && message.role != "assistant") {
+                return Err("Message data is invalid or exceeds database limits.".into());
+            }
+            let source_json = message.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e| e.to_string())?;
+            transaction.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)", params![message.id,conversation.id,message.role,message.content,message.created_at,source_json]).map_err(|e| e.to_string())?;
+        }
+    }
+    let existing: Vec<String> = {
+        let mut statement = transaction.prepare("SELECT id FROM conversations").map_err(|e| e.to_string())?;
+        statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
+    };
+    for id in existing {
+        if !ids.contains(id.as_str()) {
+            transaction.execute("DELETE FROM conversations WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    transaction.commit().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
