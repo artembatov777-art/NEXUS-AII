@@ -86,6 +86,14 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         transaction.pragma_update(None, "user_version", 3)?;
         transaction.commit()?;
     }
+
+    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if current_version < 4 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch("CREATE TRIGGER validate_conversation_project_insert BEFORE INSERT ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_conversation_project_update BEFORE UPDATE OF project_id ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_insert BEFORE INSERT ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_update BEFORE UPDATE OF project_id,scope ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER cleanup_project_data AFTER DELETE ON projects BEGIN DELETE FROM conversations WHERE project_id=OLD.id; DELETE FROM memory_records WHERE project_id=OLD.id; END;");
+        transaction.pragma_update(None, "user_version", 4)?;
+        transaction.commit()?;
+    }
     Ok(())
 }
 
@@ -277,6 +285,77 @@ fn delete_provider_key() -> Result<(), String> {
     }
 }
 
+
+#[tauri::command]
+fn export_workspace(database: State<'_, AppDatabase>) -> Result<serde_json::Value, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let projects: Vec<StoredProject> = {
+        let mut stmt=connection.prepare("SELECT id,name,description,created_at,updated_at,archived,schema_version FROM projects ORDER BY created_at").map_err(|e|e.to_string())?;
+        let rows=stmt.query_map([],|r|Ok(StoredProject{id:r.get(0)?,name:r.get(1)?,description:r.get(2)?,created_at:r.get(3)?,updated_at:r.get(4)?,archived:r.get::<_,i64>(5)?!=0,schema_version:r.get(6)?})).map_err(|e|e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?
+    };
+    let conversations: Vec<StoredConversation> = {
+        let mut stmt=connection.prepare("SELECT id,title,project_id,updated_at FROM conversations ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
+        let rows=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,i64>(3)?))).map_err(|e|e.to_string())?;
+        let metadata=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+        let mut output=Vec::new();
+        for (id,title,project_id,updated_at) in metadata {
+            let mut stmt=connection.prepare("SELECT id,role,content,created_at,source_references FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e|e.to_string())?;
+            let rows=stmt.query_map(params![id],|r|{let raw:Option<String>=r.get(4)?;Ok(StoredMessage{id:r.get(0)?,role:r.get(1)?,content:r.get(2)?,created_at:r.get(3)?,source_references:raw.and_then(|v|serde_json::from_str(&v).ok())})}).map_err(|e|e.to_string())?;
+            let messages=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
+            output.push(StoredConversation{id,title,project_id,messages,updated_at});
+        }
+        output
+    };
+    let read_payloads=|sql:&str| -> Result<Vec<serde_json::Value>,String> {
+        let mut stmt=connection.prepare(sql).map_err(|e|e.to_string())?;
+        let rows=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
+        rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect()
+    };
+    let exported_at=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_secs() as i64).unwrap_or(0);
+    Ok(serde_json::json!({"format":"nexus-au-backup","schemaVersion":1,"exportedAt":exported_at,"projects":projects,"conversations":conversations,"memories":read_payloads("SELECT payload FROM memory_records")?,"knowledgeChunks":read_payloads("SELECT payload FROM knowledge_chunks")?}))
+}
+
+#[tauri::command]
+fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value) -> Result<(), String> {
+    if backup.get("format").and_then(|v|v.as_str())!=Some("nexus-au-backup") || backup.get("schemaVersion").and_then(|v|v.as_i64())!=Some(1) { return Err("Unsupported or invalid NEXUS AU backup file.".into()); }
+    let projects:Vec<StoredProject>=serde_json::from_value(backup.get("projects").cloned().ok_or("Backup projects are missing.")?).map_err(|e|e.to_string())?;
+    let conversations:Vec<StoredConversation>=serde_json::from_value(backup.get("conversations").cloned().ok_or("Backup conversations are missing.")?).map_err(|e|e.to_string())?;
+    let memories=backup.get("memories").and_then(|v|v.as_array()).ok_or("Backup memories are missing.")?;
+    let chunks=backup.get("knowledgeChunks").and_then(|v|v.as_array()).ok_or("Backup knowledge chunks are missing.")?;
+    if projects.len()>10000 || conversations.len()>10000 || memories.len()>10000 || chunks.len()>100000 { return Err("Backup exceeds import limits.".into()); }
+    let project_ids:HashSet<&str>=projects.iter().map(|p|p.id.as_str()).collect();
+    if project_ids.len()!=projects.len() || projects.iter().any(|p|p.id.is_empty()||p.id.len()>128||p.name.trim().is_empty()||p.name.len()>80||p.description.len()>500||p.schema_version!=1) { return Err("Backup contains invalid or duplicate projects.".into()); }
+    let conversation_ids:HashSet<&str>=conversations.iter().map(|c|c.id.as_str()).collect();
+    if conversation_ids.len()!=conversations.len() || conversations.iter().any(|c|c.id.is_empty()||c.id.len()>128||c.title.len()>120||c.messages.len()>20000||c.project_id.as_deref().map_or(false,|id|!project_ids.contains(id))) { return Err("Backup contains invalid or duplicate conversations.".into()); }
+    for c in &conversations { for m in &c.messages { if m.id.is_empty()||m.id.len()>128||m.content.len()>100000||!["user","assistant"].contains(&m.role.as_str()) { return Err("Backup contains invalid messages.".into()); } } }
+    for m in memories {
+        let id=m.get("id").and_then(|v|v.as_str()).ok_or("Memory ID missing.")?;
+        let content=m.get("content").and_then(|v|v.as_str()).ok_or("Memory content missing.")?;
+        let scope=m.get("scope").and_then(|v|v.as_str()).ok_or("Memory scope missing.")?;
+        let pid=m.get("projectId").and_then(|v|v.as_str());
+        if id.is_empty()||id.len()>128||content.is_empty()||content.len()>4000||!["profile","project","conversation"].contains(&scope)||(scope=="project"&&pid.map_or(true,|p|!project_ids.contains(p))) { return Err("Backup contains invalid memories.".into()); }
+    }
+    for c in chunks {
+        let id=c.get("id").and_then(|v|v.as_str()).ok_or("Chunk ID missing.")?;
+        let doc=c.get("documentId").and_then(|v|v.as_str()).ok_or("Document ID missing.")?;
+        let pid=c.get("projectId").and_then(|v|v.as_str()).ok_or("Chunk project missing.")?;
+        let body=c.get("text").and_then(|v|v.as_str()).ok_or("Chunk text missing.")?;
+        if id.is_empty()||id.len()>160||doc.is_empty()||doc.len()>160||!project_ids.contains(pid)||body.is_empty()||body.len()>12000 { return Err("Backup contains invalid knowledge chunks.".into()); }
+    }
+    let mut connection=database.0.lock().map_err(|_|"Database lock is unavailable.")?;
+    let tx=connection.transaction().map_err(|e|e.to_string())?;
+    tx.execute_batch("DELETE FROM knowledge_chunks; DELETE FROM memory_records; DELETE FROM conversations; DELETE FROM projects;").map_err(|e|e.to_string())?;
+    for p in projects { tx.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![p.id,p.name,p.description,p.created_at,p.updated_at,p.archived as i64,p.schema_version]).map_err(|e|e.to_string())?; }
+    for c in conversations {
+        tx.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES(?1,?2,?3,?4)",params![c.id,c.title,c.project_id,c.updated_at]).map_err(|e|e.to_string())?;
+        for m in c.messages { let refs=m.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?; tx.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)",params![m.id,c.id,m.role,m.content,m.created_at,refs]).map_err(|e|e.to_string())?; }
+    }
+    for m in memories { let id=m["id"].as_str().unwrap();let scope=m["scope"].as_str().unwrap();let pid=m.get("projectId").and_then(|v|v.as_str());let updated=m["updatedAt"].as_i64().unwrap_or(0);tx.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5)",params![id,scope,pid,updated,serde_json::to_string(m).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
+    for c in chunks { tx.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![c["id"].as_str().unwrap(),c["documentId"].as_str().unwrap(),c["projectId"].as_str().unwrap(),serde_json::to_string(c).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
+    tx.commit().map_err(|e|e.to_string())
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -351,7 +430,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
@@ -364,10 +443,24 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
         assert!(result.is_err(), "message must reference an existing conversation");
+        let invalid_project = connection.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES('c0','invalid','missing',1)", []);
+        assert!(invalid_project.is_err(), "conversation must reference an existing project");
+        connection.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES('p1','Project','',1,1,0,1)", []).expect("create project");
+        connection.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES('c1','valid','p1',1)", []).expect("create project conversation");
+        connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m2','c1','user','test',1)", []).expect("create message");
+        connection.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES('mem1','project','p1',1,'{}')", []).expect("create project memory");
+        connection.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES('k1','d1','p1','{}')", []).expect("create project knowledge");
+        connection.execute("DELETE FROM projects WHERE id='p1'", []).expect("delete project");
+        let remaining: i64 = connection.query_row("SELECT COUNT(*) FROM conversations WHERE project_id='p1'", [], |r| r.get(0)).expect("conversation cleanup");
+        assert_eq!(remaining, 0);
+        let memories: i64 = connection.query_row("SELECT COUNT(*) FROM memory_records WHERE project_id='p1'", [], |r| r.get(0)).expect("memory cleanup");
+        assert_eq!(memories, 0);
+        let chunks: i64 = connection.query_row("SELECT COUNT(*) FROM knowledge_chunks WHERE project_id='p1'", [], |r| r.get(0)).expect("knowledge cleanup");
+        assert_eq!(chunks, 0);
     }
 }
