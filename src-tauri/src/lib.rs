@@ -184,7 +184,15 @@ async fn send_chat(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat])
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&data_dir)?;
+            let mut connection = Connection::open(data_dir.join("nexus-au.sqlite"))?;
+            migrate_database(&mut connection)?;
+            app.manage(AppDatabase(Mutex::new(connection)));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
