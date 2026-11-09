@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::HashSet;
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -132,6 +132,14 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         let transaction = connection.transaction()?;
         transaction.execute_batch("CREATE TRIGGER validate_conversation_project_insert BEFORE INSERT ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_conversation_project_update BEFORE UPDATE OF project_id ON conversations WHEN NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_insert BEFORE INSERT ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER validate_memory_project_update BEFORE UPDATE OF project_id,scope ON memory_records WHEN NEW.scope='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) BEGIN SELECT RAISE(ABORT,'Unknown project'); END; CREATE TRIGGER cleanup_project_data AFTER DELETE ON projects BEGIN DELETE FROM conversations WHERE project_id=OLD.id; DELETE FROM memory_records WHERE project_id=OLD.id; END;");
         transaction.pragma_update(None, "user_version", 4)?;
+        transaction.commit()?;
+    }
+
+    let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if current_version < 5 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch("CREATE TABLE agent_checkpoints (run_id TEXT PRIMARY KEY NOT NULL,agent_id TEXT NOT NULL,thread_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence >= 1),status TEXT NOT NULL CHECK(status IN ('running','waiting_for_approval','completed','failed','cancelled')),updated_at REAL NOT NULL,payload TEXT NOT NULL); CREATE INDEX idx_agent_checkpoints_thread_updated ON agent_checkpoints(thread_id,updated_at DESC,run_id);")?;
+        transaction.pragma_update(None, "user_version", 5)?;
         transaction.commit()?;
     }
     Ok(())
@@ -441,6 +449,160 @@ fn import_workspace(database: State<'_, AppDatabase>, backup: serde_json::Value)
 }
 
 
+
+const MAX_AGENT_CHECKPOINT_BYTES: usize = 256 * 1024;
+
+fn valid_agent_checkpoint(checkpoint: &serde_json::Value) -> bool {
+    let bounded_string = |field: &str, max: usize| {
+        checkpoint.get(field).and_then(|value| value.as_str())
+            .map_or(false, |value| !value.trim().is_empty() && value.len() <= max)
+    };
+    let sequence = checkpoint.get("sequence").and_then(|value| value.as_i64());
+    let status = checkpoint.get("status").and_then(|value| value.as_str()).unwrap_or("");
+    let created_at = checkpoint.get("createdAt").and_then(|value| value.as_f64());
+    let updated_at = checkpoint.get("updatedAt").and_then(|value| value.as_f64());
+    let state = checkpoint.get("state");
+    let state_is_bounded = state.map_or(false, |value| {
+        serde_json::to_vec(value).map_or(false, |bytes| bytes.len() <= MAX_AGENT_CHECKPOINT_BYTES)
+    });
+    let pending_is_valid = checkpoint.get("pendingApproval").map_or(true, |pending| {
+        status == "waiting_for_approval"
+            && pending.get("permission").and_then(|value| value.as_str())
+                .map_or(false, |value| !value.trim().is_empty() && value.len() <= 160)
+            && pending.get("requestedAt").and_then(|value| value.as_f64())
+                .map_or(false, |value| value.is_finite())
+    });
+    checkpoint.get("schemaVersion").and_then(|value| value.as_i64()) == Some(1)
+        && bounded_string("runId", 160)
+        && bounded_string("agentId", 160)
+        && bounded_string("threadId", 160)
+        && sequence.map_or(false, |value| value > 0)
+        && ["running", "waiting_for_approval", "completed", "failed", "cancelled"].contains(&status)
+        && created_at.map_or(false, |value| value.is_finite())
+        && updated_at.map_or(false, |value| value.is_finite())
+        && updated_at.zip(created_at).map_or(false, |(updated, created)| updated >= created)
+        && state_is_bounded
+        && pending_is_valid
+}
+
+fn load_agent_checkpoint_record(connection: &Connection, run_id: &str) -> Result<Option<serde_json::Value>, String> {
+    if run_id.trim().is_empty() || run_id.len() > 160 {
+        return Err("Agent checkpoint run id is invalid.".into());
+    }
+    let raw: Option<String> = connection.query_row(
+        "SELECT payload FROM agent_checkpoints WHERE run_id=?1",
+        params![run_id],
+        |row| row.get(0)
+    ).optional().map_err(|error| error.to_string())?;
+    raw.map(|payload| serde_json::from_str(&payload).map_err(|error| error.to_string())).transpose()
+}
+
+fn list_agent_checkpoint_records(connection: &Connection, thread_id: &str, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    if thread_id.trim().is_empty() || thread_id.len() > 160 || !(1..=200).contains(&limit) {
+        return Err("Agent checkpoint thread id and a limit from 1 to 200 are required.".into());
+    }
+    let mut statement = connection.prepare(
+        "SELECT payload FROM agent_checkpoints WHERE thread_id=?1 ORDER BY updated_at DESC,run_id LIMIT ?2"
+    ).map_err(|error| error.to_string())?;
+    let rows = statement.query_map(params![thread_id, limit], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|error| error.to_string())?;
+        serde_json::from_str(&payload).map_err(|error| error.to_string())
+    }).collect()
+}
+
+fn save_agent_checkpoint_record(
+    connection: &mut Connection,
+    checkpoint: serde_json::Value,
+    expected_previous_sequence: Option<i64>
+) -> Result<(), String> {
+    if !valid_agent_checkpoint(&checkpoint) {
+        return Err("Agent checkpoint is invalid or exceeds the 256 KB state limit.".into());
+    }
+    let run_id = checkpoint["runId"].as_str().unwrap();
+    let agent_id = checkpoint["agentId"].as_str().unwrap();
+    let thread_id = checkpoint["threadId"].as_str().unwrap();
+    let sequence = checkpoint["sequence"].as_i64().unwrap();
+    let status = checkpoint["status"].as_str().unwrap();
+    let updated_at = checkpoint["updatedAt"].as_f64().unwrap();
+    let created_at = checkpoint["createdAt"].as_f64().unwrap();
+
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| error.to_string())?;
+    let previous: Option<(i64, String, String, String, String)> = transaction.query_row(
+        "SELECT sequence,agent_id,thread_id,status,payload FROM agent_checkpoints WHERE run_id=?1",
+        params![run_id],
+        |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?))
+    ).optional().map_err(|error| error.to_string())?;
+
+    match (previous, expected_previous_sequence) {
+        (None, None) if sequence == 1 => {}
+        (None, _) => return Err("Checkpoint changed concurrently; reload before retrying.".into()),
+        (Some(_), None) => return Err("Checkpoint changed concurrently; reload before retrying.".into()),
+        (Some((previous_sequence, previous_agent, previous_thread, previous_status, previous_payload)), Some(expected)) => {
+            if previous_sequence != expected || sequence != expected + 1 {
+                return Err("Checkpoint changed concurrently; reload before retrying.".into());
+            }
+            if previous_agent != agent_id || previous_thread != thread_id {
+                return Err("Checkpoint run identity cannot change.".into());
+            }
+            if ["completed", "failed", "cancelled"].contains(&previous_status.as_str()) {
+                return Err("A terminal agent checkpoint cannot be modified.".into());
+            }
+            let previous_value: serde_json::Value = serde_json::from_str(&previous_payload)
+                .map_err(|error| error.to_string())?;
+            if previous_value.get("createdAt").and_then(|value| value.as_f64()) != Some(created_at) {
+                return Err("Checkpoint creation time is immutable.".into());
+            }
+        }
+    }
+
+    let payload = serde_json::to_string(&checkpoint).map_err(|error| error.to_string())?;
+    transaction.execute(
+        "INSERT INTO agent_checkpoints(run_id,agent_id,thread_id,sequence,status,updated_at,payload) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(run_id) DO UPDATE SET sequence=excluded.sequence,status=excluded.status,updated_at=excluded.updated_at,payload=excluded.payload",
+        params![run_id,agent_id,thread_id,sequence,status,updated_at,payload]
+    ).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn delete_agent_checkpoint_record(connection: &Connection, run_id: &str) -> Result<(), String> {
+    if run_id.trim().is_empty() || run_id.len() > 160 {
+        return Err("Agent checkpoint run id is invalid.".into());
+    }
+    connection.execute("DELETE FROM agent_checkpoints WHERE run_id=?1", params![run_id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_agent_checkpoint(database: State<'_, AppDatabase>, run_id: String) -> Result<Option<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    load_agent_checkpoint_record(&connection, &run_id)
+}
+
+#[tauri::command]
+fn list_agent_checkpoints(database: State<'_, AppDatabase>, thread_id: String, limit: i64) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    list_agent_checkpoint_records(&connection, &thread_id, limit)
+}
+
+#[tauri::command]
+fn save_agent_checkpoint(
+    database: State<'_, AppDatabase>,
+    checkpoint: serde_json::Value,
+    expected_previous_sequence: Option<i64>
+) -> Result<(), String> {
+    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    save_agent_checkpoint_record(&mut connection, checkpoint, expected_previous_sequence)
+}
+
+#[tauri::command]
+fn delete_agent_checkpoint(database: State<'_, AppDatabase>, run_id: String) -> Result<(), String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    delete_agent_checkpoint_record(&connection, &run_id)
+}
+
 #[tauri::command]
 fn write_clipboard(text: String) -> Result<(), String> {
     if text.len() > 1_000_000 { return Err("Clipboard text exceeds the 1 MB limit.".into()); }
@@ -556,13 +718,67 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    fn checkpoint(sequence: i64, status: &str) -> serde_json::Value {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "runId": "run-1",
+            "agentId": "agent-1",
+            "threadId": "thread-1",
+            "sequence": sequence,
+            "status": status,
+            "state": {"payload": {"task": "persist me"}},
+            "createdAt": 1000,
+            "updatedAt": 1000 + sequence,
+            "pendingApproval": if status == "waiting_for_approval" {
+                Some(serde_json::json!({"permission":"tool:execute","requestedAt":1000 + sequence}))
+            } else { None }
+        })
+    }
+
+    #[test]
+    fn native_agent_checkpoints_round_trip_and_enforce_compare_and_swap() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+
+        let first = checkpoint(1, "running");
+        save_agent_checkpoint_record(&mut connection, first.clone(), None).expect("save initial checkpoint");
+        assert_eq!(load_agent_checkpoint_record(&connection, "run-1").expect("load checkpoint"), Some(first));
+
+        let waiting = checkpoint(2, "waiting_for_approval");
+        save_agent_checkpoint_record(&mut connection, waiting.clone(), Some(1)).expect("advance checkpoint");
+        assert_eq!(list_agent_checkpoint_records(&connection, "thread-1", 10).expect("list checkpoints"), vec![waiting.clone()]);
+
+        let stale = checkpoint(2, "waiting_for_approval");
+        assert!(save_agent_checkpoint_record(&mut connection, stale, Some(1)).is_err(), "stale sequence must not overwrite the current record");
+
+        let completed = checkpoint(3, "completed");
+        save_agent_checkpoint_record(&mut connection, completed, Some(2)).expect("complete checkpoint");
+        assert!(save_agent_checkpoint_record(&mut connection, checkpoint(4, "running"), Some(3)).is_err(), "terminal checkpoints must be immutable");
+
+        delete_agent_checkpoint_record(&connection, "run-1").expect("delete checkpoint");
+        assert_eq!(load_agent_checkpoint_record(&connection, "run-1").expect("load deleted checkpoint"), None);
+    }
+
+    #[test]
+    fn native_agent_checkpoints_reject_invalid_and_oversized_payloads() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let mut invalid = checkpoint(1, "running");
+        invalid["threadId"] = serde_json::json!(" ");
+        assert!(save_agent_checkpoint_record(&mut connection, invalid, None).is_err());
+
+        let mut oversized = checkpoint(1, "running");
+        oversized["state"] = serde_json::json!({"payload": "x".repeat(MAX_AGENT_CHECKPOINT_BYTES + 1)});
+        assert!(save_agent_checkpoint_record(&mut connection, oversized, None).is_err());
+    }
+
     #[test]
     fn provider_response_limit_is_enforced_incrementally() {
         let mut body = Vec::new();
@@ -577,7 +793,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
