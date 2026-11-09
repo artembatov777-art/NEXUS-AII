@@ -75,6 +75,7 @@ export interface KnowledgeRepository {
   replaceDocument?(documentId: string, projectId: string, chunks: KnowledgeChunk[]): Promise<Result<void>>;
   getByIds?(ids: string[]): Promise<Result<KnowledgeChunk[]>>;
   search(query: string, projectId: string, limit: number): Promise<Result<KnowledgeChunk[]>>;
+  searchAll?(query: string, limit: number): Promise<Result<KnowledgeChunk[]>>;
   removeDocument(documentId: string, projectId: string): Promise<Result<void>>;
 }
 export interface KnowledgeVectorIndex {

@@ -42,6 +42,17 @@ describe("LocalStorageKnowledgeRepository", () => {
     expect(search.ok && search.value).toEqual([]);
   });
 
+  it("searches across all projects with a single bounded workspace query", async () => {
+    const repository = new LocalStorageKnowledgeRepository(new MemoryStorage());
+    await repository.add([
+      { id: "a:1", documentId: "a", projectId: "p1", text: "NEXUS architecture", sourceLabel: "one.md" },
+      { id: "b:1", documentId: "b", projectId: "p2", text: "NEXUS memory design", sourceLabel: "two.md" },
+      { id: "c:1", documentId: "c", projectId: "p3", text: "unrelated", sourceLabel: "three.md" }
+    ]);
+    const result = await repository.searchAll("NEXUS", 10);
+    expect(result.ok && result.value.map(chunk => chunk.projectId)).toEqual(["p1", "p2"]);
+  });
+
   it("removes only the selected document in the selected project", async () => {
     const repository = new LocalStorageKnowledgeRepository(new MemoryStorage());
     await repository.add([
