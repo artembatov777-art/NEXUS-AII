@@ -656,10 +656,15 @@ fn list_tool_audit_event_records(connection: &Connection, run_id: Option<&str>, 
         return Err("Audit filter or limit is invalid.".into());
     }
     let mut statement=connection.prepare("SELECT tool_id,run_id,trace_id,status,timestamp,detail FROM tool_audit_events WHERE (?1 IS NULL OR run_id=?1) ORDER BY id DESC LIMIT ?2").map_err(|e|e.to_string())?;
-    let rows=statement.query_map(params![run_id,limit],|r|Ok(serde_json::json!({
-        "toolId":r.get::<_,String>(0)?,"runId":r.get::<_,String>(1)?,"traceId":r.get::<_,String>(2)?,
-        "status":r.get::<_,String>(3)?,"timestamp":r.get::<_,f64>(4)?,"detail":r.get::<_,Option<String>>(5)?
-    }))).map_err(|e|e.to_string())?;
+    let rows=statement.query_map(params![run_id,limit],|r|{
+        let detail:Option<String>=r.get(5)?;
+        let mut event=serde_json::json!({
+            "toolId":r.get::<_,String>(0)?,"runId":r.get::<_,String>(1)?,"traceId":r.get::<_,String>(2)?,
+            "status":r.get::<_,String>(3)?,"timestamp":r.get::<_,f64>(4)?
+        });
+        if let Some(detail)=detail { event.as_object_mut().unwrap().insert("detail".into(),serde_json::json!(detail)); }
+        Ok(event)
+    }).map_err(|e|e.to_string())?;
     let mut output=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
     output.reverse();
     Ok(output)
@@ -953,6 +958,16 @@ mod database_tests {
         assert_eq!(listed[0]["attributes"]["step"],2);
         assert_eq!(listed[0]["attributes"]["label"],"safe");
         assert!(listed[0]["attributes"].get("apiKey").is_none());
+    }
+
+    #[test]
+    fn audit_listing_omits_absent_optional_detail_fields() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        record_tool_audit_event_record(&mut connection,serde_json::json!({"toolId":"tool","runId":"run","traceId":"trace","status":"started","timestamp":1})).expect("record audit");
+        let listed=list_tool_audit_event_records(&connection,None,10).expect("list audit");
+        assert_eq!(listed.len(),1);
+        assert!(listed[0].get("detail").is_none());
     }
 
     #[test]
