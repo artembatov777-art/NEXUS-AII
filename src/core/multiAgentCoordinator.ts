@@ -176,6 +176,8 @@ export class MultiAgentCoordinator {
       const input = {
         ...((step.input && typeof step.input === "object" && !Array.isArray(step.input))
           ? step.input as Record<string, unknown> : { value: step.input }),
+        toolId: step.toolId,
+        input: step.input,
         dependencyResults: Object.fromEntries(step.dependsOn.map(dep => [dep, outputs.get(dep)])),
         goal: plan.goal,
         purpose: step.purpose
