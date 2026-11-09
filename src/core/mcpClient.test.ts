@@ -69,7 +69,7 @@ describe("McpClient", () => {
     const tools = gateway();
     const client = new McpClient(new ToolRegistry(tools), tools);
     const transport: McpTransport = {
-      request: vi.fn(async request => request.method === "initialize"
+      request: vi.fn(async (request: McpRequest): Promise<McpResponse> => request.method === "initialize"
         ? { jsonrpc: "2.0", id: request.id, result: initializeResult() }
         : request.params && "cursor" in (request.params as object)
           ? { jsonrpc: "2.0", id: request.id, result: { tools: [{ name: "second" }] } }
