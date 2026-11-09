@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { Conversation, ProviderSettings } from "../types";
 import { DEFAULT_PROVIDER } from "../types";
 
@@ -35,7 +36,18 @@ function normalizeConversation(value: unknown): Conversation | null {
   };
 }
 
-export function loadConversations(storage: StorageAdapter = localStorage): Conversation[] {
+export async function loadConversations(storage: StorageAdapter = localStorage): Promise<Conversation[]> {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    const nativeItems = await invoke<Conversation[]>("load_conversations");
+    if (nativeItems.length) return nativeItems;
+    const legacyItems = readBrowserConversations(storage);
+    if (legacyItems.length) await invoke("save_conversations", { conversations: legacyItems });
+    return legacyItems;
+  }
+  return readBrowserConversations(storage);
+}
+
+function readBrowserConversations(storage: StorageAdapter): Conversation[] {
   try {
     const current = storage.getItem(CHAT_KEY);
     const legacy = current === null ? storage.getItem(LEGACY_CHAT_KEY) : null;
@@ -50,7 +62,11 @@ export function loadConversations(storage: StorageAdapter = localStorage): Conve
   } catch { return []; }
 }
 
-export function saveConversations(items: Conversation[], storage: StorageAdapter = localStorage): void {
+export async function saveConversations(items: Conversation[], storage: StorageAdapter = localStorage): Promise<void> {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    await invoke("save_conversations", { conversations: items });
+    return;
+  }
   storage.setItem(CHAT_KEY, JSON.stringify(items));
 }
 
