@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste } from "lucide-react";
 import { sendMessage } from "./lib/ai";
 import { MemoryPanel } from "./components/MemoryPanel";
+import { GlobalSearchPanel } from "./components/GlobalSearchPanel";
 import { AgentControlCenter } from "./components/AgentControlCenter";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { KnowledgePanel } from "./components/KnowledgePanel";
@@ -35,6 +36,7 @@ export default function App() {
   const [hasProviderKey, setHasProviderKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -177,7 +179,7 @@ export default function App() {
       <button className="nav-item" onClick={() => setKnowledgeOpen(true)}><BookOpen size={17}/> Knowledge base</button>
       <button className="nav-item" onClick={() => setAgentsOpen(true)}><Bot size={17}/> Agents</button>
       <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
-      <div className="history-heading"><span>RECENT</span><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div>
+      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => setGlobalSearchOpen(true)} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div></div>
       <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
         {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
@@ -208,6 +210,7 @@ export default function App() {
       </section>
     </main>
 
+    {globalSearchOpen && <GlobalSearchPanel conversations={conversations} projects={workspaceProjects} onClose={() => setGlobalSearchOpen(false)} onOpenConversation={conversation => { setSelectedProjectId(conversation.projectId ?? ""); setActiveId(conversation.id); setGlobalSearchOpen(false); setError(""); }} onOpenMemory={() => { setGlobalSearchOpen(false); setMemoryOpen(true); }} onOpenKnowledge={() => { setGlobalSearchOpen(false); setKnowledgeOpen(true); }} />}
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
