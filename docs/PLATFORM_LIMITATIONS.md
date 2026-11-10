@@ -12,9 +12,9 @@ The native.yml workflow runs on:
 | macOS | Tauri build without installer bundling | Yes | Compiled, not launched in CI |
 | Ubuntu Linux | Tauri build without installer bundling | Yes | Compiled, not launched in CI |
 
-The workflow installs Linux WebKitGTK and desktop build dependencies, then runs frontend build, cargo check, cargo test --lib, and npm run tauri build -- --no-bundle on each OS. Native tests exercise SQLite migrations, transactional backup/restore, project cleanup, knowledge document replacement/deletion, checkpoint compare-and-swap, and audit/trace persistence.
+The workflow installs Linux WebKitGTK and desktop build dependencies, then runs frontend build, cargo check, cargo test --lib, and npm run tauri build -- --no-bundle on each OS. The resulting `nexus-au` executable is uploaded as a seven-day GitHub Actions artifact named `nexus-au-<OS>-<commit SHA>`, allowing a tester to download the exact tested build for manual launch. Native tests exercise SQLite migrations, transactional backup/restore, project cleanup, knowledge document replacement/deletion, checkpoint compare-and-swap, and audit/trace persistence.
 
-This is native build and backend integration coverage, **not GUI end-to-end automation**. The CI runners do not launch an interactive Tauri window or a real user session. GUI automation remains a release follow-up.
+This is native build and backend integration coverage, **not GUI end-to-end automation**. The CI runners do not launch an interactive Tauri window or a real user session. GUI automation remains a release follow-up. To obtain a manual test build, open the successful **Native desktop quality** run for the desired commit in GitHub Actions, download the artifact matching the tester's OS, extract it, and launch the executable in a normal signed-in desktop session. The artifact is a test executable, not a signed installer or production release package.
 
 ## Platform-specific behavior
 

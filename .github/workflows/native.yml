@@ -30,3 +30,10 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - name: Build native application without packaging installers
         run: npm run tauri build -- --no-bundle
+      - name: Upload native executable for manual desktop smoke tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-au-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/nexus-au*
+          if-no-files-found: error
+          retention-days: 7

@@ -246,7 +246,7 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [x] Implement native credential-vault status states (available/missing/unavailable), browser-preview fail-closed messaging, platform backend selection, and provider-key input validation with unit tests.
 - [x] Add a source-level security review covering trust boundaries, provider/MCP controls, storage, permissions, CSP, and residual risks.
 - [x] Document platform-specific WebView, keyring, speech, build, and persistence limitations.
-- [x] Add a repeatable Windows/macOS/Linux manual desktop smoke-test procedure in docs/PLATFORM_SMOKE_TESTS.md.
+- [x] Add a repeatable Windows/macOS/Linux manual desktop smoke-test procedure in docs/PLATFORM_SMOKE_TESTS.md.\n- [x] Verify the native build and Rust test matrix on Windows, macOS, and Linux for commit `9d2d4c2304789be1724a1b5a8809b2ab8e841b02`; all three jobs and frontend Quality passed.\n- [x] Publish short-lived per-OS native executable artifacts from CI so manual GUI/keyring smoke tests can be run against the exact tested commit.
 - [ ] Execute and record credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions; CI cannot validate an unlocked interactive keyring.
 - [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
