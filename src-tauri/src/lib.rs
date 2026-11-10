@@ -761,8 +761,8 @@ fn append_trace_event_record(connection: &mut Connection, event: serde_json::Val
     if let Some(duration)=duration {
         safe_event["durationMs"]=serde_json::json!(duration);
     }
-    if let Some(value)=attributes {
-        safe_event["attributes"]=value;
+    if let Some(value)=attributes.as_ref() {
+        safe_event["attributes"]=value.clone();
     }
     let payload=serde_json::to_string(&safe_event).map_err(|e|e.to_string())?;
     if payload.len()>32_000 { return Err("Trace event exceeds the 32 KB limit.".into()); }
