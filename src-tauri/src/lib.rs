@@ -745,9 +745,24 @@ fn append_trace_event_record(connection: &mut Connection, event: serde_json::Val
     let duration=event.get("durationMs").and_then(|v|v.as_f64());
     if duration.map_or(false,|v|!v.is_finite()||v<0.0) { return Err("Invalid trace duration.".into()); }
     let attributes=trace_attributes(event.get("attributes"))?;
-    let mut safe_event=event.clone();
-    if let Some(object)=safe_event.as_object_mut() {
-        if let Some(value)=&attributes { object.insert("attributes".into(),value.clone()); } else { object.remove("attributes"); }
+    // Rebuild from the public TraceEvent contract instead of cloning untrusted
+    // input. Tauri commands are a privilege boundary, so unknown top-level
+    // fields must never become persistent telemetry by accident.
+    let mut safe_event=serde_json::json!({
+        "traceId": trace_id,
+        "runId": run_id,
+        "name": name,
+        "status": status,
+        "timestamp": timestamp
+    });
+    if let Some(parent)=parent {
+        safe_event["parentTraceId"]=serde_json::json!(parent);
+    }
+    if let Some(duration)=duration {
+        safe_event["durationMs"]=serde_json::json!(duration);
+    }
+    if let Some(value)=attributes {
+        safe_event["attributes"]=value;
     }
     let payload=serde_json::to_string(&safe_event).map_err(|e|e.to_string())?;
     if payload.len()>32_000 { return Err("Trace event exceeds the 32 KB limit.".into()); }
@@ -993,13 +1008,24 @@ mod database_tests {
         let audit=serde_json::json!({"toolId":"notes.search","runId":"run-1","traceId":"trace-1","status":"completed","timestamp":12.0,"detail":"done"});
         record_tool_audit_event_record(&mut connection,audit.clone()).expect("record audit");
         assert_eq!(list_tool_audit_event_records(&connection,Some("run-1"),10).expect("list audit"),vec![audit]);
-        let trace=serde_json::json!({"traceId":"trace-1","runId":"run-1","name":"agent.step","status":"completed","timestamp":13.0,"durationMs":5.0,"attributes":{"step":2,"apiKey":"must-not-persist","label":"safe"}});
+        let trace=serde_json::json!({
+            "traceId":"trace-1","runId":"run-1","parentTraceId":"parent-1",
+            "name":"agent.step","status":"completed","timestamp":13.0,"durationMs":5.0,
+            "attributes":{"step":2,"apiKey":"must-not-persist","label":"safe"},
+            "apiKey":"must-not-persist","prompt":"must-not-persist",
+            "unexpected":{"secret":"must-not-persist"}
+        });
         append_trace_event_record(&mut connection,trace).expect("append trace");
         let listed=list_trace_event_records(&connection,Some("run-1"),Some("trace-1"),10).expect("list trace");
         assert_eq!(listed.len(),1);
         assert_eq!(listed[0]["attributes"]["step"],2);
         assert_eq!(listed[0]["attributes"]["label"],"safe");
         assert!(listed[0]["attributes"].get("apiKey").is_none());
+        assert_eq!(listed[0]["parentTraceId"],"parent-1");
+        assert_eq!(listed[0]["durationMs"],5.0);
+        assert!(listed[0].get("apiKey").is_none());
+        assert!(listed[0].get("prompt").is_none());
+        assert!(listed[0].get("unexpected").is_none());
     }
 
     #[test]
