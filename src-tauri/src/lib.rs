@@ -395,7 +395,7 @@ mod payload_validation_tests {
         assert_eq!(validate_provider_key("  key-value  "), Ok("key-value"));
         assert!(validate_provider_key("  ").is_err());
         assert!(validate_provider_key(&"x".repeat(8193)).is_err());
-        assert!(validate_provider_key("key\\nvalue").is_err());
+        assert!(validate_provider_key("key\nvalue").is_err());
     }
 
     #[test]
