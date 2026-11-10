@@ -2,7 +2,7 @@
 
 Status: initial design baseline, not a completed security audit.
 Scope: current React/Vite + Tauri/Rust desktop foundation and planned local-first AI modules.
-Last reviewed: 2026-11-08.
+Last reviewed: 2026-11-10.
 
 ## 1. Security objectives
 
@@ -37,11 +37,11 @@ Last reviewed: 2026-11-08.
 | Threat | Example | Required control | Current status |
 |---|---|---|---|
 | Prompt injection | A document tells an agent to reveal secrets | Treat retrieved content as untrusted; separate policy from data; tool allowlists | Design requirement; end-to-end tests pending |
-| Credential exposure | API key stored in localStorage or logged | OS credential vault / server-side proxy; redact logs; no secrets in frontend | Not implemented |
+| Credential exposure | API key stored in localStorage or logged | OS credential vault / server-side proxy; redact logs; no secrets in frontend | Native OS credential vault is implemented for desktop provider keys; hosted web still requires a server-side proxy. Trace persistence now drops unknown top-level fields and filters sensitive attribute names; callers must still keep secret values out of telemetry. |
 | Privilege escalation | Agent requests shell or filesystem access | Default-deny permission service; per-action approval; no raw host APIs in agents | Core gateway foundation exists |
-| Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway foundation implemented |
-| Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Local preview sink and explicit uncertain-outcome error implemented; production transactional store and reconciliation pending |
-| State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Checkpoint service, preview adapter, and resumable step runtime implemented; SQLite durability pending |
+| Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway validation, bounds, timeout, cancellation, and audit lifecycle are implemented; broader adversarial testing remains open. |
+| Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Native transactional SQLite audit/trace persistence and retention caps are implemented; uncertain outcomes are surfaced, while operation-level idempotency and reconciliation remain pending. |
+| State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Versioned checkpoints use native SQLite persistence with transactional compare-and-swap; approval grants remain ephemeral by design and must be re-issued after restart. |
 | Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Not implemented |
 | Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Partial; dependency audit currently reports 6 advisories |
 | Web content abuse | Browser agent visits untrusted URL | Domain policy, navigation restrictions, isolated browser context | Not implemented |
@@ -74,13 +74,13 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 - Tool and agent inputs/outputs are size-limited and validated.
 - Cancellation and timeout must stop waiting callers even if a worker does not cooperate; the underlying worker may still need isolation to guarantee termination.
 - Never replay a generator or model request after restart unless its state transition is explicitly serializable and idempotent.
-- Never place provider secrets in prompts, telemetry, frontend localStorage, or error messages.
+- Never place provider secrets in prompts, telemetry, frontend localStorage, or error messages. Native trace persistence reconstructs events from allowlisted fields and filters sensitive attribute names; a benign attribute name can still carry a secret value, so callers must never put credentials in trace attributes.
 - Do not enable shell, arbitrary filesystem access, or unrestricted browser automation as a default capability.
 - Do not claim encryption, sandboxing, or secure credential storage until verified in the native implementation.
 
 ## 7. Known gaps and next controls
 
-1. Replace the LocalStorage preview audit adapter with a transactional native store; add reconciliation and operation-level idempotency for uncertain side effects.
+1. Add operation-level idempotency and reconciliation for uncertain side effects; native SQLite audit/trace persistence is now implemented.
 2. Add a user-facing approval queue and durable native approval state. The core currently supports ephemeral, one-time, run/agent/permission-bound grants; restart requires re-approval.
 3. Add operation-level idempotency and a durable event outbox to the serializable step-based agent runtime; do not attempt to serialize async-generator internals.
 4. Add Tauri command allowlists, argument validation, CSP review, and native build verification.
