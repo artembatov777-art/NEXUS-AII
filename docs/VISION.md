@@ -10,11 +10,11 @@ This is not a public multi-user SaaS product and must not remain a thin client f
 - Intelligence layer: NEXUS AI Core
 - Primary model: NEXUS Model
 - Audience: one primary owner, private personal use
-- Deployment: local-first desktop with optional owner-controlled remote compute
+- Deployment: hybrid local-and-cloud desktop with owner-controlled remote compute
 
 ## Principles
 1. Personal-first, not public-SaaS-first. Multi-tenant accounts, billing, and public quotas are not requirements.
-2. NEXUS Model is the destination. External providers and aggregators are optional development, comparison, or fallback adapters.
+2. Hybrid model strategy: local inference where practical and OmniRoute as the selected gateway for cloud model routing. NEXUS Model remains the long-term model-adaptation goal.
 3. Own the complete system: model runtime, context, memory, agents, tools, data, and evaluation.
 4. Local-first with honest trade-offs. Prefer local processing when practical; allow remote compute when hardware requires it.
 5. Owner-configurable behavior, tools, integrations, memory rules, and workflows.
@@ -46,7 +46,7 @@ An open-weight starting checkpoint is a bootstrap strategy, not a claim that NEX
 
 ## Non-goals unless explicitly reconsidered
 - Public multi-user SaaS, subscriptions, or tenant management.
-- Dependence on OmniRoute or one external vendor.
+- Direct coupling to individual cloud vendors; cloud model access is routed through OmniRoute, while local-only operation remains possible.
 - Frontier-scale from-scratch pretraining as the first milestone.
 - Unbounded background agents or invisible computer control.
 - Automatic ingestion of all personal data into training.
