@@ -1,166 +1,117 @@
 # NEXUS AU — Active Development Roadmap
 
-This roadmap contains **seven active phases**. The independent foundation model from-scratch idea is deferred to Future Research and is not part of active completion or progress calculations.
+NEXUS AU is a private, single-owner AI environment. The active delivery order is intentionally **interface first, intelligence second**: finish the complete desktop and mobile experience before expanding the runtime behind it.
+
+The seven phases below are the authoritative project sequence. Earlier milestone notes in other documents are historical implementation records and do not change this order.
 
 ## Product direction
 
-NEXUS AU is a private personal AI desktop environment for one primary owner. It combines local model execution with cloud models routed through OmniRoute. NEXUS AI Core coordinates model selection, context, memory, agents, tools, multimodal services, and model lifecycle. NEXUS Model is a later adaptation goal, not a reason to postpone a working system.
+- **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
+- **Design:** restrained JARVIS-inspired interface, graphite surfaces, muted blue/cyan accents, a dynamic central core, and consistent desktop/mobile behavior.
+- **Model strategy:** hybrid local and cloud. OmniRoute is the selected gateway for cloud models; Ollama is the planned local runtime.
+- **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
+- **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
 
-## Parallel track — Mobile interface preview
+## Phase I — Complete interface
 
-**Status:** first standalone mobile preview screen implemented; publication and device verification remain.
+**Status: in progress.** This phase is about the complete user experience and stable UI contracts. Mock data is acceptable where a backend belongs to a later phase, but every visible control must behave honestly and clearly identify unavailable integrations.
 
-- [x] Add an isolated demo entry point using `?demo=1`; the desktop app entry point remains unchanged.
-- [x] Add responsive iPhone-oriented preview screens for chat, projects, memory, and settings.
-- [x] Keep all demo interactions local and clearly disclose that no AI model is connected.
-- [x] Run the production build and automated checks for the new preview (Pages build and Quality workflow passed).
-- [x] Add a GitHub Actions Pages build/deploy workflow for the feature branch.
-- [x] Confirm the first successful Pages deployment and publish its URL: https://artembatov777-art.github.io/NEXUS-AII/.
-- [ ] Verify the hosted demo in iPhone Safari.
-- [ ] Refine layouts after real-device feedback.
+- [x] Establish the restrained JARVIS visual language and shared responsive styling.
+- [x] Build the desktop workspace shell, navigation, chat, history, and system overview.
+- [x] Add workspace panels for Projects, Memory, Knowledge, Agents, Tools & MCP, File System, Training Lab, global search, and provider settings.
+- [x] Add backup/restore controls to provider settings.
+- [x] Add an isolated iPhone-oriented preview route using `?demo=1`; demo interactions remain local and never contact an AI provider.
+- [x] Add responsive layouts for the main desktop application and the mobile preview.
+- [x] Add visible keyboard focus, reduced-motion behavior, and explicit preview/runtime disclosures.
+- [x] Add mobile navigation dismissal and dialog Escape/focus/scroll handling.
+- [ ] Complete a full interaction audit of every visible control and every module state.
+- [ ] Add automated UI-level coverage for navigation, dialogs, and mobile behavior where the current test stack supports it.
+- [ ] Verify the hosted preview and main responsive workspace on a real iPhone Safari session.
+- [ ] Pass fresh frontend, mobile-preview, and native CI workflows on the final Phase I commit.
 
-**Acceptance:** the owner can open a hosted URL on iPhone, inspect key workspace screens, and try demo-only interactions without contacting an AI provider or exposing credentials.
+**Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
-## Phase I — Architecture and infrastructure
+## Phase II — AI Core
 
-**Status:** implementation substantially complete; final validation remains.
+- [ ] Complete the provider-neutral model runtime and model registry lifecycle.
+- [ ] Connect OmniRoute through its OpenAI-compatible API.
+- [ ] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
+- [ ] Prepare the Ollama adapter as a separate local inference path.
+- [ ] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
+- [ ] Keep provider secrets in the operating-system credential vault, never browser storage.
+- [ ] Add reliable timeout, retry, and request cleanup behavior.
 
-- [x] React + TypeScript + Vite frontend.
-- [x] Tauri 2 / Rust desktop host.
-- [x] SQLite persistence and versioned migrations.
-- [x] Core domain, application services, provider-neutral model contracts.
-- [x] Cross-platform CI build and Rust test matrix.
-- [ ] Finalize remaining infrastructure-level integration checks and document release baseline.
+**Exit criteria:** a selected cloud model works through OmniRoute; the local adapter works when a local runtime is available; model identity, route, errors, usage, streaming, and cancellation are observable and tested.
 
-**Acceptance:** stable module boundaries, reproducible builds, passing automated tests, and documented platform support.
+## Phase III — Memory & Knowledge
 
-## Phase II — Workspace and interface
+- [ ] Complete inspectable long-term memory with user-controlled create, revise, search, export, and deletion.
+- [ ] Complete document ingestion and project-scoped knowledge retrieval with provenance.
+- [ ] Add reliable indexing, rebuild, and recovery behavior.
+- [ ] Integrate relevant approved memory and project knowledge into AI Core context assembly.
+- [ ] Test privacy boundaries, retrieval quality, citations, and persistence.
 
-**Status:** core workspace implemented; desktop acceptance remains.
+**Exit criteria:** NEXUS can retrieve the right approved context across sessions and projects, cite source material, and let the owner inspect and control stored information.
 
-- [x] Chat and conversation history.
-- [x] Projects and project-aware workspace.
-- [x] Settings and provider credential management.
-- [x] Global search, backup and restore UI.
-- [x] Add visible keyboard focus indicators, reduced-motion support, and semantic provider-settings dialog labels.
-- [ ] Complete full keyboard-navigation and screen-reader audit.
-- [ ] Finish native file-picker, notification, and deep-link workflows where they belong in the product.
+## Phase IV — Agents & Tools
 
-**Acceptance:** the workspace is usable end-to-end, keyboard accessible, and reliable on supported desktop platforms.
+- [ ] Complete the agent runtime and model-driven planning through AI Core.
+- [ ] Finish approval, pause/resume, cancellation, and durable checkpoints.
+- [ ] Complete the Tool Gateway and MCP server/tool management UI.
+- [ ] Add operation-level idempotency and recovery for external side effects.
+- [ ] Make tool scopes, approvals, execution traces, and failures visible.
+- [ ] Add integration tests for safe and denied tool execution.
 
-## Phase III — Memory, agents, and tools
+**Exit criteria:** an agent can plan, request scoped tools, wait for owner approval, resume, and complete with a verifiable audit trail.
 
-**Status:** major foundations implemented; production agent integration remains.
+## Phase V — NEXUS File System
 
-- [x] Long-term memory and project knowledge retrieval.
-- [x] PDF, DOCX, TXT, and Markdown ingestion with provenance.
-- [x] Semantic retrieval with lexical fallback.
-- [x] Agent runtime, coordinator, checkpoints, and resume.
-- [x] Tool Gateway, permission checks, audit and trace persistence.
-- [x] MCP HTTP transport and bounded tool discovery.
-- [ ] Complete model-driven agent planning against the real selected runtime.
-- [ ] Add operation-level idempotency and durable reconciliation for external side effects.
-- [ ] Finish the visual MCP server/tool management and plan-review experience.
+- [ ] Implement native Windows folder selection and scoped filesystem permissions.
+- [ ] Browse and search only owner-approved folders.
+- [ ] Read and analyze supported files and code.
+- [ ] Create, edit, rename, move, and organize files with explicit confirmation for consequential changes.
+- [ ] Add previews, conflict handling, recovery, and audit history.
+- [ ] Keep browser preview disconnected from the host filesystem.
 
-**Acceptance:** a model-driven agent can plan, request approved tools, pause, resume, and complete with an auditable trace.
+**Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.
 
-## Phase IV — Desktop, security, and stability
+## Phase VI — Security & Integration
 
-**Status:** code implementation substantially complete; automated dependency scanning has been added to CI, while manual platform verification remains open.
+- [ ] Integrate UI, AI Core, memory, agents, tools, and filesystem through stable application contracts.
+- [ ] Complete permission enforcement and approval policy across all modules.
+- [ ] Complete credential-vault, secret-redaction, and data-routing reviews.
+- [ ] Add backup/restore coverage for all persisted workspace data.
+- [ ] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries.
+- [ ] Complete error handling, cancellation, observability, and recovery paths.
+- [ ] Run a focused threat-model review against the integrated product.
 
-- [x] Native SQLite workspace persistence and migration.
-- [x] OS credential-vault implementation.
-- [x] Transactional backup/restore and recovery tests.
-- [x] Native audit/trace and agent checkpoint persistence.
-- [x] Windows/macOS/Linux CI build and Rust test matrix.
-- [x] Source-level security review and platform smoke-test protocol.
-- [x] Add npm dependency advisory scanning (`npm audit --audit-level=high`) to the Quality workflow.
-- [ ] Resolve applicable dependency advisories and complete dependency review.
-- [ ] Complete full accessibility, CSP/capability, release packaging, and upgrade review.
-- [ ] Run and record interactive Tauri + credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions.
+**Exit criteria:** all modules operate as one system with consistent permissions, secure secret handling, traceable actions, and tested recovery.
 
-**Acceptance:** all automated checks pass, security/dependency findings are triaged, and real desktop behavior is verified on supported platforms. CI compilation alone does not satisfy manual acceptance.
+## Phase VII — Testing & Release 1.0
 
-## Phase V — NEXUS AI Core and OmniRoute
+- [ ] Complete unit, integration, end-to-end, and security test coverage for release-critical flows.
+- [ ] Pass frontend Quality and native Windows/macOS/Linux build and Rust test workflows.
+- [ ] Run real desktop smoke tests, including Windows credential-vault and filesystem permissions.
+- [ ] Verify upgrade, backup/restore, crash recovery, and cancellation behavior.
+- [ ] Produce signed/reproducible release artifacts and installation instructions.
+- [ ] Publish release notes and a known-limitations list.
 
-**Status:** OmniRoute model discovery, bounded SSE streaming, native cancellation, and provider-neutral Model Registry foundations are implemented; verified runtime lifecycle, capability metadata, local runtime, and unified routing remain.
+**Exit criteria:** the release candidate installs, starts, and completes the core workflows reliably on supported platforms, with CI evidence and manual smoke-test records. No phase is marked complete merely because its code compiles.
 
-- [x] Add provider-neutral in-memory Model Registry, catalog refresh, active-model selection, and discovery-state contracts.
-- [ ] Implement actual model runtime lifecycle and verified health checks.
-- [x] Implement the native OpenAI-compatible cloud adapter used for OmniRoute `/v1` requests, including one-shot and SSE chat.
-- [x] Discover available models through `GET /v1/models` and expose the model catalog to the native ModelProvider.
-- [x] Implement bounded SSE chat completion streaming and incremental chat rendering.
-- [x] Add native cancellation for active streams, including cancellation during connection/stream reads and early consumer exit.
-- [ ] Normalize provider errors and usage metadata.
-- [x] Store the provider credential in the OS vault; never expose it to the webview or logs.
-- [ ] Keep local inference as a separate adapter under the same Model Runtime.
-- [x] Disclose local versus remote model routing in the chat header.
-- [x] Persist the owner-declared local/remote inference disclosure with provider settings.
-- [ ] Add a verified active-model/runtime status panel and backend capability metadata.
-- [ ] Connect chat, context assembly, and model-backed planning through the AI Core facade.
+## Post-release / future research
 
-**Acceptance:** NEXUS AU can use a selected OmniRoute cloud model and a configured local model through the same application contracts, with streaming, cancellation, model identity, and clear data-routing disclosure.
+- Voice STT/TTS and hands-free operation.
+- Expanded image/audio understanding and multimodal workflows.
+- Multi-agent orchestration beyond the initial bounded runtime.
+- Training Lab expansion, fine-tuning, and model artifact lifecycle.
+- Native mobile client beyond the responsive/mobile preview.
+- Research into a NEXUS-owned foundation model. Training a foundation model from scratch is not part of Release 1.0.
 
-## Phase VI — Training Lab and model development
+## Current verified engineering notes
 
-**Status:** dataset governance, deterministic phrase-based evaluation, SQLite persistence for dataset manifests and experiment metadata, and a Training Lab workspace are implemented; artifact tracking and real model evaluation remain.
-
-- [x] Add deterministic evaluation-suite contracts and baseline phrase scoring.
-- [x] Add versioned dataset manifests with license, privacy/consent gates, provenance, and disjoint train/validation/test splits.
-- [x] Add validated experiment records with model, code revision, hardware, configuration, and metrics metadata.
-- [x] Persist versioned dataset manifests and immutable experiment records in native SQLite (browser preview uses localStorage).
-- [x] Add a Training Lab workspace for registering dataset manifests and recording experiment metadata.
-- [x] Add a manual deterministic phrase-evaluation bench that exports measured metrics into experiment records.
-- [ ] Add content-addressed model artifact tracking and rollback.
-- [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
-- [ ] Add reproducible adapter/LoRA fine-tuning only when hardware and measured need justify it.
-- [ ] Keep private conversations, files, and memories excluded from training by default.
-
-**Acceptance:** a reproducible experiment demonstrates measured improvement on held-out tasks, with provenance and rollback. Fine-tuning an existing checkpoint is not training a foundation model from scratch.
-
-## Phase VII — Multimodal AI and voice
-
-**Status:** browser/WebView voice lifecycle and multimodal privacy/capability contracts are implemented; model-backed image/audio workflows and native voice remain planned.
-
-- [x] Optional browser/WebView speech recognition and speech synthesis controls.
-- [x] Harden browser/WebView speech recognition and synthesis lifecycle, permission errors, cancellation, and unmount cleanup.
-- [ ] Add native/offline speech adapters and a unified explicit voice provider interface.
-- [ ] Add image understanding through models that declare vision capability.
-- [ ] Add audio/document workflows with source provenance.
-- [x] Add model modality-capability and local/remote processing policy contracts with explicit remote approval.
-- [ ] Surface the selected processing location and approval state in the multimodal UI.
-- [ ] Consider video only after resource and privacy controls are established.
-
-**Acceptance:** modality support is capability-checked, observable, cancellable, and reports local versus remote processing.
-
-
-## Progress snapshot — 2026-11-11
-
-Percentages below are checklist completion (checked items divided by all checklist items in each active phase), not estimates of code volume or complexity.
-
-| Phase | Completed | Total | Progress |
-|---|---:|---:|---:|
-| I — Architecture and infrastructure | 5 | 6 | 83% |
-| II — Workspace and interface | 5 | 7 | 71% |
-| III — Memory, agents, and tools | 6 | 9 | 67% |
-| IV — Desktop, security, and stability | 7 | 10 | 70% |
-| V — NEXUS AI Core and OmniRoute | 8 | 13 | 62% |
-| VI — Training Lab and model development | 6 | 10 | 60% |
-| VII — Multimodal AI and voice | 3 | 8 | 38% |
-
-**Overall active-phase checklist completion: 40 / 63 = 63%.** The independent foundation-model-from-scratch research remains deferred and is not included. The mobile preview is a parallel delivery track, not an eighth phase; it is 6 / 8 = 75% complete, with iPhone Safari verification and real-device refinement still open.
-
-## Future Research — independent foundation model
-
-Training a foundation model from scratch is **deferred**. It is not an active phase, has no delivery date, and does not affect the project's completion percentage. Reconsider it only after NEXUS AU has a stable runtime, measured gaps that cannot be solved through existing models/adaptation, legal data provenance, sufficient compute, and a credible research plan.
-
-## Permanent engineering rules
-
-- Preserve working code and verify the current branch before changes.
-- Every module has a contract and tests.
-- No fake implementations or completion claims.
-- Never commit credentials, private tokens, or personal datasets.
-- Private data is excluded from training by default.
-- Local and OmniRoute adapters remain replaceable behind provider-neutral contracts.
-- High-impact tools remain observable, interruptible, permission-scoped, and recoverable.
-- CI success is not a substitute for interactive desktop verification.
+- Active implementation branch: `feat/nexus-core-architecture`.
+- Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
+- The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
+- OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
+- Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
+- The most recent known CI failure before the current UI work was one stale model-catalog expectation in `tauriModelProvider.test.ts`; the test was updated to match the intended configured-plus-discovered catalog behavior. Fresh CI for the current head is required before claiming it is fixed.
