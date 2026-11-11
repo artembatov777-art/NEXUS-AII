@@ -14,13 +14,25 @@ class TauriModelProvider implements ModelProvider {
     if (!this.settings.model.trim() || this.settings.model.length > 128) {
       return err("validation", "Configured model name is invalid.");
     }
-    return ok([{
-      id: this.settings.model,
-      providerId: this.id,
-      displayName: this.settings.model,
-      supportsStreaming: true,
-      supportsTools: false
-    }]);
+    try {
+      const ids = await invoke<string[]>("list_provider_models", {
+        baseUrl: this.settings.baseUrl,
+        credentialHandle: "default"
+      });
+      const uniqueIds = [...new Set(ids.filter(id =>
+        typeof id === "string" && id.trim().length > 0 && id.length <= 128
+      ))];
+      if (!uniqueIds.includes(this.settings.model)) uniqueIds.unshift(this.settings.model);
+      return ok(uniqueIds.map(id => ({
+        id,
+        providerId: this.id,
+        displayName: id,
+        supportsStreaming: true,
+        supportsTools: false
+      })));
+    } catch (cause) {
+      return err("provider_unavailable", cause instanceof Error ? cause.message : "Could not load models from the configured gateway.", true);
+    }
   }
 
   async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
