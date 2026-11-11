@@ -1,5 +1,7 @@
 # NEXUS AU — Implementation Plan
 
+> **Strategic direction update (2026-11-11):** NEXUS AU is a private, single-owner personal AI ecosystem. NEXUS Model is the intended primary model; OmniRoute is not a required dependency. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
+
 ## Current verified baseline
 
 The `feat/foundation-0.1` branch contains a React + TypeScript + Vite UI, Tauri 2/Rust host, a basic chat flow, local browser persistence, provider settings, and an initial CI workflow. The frontend production build passed in GitHub Actions. Native Tauri compilation has not yet been verified.
@@ -254,3 +256,39 @@ Exit criteria: public browser clients cannot use a shared secret anonymously or 
 - [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
 **Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. No OmniRoute work is included here.
+
+
+## Strategic model and product direction — 2026-11-11
+
+This section is authoritative for future work and supersedes earlier wording that treated OmniRoute or a hosted multi-user client as the product destination.
+
+### Product scope
+- NEXUS AU is a personal AI ecosystem for one primary owner, not a public multi-tenant SaaS service.
+- NEXUS AI Core is the application runtime for context, memory, inference, agents, tools, multimodal services, and model lifecycle.
+- NEXUS Model is the intended primary model.
+- External providers and aggregators are optional adapters for development, comparison, or fallback. OmniRoute is not mandatory.
+- Local inference is preferred when practical. Owner-configured remote compute remains an option when local hardware is insufficient.
+
+### New strategic phases
+- [ ] NEXUS AI Core: model registry, runtime lifecycle, inference contracts, streaming, cancellation, health and resource reporting.
+- [ ] Local model vertical slice: evaluate an open-weight checkpoint, document license/hardware constraints, integrate a local inference backend, and deliver real local chat.
+- [ ] Personal context integration: connect the local primary model to approved memory, project knowledge, and bounded context assembly with source provenance.
+- [ ] NEXUS Model adaptation: evaluation suites, curated/versioned datasets, reproducible adapter or fine-tuning experiments, model versioning and rollback.
+- [ ] Multimodal capabilities: capability-declared image/audio/voice paths, with local-versus-remote processing clearly identified.
+- [ ] Training/research lab: experiment tracking and, only if justified by data, compute, and expertise, research into an independent foundation model.
+
+### Model-development terminology and constraints
+- An open-weight checkpoint is a bootstrap base, not a model trained from scratch by NEXUS.
+- Prompting and retrieval are not training. Fine-tuning an existing checkpoint is not foundation-model pretraining.
+- Private conversations, files, and memories are excluded from training by default. Dataset inclusion requires deliberate owner curation and provenance.
+- Training runs record data manifests, licenses/permissions, configuration, code revision, hardware, checkpoints, and evaluation results.
+- Do not start expensive pretraining before the project has measured a need and a credible data/compute plan.
+
+### Immediate next engineering sequence
+1. Finish and verify open Phase IV/VI desktop, security, dependency, accessibility, and manual smoke-test acceptance items.
+2. Add model registry/runtime contracts and contract tests without prematurely replacing existing provider-neutral interfaces.
+3. Implement one local inference adapter and test it end to end.
+4. Integrate memory/context and then model-driven agents.
+5. Establish evaluation and data governance before fine-tuning.
+
+**Status rule:** this strategy update is documentation only. It does not mean a local model, training pipeline, or NEXUS Foundation Model has been implemented.

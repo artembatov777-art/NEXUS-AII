@@ -1,209 +1,113 @@
-# NEXUS AU — System Design
+# NEXUS AU — Personal AI System Design
 
-**Status:** Architecture proposal for the next implementation phase  
-**Target:** Modular, local-first AI workspace with a desktop shell and optional web client.
+**Status:** Strategic architecture for the personal AI ecosystem  
+**Scope:** One primary owner; local-first desktop with optional owner-controlled remote compute.
 
 ## 1. Product boundary
+NEXUS AU is a personal AI environment whose long-term primary intelligence is NEXUS Model. It is not a public multi-user SaaS product and is not intended to remain a thin wrapper around model aggregators.
 
-NEXUS AU is an orchestration environment around AI models and tools. It is not a foundation model and does not become intelligent merely by adding more code. Its value comes from reliable context management, model routing, memory retrieval, agent orchestration, tool permissions, and a usable interface.
+Two responsibilities must remain distinct:
+- NEXUS Model supplies learned language and multimodal capabilities through model weights and inference.
+- NEXUS AI Core assembles context, retrieves memory, coordinates agents, invokes tools, manages state, and exposes model capabilities through the desktop workspace.
 
-The system must remain useful when optional integrations are unavailable. Core domain logic must not depend directly on React, Tauri, a specific model provider, or a specific database.
+## 2. Principles
+1. Personal-first, not multi-tenant-first.
+2. Modular monolith first.
+3. Model-neutral interfaces, NEXUS Model as strategic default.
+4. Local-first where practical; remote execution is owner-configured.
+5. Ports and adapters for models, storage, tools, and inference engines.
+6. Inspectable memory, provenance, backup, correction, and deletion.
+7. Bounded and observable agent execution.
+8. No silent training on private conversations or files.
+9. Reproducible model/data experiments with versioning and rollback.
+10. Honest capability claims backed by tests and real runs.
 
-## 2. Architectural principles
+## 3. Topology
 
-1. **Modular monolith first.** Keep modules in one application and one repository until there is a measured reason to split services.
-2. **Ports and adapters.** Domain logic defines interfaces; providers, databases, Tauri commands, and MCP clients implement them.
-3. **Local-first.** Conversations and user-controlled memory should work locally. Remote services are opt-in integrations.
-4. **Provider-neutral.** OpenAI-compatible APIs are an adapter, not the domain model.
-5. **Explicit permissions.** Tools declare capabilities. Every sensitive action is permission-checked and auditable.
-6. **Observable execution.** Every model request, agent run, tool call, and failure has a trace ID and structured status.
-7. **No pretend autonomy.** The system may plan and propose actions, but execution must respect policy, permissions, and user confirmation.
-8. **Testable boundaries.** Core orchestration is testable without a live model, network, or desktop runtime.
+~~~text
+Desktop UI -> Application Facade
+  +--> Conversation & Workspace
+  +--> Context Builder
+  |      +--> Working context
+  |      +--> Episodic memory
+  |      +--> Semantic/profile memory
+  |      +--> Project knowledge
+  +--> NEXUS AI Core
+  |      +--> Model Registry
+  |      +--> Model Runtime
+  |      +--> NEXUS Model (primary)
+  |      +--> optional local/remote comparison models
+  |      +--> Reasoning / Planner
+  +--> Agent Runtime -> Tool Gateway -> Built-in tools / MCP
+  +--> Voice & Multimodal
+  +--> Automation
+  +--> Evaluation / Training control plane
+Storage: SQLite + managed files + OS credential vault
+~~~
 
-## 3. High-level topology
+## 4. Model subsystem
 
-```text
-React UI
-  |
-  v
-Application Facade / Command Bus
-  |
-  +--> Conversation Service ----> Conversation Repository
-  |
-  +--> Context Builder ----------> Memory Retrieval
-  |
-  +--> Model Router -------------> Provider Adapters (OmniRoute / OpenAI-compatible)
-  |
-  +--> Agent Runtime ------------> Planner + Agent Registry
-  |                                  |
-  |                                  +--> Tool Gateway --> MCP / Built-in Tools
-  |
-  +--> Permission Service
-  |
-  +--> Event / Trace Service
-  |
-  v
-Storage Ports
-  +--> SQLite (desktop target)
-  +--> Browser storage adapter (web preview only)
-  +--> Export / Import
-  |
-  v
-Tauri 2 / Rust host
-  +--> OS integration
-  +--> secure credential storage
-  +--> filesystem boundary
-  +--> native notifications
-```
+### Model Registry
+A model descriptor identifies stable ID, display name, version, source and license, architecture/tokenizer metadata, artifact format, quantization, context and modality capabilities, estimated hardware requirements, artifact location, and lifecycle state.
 
-The web client and desktop client should call the same application-level contracts. The web client must never receive provider secrets.
+### Model Runtime
+Owns discover, validate, import/download, load, unload, health-check, infer, stream, cancel, and resource reporting. Multiple inference backends are supported through adapters.
 
-## 4. Logical modules
+The runtime must not assume all models support identical tool calling, structured output, context length, or modalities. Capabilities are declared and validated.
 
-### 4.1 Core domain
-Owns shared types and invariants:
-- IDs, timestamps, result/error types
-- conversation, message, attachment, model, tool and run entities
-- permission scopes and execution states
-- serialization/versioning rules
+### NEXUS Model stages
+- Bootstrap: evaluate legally usable open-weight checkpoints for quality, license, hardware, context, and inference support.
+- Personalization: establish behavior, retrieval, tool schemas, and curated examples.
+- Fine-tuning: run controlled experiments only when evaluation identifies a gap and suitable data/compute are available.
+- Independent model research: investigate tokenizer, architecture, pretraining data, and from-scratch training as a long-term effort.
 
-Must not import UI frameworks, Tauri APIs, provider SDKs, or database clients.
+Prompting and retrieval are not training. Fine-tuning an existing checkpoint is not pretraining a new foundation model.
 
-### 4.2 Conversation
-Responsibilities:
-- create, rename, archive, delete, and list conversations
-- append user, assistant, and tool messages
-- preserve message ordering and metadata
-- support cancellation and retry
-- expose a repository interface
+### Training and data governance
+Every training dataset needs a manifest with source, license/permission status, transformations, filtering, deduplication, and split assignment. Every experiment records code revision, configuration, seed, hardware, parent checkpoint, logs, output artifact, and evaluation.
 
-### 4.3 Context and memory
-Memory is not one giant prompt. It is a retrieval system with explicit sources and lifecycle:
-- working context: current conversation window
-- episodic memory: selected summaries of prior interactions
-- semantic memory: user-approved facts and project knowledge
-- procedural memory: user-approved workflows and preferences
+Private conversations, files, and memories are excluded from training by default. The owner must deliberately curate and approve any private data used in a dataset.
 
-Every memory record needs provenance, creation time, confidence, scope, and deletion semantics. Retrieval must return source IDs so the UI can explain why a memory was used. Sensitive data must not be silently promoted into long-term memory.
+## 5. Context and memory
+Distinguish working context, episodic memory, semantic memory, procedural memory, and project knowledge. Each record has provenance, scope, timestamps, and deletion semantics. Retrieval returns source IDs and scores so the UI can explain why an item influenced a response.
 
-### 4.4 Model router
-Responsibilities:
-- select provider/model based on explicit user selection or routing policy
-- normalize provider requests and responses
-- support timeouts, cancellation, retry policy, and streaming
-- normalize usage and error metadata
-- redact secrets from logs
+## 6. Reasoning and agents
+The model may propose plans and tool calls. A planner validates schemas, dependencies, allowed tools, budgets, and context. The coordinator manages specialist agents and task state. Each run records plan, steps, model version, tool invocations, outputs, and errors.
 
-Provider adapters implement a common interface. The router must not contain provider-specific HTTP details.
+Agent limits are configurable by the owner but remain explicit. Cancellation, checkpointing, and recovery are core capabilities. Agents do not receive ambient host privileges.
 
-### 4.5 Agent runtime
-An agent is a constrained task runner, not an unrestricted background process.
-Each agent declares:
-- ID, name, version, description
-- accepted input/output schema
-- allowed tools and permission scopes
-- model requirements
-- maximum steps, time budget, and token budget
-- stop conditions and handoff behavior
+## 7. Tool Gateway
+All tools pass through one gateway: validate identity and input, resolve owner-configured capability policy, request approval when required, execute with timeout/cancellation, validate output, record a redacted audit event, and return the result as untrusted observation data.
 
-The runtime records plans, steps, tool calls, outputs, and errors. Multi-agent delegation is a later capability; start with one orchestrator and a small registry of specialist agents.
+MCP metadata and tool outputs are untrusted. A tool cannot grant itself permissions through its description.
 
-### 4.6 Tool gateway and MCP
-All tool execution passes through one gateway:
-1. validate tool schema and arguments
-2. resolve capability requirements
-3. check permission and approval policy
-4. execute with timeout and cancellation
-5. validate output size/type
-6. write audit event
-7. return a normalized result
+## 8. Personal deployment and privacy
+The default deployment has one primary owner and local profile. Tenant IDs, public registration, billing, and public quotas are not baseline requirements.
 
-MCP servers are untrusted external processes/services. Treat tool descriptions and outputs as data, never as system instructions. Do not expose arbitrary shell or filesystem access by default.
+Remote inference may be used when local hardware is insufficient. The UI identifies when data leaves the device and which endpoint receives it. Credentials remain in the OS vault or a deliberately configured secret manager.
 
-### 4.7 Permission and security
-Permission scopes should be narrow, e.g.:
-- `conversation:read`
-- `memory:read`
-- `memory:write`
-- `filesystem:read:selected`
-- `filesystem:write:selected`
-- `browser:read`
-- `browser:interact`
-- `github:read`
-- `github:write`
+Backups include versioned structured workspace data and optional selected artifacts. Secrets are excluded by default. Restore validates input and is transactional where possible.
 
-High-impact operations require a visible confirmation step. Secrets belong in the OS credential store for desktop or server environment variables for hosted deployments, never in browser storage or committed files.
+## 9. Request lifecycle
+1. Validate input and create a trace.
+2. Persist the user message.
+3. Assemble bounded context from conversation and selected memory/knowledge.
+4. Resolve NEXUS Model or an explicitly selected fallback.
+5. Stream normalized inference events.
+6. Validate proposed tool calls.
+7. Execute through Tool Gateway and append structured observations.
+8. Continue or stop based on budgets, cancellation, and owner policy.
+9. Persist response, model metadata, and trace summary.
 
-### 4.8 Observability
-Use structured events with:
-- trace_id, run_id, conversation_id
-- module, operation, status
-- started_at, duration_ms
-- safe error code and redacted diagnostic details
+## 10. Delivery order
+1. Finish and verify current desktop foundation and outstanding manual smoke tests.
+2. Define model registry, runtime, and inference contracts.
+3. Deliver one real local-model chat vertical slice.
+4. Add model lifecycle UI, resource diagnostics, and fallback adapters.
+5. Connect context and memory to the primary local model.
+6. Add model evaluation harness and curated datasets.
+7. Run the first reproducible fine-tuning experiment only when justified.
+8. Expand agent, voice, and multimodal capabilities.
+9. Research independent foundation-model pretraining as a long-term track.
 
-Never log raw API keys, full private prompts by default, or sensitive memory values.
-
-## 5. Request lifecycle
-
-1. UI submits a typed command.
-2. Application facade validates input and creates a trace.
-3. Conversation service persists the user message.
-4. Context builder selects recent messages and permitted memory results.
-5. Model router resolves provider and model.
-6. Provider adapter performs the request and emits normalized stream events.
-7. Assistant output is persisted.
-8. If a tool call is proposed, the agent runtime validates it and routes it through the permission gateway.
-9. Tool results are appended as structured messages.
-10. The model may continue within strict step/time budgets.
-11. Final response and trace summary are returned to the UI.
-
-A user cancellation must propagate through every layer and stop pending work where possible.
-
-## 6. Storage strategy
-
-Use repository interfaces from the beginning. Keep LocalStorage as a temporary web-preview adapter only. Desktop persistence should move to SQLite with migrations.
-
-Initial SQLite entities:
-- conversations
-- messages
-- attachments
-- memory_records
-- agent_runs
-- agent_steps
-- tool_invocations
-- permission_grants
-- settings
-- schema_migrations
-
-Store large attachment bytes outside message rows and reference them by opaque IDs. Define export/import before depending on a proprietary schema.
-
-## 7. Error model
-
-Normalize errors into stable categories:
-- validation
-- authentication
-- permission_denied
-- provider_unavailable
-- rate_limited
-- timeout
-- cancelled
-- tool_failed
-- storage_failed
-- internal
-
-User-facing messages should be understandable. Diagnostics should be structured and redacted.
-
-## 8. Delivery order
-
-1. Domain contracts and test harness
-2. Application facade and provider-neutral model router
-3. Streaming and cancellation
-4. SQLite repositories and migrations
-5. Context builder and transparent memory retrieval
-6. Permission service and tool gateway
-7. Single-agent runtime with bounded execution
-8. MCP adapter and built-in tools
-9. Voice and desktop integrations
-10. Optional hosted web backend
-
-Do not implement all modules at once. Each milestone must compile, have tests, and update this document when its design changes.
+Each milestone compiles, has tests, and updates implementation status. No training pipeline or platform verification is marked complete without reproducible evidence.

@@ -1,96 +1,110 @@
-# NEXUS AU — Development Roadmap
+# NEXUS AU — Personal AI Development Roadmap
 
-This roadmap describes intended work. A phase is complete only when its acceptance criteria are implemented and verified.
+This roadmap defines the private, single-owner personal AI ecosystem. It supersedes the earlier public/hosted-client-first direction. A phase is complete only when its acceptance criteria are implemented and verified.
 
-## Phase 0 — Repository and foundation
+## Existing work — preserve and finish
+The repository already contains substantial implementation in React/TypeScript, Tauri/Rust, SQLite persistence, memory/knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, credential vault, backup/restore, and CI.
 
-- [x] Add initial product vision and architecture documents.
-- [ ] Audit the existing repository and preserve working code.
-- [ ] Establish project conventions and branch/PR workflow.
-- [ ] Confirm the actual provider API contract and configuration.
-- [ ] Add formatting, linting, type-checking, and CI.
+Do not rebuild working modules merely to match a new diagram. First finish outstanding Phase IV/VI work in IMPLEMENTATION_PLAN.md, especially real desktop smoke tests and remaining native integrations.
 
-**Acceptance:** a clean checkout can install dependencies and pass the documented checks.
+## Phase 0 — Existing foundation and verification
+**Status:** substantial implementation exists; manual acceptance remains open.
+- [x] React + TypeScript + Vite application.
+- [x] Tauri 2 / Rust desktop host.
+- [x] Conversation, project, memory, and knowledge foundations.
+- [x] Native SQLite persistence and migrations.
+- [x] Agent runtime, coordinator, Tool Gateway, MCP HTTP adapter.
+- [x] OS credential-vault implementation and backup/restore foundations.
+- [x] Windows/macOS/Linux CI build and Rust test matrix for the recorded baseline.
+- [ ] Complete real interactive desktop and credential-vault smoke tests.
+- [ ] Finish remaining native integrations, accessibility, dependency/security audit, and release packaging.
 
-## Phase 1 — Desktop foundation
+**Acceptance:** existing capabilities and limitations are accurately documented and desktop behavior is verified on real systems.
 
-- [ ] React + TypeScript + Vite application shell.
-- [ ] Tauri 2 desktop integration.
-- [ ] Rust command boundary and typed shared contracts.
-- [ ] Navigation and reusable design system.
-- [ ] Settings and provider configuration UI.
-- [ ] Error, loading, and empty states.
+## Phase 1 — NEXUS AI Core contracts
+- [ ] Define model descriptor, capability, inference request/event, runtime status, and lifecycle contracts.
+- [ ] Add Model Registry with version, source/license, artifact, quantization, modality, context, and hardware metadata.
+- [ ] Define discover/import, validate, load, unload, health-check, infer, stream, and cancel operations.
+- [ ] Keep provider-specific formats inside adapters.
+- [ ] Connect existing conversation pipeline through the AI Core facade without breaking storage and memory.
 
-**Acceptance:** desktop application launches and core navigation/settings work without mock claims.
+**Acceptance:** fake and real adapters pass the same contract tests; application code does not depend on one backend.
 
-## Phase 2 — AI Core
+## Phase 2 — First local model
+- [ ] Evaluate open-weight checkpoints for license, quality, language coverage, context, tool use, hardware fit, and inference support.
+- [ ] Select a compatible local inference backend.
+- [ ] Implement local inference adapter and health/resource reporting.
+- [ ] Deliver real local chat with streaming, cancellation, errors, and persisted history.
+- [ ] Keep optional external adapters for comparison/fallback; OmniRoute is not required.
 
-- [ ] Configurable provider adapter.
-- [ ] Model selection.
-- [ ] Chat and conversation history.
-- [ ] Streaming responses.
-- [ ] Cancellation, timeout, and error handling.
-- [ ] Local persistence.
+**Acceptance:** NEXUS AU loads and queries a documented local model through NEXUS AI Core and displays the active model identity.
 
-**Acceptance:** a user can configure a verified provider, send a prompt, receive a response, and reopen the saved conversation.
+## Phase 3 — Personal context and memory
+- [ ] Build bounded context assembly for conversation, selected project knowledge, and approved memories.
+- [ ] Preserve citations and provenance.
+- [ ] Add owner-configurable retrieval and context budgets.
+- [ ] Show which context sources were included.
+- [ ] Test isolation between projects and conversations.
 
-## Phase 3 — Memory
+**Acceptance:** local primary model uses selected memory/knowledge without losing provenance or crossing project boundaries.
 
-- [ ] SQLite schema and migrations.
-- [ ] User-controlled memory records.
-- [ ] Project-scoped memory.
-- [ ] Search and retrieval.
-- [ ] Inspect, edit, and delete controls.
+## Phase 4 — Personal agents and tools
+- [ ] Connect model tool-call proposals to validated agent plans.
+- [ ] Improve plan review, status, cancellation, resume, and failure recovery.
+- [ ] Add owner-configured specialist agents and model assignment.
+- [ ] Expand MCP and native integrations through Tool Gateway.
+- [ ] Add operation idempotency and durable execution reconciliation.
 
-**Acceptance:** memory is inspectable and user-controlled, with tests for isolation and deletion.
+**Acceptance:** a model-driven task can plan, request tools, pause/resume, and complete with a traceable record.
 
-## Phase 4 — Agents
+## Phase 5 — NEXUS Model adaptation
+- [ ] Establish evaluation suites before training experiments.
+- [ ] Create versioned dataset manifests with provenance and license/permission metadata.
+- [ ] Curate task-specific examples from permitted sources.
+- [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
+- [ ] Run a reproducible parameter-efficient fine-tuning experiment if justified by hardware and evaluation.
+- [ ] Version weights/adapters and retain rollback.
 
-- [ ] Agent definitions and model assignment.
-- [ ] Task orchestration and status tracking.
-- [ ] Step, time, and budget limits.
-- [ ] Scoped tool permissions.
-- [ ] Cancellation and audit trail.
+**Acceptance:** a documented experiment demonstrates measured improvement on held-out tasks. No private data enters training without deliberate curation and approval.
 
-**Acceptance:** a bounded multi-step task can run, stop, and report its actions and results.
+## Phase 6 — Multimodal and voice
+- [ ] Define modality capabilities in the model registry.
+- [ ] Improve voice input/output and interruption.
+- [ ] Add image understanding through compatible local or owner-configured models.
+- [ ] Add document and audio workflows with source tracking.
+- [ ] Consider video only after runtime and resource budgets are established.
 
-## Phase 5 — Tools
+**Acceptance:** each modality uses explicit adapters and reports whether processing is local or remote.
 
-- [ ] Tool registry.
-- [ ] MCP client integration.
-- [ ] Permission broker.
-- [ ] File and browser integrations.
-- [ ] GitHub integration.
-- [ ] Prompt-injection-aware handling of untrusted tool content.
+## Phase 7 — Training and research lab
+- [ ] Add experiment tracking, dataset validation, checkpoint management, and evaluation reports.
+- [ ] Support repeatable training jobs outside the UI process.
+- [ ] Add hardware/resource estimation and safe cancellation.
+- [ ] Research tokenizer/architecture choices for a future independent foundation model.
+- [ ] Evaluate cost and feasibility of from-scratch pretraining before committing resources.
 
-**Acceptance:** each tool has explicit capabilities, user-visible permissions, and tests.
+**Acceptance:** experiments are reproducible, isolated from chat runtime, and have versioned artifacts and evaluation evidence.
 
-## Phase 6 — Voice
+## Phase 8 — Personal automation and system maturity
+- [ ] Add owner-defined triggers and schedules.
+- [ ] Add approvals, audit history, interruption, and recovery.
+- [ ] Add diagnostics, performance profiles, and model switching.
+- [ ] Complete platform packaging and upgrade tests.
+- [ ] Maintain backup/restore and recovery procedures.
 
-- [ ] Speech-to-text adapter.
-- [ ] Text-to-speech adapter.
-- [ ] Device and provider settings.
-- [ ] Push-to-talk interaction.
-- [ ] Clear recording and processing indicators.
+**Acceptance:** NEXUS AU is a dependable personal environment with transparent automation and recoverable state.
 
-**Acceptance:** voice features work with a configured provider and clear user controls.
+## Long-term objective — Independent NEXUS Foundation Model
+A model pretrained from scratch is a research objective, not an assumed near-term deliverable. It requires data rights, tokenizer and architecture work, substantial compute, distributed training expertise, evaluation, and maintenance.
 
-## Phase 7 — Automation
+Proceed only when evidence shows that an independent foundation model is feasible and materially better for the owner's goals than adapting an existing checkpoint.
 
-- [ ] Workflow definitions.
-- [ ] Scheduled/manual triggers where supported.
-- [ ] Approval gates.
-- [ ] Run history and cancellation.
-- [ ] Failure recovery.
-
-**Acceptance:** workflows are observable, bounded, cancellable, and require approval for sensitive actions.
-
-## Phase 8 — Release
-
-- [ ] Full test pass and security review.
-- [ ] Windows packaging and installer.
-- [ ] Upgrade and data migration checks.
-- [ ] User documentation.
-- [ ] Release notes and versioning.
-
-**Acceptance:** reproducible release build with documented limitations and verified installation.
+## Permanent engineering rules
+- Preserve working code and verify the current branch before changes.
+- Every module has a contract and tests.
+- No fake implementations or completion claims.
+- Never commit credentials, private tokens, or personal datasets.
+- Private data is excluded from training by default.
+- Model adapters remain replaceable; NEXUS Model remains the strategic primary.
+- High-impact tools remain observable, interruptible, and recoverable.
+- CI success is not a substitute for interactive desktop verification.

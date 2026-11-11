@@ -1,92 +1,113 @@
-# NEXUS AU — System Architecture
+# NEXUS AU — Personal AI System Architecture
 
-## High-level structure
+## Objective
+NEXUS AU is a private, local-first personal AI environment. Its architecture supports NEXUS Model as the intended primary model without coupling the application to one inference engine, hardware target, or external provider.
 
-NEXUS AU is divided into a desktop presentation layer, a native application layer, and modular domain services.
+The product is designed for one primary owner. Multi-tenant SaaS concerns are not part of the default architecture. Optional remote compute and external model adapters remain owner-controlled integrations.
 
-```text
-React + TypeScript UI
-        |
-        | Tauri commands / events
-        v
-Tauri 2 + Rust application layer
-        |
-        +-- AI provider adapters
-        +-- Conversation and project services
-        +-- Memory service
-        +-- Agent orchestration
-        +-- Tool permission broker
-        +-- Voice service
-        +-- Local persistence (SQLite)
-        |
-        v
-External providers and explicitly enabled tools
-(OmniRoute-compatible endpoint, MCP servers, APIs)
-```
+## High-level topology
 
-## Technology choices
+~~~text
+React + TypeScript desktop UI
+          |
+Application Facade / Tauri command boundary
+          |
+          +--> Conversation & Workspace
+          +--> Context Builder
+          +--> Memory / Knowledge Engine
+          +--> NEXUS AI Core
+          |      +--> Model Registry
+          |      +--> Model Runtime
+          |      +--> Inference Adapters
+          |      |      +--> NEXUS Model (primary)
+          |      |      +--> Local open-weight runtime
+          |      |      +--> Optional remote providers
+          |      +--> Reasoning / Planner
+          |      +--> Evaluation interface
+          +--> Agent Runtime / Coordinator
+          +--> Tool Gateway / MCP
+          +--> Voice & Multimodal Services
+          +--> Automation Scheduler
+          +--> Trace, Audit & Diagnostics
+          |
+Rust host + SQLite + managed local files
+          +--> OS credential vault
+          +--> owner-approved integrations
+          +--> optional remote compute
+~~~
 
-- Frontend: React, TypeScript, Vite.
-- Desktop shell: Tauri 2.
-- Native layer: Rust.
-- Persistence: SQLite, introduced behind a repository/data-access layer.
-- AI routing: provider adapter compatible with the configured OmniRoute API.
-- Tool integrations: MCP and narrowly scoped application adapters.
-- Quality: unit tests, integration tests, formatting, linting, and CI.
+## Technology baseline
+- UI: React, TypeScript, Vite.
+- Desktop host: Tauri 2 and Rust.
+- Persistence: SQLite with versioned migrations and repository ports.
+- Search: lexical and semantic retrieval with source provenance.
+- Model integration: provider-neutral contracts and inference adapters.
+- Tools: central Tool Gateway, MCP adapters, and narrowly scoped native commands.
+- Quality: unit/integration tests, cross-platform CI, and manual desktop smoke tests.
 
-## Architectural boundaries
+## Architectural layers
 
-### Frontend
+### Presentation
+Owns chat, workspace, settings, memory inspection, agent control, model management, diagnostics, and training/evaluation views. It must not hold secrets or execute privileged OS operations directly.
 
-Responsible for presentation, navigation, user input, and rendering application state. It must not contain provider secrets or directly execute privileged operating-system operations.
+### Application facade
+Coordinates use cases and exposes typed commands/events. It owns request lifecycle, trace IDs, cancellation propagation, and orchestration.
 
-### Rust application layer
+### NEXUS AI Core
+Coordinates model selection and inference, context assembly, memory retrieval, tool-call handling, planning, response streaming, cancellation, and evaluation hooks. It is the application runtime, not itself a foundation model.
 
-Owns privileged operations, local persistence, credential access, permission checks, and communication with configured providers and tools. Tauri commands should expose narrow, typed operations rather than generic unrestricted shell access.
+### Model Registry and Runtime
+The registry stores model identity, version, format, capabilities, context limits, quantization, license metadata, hardware requirements, and artifact location. The runtime loads, unloads, health-checks, and invokes models through a stable interface.
 
-### AI provider adapter
+Adapters may target local inference engines or optional remote APIs. Vendor-specific formats stay inside adapters. The application must not assume OmniRoute or any single API is present.
 
-Normalizes provider configuration, request construction, streaming events, errors, and model metadata. Base URLs and authentication formats must be configurable and verified against the selected provider. Do not assume an endpoint that has not been tested.
+### NEXUS Model lifecycle
+NEXUS Model is the intended primary model. Its lifecycle includes base checkpoint selection and license review, tokenizer/config/weight metadata, dataset manifests, training experiments, evaluation suites, versioned artifacts, and rollback.
 
-### Memory service
+Initially, an open-weight model may serve as the base checkpoint. NEXUS-specific adaptation can begin with retrieval, prompting, tool-use data, and parameter-efficient fine-tuning. Training a new foundation model from scratch is a later research milestone.
 
-Separates memory records by scope (profile, conversation, project, knowledge, task). It must support inspection, correction, and deletion by the user. Retrieval should return source/context metadata where possible.
+### Context and memory
+Context is assembled from recent conversation, explicitly selected project data, and owner-approved memory/knowledge. Retrieved items retain source metadata. Memory writes and retention policies are configurable and inspectable.
 
-### Agent orchestration
+### Agents and tools
+Agents are task runners with explicit identity, budgets, allowed tools, cancellation, and checkpoints. All tool calls pass through the Tool Gateway. MCP descriptions and results are untrusted data, not system instructions.
 
-Runs bounded tasks with explicit budgets, timeouts, step limits, and tool permissions. Agents receive only the context and tools required for their task. The orchestrator records task state and results.
+### Storage and privacy
+SQLite is authoritative for structured desktop state. Large files and model artifacts use managed paths and opaque identifiers. Secrets belong in the OS credential vault. Backups exclude secrets by default.
 
-### Tool permission broker
+Personal data must not be silently uploaded to training pipelines. Dataset inclusion requires deliberate curation and provenance.
 
-All external or privileged tools go through a central permission layer. Each tool declares capabilities and risk level. Destructive, external, or irreversible actions require confirmation.
+## Dependency direction
 
-## Suggested package boundaries
+~~~text
+UI -> Application -> Domain contracts
+Infrastructure -> Domain contracts
+Tauri host -> Application + Infrastructure
+Model adapters -> Model runtime ports
+Training/evaluation -> versioned dataset/model artifacts
+~~~
 
-- `core`: shared domain types and application contracts.
-- `ai-router`: provider interfaces and adapters.
-- `memory`: memory domain and retrieval.
-- `agents`: agent definitions and orchestration.
-- `tools`: tool registry and permission broker.
-- `database`: SQLite schema and repositories.
-- `voice`: speech interfaces and provider adapters.
-- `shared`: validated shared types and utilities.
+Domain modules must not import React, Tauri APIs, HTTP clients, SQLite drivers, or model SDKs.
 
-These are target boundaries. Create packages when implementation begins; do not add empty packages merely to imitate the target structure.
+## Request lifecycle
+1. UI submits a typed message or task.
+2. Application facade validates it and creates a trace.
+3. Conversation service persists the user input.
+4. Context builder assembles recent messages and permitted memory/knowledge.
+5. NEXUS AI Core resolves the selected model and runtime.
+6. Adapter performs inference and emits normalized stream events.
+7. Proposed tool calls are validated and routed through the Tool Gateway.
+8. Tool results return as structured, untrusted observations.
+9. Model continues within configured budgets or stops for owner approval.
+10. Response, usage metadata, and trace are persisted.
 
-## Data flow
-
-1. The UI submits a typed request.
-2. The Rust layer validates the request and user configuration.
-3. The provider adapter sends the request to the configured endpoint.
-4. Streaming or final results are returned through typed events.
-5. Conversation state is persisted locally.
-6. Memory extraction, if enabled, is a separate user-configurable operation.
+Cancellation must propagate through every layer where supported.
 
 ## Reliability
-
-- Validate all inputs at system boundaries.
-- Use typed errors and actionable UI messages.
-- Add timeouts and cancellation for network and agent tasks.
-- Avoid blocking the UI thread.
-- Log operational metadata without logging secrets or unnecessary private content.
-- Keep database migrations versioned.
+- Validate inputs at module boundaries.
+- Bound context, output, file, and tool payload sizes.
+- Use typed errors, timeouts, cancellation, and retry-safe operations.
+- Redact credentials and sensitive diagnostics.
+- Version database schemas, model artifacts, datasets, and evaluation results.
+- Test core logic without a live model; separately test real local inference.
+- A successful build is not proof of an interactive desktop experience.

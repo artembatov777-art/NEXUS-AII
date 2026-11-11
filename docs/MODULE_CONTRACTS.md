@@ -336,3 +336,36 @@ This composition root is intentionally a preview adapter. Browser localStorage i
 - Project metadata is local and versioned. Archiving hides a project from the default list; it does not delete associated data.
 - Browser/WebView speech recognition is optional and host-dependent. Microphone access starts only after a user click; speech recognition may use OS/browser services and is not guaranteed to be offline.
 - TTS uses the host speech synthesis implementation. Both features must remain optional and degrade gracefully when unsupported.
+
+
+## 20. NEXUS AI Core and model registry — target contract
+
+This is a target contract direction, not a claim that these interfaces or adapters already exist in production code.
+
+A model descriptor identifies model ID, display name, version, runtime kind (local or remote), source, license, artifact format, quantization, capabilities, maximum context, and estimated memory requirements.
+
+Model capabilities explicitly declare streaming, tool calling, structured output, vision, audio input, and audio output. Callers must check capabilities rather than assuming every model supports every feature.
+
+The model runtime exposes list/discover, status, load, unload, health-check, inference, streaming, cancellation, and resource-reporting operations. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
+
+The primary model policy selects NEXUS Model when installed and healthy. Any fallback is explicit and observable, including the active model identity and whether inference is local or remote.
+
+## 21. Model artifacts and experiment records — target
+
+A model artifact record identifies model ID/version, source checkpoint, license, tokenizer/config revisions, weight or adapter hashes, quantization, supported runtime, and evaluation report.
+
+A dataset manifest identifies source provenance, license/permission basis, transformations, filtering, deduplication, and train/validation/test split assignment. Private workspace data is excluded by default; owner approval and explicit curation are required before it can enter a training dataset.
+
+An experiment record captures code revision, configuration, seed, hardware, dataset manifest, parent checkpoint, output artifact, logs, and evaluation results. A model version is not promoted merely because a training job completed.
+
+## 22. Personal owner profile
+
+The default deployment has one primary owner. Tenant isolation, public registration, subscription billing, and public quota management are not baseline product requirements.
+
+Owner profile, local settings, permissions, and model preferences remain private application state. Any future shared-access or multi-user feature requires a separate architecture decision and threat-model review.
+
+## 23. Training-data boundary
+
+Normal conversation, memory retrieval, and agent execution do not automatically update model weights. Runtime memory and model training are separate systems with separate controls.
+
+The training pipeline may consume only explicitly curated datasets with documented provenance and permission status. Every experiment must be reproducible and evaluated against held-out data. Fine-tuning, retrieval, prompting, and foundation-model pretraining must be described accurately and separately.

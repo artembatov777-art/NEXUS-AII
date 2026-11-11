@@ -1,43 +1,55 @@
-# NEXUS AU — Product Vision
+# NEXUS AU — Personal AI Product Vision
 
 ## Purpose
+NEXUS AU is a private personal AI ecosystem built for one primary owner. It combines a desktop workspace with a modular AI Core and a long-term effort to develop NEXUS Model as its own primary language model.
 
-NEXUS AU is a modular, local-first AI desktop environment that brings multiple AI providers, persistent memory, specialized agents, tools, voice interaction, and workflow automation into one user-controlled workspace.
+This is not a public multi-user SaaS product and must not remain a thin client for model aggregators. Its purpose is personal control, continuity across projects, integration with the owner's workflows, and the ability to evolve the model and the surrounding system together.
 
-It is intended to become a practical AI work environment, not merely a chat interface or a static UI demo.
+## Product identity
+- Product: NEXUS AU
+- Intelligence layer: NEXUS AI Core
+- Primary model: NEXUS Model
+- Audience: one primary owner, private personal use
+- Deployment: local-first desktop with optional owner-controlled remote compute
 
-## Product principles
-
-- **User control:** the user decides what the system can access, remember, and execute.
-- **Modularity:** providers, memory, agents, and tools remain replaceable components.
-- **Local-first:** keep personal data and application state local by default where practical.
-- **Transparency:** show active models, agent activity, tool calls, errors, and permission requests.
-- **Security by design:** secrets are never committed; sensitive actions require explicit authorization.
-- **Honest status:** a feature is not considered complete until implemented and tested.
+## Principles
+1. Personal-first, not public-SaaS-first. Multi-tenant accounts, billing, and public quotas are not requirements.
+2. NEXUS Model is the destination. External providers and aggregators are optional development, comparison, or fallback adapters.
+3. Own the complete system: model runtime, context, memory, agents, tools, data, and evaluation.
+4. Local-first with honest trade-offs. Prefer local processing when practical; allow remote compute when hardware requires it.
+5. Owner-configurable behavior, tools, integrations, memory rules, and workflows.
+6. Data sovereignty: inspection, correction, export, backup, and deletion are first-class capabilities.
+7. Observable execution: show model identity, context sources, agent activity, tool calls, errors, and resource use.
+8. No fake capability claims. A feature is complete only after implementation and verification.
+9. Safety protects the owner. Powerful integrations remain scoped, visible, interruptible, and recoverable.
 
 ## Core capabilities
+- Personal AI chat and workspace.
+- NEXUS Model as the primary inference target.
+- Local and optional remote model runtimes behind stable contracts.
+- Conversation context and inspectable long-term memory.
+- Personal knowledge base with source provenance.
+- Reasoning, planning, and bounded multi-agent workflows.
+- Tool Gateway, MCP integrations, and owner-configured capabilities.
+- Voice interaction and multimodal input/output.
+- Personal automation with logs, cancellation, and configurable approvals.
+- Model evaluation, dataset curation, fine-tuning experiments, and version management.
 
-1. Multi-provider AI chat with conversation history and streaming.
-2. Configurable model routing through an OmniRoute-compatible adapter.
-3. User-controlled long-term memory with search and project separation.
-4. Specialized AI agents coordinated through bounded workflows.
-5. MCP and application tool integrations with scoped permissions.
-6. Voice input and text-to-speech.
-7. Workspace for projects, notes, files, and tasks.
-8. Auditable workflow automation.
+## Model development stages
+1. Bootstrap: evaluate open-weight checkpoints and run one through a local inference adapter.
+2. Personal adaptation: define behavior, retrieval, tools, and curated examples.
+3. Fine-tuning: run controlled experiments when evaluation identifies a real gap and suitable data/compute exist.
+4. Model ownership: maintain versioned weights/adapters, datasets, evaluation results, and rollback.
+5. Long-term research: investigate training a foundation model from scratch only when data, compute, expertise, and budget justify it.
 
-## Target platform
+An open-weight starting checkpoint is a bootstrap strategy, not a claim that NEXUS created that base model. Prompting and retrieval are not training; fine-tuning is not foundation-model pretraining.
 
-The initial target is Windows desktop using Tauri 2, React, TypeScript, and Rust. The architecture should avoid unnecessary platform coupling so other platforms can be considered later.
+## Non-goals unless explicitly reconsidered
+- Public multi-user SaaS, subscriptions, or tenant management.
+- Dependence on OmniRoute or one external vendor.
+- Frontier-scale from-scratch pretraining as the first milestone.
+- Unbounded background agents or invisible computer control.
+- Automatic ingestion of all personal data into training.
 
-## Non-goals for the first release
-
-- Autonomous unrestricted computer control.
-- Hidden background monitoring.
-- Unbounded agent-to-agent execution.
-- A cloud account requirement for basic local application functions.
-- Claiming integrations work before they have been tested.
-
-## Initial milestone
-
-Deliver a reliable foundation: application shell, navigation, design system, provider configuration, working chat, local conversation persistence, error handling, and automated checks.
+## Initial priority
+Finish and verify the existing desktop foundation. Then establish NEXUS AI Core model contracts and a working local inference vertical slice before expensive training work.
