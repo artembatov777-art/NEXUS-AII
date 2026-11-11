@@ -14,7 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Audit npm dependency advisories
         run: npm audit --audit-level=high
       - run: npm run test
