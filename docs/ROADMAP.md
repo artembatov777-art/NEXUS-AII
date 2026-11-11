@@ -96,7 +96,6 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [ ] Add content-addressed model artifact tracking and rollback.
 - [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
 - [ ] Add reproducible adapter/LoRA fine-tuning only when hardware and measured need justify it.
-- [ ] Version model artifacts and support rollback.
 - [ ] Keep private conversations, files, and memories excluded from training by default.
 
 **Acceptance:** a reproducible experiment demonstrates measured improvement on held-out tasks, with provenance and rollback. Fine-tuning an existing checkpoint is not training a foundation model from scratch.
