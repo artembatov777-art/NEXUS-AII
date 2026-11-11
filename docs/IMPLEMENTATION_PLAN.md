@@ -275,7 +275,7 @@ The seven phases below are the only active project phases. The earlier numbered 
 - OmniRoute is the selected gateway for cloud model routing and is accessed through its OpenAI-compatible `/v1` API.
 - NEXUS AI Core uses provider-neutral contracts; local inference and OmniRoute are separate adapters behind the same runtime.
 - Cloud processing must be visible to the owner. The NEXUS-to-OmniRoute key stays in the OS credential vault.
-- The current native provider command can send a non-streamed OpenAI-compatible chat request to an OmniRoute endpoint. Model discovery, SSE streaming, cancellation and unified runtime lifecycle are not yet complete.
+- The current native provider command can send a non-streamed OpenAI-compatible chat request to an OmniRoute endpoint. A bounded native `/v1/models` catalog command and settings UI have now been added; they remain pending fresh CI verification. SSE streaming, cancellation and unified runtime lifecycle are not yet complete.
 - NEXUS Model adaptation is a later active development goal, but training a foundation model from scratch is deferred to Future Research. It is not an active phase and does not count toward project completion.
 
 ### Immediate engineering sequence
