@@ -46,6 +46,10 @@ This is native build and backend integration coverage, **not GUI end-to-end auto
 - Shell, arbitrary filesystem automation, OS notifications, and broad desktop control are not implemented.
 - Workspace backups are plaintext JSON and must be stored securely by the user.
 
+## Dependency scanning
+
+The frontend Quality workflow now runs `npm audit --audit-level=high` after dependency installation. This detects high and critical npm advisories in CI; it does not automatically remediate them, and the scan result for the latest branch head must be reviewed before declaring the dependency audit complete.
+
 ## Accessibility baseline
 
 The shared stylesheet now provides visible `:focus-visible` outlines, disabled-button affordances, and reduced-motion overrides. The provider settings modal has dialog semantics and a labelled heading. This is a baseline improvement, not a completed screen-reader or keyboard-navigation audit.
