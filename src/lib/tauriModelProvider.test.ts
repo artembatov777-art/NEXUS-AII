@@ -37,15 +37,16 @@ describe("TauriModelProvider", () => {
   it("sends a native cancellation command when an active stream is aborted", async () => {
     mockedIsTauri.mockReturnValue(true);
     let onMessage: ((event: { type: "text_delta" | "completed"; text?: string }) => void) | undefined;
+    let rejectStream: ((reason?: unknown) => void) | null = null;
     mockedInvoke.mockImplementation((command, args) => {
       if (command === "send_chat_stream") {
         onMessage = (args as { onEvent: { onmessage: (event: { type: "text_delta" | "completed"; text?: string }) => void } }).onEvent.onmessage;
-        return new Promise((_resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("native stream should have been cancelled")), 1000);
-          void timer;
-        });
+        return new Promise((_resolve, reject) => { rejectStream = reject; });
       }
-      if (command === "cancel_chat_stream") return Promise.resolve(true);
+      if (command === "cancel_chat_stream") {
+        rejectStream?.(new Error("Model request was cancelled."));
+        return Promise.resolve(true);
+      }
       return Promise.resolve([]);
     });
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
@@ -54,6 +55,7 @@ describe("TauriModelProvider", () => {
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, { model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal });
     const iterator = stream[Symbol.asyncIterator]();
     const pending = iterator.next();
+    await Promise.resolve();
     await Promise.resolve();
     controller.abort();
     await expect(pending).rejects.toThrow(/cancelled/);
