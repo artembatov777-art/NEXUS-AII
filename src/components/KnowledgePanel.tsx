@@ -105,7 +105,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         </div>
         <div className="knowledge-search">
           <label>Search project knowledge</label>
-          <div><input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
+          <div><input aria-label="Search project knowledge" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
           <button className="primary-btn" disabled={!query.trim() || working} onClick={() => void searchKnowledge()}><Search size={14}/> Search</button></div>
         </div>
       </>}
