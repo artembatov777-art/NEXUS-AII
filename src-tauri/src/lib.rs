@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
-use std::collections::HashSet;
-use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 
 #[derive(Debug, Deserialize)]
@@ -102,6 +103,51 @@ fn append_bounded_response(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), Strin
 }
 
 struct AppDatabase(Mutex<Connection>);
+
+type ActiveStreamMap = HashMap<String, Arc<AtomicBool>>;
+#[derive(Clone, Default)]
+struct ActiveChatStreams(Arc<Mutex<ActiveStreamMap>>);
+
+struct ActiveStreamGuard {
+    streams: Arc<Mutex<ActiveStreamMap>>,
+    stream_id: String,
+}
+impl Drop for ActiveStreamGuard {
+    fn drop(&mut self) {
+        if let Ok(mut streams) = self.streams.lock() {
+            streams.remove(&self.stream_id);
+        }
+    }
+}
+
+fn valid_stream_id(stream_id: &str) -> bool {
+    !stream_id.is_empty()
+        && stream_id.len() <= 128
+        && stream_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+async fn wait_for_stream_cancellation(cancelled: Arc<AtomicBool>) {
+    while !cancelled.load(Ordering::Acquire) {
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    }
+}
+
+#[tauri::command]
+fn cancel_chat_stream(
+    stream_id: String,
+    streams: State<'_, ActiveChatStreams>,
+) -> Result<bool, String> {
+    if !valid_stream_id(&stream_id) {
+        return Err("Stream ID is invalid.".into());
+    }
+    let active = streams.0.lock().map_err(|_| "Stream registry is unavailable.")?;
+    if let Some(cancelled) = active.get(&stream_id) {
+        cancelled.store(true, Ordering::Release);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     // One exclusive transaction serializes concurrent first-launch upgrades and
     // prevents another process from observing a partially migrated schema.
@@ -863,8 +909,22 @@ async fn send_chat_stream(
     credential_handle: String,
     model: String,
     messages: Vec<ProviderInputMessage>,
+    stream_id: String,
     on_event: tauri::ipc::Channel<serde_json::Value>,
+    streams: State<'_, ActiveChatStreams>,
 ) -> Result<(), String> {
+    if !valid_stream_id(&stream_id) {
+        return Err("Stream ID is invalid.".into());
+    }
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = streams.0.lock().map_err(|_| "Stream registry is unavailable.")?;
+        if active.contains_key(&stream_id) {
+            return Err("A chat stream with this ID is already active.".into());
+        }
+        active.insert(stream_id.clone(), cancelled.clone());
+    }
+    let _registration = ActiveStreamGuard { streams: streams.0.clone(), stream_id };
     let mut endpoint = reqwest::Url::parse(base_url.trim())
         .map_err(|_| "Provider URL is invalid.".to_string())?;
     let host = endpoint.host_str().unwrap_or_default();
@@ -910,8 +970,11 @@ async fn send_chat_stream(
         .timeout(std::time::Duration::from_secs(180))
         .redirect(reqwest::redirect::Policy::none())
         .build().map_err(|e| format!("Could not configure provider client: {e}"))?;
-    let mut response = client.post(endpoint)
-        .bearer_auth(&api_key).json(&payload).send().await
+    let send_result = tokio::select! {
+        result = client.post(endpoint).bearer_auth(&api_key).json(&payload).send() => result,
+        _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
+    };
+    let mut response = send_result
         .map_err(|e| format!("Provider streaming request failed: {e}"))?;
     let status = response.status();
     if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
@@ -919,8 +982,13 @@ async fn send_chat_stream(
     }
     if !status.is_success() {
         let mut body=Vec::new();
-        while let Some(chunk)=response.chunk().await.map_err(|e|format!("Could not read provider error: {e}"))? {
-            append_bounded_response(&mut body,&chunk)?;
+        loop {
+            let next_chunk = tokio::select! {
+                chunk = response.chunk() => chunk.map_err(|e| format!("Could not read provider error: {e}"))?,
+                _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
+            };
+            let Some(chunk) = next_chunk else { break; };
+            append_bounded_response(&mut body, &chunk)?;
         }
         let raw=String::from_utf8_lossy(&body).replace(&api_key,"[redacted]");
         return Err(format!("Provider returned HTTP {status}: {}",raw.chars().take(500).collect::<String>()));
@@ -930,7 +998,12 @@ async fn send_chat_stream(
     let mut event_data=String::new();
     let mut total=0usize;
     let mut completed=false;
-    while let Some(chunk)=response.chunk().await.map_err(|e|format!("Provider stream read failed: {e}"))? {
+    loop {
+        let next_chunk = tokio::select! {
+            chunk = response.chunk() => chunk.map_err(|e| format!("Provider stream read failed: {e}"))?,
+            _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
+        };
+        let Some(chunk) = next_chunk else { break; };
         total=total.saturating_add(chunk.len());
         if total>MAX_PROVIDER_RESPONSE_BYTES { return Err("Provider stream exceeded the 2 MB limit.".into()); }
         pending.extend_from_slice(&chunk);
@@ -1177,15 +1250,25 @@ pub fn run() {
             connection.execute_batch("PRAGMA foreign_keys = ON;")?;
             migrate_database(&mut connection)?;
             app.manage(AppDatabase(Mutex::new(connection)));
+            app.manage(ActiveChatStreams::default());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    #[test]
+    fn stream_ids_are_bounded_and_safe() {
+        assert!(valid_stream_id("stream-123_ABC"));
+        assert!(!valid_stream_id(""));
+        assert!(!valid_stream_id("bad/id"));
+        assert!(!valid_stream_id("bad id"));
+        assert!(!valid_stream_id(&"x".repeat(129)));
+    }
+
     #[test]
     fn provider_model_catalog_filters_invalid_and_duplicate_ids() {
         let body = br#"{"data":[{"id":"auto"},{"id":"provider/model-a"},{"id":"provider/model-a"},{"id":""},{"name":"missing-id"},{"id":"bad\nmodel"}]}"#;
