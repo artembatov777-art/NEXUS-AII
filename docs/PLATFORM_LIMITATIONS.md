@@ -39,12 +39,20 @@ This is native build and backend integration coverage, **not GUI end-to-end auto
 
 ## Runtime constraints shared by platforms
 
-- Provider calls support both one-shot responses and bounded SSE token streaming through the native Rust command. Native mid-request cancellation and usage metadata are not implemented yet. The configured OpenAI-compatible endpoint can point to a local OmniRoute `/v1` gateway. A native `/v1/models` discovery command and settings model picker have been added, pending fresh CI verification; SSE streaming is implemented; native cancellation remains open.
+- Provider calls support one-shot responses and bounded SSE token streaming through the native Rust command. Streamed chat supports native cancellation during connection and response reads, including early consumer exit. One-shot requests do not expose cancellation, and usage metadata normalization remains open.
+- The configured OpenAI-compatible endpoint defaults to the local OmniRoute `/v1` gateway. A native `/v1/models` discovery command and settings model picker are implemented. The selected local/remote label is owner-declared metadata; NEXUS cannot independently verify whether OmniRoute forwards a selected model to a remote provider. Remote is the safe default.
 - Semantic embeddings and vector search run in the webview using IndexedDB; the native SQLite database remains authoritative for text knowledge.
 - Speech recognition and speech synthesis use browser/WebView APIs, not a guaranteed offline native engine.
 - Clipboard integration is limited to the implemented native clipboard commands.
 - Shell, arbitrary filesystem automation, OS notifications, and broad desktop control are not implemented.
 - Workspace backups are plaintext JSON and must be stored securely by the user.
+
+## Training Lab metadata persistence
+
+- Native SQLite schema version 8 stores immutable dataset manifests and experiment records with an explicit dataset-version reference to each experiment.
+- Dataset manifests store license, provenance references, privacy/consent status, and disjoint train/validation/test sample IDs. Raw sample contents are not copied into the Training Lab metadata tables.
+- Experiment configuration rejects secret-bearing and raw prompt/conversation keys. Experiment records are immutable and bind to an exact dataset version.
+- The current evaluation bench performs deterministic required-phrase checks. It is a regression signal, not a semantic quality evaluator or model-training pipeline.
 
 ## Dependency scanning
 
