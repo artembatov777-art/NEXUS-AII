@@ -73,6 +73,13 @@ describe("Training Lab governance", () => {
     })).toBe(false);
   });
 
+  it("requires all three dataset splits to contain at least one sample", () => {
+    expect(validateDatasetManifest({
+      ...manifest,
+      splits: { train: ["train"], validation: [], test: ["test"] }
+    })).toBe(false);
+  });
+
   it("rejects duplicate IDs within a split", () => {
     expect(validateDatasetManifest({
       ...manifest,
