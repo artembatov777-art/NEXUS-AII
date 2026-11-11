@@ -263,35 +263,42 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 **Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is tracked in active Phase V, after the remaining manual desktop acceptance checks.
 
 
-## Active phase map — authoritative (2026-11-11)
+## Active phase map — authoritative (2026-11-12)
 
-The seven phases below are the only active project phases. The earlier numbered milestones and historical phase notes above record implementation history; they do not override this active map.
+The owner-approved seven-phase sequence is interface-first. Historical milestones above document implementation history only; they do not override this sequence.
 
-1. **Phase I — Architecture and infrastructure:** React/TypeScript/Vite, Tauri/Rust, SQLite, domain contracts, CI and build foundations.
-2. **Phase II — Workspace and interface:** chat, history, projects, settings, search, backup/restore, accessibility and desktop UX.
-3. **Phase III — Memory, agents and tools:** memory/knowledge, document ingestion, retrieval, agent runtime, coordinator, Tool Gateway, MCP and audited execution.
-4. **Phase IV — Desktop, security and stability:** native persistence, OS credential vault, backup recovery, platform builds, dependency/security review, accessibility and real desktop smoke tests.
-5. **Phase V — NEXUS AI Core and OmniRoute:** model registry/runtime, OmniRoute cloud adapter, model discovery, streaming/cancellation, explicit local/cloud routing, context integration and model-backed planning.
-6. **Phase VI — Training Lab and model development:** evaluation, curated datasets, experiment tracking, fine-tuning/adapters, artifact versioning and rollback.
-7. **Phase VII — Multimodal AI and voice:** image/audio/voice capabilities, explicit local/remote processing, interruption and modality-specific adapters.
+1. **Phase I — Complete interface:** full desktop and mobile workspace, all module surfaces, design system, responsive behavior, accessibility, UI contracts, and honest mock/empty/error states.
+2. **Phase II — AI Core:** OmniRoute cloud routing, model registry/runtime, local Ollama adapter, model discovery, health, streaming, cancellation, usage, and route disclosure.
+3. **Phase III — Memory & Knowledge:** durable inspectable memory, document ingestion, project knowledge, semantic retrieval, citations, and AI Core context integration.
+4. **Phase IV — Agents & Tools:** model-driven planning, bounded agent runtime, approvals, checkpoints, MCP, Tool Gateway, and auditable execution.
+5. **Phase V — NEXUS File System:** native Windows folder permissions, browsing/search, file reading and analysis, controlled writes, previews, and recovery.
+6. **Phase VI — Security & Integration:** cross-module integration, permission enforcement, OS credential vault, backup/restore, audit, error handling, and threat-model review.
+7. **Phase VII — Testing & Release 1.0:** full automated test matrix, native platform builds, real desktop smoke tests, packaging, installation, and release evidence.
 
-### Current model strategy
+## Phase I — Complete interface: exit checklist
 
-- Local inference remains a supported path when a suitable local runtime is available.
-- OmniRoute is the selected gateway for cloud model routing and is accessed through its OpenAI-compatible `/v1` API.
-- NEXUS AI Core uses provider-neutral contracts; local inference and OmniRoute are separate adapters behind the same runtime.
-- Cloud processing must be visible to the owner. The NEXUS-to-OmniRoute key stays in the OS credential vault.
-- The current native provider command can send a non-streamed OpenAI-compatible chat request to an OmniRoute endpoint. A bounded native `/v1/models` catalog command and settings UI have now been added; they remain pending fresh CI verification. SSE streaming, cancellation and unified runtime lifecycle are not yet complete.
-- NEXUS Model adaptation is a later active development goal, but training a foundation model from scratch is deferred to Future Research. It is not an active phase and does not count toward project completion.
+- [x] Establish the restrained JARVIS visual language and shared responsive styling.
+- [x] Build the desktop workspace shell, navigation, chat, history, and system overview.
+- [x] Add workspace panels for Projects, Memory, Knowledge, Agents, Tools & MCP, File System, Training Lab, global search, and provider settings.
+- [x] Add backup/restore controls to provider settings.
+- [x] Add the isolated iPhone-oriented `?demo=1` preview without provider or credential access.
+- [x] Add responsive layouts to the main application and mobile preview.
+- [x] Add visible keyboard focus and reduced-motion behavior.
+- [x] Add responsive mobile navigation and consistent dialog Escape/focus/scroll handling.
+- [ ] Audit every visible control, loading/empty/error state, and module transition.
+- [ ] Add automated UI interaction coverage where supported by the current test stack.
+- [ ] Verify both the hosted preview and main responsive application on a real iPhone.
+- [ ] Pass frontend Quality, mobile-preview deployment, and native build/test workflows on the final Phase I head.
 
-### Immediate engineering sequence
+**Phase I status: in progress.** Do not mark complete until every exit item is satisfied. The current interface contains deliberately disconnected/mock surfaces for integrations implemented in later phases; those surfaces must disclose that they are not live.
 
-1. Finish code-addressable Phase IV work and verify the latest CI baseline.
-2. Record real Windows/macOS/Linux desktop and credential-vault smoke tests when those interactive environments are available.
-3. Complete Phase V native stream cancellation, model capability metadata, error/usage normalization, and explicit local/cloud routing.
-4. Connect approved memory and project knowledge to the selected model runtime.
-5. Connect model-driven agents through the existing Tool Gateway and coordinator.
-6. Continue Phase VI with evaluation suites, dataset governance, and experiment persistence; fine-tuning stays gated on evidence and hardware.
-7. Continue Phase VII with attachment ingestion, model-backed image/audio understanding, and explicit local/remote processing disclosure.
+## Model strategy
 
-**Status rule:** documentation, UI presets, and mock providers are not proof of a working model integration. Every acceptance item requires implementation and automated or manual evidence appropriate to the feature.
+- Local inference remains supported when a suitable local runtime is available.
+- OmniRoute is the selected cloud gateway and is accessed through its OpenAI-compatible `/v1` API.
+- The OmniRoute gateway address does not prove that inference is local; route disclosure must use an explicit configured setting and remain honest about its verification limits.
+- Ollama runs on a computer or server with suitable resources. It cannot run locally on the owner's iPhone.
+- Provider credentials stay in the OS credential vault. Browser preview must never store or transmit provider secrets.
+- Training a foundation model from scratch is deferred to future research and is not a Release 1.0 requirement.
+
+**Status rule:** code written, automated tests passed, CI passed, and behavior verified on a real device/runtime are separate evidence levels. Documentation, UI presets, and mock providers are not proof of working integration.
