@@ -84,7 +84,8 @@ class TauriModelProvider implements ModelProvider {
       request.signal?.removeEventListener("abort", abortHandler);
       if (!completed) cancelNativeStream();
     }
-  }}
+  }
+}
 
 /** Provider adapter keeps credentials in the native OS keyring and never exposes them to the webview. */
 export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
