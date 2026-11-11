@@ -94,6 +94,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Add validated experiment records with model, code revision, hardware, configuration, and metrics metadata.
 - [x] Persist versioned dataset manifests and immutable experiment records in native SQLite (browser preview uses localStorage).
 - [x] Add a Training Lab workspace for registering dataset manifests and recording experiment metadata.
+- [x] Add a manual deterministic phrase-evaluation bench that exports measured metrics into experiment records.
 - [ ] Add content-addressed model artifact tracking and rollback.
 - [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
 - [ ] Add reproducible adapter/LoRA fine-tuning only when hardware and measured need justify it.
