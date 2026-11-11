@@ -60,6 +60,33 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
   });
 
+  it("cancels the native request when a consumer stops reading the stream", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    let rejectStream: ((reason?: unknown) => void) | null = null;
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string }) => void } }).onEvent;
+        return new Promise((_resolve, reject) => {
+          rejectStream = reject;
+          channel.onmessage({ type: "text_delta", text: "partial" });
+        });
+      }
+      if (command === "cancel_chat_stream") {
+        rejectStream?.(new Error("Model request was cancelled."));
+        return Promise.resolve(true);
+      }
+      return Promise.resolve([]);
+    });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
+    if (!router) throw new Error("Expected native model router.");
+    const iterator = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "plan" }]
+    })[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({ done: false, value: { type: "text_delta", text: "partial" } });
+    await iterator.return?.();
+    expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
+  });
+
   it("rejects cancellation before making a native request", async () => {
     mockedIsTauri.mockReturnValue(true);
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
