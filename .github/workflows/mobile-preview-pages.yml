@@ -31,9 +31,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Build static preview
         run: npm run build:pages
       - name: Upload Pages artifact
