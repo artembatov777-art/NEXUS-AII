@@ -951,7 +951,7 @@ async fn send_chat_stream(
                         completed=true;
                         break;
                     }
-                    if let Some(delta)=parse_sse_delta(&data)? {
+                    if let Some(delta)=parse_sse_delta(&data).map_err(|error| error.replace(&api_key, "[redacted]"))? {
                         if !delta.is_empty() {
                             on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
                                 .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
@@ -972,8 +972,20 @@ async fn send_chat_stream(
         if completed { break; }
     }
     if !completed {
+        if !pending.is_empty() {
+            let mut final_line = std::mem::take(&mut pending);
+            if final_line.last() == Some(&b'\r') { final_line.pop(); }
+            if final_line.starts_with(b"data:") {
+                let value = String::from_utf8_lossy(&final_line[5..]).trim_start().to_string();
+                if event_data.len().saturating_add(value.len()) > 65_536 {
+                    return Err("Provider stream event exceeded the 64 KB limit.".into());
+                }
+                event_data.push_str(&value);
+            }
+        }
         if !event_data.trim().is_empty() {
-            if let Some(delta)=parse_sse_delta(event_data.trim_end_matches('\n'))? {
+            if let Some(delta)=parse_sse_delta(event_data.trim_end_matches('\n'))
+                .map_err(|error| error.replace(&api_key, "[redacted]"))? {
                 if !delta.is_empty() {
                     on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
                         .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
