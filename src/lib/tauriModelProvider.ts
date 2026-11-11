@@ -58,25 +58,25 @@ class TauriModelProvider implements ModelProvider {
       wake?.();
       wake = null;
     };
-    const streamPromise = invoke("send_chat_stream", {
-      baseUrl: this.settings.baseUrl,
-      credentialHandle: "default",
-      model: request.model,
-      messages: request.messages.map(message => ({ role: message.role, content: message.content })),
-      streamId,
-      onEvent: channel
-    });
-    let requestError: unknown = null;
-    void streamPromise.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
-    while (!done || queue.length) {
-      if (request.signal?.aborted) throw new Error("Model request was cancelled.");
-      if (failure) throw failure;
-      const event = queue.shift();
-      if (event) { yield event; continue; }
-      if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
-      await new Promise<void>(resolve => { wake = resolve; });
-    }
     try {
+      const streamPromise = invoke("send_chat_stream", {
+        baseUrl: this.settings.baseUrl,
+        credentialHandle: "default",
+        model: request.model,
+        messages: request.messages.map(message => ({ role: message.role, content: message.content })),
+        streamId,
+        onEvent: channel
+      });
+      let requestError: unknown = null;
+      void streamPromise.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
+      while (!done || queue.length) {
+        if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+        if (failure) throw failure;
+        const event = queue.shift();
+        if (event) { yield event; continue; }
+        if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
+        await new Promise<void>(resolve => { wake = resolve; });
+      }
       await streamPromise;
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
       completed = true;
@@ -84,8 +84,7 @@ class TauriModelProvider implements ModelProvider {
       request.signal?.removeEventListener("abort", abortHandler);
       if (!completed) cancelNativeStream();
     }
-  }
-}
+  }}
 
 /** Provider adapter keeps credentials in the native OS keyring and never exposes them to the webview. */
 export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
