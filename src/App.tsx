@@ -125,8 +125,13 @@ export default function App() {
   const providerRoute = provider.inferenceLocation;
   const localNoAuth = provider.credentialHandle === "none";
 
+  function closeMobileNavigation() {
+    if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false);
+  }
+
   function newChat() {
     if (!conversationsReady) return;
+    closeMobileNavigation();
     const item: Conversation = { id: makeId(), title: "New conversation", messages: [welcome], updatedAt: Date.now(), ...(selectedProjectId ? { projectId: selectedProjectId } : {}) };
     setConversations(current => [item, ...current]);
     setActiveId(item.id);
@@ -198,7 +203,13 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleDialogKeys, true);
       document.body.style.overflow = previousOverflow;
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (previousFocus?.isConnected) {
+        if (previousFocus.closest(".sidebar.sidebar-hidden")) {
+          document.querySelector<HTMLElement>('[aria-controls="nexus-sidebar"]')?.focus();
+        } else {
+          previousFocus.focus();
+        }
+      }
     };
   }, [settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen]);
   function updateMessages(id: string, next: ChatMessage[]) {
@@ -393,17 +404,17 @@ export default function App() {
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
       <div className="nav-label">WORKSPACE</div>
       <button className="nav-item selected" aria-current="page"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
-      <button className="nav-item" onClick={() => setProjectsOpen(true)}><FolderKanban size={17}/> Projects</button>
-      <button className="nav-item" onClick={() => setMemoryOpen(true)}><Sparkles size={17}/> Memory</button>
-      <button className="nav-item" onClick={() => setKnowledgeOpen(true)}><BookOpen size={17}/> Knowledge base</button>
+      <button className="nav-item" onClick={() => { setProjectsOpen(true); closeMobileNavigation(); }}><FolderKanban size={17}/> Projects</button>
+      <button className="nav-item" onClick={() => { setMemoryOpen(true); closeMobileNavigation(); }}><Sparkles size={17}/> Memory</button>
+      <button className="nav-item" onClick={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}><BookOpen size={17}/> Knowledge base</button>
       <div className="nav-label nav-label-spaced">INTELLIGENCE</div>
-      <button className="nav-item" onClick={() => setAgentsOpen(true)}><Bot size={17}/> Agents <span className="nav-feature-dot"/></button>
-      <button className="nav-item" onClick={() => setTrainingLabOpen(true)}><FlaskConical size={17}/> Training Lab</button>
-      <button className="nav-item" onClick={() => setToolsOpen(true)}><Plug size={17}/> Tools & MCP</button>
+      <button className="nav-item" onClick={() => { setAgentsOpen(true); closeMobileNavigation(); }}><Bot size={17}/> Agents <span className="nav-feature-dot"/></button>
+      <button className="nav-item" onClick={() => { setTrainingLabOpen(true); closeMobileNavigation(); }}><FlaskConical size={17}/> Training Lab</button>
+      <button className="nav-item" onClick={() => { setToolsOpen(true); closeMobileNavigation(); }}><Plug size={17}/> Tools & MCP</button>
       <div className="nav-label nav-label-spaced">SYSTEM</div>
-      <button className="nav-item" onClick={() => setFileSystemOpen(true)}><FolderOpen size={17}/> File system</button>
-      <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
-      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => setGlobalSearchOpen(true)} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => {
+      <button className="nav-item" onClick={() => { setFileSystemOpen(true); closeMobileNavigation(); }}><FolderOpen size={17}/> File system</button>
+      <button className="nav-item" onClick={() => { setSettingsOpen(true); closeMobileNavigation(); }}><Cpu size={17}/> Models & providers</button>
+      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => { setGlobalSearchOpen(true); closeMobileNavigation(); }} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => {
         if (!conversations.length) return;
         if (window.confirm("Delete all conversations? This cannot be undone.")) {
           setConversations([]);
@@ -412,10 +423,10 @@ export default function App() {
       }} title="Clear all history" aria-label="Clear all conversation history"><Trash2 size={14}/></button></div></div>
       <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
-        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
+        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); closeMobileNavigation(); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
         {conversations.filter(c => (c.projectId ?? "") === selectedProjectId).length === 0 && <p className="empty-history">No conversations in this workspace yet.</p>}
       </div>
-      <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => setSettingsOpen(true)}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
+      <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => { setSettingsOpen(true); closeMobileNavigation(); }}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
     {sidebarOpen && <button className="sidebar-scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
 
