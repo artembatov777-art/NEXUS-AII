@@ -82,3 +82,14 @@ The inspected `mem0/utils/scoring.py` confirms that Mem0's hybrid ranker is not 
 ### Adoption result
 
 No upstream runtime dependency was added in this iteration. The source inspection supports keeping NEXUS's TypeScript/Rust core independent while borrowing durable-checkpoint and hybrid-retrieval concepts at the contract level. This is an intentional engineering decision, not an incomplete package installation.
+
+
+### Transformers.js v4 and local embedding model
+
+Inspected the official [Transformers.js repository](https://github.com/huggingface/transformers.js), its [v4 migration and pipeline documentation](https://huggingface.co/docs/transformers.js), and the [npm package metadata](https://www.npmjs.com/package/@huggingface/transformers) on 2026-11-11.
+
+**Decision:** replace the legacy `@xenova/transformers` v2 package with `@huggingface/transformers` v4.3.2 (Apache-2.0). The public pipeline API still supports feature extraction, mean pooling, normalization, and tensor `tolist()`; v4 uses the `dtype` option instead of the old boolean `quantized` option. The runtime now requests q8 weights from `onnx-community/all-MiniLM-L6-v2-ONNX`, whose model card declares Apache-2.0 and documents the same Transformers.js pipeline.
+
+No upstream source code was copied. This migration removes the legacy package dependency chain that caused the current npm audit to report vulnerable protobufjs/onnx-proto/sharp dependencies. The dependency audit must still pass on the new resolved graph before the remediation is considered verified.
+
+**Boundary:** model weights are still fetched from the Hugging Face Hub on first use and then cached by the runtime. This is local inference after model loading, not a guarantee of first-run offline operation. The new unit tests inject a fake extractor and do not claim to verify real model downloads or numerical inference.
