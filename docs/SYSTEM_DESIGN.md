@@ -4,7 +4,7 @@
 **Scope:** One primary owner; hybrid local-and-cloud desktop with owner-controlled remote compute.
 
 ## 1. Product boundary
-NEXUS AU is a personal AI environment whose long-term primary intelligence is NEXUS Model. It is not a public multi-user SaaS product and is not intended to remain a thin wrapper around model aggregators.
+NEXUS AU is a personal AI environment with a hybrid local-and-cloud model strategy. Local inference is supported directly; cloud models are routed through OmniRoute. NEXUS Model adaptation is a later goal. It is not a public multi-user SaaS product.
 
 Two responsibilities must remain distinct:
 - NEXUS Model supplies learned language and multimodal capabilities through model weights and inference.
@@ -51,7 +51,7 @@ Storage: SQLite + managed files + OS credential vault
 A model descriptor identifies stable ID, display name, version, source and license, architecture/tokenizer metadata, artifact format, quantization, context and modality capabilities, estimated hardware requirements, artifact location, and lifecycle state.
 
 ### Model Runtime
-Owns discover, validate, import/download, load, unload, health-check, infer, stream, cancel, and resource reporting. Multiple inference backends are supported through adapters. Cloud providers are reached through OmniRoute's OpenAI-compatible `/v1` API; local inference uses a separate adapter and does not require the gateway.
+Owns discover, validate, import/download, load, unload, health-check, infer, stream, cancel, and resource reporting. Multiple inference backends are supported through adapters. Cloud providers are reached through OmniRoute's OpenAI-compatible `/v1` API; local inference uses a separate adapter and does not require the gateway. Cloud providers are reached through OmniRoute's OpenAI-compatible `/v1` API; local inference uses a separate adapter and does not require the gateway.
 
 The runtime must not assume all models support identical tool calling, structured output, context length, or modalities. Capabilities are declared and validated.
 
