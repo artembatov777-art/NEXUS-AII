@@ -60,7 +60,7 @@ export default function App() {
   const chatAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
   const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const projectService = useMemo(() => new ProjectService(
@@ -136,6 +136,65 @@ export default function App() {
     window.addEventListener("keydown", handleKeyboardShortcut);
     return () => window.removeEventListener("keydown", handleKeyboardShortcut);
   }, [conversationsReady, selectedProjectId]);
+
+  // Keep keyboard focus inside the active workspace dialog and make Escape a
+  // consistent close action across every module.
+  useEffect(() => {
+    const dialogOpen = settingsOpen || memoryOpen || globalSearchOpen || agentsOpen ||
+      projectsOpen || knowledgeOpen || trainingLabOpen || fileSystemOpen || toolsOpen;
+    if (!dialogOpen) return;
+
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+    const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+      .filter(element => !element.closest('[hidden], [aria-hidden="true"]'));
+
+    const focusTarget = dialog?.querySelector<HTMLElement>("[autofocus]") ?? getFocusable()[0];
+    focusTarget?.focus();
+
+    function handleDialogKeys(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (globalSearchOpen) setGlobalSearchOpen(false);
+        else if (agentsOpen) setAgentsOpen(false);
+        else if (fileSystemOpen) setFileSystemOpen(false);
+        else if (toolsOpen) setToolsOpen(false);
+        else if (trainingLabOpen) setTrainingLabOpen(false);
+        else if (knowledgeOpen) setKnowledgeOpen(false);
+        else if (projectsOpen) setProjectsOpen(false);
+        else if (memoryOpen) setMemoryOpen(false);
+        else if (settingsOpen) setSettingsOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = getFocusable();
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && (current === first || !dialog.contains(current))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (current === last || !dialog.contains(current))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleDialogKeys, true);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeys, true);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen]);
   function updateMessages(id: string, next: ChatMessage[]) {
     setConversations(current => current.map(c => c.id === id
       ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
@@ -323,8 +382,8 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <aside className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
-      <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><X size={17}/></button></div>
+    <aside id="nexus-sidebar" className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
+      <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={17}/></button></div>
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
       <div className="nav-label">WORKSPACE</div>
       <button className="nav-item selected" aria-current="page"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
@@ -352,9 +411,10 @@ export default function App() {
       </div>
       <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => setSettingsOpen(true)}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
+    {sidebarOpen && <button className="sidebar-scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
 
     <main className="main-panel">
-      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><div className="model-pill" title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><div className="model-pill" title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
       <section className="chat-area">
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><div className="nexus-hero-core" aria-label="NEXUS system core"><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">NEXUS CORE <b>INTERFACE</b></div><div className="core-label core-label-bottom">NEXUS AU <span>·</span> SYSTEM INTERFACE</div></div><h1>{active?.title ?? "Your intelligence. Connected."}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <div className="nexus-system-grid" aria-label="System overview">
