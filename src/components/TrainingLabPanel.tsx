@@ -74,7 +74,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
       name: datasetName.trim(),
       license: license.trim(),
       privacyClass,
-      consentStatus,
+      consentStatus: privacyClass === "owner_approved" ? consentStatus : "not_required",
       ...(privacyClass === "owner_approved" ? { approvalReference: approvalReference.trim() } : {}),
       sourceReferences: [sourceReference.trim()],
       splits: { train: splitIds(trainIds), validation: splitIds(validationIds), test: splitIds(testIds) },
