@@ -99,6 +99,13 @@ describe("Training Lab governance", () => {
     })).toBe(false);
   });
 
+  it("rejects raw prompts and conversation payloads in experiment configuration", () => {
+    expect(validateTrainingExperiment({
+      ...experiment,
+      configuration: { context: { promptTemplate: "private prompt" } }
+    })).toBe(false);
+  });
+
   it("rejects secrets in experiment configuration", () => {
     expect(validateTrainingExperiment({
       ...experiment,
