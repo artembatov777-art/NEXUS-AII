@@ -188,6 +188,11 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 7;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 8 {
+        transaction.execute_batch("ALTER TABLE training_experiments ADD COLUMN dataset_version INTEGER NOT NULL DEFAULT 1;")?;
+        version = 8;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
@@ -1426,8 +1431,8 @@ fn save_training_experiment_record(connection: &Connection, experiment: &serde_j
         return if existing == payload { Ok(()) } else { Err("Experiment IDs are immutable; create a new experiment instead.".into()) };
     }
     connection.execute(
-        "INSERT INTO training_experiments(id,dataset_id,created_at,payload) VALUES(?1,?2,?3,?4)",
-        params![id, dataset_id, created_at, payload]
+        "INSERT INTO training_experiments(id,dataset_id,created_at,payload,dataset_version) VALUES(?1,?2,?3,?4,?5)",
+        params![id, dataset_id, created_at, payload, dataset_version]
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -1745,15 +1750,15 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_seven() {
+    fn upgrades_schema_version_four_atomically_to_eight() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
-        connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints;").expect("remove v5 and v6 tables");
-        migrate_database(&mut connection).expect("upgrade v4 to v7");
+        connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets;").expect("remove v5 and v6 tables");
+        migrate_database(&mut connection).expect("upgrade v4 to v8");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
         assert_eq!(table, 1);
         let audit: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tool_audit_events'", [], |row| row.get(0)).expect("audit table");
@@ -1811,7 +1816,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
