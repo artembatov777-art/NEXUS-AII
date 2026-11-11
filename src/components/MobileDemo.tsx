@@ -1,12 +1,12 @@
 import { useState } from "react";
 import {
-  ArrowUp, AudioLines, Bell, BookOpen, Brain, ChevronRight,
-  CircleHelp, Command, FolderKanban, MessageSquare, MoreHorizontal,
+  ArrowUp, AudioLines, Bell, BookOpen, Brain, Bot, ChevronRight,
+  CircleHelp, Command, Database, FileText, FolderKanban, MessageSquare, MoreHorizontal, Plug,
   Plus, Search, Settings2, ShieldCheck, Sparkles, Zap
 } from "lucide-react";
 import "./mobile-demo.css";
 
-type DemoTab = "chat" | "projects" | "memory" | "settings";
+type DemoTab = "chat" | "projects" | "memory" | "settings" | "more";
 
 const sampleMessages = [
   { role: "assistant" as const, text: "Привет. Я NEXUS, твоя персональная AI-среда. Здесь будут собраны знания, проекты, память и инструменты." },
@@ -98,6 +98,17 @@ export function MobileDemo() {
           <div className="demo-settings-group"><span>ПОДДЕРЖКА</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("Голосовые функции пока не подключены.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
           <div className="demo-version">NEXUS AU · INTERFACE PREVIEW · 0.1</div>
         </div>}
+        {tab === "more" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>NEXUS MODULES</span><h2>Все разделы</h2></div><MoreHorizontal size={21}/></div>
+          <p className="demo-more-intro">Дополнительные инструменты и системные модули NEXUS AU. Сейчас показан интерфейсный макет.</p>
+          <div className="demo-more-grid">
+            <button onClick={() => setNotice("Файловый модуль будет подключён после реализации безопасного доступа к папкам Windows.")}><div><FileText size={19}/></div><span><strong>Файловая система</strong><small>Файлы и папки устройства</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setNotice("Каталог Tools & MCP пока демонстрационный. Подключения ещё не активны.")}><div><Plug size={19}/></div><span><strong>Tools & MCP</strong><small>Инструменты и интеграции</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setNotice("Панель агентов будет доступна в полной версии интерфейса.")}><div><Bot size={19}/></div><span><strong>Агенты</strong><small>Задачи и автоматизация</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setNotice("База знаний будет подключена к основному AI Core.")}><div><Database size={19}/></div><span><strong>База знаний</strong><small>Документы и поиск</small></span><ChevronRight size={16}/></button>
+          </div>
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Модули не получают доступ к устройству без явного подключения и разрешений.</div>
+        </div>}
       </section>
 
       {tab === "chat" && <div className="demo-chat-footer">
@@ -115,6 +126,7 @@ export function MobileDemo() {
         <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
         <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
         <button className={tab === "settings" ? "active" : ""} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={19}/><span>Настройки</span></button>
+        <button className={tab === "more" ? "active" : ""} aria-pressed={tab === "more"} onClick={() => setTab("more")}><MoreHorizontal size={19}/><span>Ещё</span></button>
       </nav>
       <div className="demo-home-indicator"/>
     </div>
