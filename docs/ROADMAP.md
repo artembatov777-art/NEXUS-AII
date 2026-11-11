@@ -1,6 +1,6 @@
 # NEXUS AU — Active Development Roadmap
 
-This roadmap contains **seven active engineering phases** plus a parallel mobile-preview delivery track. The independent foundation model from-scratch idea is deferred to Future Research and is not part of active completion or progress calculations.
+This roadmap contains **seven active phases**. The independent foundation model from-scratch idea is deferred to Future Research and is not part of active completion or progress calculations.
 
 ## Product direction
 
@@ -17,7 +17,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [ ] Publish a preview URL and verify it in iPhone Safari.
 - [ ] Refine layouts after real-device feedback.
 
-**Acceptance:** the owner can open a hosted URL on iPhone, inspect the key workspace screens, and safely try demo-only interactions without contacting an AI provider or exposing credentials.
+**Acceptance:** the owner can open a hosted URL on iPhone, inspect key workspace screens, and try demo-only interactions without contacting an AI provider or exposing credentials.
 
 ## Phase I — Architecture and infrastructure
 
@@ -77,7 +77,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [ ] Complete full accessibility, CSP/capability, release packaging, and upgrade review.
 - [ ] Run and record interactive Tauri + credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions.
 
-**Acceptance:** all automated checks pass, security/dependency findings are triaged, and real desktop behavior is verified on supported desktop platforms.
+**Acceptance:** all automated checks pass, security/dependency findings are triaged, and real desktop behavior is verified on supported platforms. CI compilation alone does not satisfy manual acceptance.
 
 ## Phase V — NEXUS AI Core and OmniRoute
 
