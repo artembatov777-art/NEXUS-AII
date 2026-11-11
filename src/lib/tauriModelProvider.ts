@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } from "../core/model";
 import { ok, err, type Result } from "../core/result";
 import type { ModelDescriptor } from "../core/domain";
@@ -18,7 +18,7 @@ class TauriModelProvider implements ModelProvider {
       id: this.settings.model,
       providerId: this.id,
       displayName: this.settings.model,
-      supportsStreaming: false,
+      supportsStreaming: true,
       supportsTools: false
     }]);
   }
@@ -27,18 +27,37 @@ class TauriModelProvider implements ModelProvider {
     if (!isTauri()) throw new Error("Native model requests are available only in the desktop host.");
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
     if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
-    const response = await invoke<string>("send_chat", {
+    const channel = new Channel<{ type: "text_delta" | "completed"; text?: string; finishReason?: string }>();
+    const queue: ModelEvent[] = [];
+    let wake: (() => void) | null = null;
+    let done = false;
+    let failure: Error | null = null;
+    channel.onmessage = event => {
+      if (event.type === "text_delta" && typeof event.text === "string") queue.push({ type: "text_delta", text: event.text });
+      else if (event.type === "completed") { queue.push({ type: "completed", finishReason: event.finishReason }); done = true; }
+      else failure = new Error("Provider returned an unsupported stream event.");
+      wake?.();
+      wake = null;
+    };
+    const request = invoke("send_chat_stream", {
       baseUrl: this.settings.baseUrl,
       credentialHandle: "default",
       model: request.model,
-      messages: request.messages.map(message => ({ role: message.role, content: message.content }))
+      messages: request.messages.map(message => ({ role: message.role, content: message.content })),
+      onEvent: channel
     });
-    if (request.signal?.aborted) throw new Error("Model request was cancelled.");
-    if (typeof response !== "string" || !response.trim() || response.length > 48_000) {
-      throw new Error("Native model response is empty or exceeds the planner response limit.");
+    let requestError: unknown = null;
+    void request.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
+    while (!done || queue.length) {
+      if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+      if (failure) throw failure;
+      const event = queue.shift();
+      if (event) { yield event; continue; }
+      if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
+      await new Promise<void>(resolve => { wake = resolve; });
     }
-    yield { type: "text_delta", text: response };
-    yield { type: "completed", finishReason: "stop" };
+    await request;
+    if (request.signal?.aborted) throw new Error("Model request was cancelled.");
   }
 }
 
