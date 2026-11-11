@@ -416,3 +416,15 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 
 /* JARVIS keyboard focus treatment */
 :where(button,input,textarea,select,[tabindex]):focus-visible{outline-color:var(--nx-cyan);outline-offset:3px;box-shadow:0 0 0 2px rgba(121,199,232,.12)}
+
+
+/* Provider endpoint diagnostics: catalog reachability is not the same as a successful chat completion. */
+.provider-connection{display:flex;align-items:flex-start;gap:10px;margin-top:12px;padding:12px;border:1px solid rgba(121,199,232,.14);border-radius:9px;background:rgba(9,23,36,.72)}
+.provider-connection-dot{width:8px;height:8px;flex:0 0 8px;margin-top:4px;border-radius:50%;background:#778493;box-shadow:0 0 0 3px rgba(119,132,147,.12)}
+.provider-connection strong{display:block;color:#a8bdc9;font-size:10px;letter-spacing:.08em}
+.provider-connection small{display:block;margin-top:5px;color:#829aaa;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.provider-connection.checking .provider-connection-dot{background:#d2b66d;box-shadow:0 0 0 3px rgba(210,182,109,.12);animation:provider-pulse 1.2s ease-in-out infinite}
+.provider-connection.reachable .provider-connection-dot{background:#78c9a4;box-shadow:0 0 0 3px rgba(120,201,164,.12)}
+.provider-connection.failed .provider-connection-dot{background:#d98282;box-shadow:0 0 0 3px rgba(217,130,130,.12)}
+@keyframes provider-pulse{50%{opacity:.45}}
+@media(prefers-reduced-motion:reduce){.provider-connection.checking .provider-connection-dot{animation:none}}
