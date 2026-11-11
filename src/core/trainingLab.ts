@@ -80,7 +80,8 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
       !uniqueStrings(manifest.sourceReferences, MAX_SOURCE_REFERENCES, 500) ||
       !Number.isFinite(manifest.createdAt)) return false;
 
-  if (manifest.privacyClass === "owner_approved" && !boundedText(manifest.approvalReference, 300)) return false;
+  if (manifest.sourceReferences.length === 0) return false;
+  if (manifest.privacyClass === "owner_approved" && (manifest.consentStatus !== "approved" || !boundedText(manifest.approvalReference, 300))) return false;
   if (!manifest.splits || typeof manifest.splits !== "object") return false;
   const { train, validation, test } = manifest.splits;
   if (!uniqueStrings(train, MAX_SPLIT_ITEMS, 160) ||
@@ -92,7 +93,8 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
 }
 
 function containsSensitiveKey(value: unknown, depth = 0): boolean {
-  if (depth > MAX_CONFIG_DEPTH || !value || typeof value !== "object") return false;
+  if (depth > MAX_CONFIG_DEPTH) return true;
+  if (!value || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(item => containsSensitiveKey(item, depth + 1));
   return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
     /(api.?key|access.?token|password|secret|credential|authorization)/i.test(key) ||
