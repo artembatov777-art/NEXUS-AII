@@ -43,6 +43,15 @@ describe("Training Lab governance", () => {
     expect(validateDatasetManifest(manifest)).toBe(true);
   });
 
+  it("rejects owner-selected datasets without approved consent", () => {
+    expect(validateDatasetManifest({
+      ...manifest,
+      privacyClass: "owner_approved",
+      consentStatus: "not_required",
+      approvalReference: "owner-approval-001"
+    })).toBe(false);
+  });
+
   it("rejects datasets with pending consent", () => {
     expect(validateDatasetManifest({ ...manifest, consentStatus: "pending" })).toBe(false);
   });
@@ -73,6 +82,13 @@ describe("Training Lab governance", () => {
 
   it("accepts experiment records without secret-bearing configuration", () => {
     expect(validateTrainingExperiment(experiment)).toBe(true);
+  });
+
+  it("rejects secrets hidden beyond the maximum configuration depth", () => {
+    expect(validateTrainingExperiment({
+      ...experiment,
+      configuration: { a: { b: { c: { d: { e: { f: { g: { h: { apiKey: "secret" } } } } } } } } }
+    })).toBe(false);
   });
 
   it("rejects secrets in experiment configuration", () => {
