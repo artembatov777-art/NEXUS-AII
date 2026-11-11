@@ -11,7 +11,8 @@ export async function sendMessage(
   settings: ProviderSettings,
   messages: ChatMessage[],
   knowledgeContext = "",
-  onDelta?: (text: string) => void
+  onDelta?: (text: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!isTauri()) {
     return "Browser preview mode is active. The NEXUS AU interface and local conversation history work here, but AI requests need the native Tauri backend. Open the desktop app to connect your provider securely. No API key was sent or stored by this preview.";
@@ -35,6 +36,13 @@ export async function sendMessage(
     });
   }
   const channel = new Channel<ProviderStreamEvent>();
+  const streamId = crypto.randomUUID();
+  let completed = false;
+  const cancelNativeStream = () => {
+    void invoke<boolean>("cancel_chat_stream", { streamId }).catch(() => false);
+  };
+  const abortHandler = () => cancelNativeStream();
+  signal?.addEventListener("abort", abortHandler, { once: true });
   let answer = "";
   let streamError: string | null = null;
   channel.onmessage = event => {
@@ -45,14 +53,22 @@ export async function sendMessage(
       streamError = "Provider returned an unsupported stream event.";
     }
   };
-  await invoke("send_chat_stream", {
-    baseUrl: settings.baseUrl,
-    credentialHandle: "default",
-    model: settings.model,
-    messages: requestMessages,
-    onEvent: channel
-  });
-  if (streamError) throw new Error(streamError);
-  if (!answer.trim()) throw new Error("Provider returned an empty streaming response.");
-  return answer;
+  try {
+    await invoke("send_chat_stream", {
+      baseUrl: settings.baseUrl,
+      credentialHandle: "default",
+      model: settings.model,
+      messages: requestMessages,
+      streamId,
+      onEvent: channel
+    });
+    if (signal?.aborted) throw new Error("Model request was cancelled.");
+    if (streamError) throw new Error(streamError);
+    if (!answer.trim()) throw new Error("Provider returned an empty streaming response.");
+    completed = true;
+    return answer;
+  } finally {
+    signal?.removeEventListener("abort", abortHandler);
+    if (!completed) cancelNativeStream();
+  }
 }
