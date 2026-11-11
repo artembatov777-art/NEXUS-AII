@@ -1375,14 +1375,12 @@ fn validate_training_experiment_payload(value: &serde_json::Value) -> Result<(St
     Ok((id, dataset_id, dataset_version, created_at))
 }
 
-#[tauri::command]
-fn save_training_dataset(database: State<'_, AppDatabase>, manifest: serde_json::Value) -> Result<(), String> {
-    let (id, version, created_at) = validate_training_dataset_payload(&manifest)?;
-    let payload = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
+fn save_training_dataset_record(connection: &Connection, manifest: &serde_json::Value) -> Result<(), String> {
+    let (id, version, created_at) = validate_training_dataset_payload(manifest)?;
+    let payload = serde_json::to_string(manifest).map_err(|e| e.to_string())?;
     if payload.len() > MAX_TRAINING_RECORD_BYTES {
         return Err("Training dataset manifest exceeds the 1 MB limit.".into());
     }
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
     let existing: Option<String> = connection.query_row(
         "SELECT payload FROM training_datasets WHERE id=?1 AND version=?2",
         params![id, version], |row| row.get(0)
@@ -1397,9 +1395,7 @@ fn save_training_dataset(database: State<'_, AppDatabase>, manifest: serde_json:
     Ok(())
 }
 
-#[tauri::command]
-fn list_training_datasets(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+fn list_training_dataset_records(connection: &Connection) -> Result<Vec<serde_json::Value>, String> {
     let mut statement = connection.prepare("SELECT payload FROM training_datasets ORDER BY created_at DESC,id,version DESC")
         .map_err(|e| e.to_string())?;
     let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
@@ -1409,20 +1405,18 @@ fn list_training_datasets(database: State<'_, AppDatabase>) -> Result<Vec<serde_
     }).collect()
 }
 
-#[tauri::command]
-fn save_training_experiment(database: State<'_, AppDatabase>, experiment: serde_json::Value) -> Result<(), String> {
-    let (id, dataset_id, dataset_version, created_at) = validate_training_experiment_payload(&experiment)?;
-    let payload = serde_json::to_string(&experiment).map_err(|e| e.to_string())?;
+fn save_training_experiment_record(connection: &Connection, experiment: &serde_json::Value) -> Result<(), String> {
+    let (id, dataset_id, dataset_version, created_at) = validate_training_experiment_payload(experiment)?;
+    let payload = serde_json::to_string(experiment).map_err(|e| e.to_string())?;
     if payload.len() > MAX_TRAINING_RECORD_BYTES {
         return Err("Training experiment exceeds the 1 MB limit.".into());
     }
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
     let dataset_exists: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM training_datasets WHERE id=?1 AND version=?2)",
         params![dataset_id, dataset_version], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     if !dataset_exists {
-        return Err("The referenced training dataset has not been registered.".into());
+        return Err("The referenced training dataset version has not been registered.".into());
     }
     let existing: Option<String> = connection.query_row(
         "SELECT payload FROM training_experiments WHERE id=?1",
@@ -1438,9 +1432,7 @@ fn save_training_experiment(database: State<'_, AppDatabase>, experiment: serde_
     Ok(())
 }
 
-#[tauri::command]
-fn list_training_experiments(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
-    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+fn list_training_experiment_records(connection: &Connection) -> Result<Vec<serde_json::Value>, String> {
     let mut statement = connection.prepare("SELECT payload FROM training_experiments ORDER BY created_at DESC,id")
         .map_err(|e| e.to_string())?;
     let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
@@ -1448,6 +1440,30 @@ fn list_training_experiments(database: State<'_, AppDatabase>) -> Result<Vec<ser
         let payload = row.map_err(|e| e.to_string())?;
         serde_json::from_str(&payload).map_err(|e| e.to_string())
     }).collect()
+}
+
+#[tauri::command]
+fn save_training_dataset(database: State<'_, AppDatabase>, manifest: serde_json::Value) -> Result<(), String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    save_training_dataset_record(&connection, &manifest)
+}
+
+#[tauri::command]
+fn list_training_datasets(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    list_training_dataset_records(&connection)
+}
+
+#[tauri::command]
+fn save_training_experiment(database: State<'_, AppDatabase>, experiment: serde_json::Value) -> Result<(), String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    save_training_experiment_record(&connection, &experiment)
+}
+
+#[tauri::command]
+fn list_training_experiments(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    list_training_experiment_records(&connection)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1486,6 +1502,41 @@ mod database_tests {
         private["privacyClass"] = serde_json::json!("owner_approved");
         private["consentStatus"] = serde_json::json!("pending");
         assert!(validate_training_dataset_payload(&private).is_err());
+    }
+
+    #[test]
+    fn training_lab_records_are_persisted_immutably_with_exact_dataset_versions() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("create current schema");
+        let dataset_v1 = serde_json::json!({
+            "schemaVersion":1,"id":"dataset-1","version":1,"name":"Synthetic",
+            "license":"CC0-1.0","privacyClass":"synthetic","consentStatus":"not_required",
+            "sourceReferences":["generated:test"],"createdAt":100,
+            "splits":{"train":["a"],"validation":["b"],"test":["c"]}
+        });
+        save_training_dataset_record(&connection, &dataset_v1).expect("save dataset v1");
+        save_training_dataset_record(&connection, &dataset_v1).expect("idempotent save");
+        let mut conflicting = dataset_v1.clone();
+        conflicting["name"] = serde_json::json!("Changed");
+        assert!(save_training_dataset_record(&connection, &conflicting).is_err());
+
+        let mut dataset_v2 = dataset_v1.clone();
+        dataset_v2["version"] = serde_json::json!(2);
+        save_training_dataset_record(&connection, &dataset_v2).expect("save dataset v2");
+
+        let experiment = serde_json::json!({
+            "schemaVersion":1,"id":"experiment-1","name":"Baseline","modelId":"gateway/model",
+            "method":"baseline","datasetManifestId":"dataset-1","datasetManifestVersion":1,
+            "codeRevision":"abc1234","hardware":"CI runner","configuration":{"temperature":0},
+            "metrics":{"passRate":0.5},"createdAt":200
+        });
+        save_training_experiment_record(&connection, &experiment).expect("save experiment");
+        let mut wrong_version = experiment.clone();
+        wrong_version["datasetManifestVersion"] = serde_json::json!(3);
+        wrong_version["id"] = serde_json::json!("experiment-2");
+        assert!(save_training_experiment_record(&connection, &wrong_version).is_err());
+        assert_eq!(list_training_dataset_records(&connection).expect("list datasets").len(), 2);
+        assert_eq!(list_training_experiment_records(&connection).expect("list experiments").len(), 1);
     }
 
     #[test]
@@ -1694,7 +1745,7 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_six() {
+    fn upgrades_schema_version_four_atomically_to_seven() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
