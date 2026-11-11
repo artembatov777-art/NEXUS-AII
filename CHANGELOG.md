@@ -4,6 +4,16 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 
 ## Unreleased
 
+### Changed
+- Replaced the legacy `@xenova/transformers` v2 dependency with `@huggingface/transformers` v4.3.2 and the maintained ONNX Community MiniLM export; retained mean pooling and normalized embeddings while switching to the v4 q8 dtype option.
+- Raised the Vite and Vitest minimum dependency ranges to patched releases after the latest Quality CI exposed dependency advisories.
+- Added an injectable embedding extractor boundary so validation and vector conversion can be tested without downloading model weights.
+- Added the explicit Rust `Vec<String>` type to the provider model catalog parser, fixing the cross-platform Rust inference error.
+
+### Verification pending
+- The previous Quality CI failed before tests/build because npm audit found 11 dependency vulnerabilities.
+- The previous Native desktop quality CI failed at `cargo check` on an ambiguous vector type. The new commit must pass fresh CI before either fix is marked verified.
+
 ### Added
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
 - Resumable agent registry exposes metadata-only descriptors, and the Control Center displays registered agent limits plus checkpointed final preview output.
@@ -41,6 +51,6 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - The resumable step-based runtime is wired into the Agent Control Center in browser preview. Approval grants are in-memory and require re-approval after restart.
 - LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.
 - SQLite migrations, OS credential vault, native stdio MCP transport, voice, native desktop verification, and hosted proxy remain pending.
-- Dependency installation currently reports six npm audit advisories; each requires triage before upgrades.
+- The new dependency graph has not yet been confirmed by a successful npm audit; the repository still has no committed package lockfile, so resolved transitive versions are not fully reproducible.
 
 - Phase II completed for browser-preview/runtime scope: added ToolRegistry, HTTP-capable MCP JSON-RPC client and schema adapter, ModelRouter-backed planning adapter with plan validation, resumable-agent coordinator with approval pause/resume, persistent local trace sink, Trace Inspector, and runtime factories. CI passed on 2026-11-08 with 22 test files and 81 tests. See IMPLEMENTATION_PLAN.md for explicit production boundaries.
