@@ -79,7 +79,8 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Store the provider credential in the OS vault; never expose it to the webview or logs.
 - [ ] Keep local inference as a separate adapter under the same Model Runtime.
 - [x] Disclose local versus remote model routing in the chat header.
-- [ ] Add persisted route selection and a full active-model/runtime status panel.
+- [x] Persist the owner-declared local/remote inference disclosure with provider settings.
+- [ ] Add a verified active-model/runtime status panel and backend capability metadata.
 - [ ] Connect chat, context assembly, and model-backed planning through the AI Core facade.
 
 **Acceptance:** NEXUS AU can use a selected OmniRoute cloud model and a configured local model through the same application contracts, with streaming, cancellation, model identity, and clear data-routing disclosure.
