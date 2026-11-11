@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
   ArrowUp, AudioLines, Bell, BookOpen, Brain, Bot, ChevronRight,
-  CircleHelp, Command, Database, FileText, FolderKanban, MessageSquare,
+  CircleHelp, Command, FileText, FolderKanban, MessageSquare,
   MoreHorizontal, Plug, Plus, Search, Settings2, ShieldCheck, Sparkles, Zap,
-  FlaskConical, HardDrive, LockKeyhole, Activity, Clock3
+  FlaskConical, HardDrive, LockKeyhole, Activity
 } from "lucide-react";
 import "./mobile-demo.css";
 
