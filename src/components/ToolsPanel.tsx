@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Activity, ArrowUpRight, Bot, ChevronDown, CircleDot, Cloud, Code2, Database, Globe2, LockKeyhole, Plug, Search, ShieldCheck, Terminal, X } from "lucide-react";
 
 type ToolItem = { id: string; name: string; group: string; description: string; icon: typeof Plug; mode: string; permission: string };
@@ -15,7 +15,6 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState("browser");
   const [notice, setNotice] = useState("");
-  useEffect(() => { const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); }; window.addEventListener("keydown", handleKeyDown); return () => window.removeEventListener("keydown", handleKeyDown); }, [onClose]);
   const filtered = catalog.filter(item => (item.name + " " + item.description + " " + item.group).toLowerCase().includes(query.toLowerCase()));
   return <div className="modal-backdrop tools-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="tools-workspace" role="dialog" aria-modal="true" aria-labelledby="tools-workspace-title">
