@@ -428,3 +428,7 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .provider-connection.failed .provider-connection-dot{background:#d98282;box-shadow:0 0 0 3px rgba(217,130,130,.12)}
 @keyframes provider-pulse{50%{opacity:.45}}
 @media(prefers-reduced-motion:reduce){.provider-connection.checking .provider-connection-dot{animation:none}}
+
+/* Keep the full provider configuration reachable on short and mobile screens. */
+.settings-modal{max-height:min(90dvh,900px);overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:600px){.settings-modal{padding:16px}.modal-backdrop{padding:12px}}
