@@ -27,7 +27,7 @@ describe("TauriModelProvider", () => {
       if (command === "list_provider_models") return Promise.resolve(["model-a"]);
       if (command === "send_chat_stream") {
         const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
-        channel.onmessage({ type: "text_delta", text: "{\\"goal\\":\\"safe\\"}" });
+        channel.onmessage({ type: "text_delta", text: JSON.stringify({ goal: "safe" }) });
         channel.onmessage({ type: "completed", finishReason: "stop" });
         return Promise.resolve();
       }
