@@ -17,7 +17,7 @@ class TauriModelProvider implements ModelProvider {
     try {
       const ids = await invoke<string[]>("list_provider_models", {
         baseUrl: this.settings.baseUrl,
-        credentialHandle: "default"
+        credentialHandle: this.settings.credentialHandle ?? "default"
       });
       const uniqueIds = [...new Set(ids.filter(id =>
         typeof id === "string" && id.trim().length > 0 && id.length <= 128
@@ -63,7 +63,7 @@ class TauriModelProvider implements ModelProvider {
     try {
       const streamPromise = invoke("send_chat_stream", {
         baseUrl: this.settings.baseUrl,
-        credentialHandle: "default",
+        credentialHandle: this.settings.credentialHandle ?? "default",
         model: request.model,
         messages: request.messages.map(message => ({ role: message.role, content: message.content })),
         streamId,
