@@ -1,3 +1,5 @@
+import type { Result } from "./result";
+
 export type DatasetPrivacyClass = "public" | "synthetic" | "owner_approved";
 export type DatasetConsentStatus = "approved" | "not_required" | "pending" | "rejected";
 
@@ -143,4 +145,12 @@ export function scoreEvaluation(cases: EvaluationCase[], outputs: Record<string,
     passRate: results.length === 0 ? 0 : passedCases / results.length,
     results
   };
+}
+
+
+export interface TrainingLabRepository {
+  listDatasets(): Promise<Result<DatasetManifest[]>>;
+  saveDataset(manifest: DatasetManifest): Promise<Result<void>>;
+  listExperiments(): Promise<Result<TrainingExperiment[]>>;
+  saveExperiment(experiment: TrainingExperiment): Promise<Result<void>>;
 }
