@@ -26,7 +26,7 @@ describe("TauriModelProvider", () => {
     mockedInvoke.mockImplementation((command, args) => {
       if (command === "list_provider_models") return Promise.resolve(["model-a"]);
       if (command === "send_chat_stream") {
-        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "usage"; inputTokens: number; outputTokens: number } | { type: "completed"; finishReason: string }) => void } }).onEvent;
         channel.onmessage({ type: "text_delta", text: JSON.stringify({ goal: "safe" }) });
         channel.onmessage({ type: "usage", inputTokens: 12, outputTokens: 5 });
         channel.onmessage({ type: "completed", finishReason: "stop" });
