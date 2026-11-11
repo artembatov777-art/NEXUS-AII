@@ -17,6 +17,7 @@ describe("provider endpoint validation", () => {
 
   it.each([
     "http://gateway.example/v1",
+    "http://127.999.1.1:11434/v1",
     "ftp://localhost/v1",
     "not a URL",
     "https://user:secret@gateway.example/v1",
