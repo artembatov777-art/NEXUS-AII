@@ -3,6 +3,7 @@ import { ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } f
 import { ok, err, type Result } from "../core/result";
 import type { ModelDescriptor } from "../core/domain";
 import type { ProviderSettings } from "../types";
+import { normalizeProviderModelIds, providerEndpointError } from "./providerEndpoint";
 
 export const NATIVE_MODEL_PROVIDER_ID = "nexus.native-provider";
 
@@ -14,14 +15,14 @@ class TauriModelProvider implements ModelProvider {
     if (!this.settings.model.trim() || this.settings.model.length > 128) {
       return err("validation", "Configured model name is invalid.");
     }
+    const endpointError = providerEndpointError(this.settings.baseUrl);
+    if (endpointError) return err("validation", endpointError);
     try {
-      const ids = await invoke<string[]>("list_provider_models", {
+      const ids = await invoke<unknown>("list_provider_models", {
         baseUrl: this.settings.baseUrl,
         credentialHandle: this.settings.credentialHandle ?? "default"
       });
-      const uniqueIds = [...new Set(ids.filter(id =>
-        typeof id === "string" && id.trim().length > 0 && id.length <= 128
-      ))];
+      const uniqueIds = normalizeProviderModelIds(ids);
       if (!uniqueIds.includes(this.settings.model)) uniqueIds.unshift(this.settings.model);
       return ok(uniqueIds.map(id => ({
         id,
@@ -39,6 +40,8 @@ class TauriModelProvider implements ModelProvider {
   async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
     if (!isTauri()) throw new Error("Native model requests are available only in the desktop host.");
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+    const endpointError = providerEndpointError(this.settings.baseUrl);
+    if (endpointError) throw new Error(endpointError);
     if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
     const channel = new Channel<{ type: "text_delta" | "usage" | "completed"; text?: string; finishReason?: string; inputTokens?: number; outputTokens?: number }>();
     const streamId = crypto.randomUUID();
