@@ -2,9 +2,11 @@ import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import type { ChatMessage, ProviderSettings } from "../types";
 
 export interface ProviderStreamEvent {
-  type: "text_delta" | "completed";
+  type: "text_delta" | "usage" | "completed";
   text?: string;
   finishReason?: string;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export async function sendMessage(
@@ -54,7 +56,10 @@ export async function sendMessage(
     if (event.type === "text_delta" && typeof event.text === "string") {
       answer += event.text;
       onDelta(event.text);
-    } else if (event.type !== "completed") {
+    } else if (event.type === "usage" || event.type === "completed") {
+      // Usage and finish metadata are retained by the provider-neutral runtime;
+      // this legacy chat helper currently renders text only.
+    } else {
       streamError = "Provider returned an unsupported stream event.";
     }
   };
