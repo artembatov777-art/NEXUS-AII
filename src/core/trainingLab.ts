@@ -86,9 +86,9 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
   if (manifest.privacyClass === "owner_approved" && (manifest.consentStatus !== "approved" || !boundedText(manifest.approvalReference, 300))) return false;
   if (!manifest.splits || typeof manifest.splits !== "object") return false;
   const { train, validation, test } = manifest.splits;
-  if (!uniqueStrings(train, MAX_SPLIT_ITEMS, 160) ||
-      !uniqueStrings(validation, MAX_SPLIT_ITEMS, 160) ||
-      !uniqueStrings(test, MAX_SPLIT_ITEMS, 160)) return false;
+  if (!uniqueStrings(train, MAX_SPLIT_ITEMS, 160) || train.length === 0 ||
+      !uniqueStrings(validation, MAX_SPLIT_ITEMS, 160) || validation.length === 0 ||
+      !uniqueStrings(test, MAX_SPLIT_ITEMS, 160) || test.length === 0) return false;
 
   const allIds = [...train, ...validation, ...test];
   return new Set(allIds).size === allIds.length;
