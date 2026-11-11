@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste } from "lucide-react";
 import { sendMessage } from "./lib/ai";
@@ -48,6 +48,7 @@ export default function App() {
   const [historyQuery, setHistoryQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const chatAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -140,6 +141,8 @@ export default function App() {
     setDraft("");
     setBusy(true);
     setError("");
+    const controller = new AbortController();
+    chatAbortController.current = controller;
     try {
       const contextParts: string[] = [];
       const remembered = await memoryService.search(text, "profile", 5);
@@ -165,11 +168,12 @@ export default function App() {
           id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(),
           ...(sourceReferences.length ? { sourceReferences } : {})
         }]);
-      });
+      }, controller.signal);
       updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
     } finally {
+      if (chatAbortController.current === controller) chatAbortController.current = null;
       setBusy(false);
     }
   }
@@ -329,7 +333,7 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
-        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> {providerVaultStatus === "available" ? "API key is stored in the OS credential vault" : providerVaultStatus === "unavailable" ? "OS credential vault unavailable · provider requests disabled" : providerVaultStatus === "browser" ? "Provider requests are disabled in browser preview" : providerVaultStatus === "loading" ? "Checking OS credential vault…" : "Provider key is not configured"}</span><button className="send-btn" disabled={!draft.trim() || busy || !conversationsReady} onClick={() => void submit()}>{busy ? "Working…" : "Send"} <Send size={15}/></button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+        <div className="composer-wrap"><VoiceControls onTranscript={text => setDraft(current => current ? current+" "+text : text)} textToSpeak={[...messages].reverse().find(m => m.role === "assistant")?.content ?? ""}/><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> {providerVaultStatus === "available" ? "API key is stored in the OS credential vault" : providerVaultStatus === "unavailable" ? "OS credential vault unavailable · provider requests disabled" : providerVaultStatus === "browser" ? "Provider requests are disabled in browser preview" : providerVaultStatus === "loading" ? "Checking OS credential vault…" : "Provider key is not configured"}</span><button className="send-btn" disabled={!busy && (!draft.trim() || !conversationsReady)} onClick={() => busy ? chatAbortController.current?.abort() : void submit()}>{busy ? "Stop" : "Send"} {busy ? <X size={15}/> : <Send size={15}/>}</button></div></div><div className="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
       </section>
     </main>
 
