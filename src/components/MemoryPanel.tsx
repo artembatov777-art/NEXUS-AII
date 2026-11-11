@@ -94,7 +94,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
         <button className="icon-btn" onClick={onClose} aria-label="Close memory"><X size={18}/></button>
       </header>
 
-      <div className="memory-search"><Search size={16}/><input value={query} onChange={event => {
+      <div className="memory-search"><Search size={16}/><input aria-label="Search saved memories" value={query} onChange={event => {
         const value = event.target.value;
         setQuery(value);
         void refresh(value);
@@ -105,13 +105,13 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
           <div className="memory-record-top"><span>{record.category} · {record.scope}</span><div><button className="icon-btn" onClick={() => beginEdit(record)} aria-label="Edit memory"><Pencil size={14}/></button><button className="icon-btn" onClick={() => void removeMemory(record.id)} aria-label="Delete memory"><Trash2 size={15}/></button></div></div>
           <p>{record.content}</p>
           {editing?.id === record.id && <div className="memory-edit-form">
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3}/>
+            <textarea aria-label="Edit memory content" value={editContent} onChange={e => setEditContent(e.target.value)} rows={3}/>
             <div className="memory-fields"><label>Category<select value={editCategory} onChange={e => setEditCategory(e.target.value as MemoryCategory)}><option value="fact">Fact</option><option value="preference">Preference</option><option value="goal">Goal</option><option value="workflow">Workflow</option><option value="project">Project</option></select></label>
             <label>Scope<select value={editScope} onChange={e => setEditScope(e.target.value as Exclude<MemoryScope, "all">)}><option value="profile">Profile</option><option value="project">Project</option><option value="conversation">Conversation</option></select></label></div>
             {editScope === "project" && <label>Project<select value={editProjectId} onChange={e => setEditProjectId(e.target.value)}><option value="">Select project…</option>{projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
-            <input value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="Tags, separated by commas"/>
-            <input value={editSource} onChange={e => setEditSource(e.target.value)} placeholder="Source label"/>
-            <input value={editSourceReference} onChange={e => setEditSourceReference(e.target.value)} placeholder="Source reference (optional)"/>
+            <input aria-label="Edit memory tags" value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="Tags, separated by commas"/>
+            <input aria-label="Edit memory source label" value={editSource} onChange={e => setEditSource(e.target.value)} placeholder="Source label"/>
+            <input aria-label="Edit memory source reference" value={editSourceReference} onChange={e => setEditSourceReference(e.target.value)} placeholder="Source reference (optional)"/>
             <div><button className="secondary-btn" onClick={() => setEditing(null)}>Cancel</button><button className="primary-btn" disabled={!editContent.trim() || !editSource.trim() || saving || (editScope === "project" && !editProjectId)} onClick={() => void saveEdit()}><Check size={14}/> Save</button></div>
           </div>}
           <div className="memory-record-meta">{record.tags.map(tag => <span key={tag}>#{tag}</span>)}<small>Source: {record.source.label}</small></div>
@@ -121,7 +121,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
 
       <div className="memory-add">
         <h3><Plus size={16}/> Add a memory</h3>
-        <textarea value={content} onChange={event => setContent(event.target.value)} placeholder="Example: I prefer explanations with practical examples…" rows={3}/>
+        <textarea aria-label="New memory content" value={content} onChange={event => setContent(event.target.value)} placeholder="Example: I prefer explanations with practical examples…" rows={3}/>
         <div className="memory-fields">
           <label>Category<select value={category} onChange={event => setCategory(event.target.value as MemoryCategory)}>
             <option value="fact">Fact</option><option value="preference">Preference</option><option value="goal">Goal</option><option value="workflow">Workflow</option><option value="project">Project</option>
@@ -131,7 +131,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
           </select></label>
         </div>
         {scope === "project" && <label>Project<select value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Select project…</option>{projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
-        <input className="memory-tags" value={tags} onChange={event => setTags(event.target.value)} placeholder="Tags, separated by commas"/>
+        <input className="memory-tags" aria-label="Memory tags" value={tags} onChange={event => setTags(event.target.value)} placeholder="Tags, separated by commas"/>
         {error && <div className="error-banner memory-error">{error}</div>}
         <div className="memory-footer"><span>Saved locally on this device. You control deletion.</span><button className="primary-btn" disabled={!content.trim() || saving} onClick={() => void saveMemory()}>{saving ? "Saving…" : "Save memory"}</button></div>
       </div>
