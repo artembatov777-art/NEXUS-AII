@@ -468,6 +468,13 @@ fn delete_provider_key() -> Result<(), String> {
 mod payload_validation_tests {
     use super::*;
     #[test]
+    fn unauthenticated_provider_credentials_are_limited_to_loopback() {
+        assert_eq!(load_provider_credential("none", true).unwrap(), None);
+        assert!(load_provider_credential("none", false).is_err());
+        assert_eq!(redact_provider_secret("provider error", None), "provider error");
+    }
+
+    #[test]
     fn sse_parser_extracts_text_and_handles_done() {
         let event = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
         assert_eq!(parse_sse_chunk(event).unwrap().unwrap().text.as_deref(), Some("hello"));
