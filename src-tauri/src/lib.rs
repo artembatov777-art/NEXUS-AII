@@ -922,7 +922,7 @@ fn parse_provider_model_ids(body: &[u8]) -> Result<Vec<String>, String> {
         if id.is_empty() || id.len() > 128 || id.chars().any(char::is_control) {
             continue;
         }
-        if !ids.iter().any(|existing| existing == id) {
+        if !ids.iter().any(|existing| existing.as_str() == id) {
             ids.push(id.to_string());
         }
     }
