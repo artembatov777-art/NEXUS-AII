@@ -17,6 +17,7 @@ import { WorkspaceProjectRepository } from "./lib/projectStorage";
 import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/nativeRepositories";
 import { MemoryService, type MemoryId } from "./core/memory";
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
+import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -167,8 +168,12 @@ export default function App() {
     focusTarget?.focus();
 
     function handleDialogKeys(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
+      const focusable = getFocusable();
+      const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const action = resolveDialogKeyboardAction(event.key, event.shiftKey, activeIndex, focusable.length);
+      if (!action) return;
+      event.preventDefault();
+      if (action.type === "close") {
         event.stopPropagation();
         if (globalSearchOpen) setGlobalSearchOpen(false);
         else if (agentsOpen) setAgentsOpen(false);
@@ -179,23 +184,8 @@ export default function App() {
         else if (projectsOpen) setProjectsOpen(false);
         else if (memoryOpen) setMemoryOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const focusable = getFocusable();
-      if (!focusable.length) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const current = document.activeElement;
-      if (event.shiftKey && (current === first || !dialog.contains(current))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (current === last || !dialog.contains(current))) {
-        event.preventDefault();
-        first.focus();
+      } else if (action.type === "focus") {
+        focusable[action.index]?.focus();
       }
     }
 
