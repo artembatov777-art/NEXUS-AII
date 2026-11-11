@@ -17,6 +17,7 @@ export async function sendMessage(
   if (!isTauri()) {
     return "Browser preview mode is active. The NEXUS AU interface and local conversation history work here, but AI requests need the native Tauri backend. Open the desktop app to connect your provider securely. No API key was sent or stored by this preview.";
   }
+  if (signal?.aborted) throw new Error("Model request was cancelled.");
   if (!settings.baseUrl.trim() || !settings.model.trim()) {
     throw new Error("Configure the provider URL and model first.");
   }
@@ -43,6 +44,10 @@ export async function sendMessage(
   };
   const abortHandler = () => cancelNativeStream();
   signal?.addEventListener("abort", abortHandler, { once: true });
+  if (signal?.aborted) {
+    signal.removeEventListener("abort", abortHandler);
+    throw new Error("Model request was cancelled.");
+  }
   let answer = "";
   let streamError: string | null = null;
   channel.onmessage = event => {
