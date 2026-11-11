@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
-import { validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
+import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 
@@ -27,6 +27,10 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   const [hardware, setHardware] = useState("Not recorded");
   const [configuration, setConfiguration] = useState('{"temperature":0}');
   const [metrics, setMetrics] = useState("{}");
+  const [evaluationPrompt, setEvaluationPrompt] = useState("Explain the selected model route.");
+  const [requiredPhrases, setRequiredPhrases] = useState("declared route, remote processing");
+  const [candidateOutput, setCandidateOutput] = useState("");
+  const [evaluationSummary, setEvaluationSummary] = useState<{ passRate: number; passedCases: number; totalCases: number } | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [working, setWorking] = useState(false);
@@ -43,6 +47,23 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     setError("");
   }
   useEffect(() => { void refresh(); }, [repository]);
+
+  function runManualEvaluation() {
+    const phrases = splitIds(requiredPhrases);
+    if (!evaluationPrompt.trim() || phrases.length === 0 || !candidateOutput.trim()) {
+      setError("Add an evaluation prompt, at least one required phrase, and a candidate response.");
+      return;
+    }
+    const result = scoreEvaluation(
+      [{ id: "manual-case", prompt: evaluationPrompt, requiredPhrases: phrases }],
+      { "manual-case": candidateOutput }
+    );
+    const summary = { passRate: result.passRate, passedCases: result.passedCases, totalCases: result.totalCases };
+    setEvaluationSummary(summary);
+    setMetrics(JSON.stringify(summary, null, 2));
+    setError("");
+    setStatus("Manual phrase evaluation complete. This is a deterministic regression signal, not a semantic quality score.");
+  }
 
   async function saveDataset() {
     setWorking(true); setError(""); setStatus("");
@@ -141,6 +162,14 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
           <label>Test sample IDs<textarea rows={2} value={testIds} onChange={event => setTestIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
         </div>
         <button className="primary-btn" onClick={() => void saveDataset()} disabled={working}><Save size={14}/> Save dataset manifest</button>
+      </div>
+      <div className="training-section">
+        <div className="training-section-title"><FlaskConical size={16}/> Manual evaluation bench</div>
+        <label>Evaluation prompt<input value={evaluationPrompt} onChange={event => setEvaluationPrompt(event.target.value)} maxLength={8000}/></label>
+        <label>Required phrases<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
+        <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="Paste the candidate response to evaluate"/></label>
+        <button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button>
+        {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
       <div className="training-section">
         <div className="training-section-title"><FlaskConical size={16}/> Record experiment</div>
