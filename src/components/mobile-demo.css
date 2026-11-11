@@ -187,3 +187,58 @@
     bottom: calc(100px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* JARVIS-inspired mobile command surface */
+.mobile-demo{background:radial-gradient(ellipse at 50% -10%,#173247 0%,#09121d 44%,#050910 100%);color:#e3f1f7}
+.demo-device{border-color:rgba(121,199,232,.22);background:#080f18;box-shadow:0 30px 100px #0009,0 0 0 7px #0b1420}
+.demo-topbar{background:rgba(8,17,27,.95);border-color:rgba(121,199,232,.13)}
+.demo-brand-mark{border-color:rgba(121,199,232,.3);background:linear-gradient(145deg,#1c4258,#0b1b29);color:#b9eaff;box-shadow:0 0 22px rgba(80,166,205,.12)}
+.demo-brand span{color:#6f91a6}
+.demo-round-button,.demo-section-heading>button{border-color:rgba(121,199,232,.17);background:#0e1b28;color:#a6c8d9}
+.demo-context-row{border-color:rgba(121,199,232,.12)}
+.demo-context-label,.demo-section-heading>div>span{color:#6d91a7}
+.demo-context-row strong{color:#dceef6}
+.demo-preview-pill{border-color:rgba(121,199,232,.27);color:#a9dff2}
+.demo-preview-pill span,.demo-outside-label span{background:#79c7e8;box-shadow:0 0 9px #79c7e8}
+.demo-model-card{border-color:rgba(121,199,232,.17);background:#0d1925}
+.demo-model-icon{background:#142d40;color:#a9e2f8}
+.demo-model-card strong{color:#dceef6}.demo-model-card span{color:#7894a7}
+.demo-chat-intro{padding-top:20px}
+.demo-chat-intro>span{color:#83b6ce}
+.demo-chat-intro h1{color:#e6f4fa}
+.demo-chat-intro p{color:#8198a9}
+.demo-orb{position:relative;width:104px;height:104px;display:grid;place-items:center;margin:0 auto 14px;border:1px solid rgba(142,218,245,.58);border-radius:50%;background:radial-gradient(circle at 38% 32%,#214b64,#0a1926 68%);color:#c5efff;box-shadow:0 0 35px rgba(88,185,226,.19),inset 0 0 20px rgba(83,173,214,.18)}
+.demo-orb:before,.demo-orb:after{content:"";position:absolute;inset:-12px;border:1px solid rgba(121,199,232,.34);border-radius:50%;transform:rotateX(65deg)}
+.demo-orb:after{inset:-22px;transform:rotateY(65deg) rotateZ(25deg);border-style:dashed;border-color:rgba(121,199,232,.23)}
+.demo-orb svg{filter:drop-shadow(0 0 8px rgba(121,199,232,.8))}
+.demo-message-avatar{background:#102b3d;color:#a9e2fa}
+.demo-message-bubble{border-color:rgba(121,199,232,.14);background:#101d29;color:#cbdce5}
+.demo-message.user .demo-message-bubble{border-color:rgba(121,199,232,.28);background:#142d3d;color:#e0f2fa}
+.demo-suggestions button{border-color:rgba(121,199,232,.17);background:#0d1a26;color:#9eb9c8}
+.demo-suggestions button svg{color:#8bcce7}
+.demo-composer{border-color:rgba(121,199,232,.23);background:#0e1a26}
+.demo-add-button{background:#172b3a;color:#a7c7d7}
+.demo-send-button{background:linear-gradient(145deg,#2c718f,#17445d);color:#e6f8ff;box-shadow:0 4px 12px rgba(52,143,181,.2)}
+.demo-tabbar{border-color:rgba(121,199,232,.14);background:#09131e}
+.demo-tabbar button{color:#71899a}
+.demo-tabbar button.active{color:#b9e9fa;background:#122b3c;box-shadow:inset 0 0 0 1px rgba(121,199,232,.2)}
+.demo-section-heading h2{color:#e1f1f7}
+.demo-search,.demo-project-card,.demo-memory-group article,.demo-settings-profile{border-color:rgba(121,199,232,.15);background:#0e1b27;color:#a6c8d9}
+.demo-project-card{background:linear-gradient(135deg,#102b3b,#0d1722)}
+.demo-project-card.blue{background:linear-gradient(135deg,#12283a,#0d1722);border-color:rgba(121,199,232,.18)}
+.demo-project-card.green{background:linear-gradient(135deg,#142c2d,#0d1722);border-color:rgba(121,199,232,.15)}
+.demo-project-icon,.blue .demo-project-icon,.green .demo-project-icon{background:#17384b;color:#a9e2f8}
+.demo-project-card>span,.demo-memory-group>span,.demo-settings-group>span{color:#7798aa}
+.demo-project-card h3,.demo-memory-group article strong,.demo-settings-profile strong{color:#d9edf5}
+.demo-project-card p,.demo-memory-group article p,.demo-settings-profile span{color:#849bab}
+.demo-progress{background:#1a2d3b}.demo-progress i{background:#79c7e8}
+.demo-memory-summary{border-color:rgba(121,199,232,.2);background:#102535;color:#a9e2f8}
+.demo-memory-summary strong{color:#d9edf5}.demo-memory-summary span{color:#849bab}
+.demo-safe-note{background:#10241f;color:#94c6ad}
+.demo-profile-avatar{background:#17384b;color:#b5e8fa}
+.demo-settings-group button{border-color:rgba(121,199,232,.12);color:#c4d8e2}
+.demo-settings-group button>svg:first-child{color:#88c9e5}
+.demo-notice{border-color:rgba(121,199,232,.3);background:#112638;color:#dff4fc}
+.demo-outside-label{color:#6f8c9d}
+@media(max-width:480px){.demo-device{background:#080f18}}
