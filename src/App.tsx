@@ -130,6 +130,11 @@ export default function App() {
     if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false);
   }
 
+  function dismissMobileNavigation() {
+    setSidebarOpen(false);
+    document.querySelector<HTMLElement>('[aria-controls="nexus-sidebar"]')?.focus();
+  }
+
   function newChat() {
     if (!conversationsReady) return;
     closeMobileNavigation();
@@ -141,13 +146,18 @@ export default function App() {
 
   useEffect(() => {
     function handleKeyboardShortcut(event: KeyboardEvent) {
+      if (event.key === "Escape" && sidebarOpen && window.matchMedia("(max-width: 640px)").matches) {
+        event.preventDefault();
+        dismissMobileNavigation();
+        return;
+      }
       if (!matchesNewConversationShortcut(event)) return;
       event.preventDefault();
       newChat();
     }
     window.addEventListener("keydown", handleKeyboardShortcut);
     return () => window.removeEventListener("keydown", handleKeyboardShortcut);
-  }, [conversationsReady, selectedProjectId]);
+  }, [conversationsReady, selectedProjectId, sidebarOpen]);
 
   // Keep keyboard focus inside the active workspace dialog and make Escape a
   // consistent close action across every module.
@@ -390,7 +400,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside id="nexus-sidebar" className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
-      <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={17}/></button></div>
+      <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={dismissMobileNavigation} aria-label="Close navigation"><X size={17}/></button></div>
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
       <div className="nav-label">WORKSPACE</div>
       <button className="nav-item selected" aria-current="page" aria-label="Chat workspace"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
@@ -418,7 +428,7 @@ export default function App() {
       </div>
       <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => { setSettingsOpen(true); closeMobileNavigation(); }}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
-    {sidebarOpen && <button className="sidebar-scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
+    {sidebarOpen && <button className="sidebar-scrim" onClick={dismissMobileNavigation} aria-label="Close navigation"/>}
 
     <main className="main-panel">
       <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><div className="model-pill" title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
