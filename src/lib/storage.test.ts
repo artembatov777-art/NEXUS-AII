@@ -24,6 +24,17 @@ describe("conversation workspace storage", () => {
     saveProvider(settings, storage);
     expect(loadProvider(storage)).toEqual(settings);
   });
+  it("persists credential-free local provider mode", () => {
+    const storage = new MemoryStorage();
+    const settings = {
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "qwen2.5:7b",
+      inferenceLocation: "local" as const,
+      credentialHandle: "none" as const
+    };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
   it("round-trips project ownership", async () => {
     const storage = new MemoryStorage();
     await saveConversations([base], storage);
