@@ -1083,7 +1083,10 @@ async fn send_chat_stream(
             let Some(chunk) = next_chunk else { break; };
             append_bounded_response(&mut body, &chunk)?;
         }
-        let raw=String::from_utf8_lossy(&body).replace(&api_key,"[redacted]");
+        let mut raw = String::from_utf8_lossy(&body).into_owned();
+        if let Some(secret) = api_key.as_deref().filter(|secret| !secret.is_empty()) {
+            raw = raw.replace(secret, "[redacted]");
+        }
         return Err(format!("Provider returned HTTP {status}: {}",raw.chars().take(500).collect::<String>()));
     }
 
