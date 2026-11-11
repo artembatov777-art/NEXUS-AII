@@ -61,6 +61,12 @@ export default function App() {
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(max-width: 640px)");
+    const syncNavigation = () => setSidebarOpen(!breakpoint.matches);
+    breakpoint.addEventListener("change", syncNavigation);
+    return () => breakpoint.removeEventListener("change", syncNavigation);
+  }, []);
   const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const projectService = useMemo(() => new ProjectService(
