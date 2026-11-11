@@ -39,7 +39,7 @@ class TauriModelProvider implements ModelProvider {
       wake?.();
       wake = null;
     };
-    const request = invoke("send_chat_stream", {
+    const streamPromise = invoke("send_chat_stream", {
       baseUrl: this.settings.baseUrl,
       credentialHandle: "default",
       model: request.model,
@@ -47,7 +47,7 @@ class TauriModelProvider implements ModelProvider {
       onEvent: channel
     });
     let requestError: unknown = null;
-    void request.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
+    void streamPromise.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
     while (!done || queue.length) {
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
       if (failure) throw failure;
@@ -56,7 +56,7 @@ class TauriModelProvider implements ModelProvider {
       if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
       await new Promise<void>(resolve => { wake = resolve; });
     }
-    await request;
+    await streamPromise;
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
   }
 }
