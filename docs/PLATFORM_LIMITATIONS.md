@@ -39,7 +39,7 @@ This is native build and backend integration coverage, **not GUI end-to-end auto
 
 ## Runtime constraints shared by platforms
 
-- Provider calls use the native Rust command and currently return one complete response. Token streaming and mid-request cancellation are not implemented. The configured OpenAI-compatible endpoint can point to a local OmniRoute `/v1` gateway. A native `/v1/models` discovery command and settings model picker have been added, pending fresh CI verification; SSE streaming and cancellation remain open.
+- Provider calls support both one-shot responses and bounded SSE token streaming through the native Rust command. Native mid-request cancellation and usage metadata are not implemented yet. The configured OpenAI-compatible endpoint can point to a local OmniRoute `/v1` gateway. A native `/v1/models` discovery command and settings model picker have been added, pending fresh CI verification; SSE streaming is implemented; native cancellation remains open.
 - Semantic embeddings and vector search run in the webview using IndexedDB; the native SQLite database remains authoritative for text knowledge.
 - Speech recognition and speech synthesis use browser/WebView APIs, not a guaranteed offline native engine.
 - Clipboard integration is limited to the implemented native clipboard commands.
