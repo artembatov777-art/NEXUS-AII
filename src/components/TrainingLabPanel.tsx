@@ -38,7 +38,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     if (!datasetResult.ok) { setError(datasetResult.error.message); return; }
     if (!experimentResult.ok) { setError(experimentResult.error.message); return; }
     setDatasets(datasetResult.value);
-    setSelectedDatasetKey(current => datasetResult.value.some(item => item.id + "@" + item.version === current) ? current : datasetResult.value[0] ? datasetResult.value[0].id + "@" + datasetResult.value[0].version : "");
+    setSelectedDatasetKey(current => datasetResult.value.some(item => JSON.stringify([item.id, item.version]) === current) ? current : datasetResult.value[0] ? JSON.stringify([datasetResult.value[0].id, datasetResult.value[0].version]) : "");
     setExperiments(experimentResult.value);
     setError("");
   }
@@ -88,8 +88,8 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
       name: method + " experiment",
       modelId: modelId.trim(),
       method,
-      datasetManifestId: selectedDataset.split("@")[0],
-      datasetManifestVersion: Number(selectedDataset.split("@")[1]),
+      datasetManifestId: (JSON.parse(selectedDataset) as [string, number])[0],
+      datasetManifestVersion: (JSON.parse(selectedDataset) as [string, number])[1],
       codeRevision: codeRevision.trim(),
       hardware: hardware.trim(),
       configuration: parsedConfiguration,
@@ -152,7 +152,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
           <label>Code revision<input value={codeRevision} onChange={event => setCodeRevision(event.target.value)} placeholder="Git commit SHA"/></label>
           <label>Hardware<input value={hardware} onChange={event => setHardware(event.target.value)} placeholder="CPU/GPU and memory"/></label>
         </div>
-        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetKey(event.target.value)}>{datasets.map(dataset => <option key={dataset.id+"@"+dataset.version} value={dataset.id+"@"+dataset.version}>{dataset.name} · v{dataset.version}</option>)}</select></label>
+        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetKey(event.target.value)}>{datasets.map(dataset => <option key={dataset.id+"@"+dataset.version} value={JSON.stringify([dataset.id, dataset.version])}>{dataset.name} · v{dataset.version}</option>)}</select></label>
         <div className="training-two-col">
           <label>Configuration JSON<textarea rows={3} value={configuration} onChange={event => setConfiguration(event.target.value)}/></label>
           <label>Metrics JSON<textarea rows={3} value={metrics} onChange={event => setMetrics(event.target.value)}/></label>
