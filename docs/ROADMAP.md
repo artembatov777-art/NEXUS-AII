@@ -99,11 +99,12 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 **Status:** basic browser/WebView voice controls exist; broader multimodal work is planned.
 
 - [x] Optional browser/WebView speech recognition and speech synthesis controls.
-- [ ] Add stable voice input/output lifecycle through explicit adapters.
-- [ ] Add interruption and cancellation for active voice sessions.
+- [x] Harden browser/WebView speech recognition and synthesis lifecycle, permission errors, cancellation, and unmount cleanup.
+- [ ] Add native/offline speech adapters and a unified explicit voice provider interface.
 - [ ] Add image understanding through models that declare vision capability.
 - [ ] Add audio/document workflows with source provenance.
-- [ ] Show whether each modality is processed locally or remotely.
+- [x] Add model modality-capability and local/remote processing policy contracts with explicit remote approval.
+- [ ] Surface the selected processing location and approval state in the multimodal UI.
 - [ ] Consider video only after resource and privacy controls are established.
 
 **Acceptance:** modality support is capability-checked, observable, cancellable, and reports local versus remote processing.
