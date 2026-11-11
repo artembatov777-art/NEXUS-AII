@@ -11,17 +11,17 @@ describe("TauriModelProvider", () => {
 
   it("keeps browser preview disconnected from provider credentials", () => {
     mockedIsTauri.mockReturnValue(false);
-    expect(createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" })).toBeNull();
+    expect(createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" })).toBeNull();
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
   it("routes planner requests through the native credential handle without returning secrets", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockResolvedValue(" {\"goal\":\"safe\"} ");
-    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     expect(router).not.toBeNull();
     if (!router) throw new Error("Expected native model router.");
-    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ providerId: NATIVE_MODEL_PROVIDER_ID, id: "model-a", supportsStreaming: false }] });
+    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ providerId: NATIVE_MODEL_PROVIDER_ID, id: "model-a", supportsStreaming: true, location: "remote" }] });
     const events = [];
     for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
       model: "model-a", messages: [{ role: "user", content: "plan" }]
@@ -47,7 +47,7 @@ describe("TauriModelProvider", () => {
       }
       return Promise.resolve([]);
     });
-    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
     const controller = new AbortController();
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, { model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal });
@@ -77,7 +77,7 @@ describe("TauriModelProvider", () => {
       }
       return Promise.resolve([]);
     });
-    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
     const iterator = router.stream(NATIVE_MODEL_PROVIDER_ID, {
       model: "model-a", messages: [{ role: "user", content: "plan" }]
@@ -89,7 +89,7 @@ describe("TauriModelProvider", () => {
 
   it("rejects cancellation before making a native request", async () => {
     mockedIsTauri.mockReturnValue(true);
-    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a" });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
     const controller = new AbortController(); controller.abort();
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, { model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal });
