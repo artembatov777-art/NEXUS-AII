@@ -58,7 +58,7 @@ export function MobileDemo() {
             <MoreHorizontal size={19}/>
           </div>
           <div className="demo-chat-intro">
-            <div className="demo-orb"><Sparkles size={25}/></div>
+            <div className="demo-orb" aria-label="NEXUS holographic core"><div className="demo-orb-inner"><Sparkles size={25}/></div></div>
             <span>YOUR PERSONAL AI</span>
             <h1>Думай шире.<br/>Создавай больше.</h1>
             <p>Единое пространство для идей, знаний и действий.</p>
