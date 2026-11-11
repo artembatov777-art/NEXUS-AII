@@ -114,4 +114,4 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
 - Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
-- The most recent known CI failure before the current UI work was one stale model-catalog expectation in `tauriModelProvider.test.ts`; the test was updated to match the intended configured-plus-discovered catalog behavior. Fresh CI for the current head is required before claiming it is fixed.
+- A frontend test previously failed because the model-catalog expectation omitted the configured model; the test now covers both the configured model and the discovered catalog. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. CI for the current head must pass before this phase is treated as verified.
