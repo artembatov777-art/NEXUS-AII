@@ -46,6 +46,10 @@ This is native build and backend integration coverage, **not GUI end-to-end auto
 - Shell, arbitrary filesystem automation, OS notifications, and broad desktop control are not implemented.
 - Workspace backups are plaintext JSON and must be stored securely by the user.
 
+## Accessibility baseline
+
+The shared stylesheet now provides visible `:focus-visible` outlines, disabled-button affordances, and reduced-motion overrides. The provider settings modal has dialog semantics and a labelled heading. This is a baseline improvement, not a completed screen-reader or keyboard-navigation audit.
+
 ## Release validation still required
 
 1. Launch the built application under a real user session on Windows, macOS, and Linux.
