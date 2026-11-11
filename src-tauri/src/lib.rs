@@ -1341,12 +1341,14 @@ fn contains_sensitive_training_key(value: &serde_json::Value, depth: usize) -> b
     }
 }
 
-fn validate_training_experiment_payload(value: &serde_json::Value) -> Result<(String, String, i64), String> {
+fn validate_training_experiment_payload(value: &serde_json::Value) -> Result<(String, String, i64, i64), String> {
     if value.get("schemaVersion").and_then(serde_json::Value::as_i64) != Some(1) {
         return Err("Unsupported training experiment schema version.".into());
     }
     let id = bounded_json_text(value, "id", 160)?.to_string();
     let dataset_id = bounded_json_text(value, "datasetManifestId", 160)?.to_string();
+    let dataset_version = value.get("datasetManifestVersion").and_then(serde_json::Value::as_i64)
+        .filter(|number| *number >= 1).ok_or_else(|| "Training experiment dataset version is invalid.".to_string())?;
     bounded_json_text(value, "name", 160)?;
     bounded_json_text(value, "modelId", 160)?;
     bounded_json_text(value, "codeRevision", 80)?;
@@ -1370,7 +1372,7 @@ fn validate_training_experiment_payload(value: &serde_json::Value) -> Result<(St
     }
     let created_at = value.get("createdAt").and_then(serde_json::Value::as_i64)
         .filter(|timestamp| *timestamp > 0).ok_or_else(|| "Training experiment timestamp is invalid.".to_string())?;
-    Ok((id, dataset_id, created_at))
+    Ok((id, dataset_id, dataset_version, created_at))
 }
 
 #[tauri::command]
@@ -1409,15 +1411,15 @@ fn list_training_datasets(database: State<'_, AppDatabase>) -> Result<Vec<serde_
 
 #[tauri::command]
 fn save_training_experiment(database: State<'_, AppDatabase>, experiment: serde_json::Value) -> Result<(), String> {
-    let (id, dataset_id, created_at) = validate_training_experiment_payload(&experiment)?;
+    let (id, dataset_id, dataset_version, created_at) = validate_training_experiment_payload(&experiment)?;
     let payload = serde_json::to_string(&experiment).map_err(|e| e.to_string())?;
     if payload.len() > MAX_TRAINING_RECORD_BYTES {
         return Err("Training experiment exceeds the 1 MB limit.".into());
     }
     let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
     let dataset_exists: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM training_datasets WHERE id=?1)",
-        params![dataset_id], |row| row.get(0)
+        "SELECT EXISTS(SELECT 1 FROM training_datasets WHERE id=?1 AND version=?2)",
+        params![dataset_id, dataset_version], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     if !dataset_exists {
         return Err("The referenced training dataset has not been registered.".into());
@@ -1490,7 +1492,7 @@ mod database_tests {
     fn training_experiment_rejects_secret_bearing_configuration() {
         let valid = serde_json::json!({
             "schemaVersion":1,"id":"experiment-1","name":"Baseline","modelId":"gateway/model",
-            "method":"baseline","datasetManifestId":"dataset-1","codeRevision":"abc1234",
+            "method":"baseline","datasetManifestId":"dataset-1","datasetManifestVersion":1,"codeRevision":"abc1234",
             "hardware":"CI runner","configuration":{"temperature":0.0},
             "metrics":{"passRate":0.5},"createdAt":100
         });
