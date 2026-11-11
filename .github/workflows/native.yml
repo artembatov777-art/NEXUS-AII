@@ -24,7 +24,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libdbus-1-dev
-      - run: npm install
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
       - run: npm run build
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
