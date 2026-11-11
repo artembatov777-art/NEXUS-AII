@@ -9,8 +9,9 @@ const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item =
 export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
   const [datasets, setDatasets] = useState<DatasetManifest[]>([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [selectedDatasetKey, setSelectedDatasetKey] = useState("");
   const [experiments, setExperiments] = useState<TrainingExperiment[]>([]);
+  const [datasetId, setDatasetId] = useState("nexus-baseline");
   const [datasetName, setDatasetName] = useState("NEXUS baseline dataset");
   const [license, setLicense] = useState("CC0-1.0");
   const [sourceReference, setSourceReference] = useState("generated:owner-curated");
@@ -37,7 +38,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     if (!datasetResult.ok) { setError(datasetResult.error.message); return; }
     if (!experimentResult.ok) { setError(experimentResult.error.message); return; }
     setDatasets(datasetResult.value);
-    setSelectedDatasetId(current => datasetResult.value.some(item => item.id === current) ? current : datasetResult.value[0]?.id ?? "");
+    setSelectedDatasetKey(current => datasetResult.value.some(item => item.id + "@" + item.version === current) ? current : datasetResult.value[0] ? datasetResult.value[0].id + "@" + datasetResult.value[0].version : "");
     setExperiments(experimentResult.value);
     setError("");
   }
@@ -47,8 +48,8 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     setWorking(true); setError(""); setStatus("");
     const manifest: DatasetManifest = {
       schemaVersion: 1,
-      id: crypto.randomUUID(),
-      version: 1,
+      id: datasetId.trim(),
+      version: Math.max(0, ...datasets.filter(item => item.id === datasetId.trim()).map(item => item.version)) + 1,
       name: datasetName.trim(),
       license: license.trim(),
       privacyClass,
@@ -87,7 +88,8 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
       name: method + " experiment",
       modelId: modelId.trim(),
       method,
-      datasetManifestId: selectedDataset,
+      datasetManifestId: selectedDataset.split("@")[0],
+      datasetManifestVersion: Number(selectedDataset.split("@")[1]),
       codeRevision: codeRevision.trim(),
       hardware: hardware.trim(),
       configuration: parsedConfiguration,
@@ -105,7 +107,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     setWorking(false);
   }
 
-  const selectedDataset = selectedDatasetId;
+  const selectedDataset = selectedDatasetKey;
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
@@ -120,14 +122,17 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
       {status && <div className="knowledge-status">{status}</div>}
       <div className="training-section">
         <div className="training-section-title"><Database size={16}/> Register dataset manifest</div>
-        <label>Dataset name<input value={datasetName} onChange={event => setDatasetName(event.target.value)} maxLength={160}/></label>
+        <div className="training-two-col">
+          <label>Dataset ID<input value={datasetId} onChange={event => setDatasetId(event.target.value)} maxLength={160}/></label>
+          <label>Dataset name<input value={datasetName} onChange={event => setDatasetName(event.target.value)} maxLength={160}/></label>
+        </div>
         <div className="training-two-col">
           <label>License<input value={license} onChange={event => setLicense(event.target.value)} placeholder="CC0-1.0"/></label>
           <label>Source reference<input value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="URL, archive, or generated dataset ID"/></label>
         </div>
         <div className="training-two-col">
           <label>Privacy class<select value={privacyClass} onChange={event => setPrivacyClass(event.target.value as DatasetManifest["privacyClass"])}><option value="synthetic">Synthetic</option><option value="public">Public</option><option value="owner_approved">Owner-approved private</option></select></label>
-          <label>Consent status<select value={consentStatus} onChange={event => setConsentStatus(event.target.value as DatasetManifest["consentStatus"])}><option value="not_required">Not required</option><option value="approved">Approved</option><option value="pending">Pending</option><option value="rejected">Rejected</option></select></label>
+          <label>Consent status<select value={privacyClass === "owner_approved" ? consentStatus : "not_required"} disabled={privacyClass !== "owner_approved"} onChange={event => setConsentStatus(event.target.value as DatasetManifest["consentStatus"])}><option value="not_required">Not required</option><option value="approved">Approved</option></select></label>
         </div>
         {privacyClass === "owner_approved" && <label>Approval reference<input value={approvalReference} onChange={event => setApprovalReference(event.target.value)} placeholder="Explicit owner approval reference"/></label>}
         <div className="training-splits">
@@ -147,7 +152,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
           <label>Code revision<input value={codeRevision} onChange={event => setCodeRevision(event.target.value)} placeholder="Git commit SHA"/></label>
           <label>Hardware<input value={hardware} onChange={event => setHardware(event.target.value)} placeholder="CPU/GPU and memory"/></label>
         </div>
-        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetId(event.target.value)}>{datasets.map(dataset => <option key={dataset.id} value={dataset.id}>{dataset.name} · v{dataset.version}</option>)}</select></label>
+        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetKey(event.target.value)}>{datasets.map(dataset => <option key={dataset.id+"@"+dataset.version} value={dataset.id+"@"+dataset.version}>{dataset.name} · v{dataset.version}</option>)}</select></label>
         <div className="training-two-col">
           <label>Configuration JSON<textarea rows={3} value={configuration} onChange={event => setConfiguration(event.target.value)}/></label>
           <label>Metrics JSON<textarea rows={3} value={metrics} onChange={event => setMetrics(event.target.value)}/></label>
