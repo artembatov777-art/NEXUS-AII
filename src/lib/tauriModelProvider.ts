@@ -28,7 +28,8 @@ class TauriModelProvider implements ModelProvider {
         providerId: this.id,
         displayName: id,
         supportsStreaming: true,
-        supportsTools: false
+        supportsTools: false,
+        location: this.settings.inferenceLocation
       })));
     } catch (cause) {
       return err("provider_unavailable", cause instanceof Error ? cause.message : "Could not load models from the configured gateway.", true);
