@@ -12,8 +12,9 @@ export function providerEndpointError(baseUrl: string): string | null {
   }
 
   const hostname = endpoint.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const isLoopback = hostname === "localhost" || hostname === "::1" ||
-    /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  const ipv4Parts = hostname.split(".");
+  const isLoopbackIpv4 = ipv4Parts.length === 4 && ipv4Parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) && Number(ipv4Parts[0]) === 127;
+  const isLoopback = hostname === "localhost" || hostname === "::1" || isLoopbackIpv4;
 
   if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && isLoopback)) {
     return "Provider URL must use HTTPS. HTTP is allowed only for localhost or loopback IP addresses.";
