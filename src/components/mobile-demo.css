@@ -258,3 +258,7 @@
 .demo-more-grid button>svg:last-child{color:#6d91a4}
 .demo-more-grid button:active{border-color:rgba(121,199,232,.38);background:#153146}
 @media(max-width:480px){.demo-tabbar{grid-template-columns:repeat(5,minmax(0,1fr))}.demo-tabbar button{gap:3px}.demo-tabbar button span{font-size:8px}}
+
+
+/* Keep mobile keyboard focus aligned with the cyan interface */
+.demo-tabbar button:focus-visible,.demo-composer button:focus-visible,.demo-round-button:focus-visible,.demo-section button:focus-visible{outline:2px solid #79c7e8;outline-offset:2px}
