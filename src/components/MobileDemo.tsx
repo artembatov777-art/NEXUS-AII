@@ -1,12 +1,13 @@
 import { useState } from "react";
 import {
   ArrowUp, AudioLines, Bell, BookOpen, Brain, Bot, ChevronRight,
-  CircleHelp, Command, Database, FileText, FolderKanban, MessageSquare, MoreHorizontal, Plug,
-  Plus, Search, Settings2, ShieldCheck, Sparkles, Zap
+  CircleHelp, Command, Database, FileText, FolderKanban, MessageSquare,
+  MoreHorizontal, Plug, Plus, Search, Settings2, ShieldCheck, Sparkles, Zap,
+  FlaskConical, HardDrive, LockKeyhole, Activity, Clock3
 } from "lucide-react";
 import "./mobile-demo.css";
 
-type DemoTab = "chat" | "projects" | "memory" | "settings" | "more";
+type DemoTab = "chat" | "projects" | "memory" | "knowledge" | "agents" | "files" | "tools" | "training" | "settings" | "more";
 
 const sampleMessages = [
   { role: "assistant" as const, text: "Привет. Я NEXUS, твоя персональная AI-среда. Здесь будут собраны знания, проекты, память и инструменты." },
@@ -14,11 +15,21 @@ const sampleMessages = [
   { role: "assistant" as const, text: "Я смогу помогать с исследованиями, планированием, обучением и работой с твоими проектами. Сейчас это демонстрационный интерфейс без подключённой модели." }
 ];
 
+const demoTools = [
+  { name: "Browser", detail: "Поиск и чтение открытых веб-страниц", permission: "Сетевой доступ" },
+  { name: "GitHub", detail: "Репозитории, коммиты и задачи", permission: "Доступ к репозиторию" },
+  { name: "Workspace files", detail: "Работа с разрешёнными папками", permission: "Разрешение на папку" }
+];
+
 export function MobileDemo() {
   const [tab, setTab] = useState<DemoTab>("chat");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState(sampleMessages);
   const [notice, setNotice] = useState("");
+  const [knowledgeQuery, setKnowledgeQuery] = useState("");
+  const [knowledgeSearched, setKnowledgeSearched] = useState(false);
+  const [agentTask, setAgentTask] = useState("");
+  const [expandedTool, setExpandedTool] = useState("Browser");
 
   function sendDemoMessage() {
     const value = draft.trim();
@@ -32,9 +43,15 @@ export function MobileDemo() {
     chat: "Новый диалог",
     projects: "Проекты",
     memory: "Память",
+    knowledge: "База знаний",
+    agents: "Агенты",
+    files: "Файловая система",
+    tools: "Tools & MCP",
+    training: "Training Lab",
     settings: "Настройки",
     more: "Разделы NEXUS"
   };
+  const isMoreModule = ["knowledge", "agents", "files", "tools", "training"].includes(tab);
 
   return <main className="mobile-demo">
     <div className="demo-device">
@@ -77,7 +94,7 @@ export function MobileDemo() {
         </>}
 
         {tab === "projects" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
+          <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button aria-label="Создать проект" onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-search"><Search size={16}/><span>Поиск проектов</span></div>
           <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>
           <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>
@@ -85,30 +102,77 @@ export function MobileDemo() {
         </div>}
 
         {tab === "memory" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>PERSONAL CONTEXT</span><h2>Память NEXUS</h2></div><button onClick={() => setNotice("Управление памятью появится в рабочей версии.")}><Plus size={18}/></button></div>
+          <div className="demo-section-heading"><div><span>PERSONAL CONTEXT</span><h2>Память NEXUS</h2></div><button aria-label="Добавить память" onClick={() => setNotice("Управление памятью появится в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-memory-summary"><Brain size={21}/><div><strong>Контекст владельца</strong><span>Демонстрационные записи</span></div><b>08</b></div>
           <div className="demo-memory-group"><span>ПРЕДПОЧТЕНИЯ</span><article><Sparkles size={16}/><div><strong>Стиль общения</strong><p>Прямые ответы, конкретика и аргументы.</p></div></article><article><BookOpen size={16}/><div><strong>Обучение</strong><p>Структурированные объяснения и примеры.</p></div></article></div>
           <div className="demo-memory-group"><span>ПРОЕКТЫ И ЦЕЛИ</span><article><FolderKanban size={16}/><div><strong>NEXUS AU</strong><p>Развитие личной AI-экосистемы.</p></div></article><article><Zap size={16}/><div><strong>Долгосрочные цели</strong><p>Навыки, самостоятельность и развитие.</p></div></article></div>
-          <div className="demo-safe-note"><ShieldCheck size={16}/> В реальной версии память будет доступна для просмотра и управления.</div>
+          <div className="demo-safe-note"><ShieldCheck size={16}/> В рабочей версии память будет доступна для просмотра и управления.</div>
+        </div>}
+
+        {tab === "knowledge" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>PROJECT KNOWLEDGE</span><h2>База знаний</h2></div><BookOpen size={21}/></div>
+          <div className="demo-module-card"><span>ACTIVE PROJECT</span><strong>NEXUS AU</strong><small>Материалы и заметки проекта</small></div>
+          <div className="demo-search demo-knowledge-search"><Search size={16}/><input aria-label="Поиск по базе знаний" value={knowledgeQuery} onChange={event => { setKnowledgeQuery(event.target.value); setKnowledgeSearched(false); }} placeholder="Поиск по документам..."/><button onClick={() => setKnowledgeSearched(true)} disabled={!knowledgeQuery.trim()}>Найти</button></div>
+          <div className="demo-document-row"><FileText size={18}/><div><strong>ARCHITECTURE.md</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></div>
+          <div className="demo-document-row"><FileText size={18}/><div><strong>ROADMAP.md</strong><small>План разработки · 8.6 KB</small></div><ChevronRight size={16}/></div>
+          {knowledgeSearched && <div className="demo-safe-note"><Search size={15}/> Демо-поиск по запросу «{knowledgeQuery}». Реальные документы пока не индексируются в мобильном preview.</div>}
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Источники и поиск будут связаны с проектами в рабочей версии.</div>
+        </div>}
+
+        {tab === "agents" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>NEXUS AUTOMATION</span><h2>Агенты</h2></div><Bot size={21}/></div>
+          <div className="demo-stat-grid"><div><span>AGENTS</span><strong>03</strong></div><div><span>ACTIVE RUNS</span><strong>00</strong></div><div><span>APPROVALS</span><strong>00</strong></div></div>
+          <div className="demo-module-card"><span>LOCAL WORKFLOW</span><strong>Task Assistant</strong><small>Ограниченный исполнитель задач с подтверждением действий</small><div className="demo-status-line"><i/> ОЖИДАЕТ ЗАДАЧУ</div></div>
+          <label className="demo-field-label">Тестовая задача<textarea aria-label="Тестовая задача для агента" value={agentTask} onChange={event => setAgentTask(event.target.value)} rows={3} placeholder="Опиши задачу для демонстрации..."/></label>
+          <button className="demo-primary-action" disabled={!agentTask.trim()} onClick={() => setNotice("Демо-режим: задача не отправлялась агенту и не выполнялась.")}><PlayIcon/> Запустить демо</button>
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Реальные агенты будут работать через разрешения, подтверждения и журнал действий.</div>
+        </div>}
+
+        {tab === "files" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>DEVICE WORKSPACE</span><h2>Файловая система</h2></div><HardDrive size={21}/></div>
+          <div className="demo-module-card"><span>CONNECTION STATUS</span><strong>Не подключено</strong><small>Доступ к папкам Windows пока не активирован</small><div className="demo-status-line warning"><i/> ОЖИДАЕТ РАЗРЕШЕНИЯ</div></div>
+          <div className="demo-file-row"><FolderKanban size={18}/><div><strong>Документы</strong><small>Выбранные папки появятся здесь</small></div><ChevronRight size={16}/></div>
+          <div className="demo-file-row"><FolderKanban size={18}/><div><strong>Проекты</strong><small>Папки с разрешённым доступом</small></div><ChevronRight size={16}/></div>
+          <div className="demo-file-row"><FileText size={18}/><div><strong>Последние файлы</strong><small>Список пока пуст</small></div><ChevronRight size={16}/></div>
+          <div className="demo-safe-note"><LockKeyhole size={16}/> NEXUS не читает файлы устройства в этом preview. Доступ будет выдаваться отдельно для каждой папки.</div>
+        </div>}
+
+        {tab === "tools" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>EXTENSIONS & MCP</span><h2>Tools & MCP</h2></div><Plug size={21}/></div>
+          <div className="demo-module-card"><span>TOOL GATEWAY</span><strong>Подключения не настроены</strong><small>Инструменты появятся после подключения и выдачи разрешений</small></div>
+          {demoTools.map(tool => <button className="demo-tool-row" key={tool.name} onClick={() => setExpandedTool(current => current === tool.name ? "" : tool.name)} aria-expanded={expandedTool === tool.name}><div><strong>{tool.name}</strong><small>{tool.detail}</small>{expandedTool === tool.name && <em>Требуется: {tool.permission}. Сейчас это только макет.</em>}</div><span>PREVIEW</span></button>)}
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Каталог не подключает сервисы и не выдаёт разрешения автоматически.</div>
+        </div>}
+
+        {tab === "training" && <div className="demo-section">
+          <div className="demo-section-heading"><div><span>MODEL DEVELOPMENT</span><h2>Training Lab</h2></div><FlaskConical size={21}/></div>
+          <div className="demo-stat-grid"><div><span>DATASETS</span><strong>03</strong></div><div><span>EXPERIMENTS</span><strong>02</strong></div><div><span>MODELS</span><strong>00</strong></div></div>
+          <div className="demo-module-card"><span>DATA GOVERNANCE</span><strong>Наборы данных</strong><small>Лицензия, происхождение, согласие и разделение train / validation / test</small></div>
+          <div className="demo-document-row"><Database size={18}/><div><strong>Baseline dataset</strong><small>Synthetic · CC0 · v1</small></div><ChevronRight size={16}/></div>
+          <div className="demo-document-row"><Activity size={18}/><div><strong>Evaluation baseline</strong><small>Детерминированная проверка</small></div><ChevronRight size={16}/></div>
+          <button className="demo-primary-action" onClick={() => setNotice("Training Lab preview: запуск обучения и изменение весов модели недоступны.")}>Открыть эксперименты</button>
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Личные переписки и файлы не добавляются в датасеты автоматически.</div>
         </div>}
 
         {tab === "settings" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>SYSTEM CONTROL</span><h2>Настройки</h2></div><Settings2 size={21}/></div>
           <div className="demo-settings-profile"><div className="demo-profile-avatar">N</div><div><strong>Владелец NEXUS</strong><span>Личное пространство</span></div><ChevronRight size={18}/></div>
           <div className="demo-settings-group"><span>СИСТЕМА</span><button onClick={() => setNotice("Подключение моделей появится в рабочей версии.")}><Brain size={17}/> Модели и провайдеры <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки безопасности пока демонстрационные.")}><ShieldCheck size={17}/> Безопасность <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки уведомлений пока демонстрационные.")}><Bell size={17}/> Уведомления <ChevronRight size={17}/></button></div>
-          <div className="demo-settings-group"><span>ПОДДЕРЖКА</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("Голосовые функции пока не подключены.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
-          <div className="demo-version">NEXUS AU · INTERFACE PREVIEW · 0.1</div>
+          <div className="demo-settings-group"><span>ПОДДЕРЖКА</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("Голосовые функции отложены до post-release.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
+          <div className="demo-version">NEXUS AU · INTERFACE PREVIEW · 0.2</div>
         </div>}
+
         {tab === "more" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>NEXUS MODULES</span><h2>Все разделы</h2></div><MoreHorizontal size={21}/></div>
-          <p className="demo-more-intro">Дополнительные инструменты и системные модули NEXUS AU. Сейчас показан интерфейсный макет.</p>
+          <p className="demo-more-intro">Дополнительные модули NEXUS AU. Каждый раздел открывает отдельный экран интерфейса.</p>
           <div className="demo-more-grid">
-            <button onClick={() => setNotice("Файловый модуль будет подключён после реализации безопасного доступа к папкам Windows.")}><div><FileText size={19}/></div><span><strong>Файловая система</strong><small>Файлы и папки устройства</small></span><ChevronRight size={16}/></button>
-            <button onClick={() => setNotice("Каталог Tools & MCP пока демонстрационный. Подключения ещё не активны.")}><div><Plug size={19}/></div><span><strong>Tools & MCP</strong><small>Инструменты и интеграции</small></span><ChevronRight size={16}/></button>
-            <button onClick={() => setNotice("Панель агентов будет доступна в полной версии интерфейса.")}><div><Bot size={19}/></div><span><strong>Агенты</strong><small>Задачи и автоматизация</small></span><ChevronRight size={16}/></button>
-            <button onClick={() => setNotice("База знаний будет подключена к основному AI Core.")}><div><Database size={19}/></div><span><strong>База знаний</strong><small>Документы и поиск</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setTab("knowledge")}><div><BookOpen size={19}/></div><span><strong>База знаний</strong><small>Документы и поиск по источникам</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setTab("agents")}><div><Bot size={19}/></div><span><strong>Агенты</strong><small>Задачи, выполнение и подтверждения</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setTab("files")}><div><FileText size={19}/></div><span><strong>Файловая система</strong><small>Файлы и папки устройства</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setTab("tools")}><div><Plug size={19}/></div><span><strong>Tools & MCP</strong><small>Инструменты и интеграции</small></span><ChevronRight size={16}/></button>
+            <button onClick={() => setTab("training")}><div><FlaskConical size={19}/></div><span><strong>Training Lab</strong><small>Оценка моделей и эксперименты</small></span><ChevronRight size={16}/></button>
           </div>
-          <div className="demo-safe-note"><ShieldCheck size={16}/> Модули не получают доступ к устройству без явного подключения и разрешений.</div>
+          <div className="demo-safe-note"><ShieldCheck size={16}/> Демо-данные не обращаются к AI, устройству или внешним сервисам.</div>
         </div>}
       </section>
 
@@ -127,10 +191,14 @@ export function MobileDemo() {
         <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
         <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
         <button className={tab === "settings" ? "active" : ""} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={19}/><span>Настройки</span></button>
-        <button className={tab === "more" ? "active" : ""} aria-pressed={tab === "more"} onClick={() => setTab("more")}><MoreHorizontal size={19}/><span>Ещё</span></button>
+        <button className={tab === "more" || isMoreModule ? "active" : ""} aria-pressed={tab === "more" || isMoreModule} onClick={() => setTab("more")}><MoreHorizontal size={19}/><span>Ещё</span></button>
       </nav>
       <div className="demo-home-indicator"/>
     </div>
     <div className="demo-outside-label"><span/> NEXUS AU <b>·</b> MOBILE INTERFACE CONCEPT</div>
   </main>;
+}
+
+function PlayIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>;
 }
