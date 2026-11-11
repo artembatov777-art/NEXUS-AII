@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:pages": "tsc -b && vite build --mode pages"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
