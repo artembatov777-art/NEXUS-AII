@@ -907,6 +907,86 @@ async fn send_chat(
         .ok_or_else(|| "Provider returned an empty response.".into())
 }
 
+
+fn parse_provider_model_ids(body: &[u8]) -> Result<Vec<String>, String> {
+    let payload: serde_json::Value = serde_json::from_slice(body)
+        .map_err(|_| "Could not parse the provider model catalog.".to_string())?;
+    let entries = payload.get("data").and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Provider model catalog must contain a data array.".to_string())?;
+    let mut ids = Vec::new();
+    for entry in entries.iter().take(1000) {
+        let Some(raw_id) = entry.get("id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let id = raw_id.trim();
+        if id.is_empty() || id.len() > 128 || id.chars().any(char::is_control) {
+            continue;
+        }
+        if !ids.iter().any(|existing| existing == id) {
+            ids.push(id.to_string());
+        }
+    }
+    if ids.is_empty() {
+        return Err("Provider returned no usable model IDs.".into());
+    }
+    Ok(ids)
+}
+
+#[tauri::command]
+async fn list_provider_models(
+    base_url: String,
+    credential_handle: String,
+) -> Result<Vec<String>, String> {
+    let mut endpoint = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "Provider URL is invalid.".to_string())?;
+    let host = endpoint.host_str().unwrap_or_default();
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false);
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && loopback) {
+        return Err("Provider URL must use HTTPS (HTTP is allowed only for loopback hosts).".into());
+    }
+    if !endpoint.username().is_empty() || endpoint.password().is_some()
+        || endpoint.query().is_some() || endpoint.fragment().is_some() {
+        return Err("Provider URL cannot contain credentials, query parameters, or fragments.".into());
+    }
+    if !endpoint.path().trim_end_matches('/').ends_with("/models") {
+        let path = format!("{}/models", endpoint.path().trim_end_matches('/'));
+        endpoint.set_path(&path);
+    }
+
+    let api_key = credential_entry(&credential_handle)?
+        .get_password()
+        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
+    if api_key.is_empty() || api_key.len() > 8192 {
+        return Err("Stored provider credential is invalid.".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| format!("Could not configure provider client: {e}"))?;
+    let mut response = client.get(endpoint)
+        .bearer_auth(&api_key)
+        .send()
+        .await
+        .map_err(|e| format!("Model catalog request failed: {e}"))?;
+    let status = response.status();
+    if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
+        return Err("Provider model catalog exceeded the 2 MB limit.".into());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await
+        .map_err(|e| format!("Could not read provider model catalog: {e}"))? {
+        append_bounded_response(&mut body, &chunk)?;
+    }
+    if !status.is_success() {
+        let raw = String::from_utf8_lossy(&body).replace(&api_key, "[redacted]");
+        let excerpt: String = raw.chars().take(500).collect();
+        return Err(format!("Provider returned HTTP {status}: {excerpt}"));
+    }
+    parse_provider_model_ids(&body)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -919,13 +999,27 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    #[test]
+    fn provider_model_catalog_filters_invalid_and_duplicate_ids() {
+        let body = br#"{"data":[{"id":"auto"},{"id":"provider/model-a"},{"id":"provider/model-a"},{"id":""},{"name":"missing-id"},{"id":"bad\nmodel"}]}"#;
+        let ids = parse_provider_model_ids(body).expect("valid catalog");
+        assert_eq!(ids, vec!["auto".to_string(), "provider/model-a".to_string()]);
+    }
+
+    #[test]
+    fn provider_model_catalog_rejects_empty_or_invalid_catalogs() {
+        assert!(parse_provider_model_ids(br#"{"data":[]}"#).is_err());
+        assert!(parse_provider_model_ids(br#"{"models":[]}"#).is_err());
+        assert!(parse_provider_model_ids(b"not-json").is_err());
+    }
+
     fn checkpoint(sequence: i64, status: &str) -> serde_json::Value {
         serde_json::json!({
             "schemaVersion": 1,
