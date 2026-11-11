@@ -24,8 +24,11 @@ export interface Conversation {
 export interface ProviderSettings {
   baseUrl: string;
   model: string;
+  /** Inference location of the selected model, not the gateway URL. */
+  inferenceLocation: "local" | "remote";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
   baseUrl: "https://api.openai.com/v1",
-  model: "gpt-4o-mini"
+  model: "gpt-4o-mini",
+  inferenceLocation: "remote"
 };
