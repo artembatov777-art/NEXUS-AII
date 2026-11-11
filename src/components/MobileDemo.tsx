@@ -73,12 +73,6 @@ export function MobileDemo() {
             <button onClick={() => setDraft("Помоги спланировать неделю")}><Zap size={14}/> Планирование</button>
             <button onClick={() => setDraft("Изучи эту тему и составь конспект")}><BookOpen size={14}/> Обучение</button>
           </div>
-          <div className="demo-composer">
-            <button className="demo-add-button" aria-label="Добавить вложение" onClick={() => setNotice("Вложения появятся в следующих версиях демо.")}><Plus size={18}/></button>
-            <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder="Напиши сообщение..." aria-label="Сообщение"/>
-            <button className="demo-send-button" onClick={sendDemoMessage} aria-label="Отправить сообщение"><ArrowUp size={18}/></button>
-          </div>
-          <p className="demo-disclaimer">Демонстрация интерфейса · AI не подключён</p>
         </>}
 
         {tab === "projects" && <div className="demo-section">
@@ -106,12 +100,21 @@ export function MobileDemo() {
         </div>}
       </section>
 
+      {tab === "chat" && <div className="demo-chat-footer">
+        <div className="demo-composer">
+          <button className="demo-add-button" aria-label="Добавить вложение" onClick={() => setNotice("Вложения появятся в следующих версиях демо.")}><Plus size={18}/></button>
+          <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder="Напиши сообщение..." aria-label="Сообщение"/>
+          <button className="demo-send-button" onClick={sendDemoMessage} aria-label="Отправить сообщение"><ArrowUp size={18}/></button>
+        </div>
+        <p className="demo-disclaimer">Демо-режим · сообщения не отправляются модели</p>
+      </div>}
+
       {notice && <button className="demo-notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       <nav className="demo-tabbar" aria-label="Основная навигация">
-        <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
-        <button className={tab === "projects" ? "active" : ""} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
-        <button className={tab === "memory" ? "active" : ""} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
-        <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Settings2 size={19}/><span>Настройки</span></button>
+        <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
+        <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
+        <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
+        <button className={tab === "settings" ? "active" : ""} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={19}/><span>Настройки</span></button>
       </nav>
       <div className="demo-home-indicator"/>
     </div>
