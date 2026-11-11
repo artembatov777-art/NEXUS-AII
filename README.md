@@ -2,15 +2,15 @@
 
 **A personal AI ecosystem built for one owner.**
 
-NEXUS AU is a local-first desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, voice interface, and automation.
+NEXUS AU is a hybrid local-and-cloud desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, voice interface, and automation.
 
-The strategic goal is not to publish a multi-user AI service or remain a thin client for model aggregators. The goal is to develop **NEXUS Model** as the primary intelligence of a private AI environment, while keeping replaceable adapters for external models during development, evaluation, and fallback.
+The strategic goal is not to publish a multi-user AI service or remain a thin client for model aggregators. The goal is to develop **NEXUS Model** as the primary intelligence of a private AI environment, while using OmniRoute as the standard gateway for cloud model routing and keeping direct local inference adapters available.
 
 ## Product direction
 - **Personal-first:** designed around one owner's workflows, preferences, projects, and devices. Multi-user accounts, public SaaS billing, and public quotas are not product requirements.
 - **Own model as the destination:** an existing open-weight model may be used as a practical starting checkpoint; it is not the final product.
 - **Independent AI Core:** model execution, context assembly, memory retrieval, agent orchestration, tools, and evaluation are separate modules.
-- **Local-first, hybrid-capable:** private data and suitable inference stay local where practical. Optional remote compute may be used when hardware requires it.
+- **Hybrid by design:** local inference is used where practical; cloud models are accessed through OmniRoute. The UI must make remote processing visible, and private data is never sent to training automatically.
 - **Owner-configurable:** the owner chooses model behavior, tools, integrations, memory policy, and automation workflows.
 - **Transparent and recoverable:** runs are observable, data can be backed up, and consequential actions can be interrupted or reviewed.
 
@@ -33,10 +33,10 @@ NEXUS AU desktop
                  └─ long-term independent model research
 ~~~
 
-External model APIs are optional adapters, not the architectural center. OmniRoute is not a required dependency.
+OmniRoute is the selected cloud-model routing layer. NEXUS AU talks to its OpenAI-compatible `/v1` API; local model runtimes remain separate adapters. The app must not depend on OmniRoute for local-only operation.
 
 ## Practical model strategy
-1. Establish a provider-neutral model runtime and local inference adapter.
+1. Establish a provider-neutral model runtime with an OmniRoute cloud adapter and a local inference adapter.
 2. Select an open-weight base model after evaluating quality, license, hardware needs, and inference support.
 3. Build reproducible datasets and evaluation suites from permitted, curated material.
 4. Adapt the model for the owner's workflows using configuration, prompting, retrieval, and parameter-efficient fine-tuning where useful.
@@ -53,7 +53,7 @@ These facts do not mean every planned feature is production-ready. See the imple
 - Frontend: React, TypeScript, Vite.
 - Desktop: Tauri 2, Rust.
 - Storage: SQLite plus bounded local indexes and managed attachment storage.
-- Model layer: provider-neutral contracts with local and optional remote adapters.
+- Model layer: provider-neutral contracts, local inference adapters, and an OmniRoute adapter for cloud models.
 - Agent integrations: Tool Gateway and MCP.
 - Quality: unit/integration tests, CI, security review, and real desktop smoke tests.
 
