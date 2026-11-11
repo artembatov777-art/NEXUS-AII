@@ -79,7 +79,7 @@ export function MobileDemo() {
         {tab === "projects" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-search"><Search size={16}/><span>Поиск проектов</span></div>
-          <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><div className="demo-progress"><i style={{width:"68%"}}/></div><small>В разработке</small></article>
+          <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>
           <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>
           <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>LEARNING</span><h3>База знаний</h3><p>Материалы и исследования</p><small>12 материалов</small></article>
         </div>}
