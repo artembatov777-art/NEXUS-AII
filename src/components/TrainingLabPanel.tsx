@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Database, FlaskConical, Plus, RefreshCw, Save, X } from "lucide-react";
+import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
 import { validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
@@ -9,6 +9,7 @@ const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item =
 export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
   const [datasets, setDatasets] = useState<DatasetManifest[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [experiments, setExperiments] = useState<TrainingExperiment[]>([]);
   const [datasetName, setDatasetName] = useState("NEXUS baseline dataset");
   const [license, setLicense] = useState("CC0-1.0");
@@ -36,6 +37,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     if (!datasetResult.ok) { setError(datasetResult.error.message); return; }
     if (!experimentResult.ok) { setError(experimentResult.error.message); return; }
     setDatasets(datasetResult.value);
+    setSelectedDatasetId(current => datasetResult.value.some(item => item.id === current) ? current : datasetResult.value[0]?.id ?? "");
     setExperiments(experimentResult.value);
     setError("");
   }
@@ -103,7 +105,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     setWorking(false);
   }
 
-  const selectedDataset = datasets[0]?.id ?? "";
+  const selectedDataset = selectedDatasetId;
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
@@ -145,7 +147,7 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
           <label>Code revision<input value={codeRevision} onChange={event => setCodeRevision(event.target.value)} placeholder="Git commit SHA"/></label>
           <label>Hardware<input value={hardware} onChange={event => setHardware(event.target.value)} placeholder="CPU/GPU and memory"/></label>
         </div>
-        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={() => undefined}>{datasets.map(dataset => <option key={dataset.id} value={dataset.id}>{dataset.name} · v{dataset.version}</option>)}</select></label>
+        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetId(event.target.value)}>{datasets.map(dataset => <option key={dataset.id} value={dataset.id}>{dataset.name} · v{dataset.version}</option>)}</select></label>
         <div className="training-two-col">
           <label>Configuration JSON<textarea rows={3} value={configuration} onChange={event => setConfiguration(event.target.value)}/></label>
           <label>Metrics JSON<textarea rows={3} value={metrics} onChange={event => setMetrics(event.target.value)}/></label>
