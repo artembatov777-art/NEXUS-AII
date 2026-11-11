@@ -393,6 +393,27 @@ fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
 }
 
+fn load_provider_credential(handle: &str, loopback: bool) -> Result<Option<String>, String> {
+    if handle == "none" {
+        if !loopback { return Err("Unauthenticated providers are allowed only on loopback hosts.".into()); }
+        return Ok(None);
+    }
+    let key = credential_entry(handle)?
+        .get_password()
+        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
+    if key.is_empty() || key.len() > 8192 {
+        return Err("Stored provider credential is invalid.".into());
+    }
+    Ok(Some(key))
+}
+
+fn redact_provider_secret(message: &str, api_key: Option<&str>) -> String {
+    match api_key.filter(|key| !key.is_empty()) {
+        Some(key) => message.replace(key, "[redacted]"),
+        None => message.to_string()
+    }
+}
+
 fn validate_provider_key(api_key: &str) -> Result<&str, &'static str> {
     let normalized = api_key.trim();
     if normalized.is_empty() { return Err("API key cannot be empty."); }
@@ -948,10 +969,10 @@ fn forward_sse_chunk(
     on_event: &tauri::ipc::Channel<serde_json::Value>,
     data: &str,
     finish_reason: &mut Option<String>,
-    api_key: &str,
+    api_key: Option<&str>,
 ) -> Result<bool, String> {
     if data.trim() == "[DONE]" { return Ok(true); }
-    let parsed = parse_sse_chunk(data).map_err(|error| error.replace(api_key, "[redacted]"))?;
+    let parsed = parse_sse_chunk(data).map_err(|error| redact_provider_secret(&error, api_key))?;
     if let Some(chunk) = parsed {
         if let Some(text) = chunk.text.filter(|value| !value.is_empty()) {
             on_event.send(serde_json::json!({"type":"text_delta","text":text}))
@@ -1023,12 +1044,7 @@ async fn send_chat_stream(
             return Err("Chat request exceeds the 1 MB content limit.".into());
         }
     }
-    let api_key = credential_entry(&credential_handle)?
-        .get_password()
-        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
-    if api_key.is_empty() || api_key.len() > 8192 {
-        return Err("Stored provider credential is invalid.".into());
-    }
+    let api_key = load_provider_credential(&credential_handle, loopback)?;
     let payload = serde_json::json!({
         "model": model.trim(),
         "messages": messages.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
@@ -1038,8 +1054,10 @@ async fn send_chat_stream(
         .timeout(std::time::Duration::from_secs(180))
         .redirect(reqwest::redirect::Policy::none())
         .build().map_err(|e| format!("Could not configure provider client: {e}"))?;
+    let mut request = client.post(endpoint).json(&payload);
+    if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
     let send_result = tokio::select! {
-        result = client.post(endpoint).bearer_auth(&api_key).json(&payload).send() => result,
+        result = request.send() => result,
         _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
     };
     let mut response = send_result
@@ -1087,7 +1105,7 @@ async fn send_chat_stream(
                 if !event_data.is_empty() {
                     let data=event_data.trim_end_matches('\n').to_string();
                     event_data.clear();
-                    if forward_sse_chunk(&on_event, &data, &mut finish_reason, &api_key)? {
+                    if forward_sse_chunk(&on_event, &data, &mut finish_reason, api_key.as_deref())? {
                         on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
                             .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
                         completed=true;
@@ -1120,7 +1138,7 @@ async fn send_chat_stream(
             }
         }
         if !event_data.trim().is_empty() {
-            let _ = forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, &api_key)?;
+            let _ = forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, api_key.as_deref())?;
         }
         on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
             .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
@@ -1174,12 +1192,7 @@ async fn send_chat(
         }
     }
 
-    let api_key = credential_entry(&credential_handle)?
-        .get_password()
-        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
-    if api_key.is_empty() || api_key.len() > 8192 {
-        return Err("Stored provider credential is invalid.".into());
-    }
+    let api_key = load_provider_credential(&credential_handle, loopback)?;
     let payload = serde_json::json!({
         "model": model.trim(),
         "messages": messages.iter().map(|m| serde_json::json!({
@@ -1192,11 +1205,9 @@ async fn send_chat(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("Could not configure provider client: {e}"))?;
-    let mut response = client.post(endpoint)
-        .bearer_auth(&api_key)
-        .json(&payload)
-        .send()
-        .await
+    let mut request = client.post(endpoint).json(&payload);
+    if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
+    let mut response = request.send().await
         .map_err(|e| format!("Provider request failed: {e}"))?;
     let status = response.status();
     if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
@@ -1207,7 +1218,7 @@ async fn send_chat(
         append_bounded_response(&mut body, &chunk)?;
     }
     if !status.is_success() {
-        let raw = String::from_utf8_lossy(&body).replace(&api_key, "[redacted]");
+        let raw = redact_provider_secret(&String::from_utf8_lossy(&body), api_key.as_deref());
         let excerpt: String = raw.chars().take(500).collect();
         return Err(format!("Provider returned HTTP {status}: {excerpt}"));
     }
@@ -1264,21 +1275,15 @@ async fn list_provider_models(
         endpoint.set_path(&path);
     }
 
-    let api_key = credential_entry(&credential_handle)?
-        .get_password()
-        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
-    if api_key.is_empty() || api_key.len() > 8192 {
-        return Err("Stored provider credential is invalid.".into());
-    }
+    let api_key = load_provider_credential(&credential_handle, loopback)?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("Could not configure provider client: {e}"))?;
-    let mut response = client.get(endpoint)
-        .bearer_auth(&api_key)
-        .send()
-        .await
+    let mut request = client.get(endpoint);
+    if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
+    let mut response = request.send().await
         .map_err(|e| format!("Model catalog request failed: {e}"))?;
     let status = response.status();
     if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
@@ -1290,7 +1295,7 @@ async fn list_provider_models(
         append_bounded_response(&mut body, &chunk)?;
     }
     if !status.is_success() {
-        let raw = String::from_utf8_lossy(&body).replace(&api_key, "[redacted]");
+        let raw = redact_provider_secret(&String::from_utf8_lossy(&body), api_key.as_deref());
         let excerpt: String = raw.chars().take(500).collect();
         return Err(format!("Provider returned HTTP {status}: {excerpt}"));
     }
