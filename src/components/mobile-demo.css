@@ -242,3 +242,19 @@
 .demo-notice{border-color:rgba(121,199,232,.3);background:#112638;color:#dff4fc}
 .demo-outside-label{color:#6f8c9d}
 @media(max-width:480px){.demo-device{background:#080f18}}
+
+
+/* Mobile module hub */
+.demo-tabbar{grid-template-columns:repeat(5,minmax(0,1fr))}
+.demo-tabbar button{min-width:0}
+.demo-tabbar button span{white-space:nowrap}
+.demo-more-intro{margin:0 0 15px;color:#8ca4b2;font-size:11px;line-height:1.6}
+.demo-more-grid{display:grid;gap:8px}
+.demo-more-grid button{width:100%;min-height:66px;display:flex;align-items:center;gap:11px;padding:10px 11px;border:1px solid rgba(121,199,232,.15);border-radius:12px;background:linear-gradient(120deg,#102637,#0c1a27);color:#a8c9d8;text-align:left}
+.demo-more-grid button>div{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border:1px solid rgba(121,199,232,.18);border-radius:10px;background:#17384b;color:#9eddf3}
+.demo-more-grid button>span{flex:1;display:grid;gap:4px;min-width:0}
+.demo-more-grid button strong{color:#dceef5;font-size:11px}
+.demo-more-grid button small{color:#829bab;font-size:9px}
+.demo-more-grid button>svg:last-child{color:#6d91a4}
+.demo-more-grid button:active{border-color:rgba(121,199,232,.38);background:#153146}
+@media(max-width:480px){.demo-tabbar{grid-template-columns:repeat(5,minmax(0,1fr))}.demo-tabbar button{gap:3px}.demo-tabbar button span{font-size:8px}}
