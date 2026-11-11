@@ -346,9 +346,9 @@ A model descriptor identifies model ID, display name, version, runtime kind (loc
 
 Model capabilities explicitly declare streaming, tool calling, structured output, vision, audio input, and audio output. Callers must check capabilities rather than assuming every model supports every feature.
 
-The model runtime exposes list/discover, status, load, unload, health-check, inference, streaming, cancellation, and resource-reporting operations. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
+The model runtime exposes list/discover, status, load, unload, health-check, inference, streaming, cancellation, and resource-reporting operations. The OmniRoute adapter uses the OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints; the local adapter targets the selected local inference backend. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
 
-The primary model policy selects NEXUS Model when installed and healthy. Any fallback is explicit and observable, including the active model identity and whether inference is local or remote.
+The model policy selects an explicitly configured local model or an OmniRoute-routed cloud model. Every response records the active model ID, runtime adapter, and whether inference is local or remote. OmniRoute is the selected cloud gateway; local-only operation must remain possible without it.
 
 ## 21. Model artifacts and experiment records — target
 
