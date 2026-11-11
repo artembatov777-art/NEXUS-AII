@@ -1310,6 +1310,9 @@ fn validate_training_dataset_payload(value: &serde_json::Value) -> Result<(Strin
         if values.len() > 100_000 {
             return Err("Training dataset split exceeds its item limit.".into());
         }
+        if values.is_empty() {
+            return Err(format!("Training dataset split '{split}' cannot be empty."));
+        }
         let mut local = HashSet::new();
         for item in values {
             let sample_id = item.as_str().ok_or_else(|| "Training sample IDs must be strings.".to_string())?;
