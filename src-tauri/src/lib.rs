@@ -391,6 +391,21 @@ fn delete_provider_key() -> Result<(), String> {
 mod payload_validation_tests {
     use super::*;
     #[test]
+    fn sse_parser_extracts_text_and_handles_done() {
+        let event = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
+        assert_eq!(parse_sse_delta(event).unwrap(), Some("hello".to_string()));
+        assert_eq!(parse_sse_delta("[DONE]").unwrap(), None);
+    }
+
+    #[test]
+    fn sse_parser_handles_empty_role_and_rejects_invalid_payload() {
+        let event = r#"{"choices":[{"delta":{"role":"assistant"}}]}"#;
+        assert_eq!(parse_sse_delta(event).unwrap(), Some(String::new()));
+        assert!(parse_sse_delta("not-json").is_err());
+        assert!(parse_sse_delta(r#"{"error":{"message":"bad request"}}"#).is_err());
+    }
+
+    #[test]
     fn provider_key_validation_rejects_empty_oversized_and_control_values() {
         assert_eq!(validate_provider_key("  key-value  "), Ok("key-value"));
         assert!(validate_provider_key("  ").is_err());
@@ -819,6 +834,159 @@ fn read_clipboard() -> Result<String, String> {
     Ok(text)
 }
 
+
+fn parse_sse_delta(data: &str) -> Result<Option<String>, String> {
+    if data.trim() == "[DONE]" { return Ok(None); }
+    let payload: serde_json::Value = serde_json::from_str(data)
+        .map_err(|_| "Provider sent an invalid streaming event.".to_string())?;
+    if let Some(error) = payload.get("error") {
+        let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("Provider streaming error.");
+        return Err(message.chars().take(500).collect());
+    }
+    let choice = payload.get("choices").and_then(|v| v.as_array())
+        .and_then(|items| items.first());
+    let delta = choice.and_then(|v| v.get("delta"))
+        .and_then(|v| v.get("content"));
+    match delta {
+        Some(serde_json::Value::String(text)) => Ok(Some(text.clone())),
+        Some(serde_json::Value::Array(parts)) => {
+            let text = parts.iter().filter_map(|part| part.get("text").and_then(|v| v.as_str())).collect::<String>();
+            if text.is_empty() { Ok(Some(String::new())) } else { Ok(Some(text)) }
+        }
+        _ => Ok(Some(String::new()))
+    }
+}
+
+#[tauri::command]
+async fn send_chat_stream(
+    base_url: String,
+    credential_handle: String,
+    model: String,
+    messages: Vec<ProviderInputMessage>,
+    on_event: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<(), String> {
+    let mut endpoint = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "Provider URL is invalid.".to_string())?;
+    let host = endpoint.host_str().unwrap_or_default();
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false);
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && loopback) {
+        return Err("Provider URL must use HTTPS (HTTP is allowed only for loopback hosts).".into());
+    }
+    if !endpoint.username().is_empty() || endpoint.password().is_some()
+        || endpoint.query().is_some() || endpoint.fragment().is_some() {
+        return Err("Provider URL cannot contain credentials, query parameters, or fragments.".into());
+    }
+    if !endpoint.path().trim_end_matches('/').ends_with("/chat/completions") {
+        let path = format!("{}/chat/completions", endpoint.path().trim_end_matches('/'));
+        endpoint.set_path(&path);
+    }
+    if model.trim().is_empty() || model.len() > 128 || messages.is_empty() || messages.len() > 100 {
+        return Err("A valid model and between 1 and 100 messages are required.".into());
+    }
+    let mut total_bytes = 0usize;
+    for message in &messages {
+        if !["system", "user", "assistant"].contains(&message.role.as_str())
+            || message.content.len() > 100_000 {
+            return Err("Chat message role or content is invalid.".into());
+        }
+        total_bytes = total_bytes.saturating_add(message.content.len());
+        if total_bytes > 1_000_000 {
+            return Err("Chat request exceeds the 1 MB content limit.".into());
+        }
+    }
+    let api_key = credential_entry(&credential_handle)?
+        .get_password()
+        .map_err(|_| "Save an API key in the OS credential vault first.".to_string())?;
+    if api_key.is_empty() || api_key.len() > 8192 {
+        return Err("Stored provider credential is invalid.".into());
+    }
+    let payload = serde_json::json!({
+        "model": model.trim(),
+        "messages": messages.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
+        "stream": true
+    });
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .redirect(reqwest::redirect::Policy::none())
+        .build().map_err(|e| format!("Could not configure provider client: {e}"))?;
+    let mut response = client.post(endpoint)
+        .bearer_auth(&api_key).json(&payload).send().await
+        .map_err(|e| format!("Provider streaming request failed: {e}"))?;
+    let status = response.status();
+    if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
+        return Err("Provider stream exceeded the 2 MB limit.".into());
+    }
+    if !status.is_success() {
+        let mut body=Vec::new();
+        while let Some(chunk)=response.chunk().await.map_err(|e|format!("Could not read provider error: {e}"))? {
+            append_bounded_response(&mut body,&chunk)?;
+        }
+        let raw=String::from_utf8_lossy(&body).replace(&api_key,"[redacted]");
+        return Err(format!("Provider returned HTTP {status}: {}",raw.chars().take(500).collect::<String>()));
+    }
+
+    let mut pending=Vec::<u8>::new();
+    let mut event_data=String::new();
+    let mut total=0usize;
+    let mut completed=false;
+    while let Some(chunk)=response.chunk().await.map_err(|e|format!("Provider stream read failed: {e}"))? {
+        total=total.saturating_add(chunk.len());
+        if total>MAX_PROVIDER_RESPONSE_BYTES { return Err("Provider stream exceeded the 2 MB limit.".into()); }
+        pending.extend_from_slice(&chunk);
+        if pending.len()>65_536 && !pending.contains(&b'\n') {
+            return Err("Provider stream event exceeded the 64 KB limit.".into());
+        }
+        while let Some(newline)=pending.iter().position(|byte|*byte==b'\n') {
+            let mut line=pending.drain(..=newline).collect::<Vec<_>>();
+            if line.last()==Some(&b'\n') { line.pop(); }
+            if line.last()==Some(&b'\r') { line.pop(); }
+            if line.is_empty() {
+                if !event_data.is_empty() {
+                    let data=event_data.trim_end_matches('\n').to_string();
+                    event_data.clear();
+                    if data=="[DONE]" {
+                        on_event.send(serde_json::json!({"type":"completed","finishReason":"stop"}))
+                            .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+                        completed=true;
+                        break;
+                    }
+                    if let Some(delta)=parse_sse_delta(&data)? {
+                        if !delta.is_empty() {
+                            on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
+                                .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+                        }
+                    }
+                }
+            } else if line.starts_with(b"data:") {
+                let value=String::from_utf8_lossy(&line[5..]).trim_start().to_string();
+                if event_data.len().saturating_add(value.len())>65_536 {
+                    return Err("Provider stream event exceeded the 64 KB limit.".into());
+                }
+                event_data.push_str(&value);
+                event_data.push('\n');
+            } else if !line.starts_with(b":") && !line.starts_with(b"event:") && !line.starts_with(b"id:") && !line.starts_with(b"retry:") {
+                return Err("Provider sent an unsupported SSE field.".into());
+            }
+        }
+        if completed { break; }
+    }
+    if !completed {
+        if !event_data.trim().is_empty() {
+            if let Some(delta)=parse_sse_delta(event_data.trim_end_matches('\n'))? {
+                if !delta.is_empty() {
+                    on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
+                        .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+                }
+            }
+        }
+        on_event.send(serde_json::json!({"type":"completed","finishReason":"stop"}))
+            .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+    }
+    Ok(())
+}
+
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -999,7 +1167,7 @@ pub fn run() {
             app.manage(AppDatabase(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
