@@ -183,6 +183,11 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 6;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 7 {
+        transaction.execute_batch("CREATE TABLE training_datasets (id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version >= 1), created_at INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version)); CREATE INDEX idx_training_datasets_created ON training_datasets(created_at DESC); CREATE TABLE training_experiments (id TEXT PRIMARY KEY NOT NULL, dataset_id TEXT NOT NULL, created_at INTEGER NOT NULL, payload TEXT NOT NULL); CREATE INDEX idx_training_experiments_created ON training_experiments(created_at DESC);")?;
+        version = 7;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
@@ -1240,6 +1245,206 @@ async fn list_provider_models(
     parse_provider_model_ids(&body)
 }
 
+
+const MAX_TRAINING_RECORD_BYTES: usize = 1_000_000;
+
+fn bounded_json_text<'a>(value: &'a serde_json::Value, key: &str, max: usize) -> Result<&'a str, String> {
+    let text = value.get(key).and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("Training record field '{key}' is required."))?;
+    if text.trim().is_empty() || text.len() > max {
+        return Err(format!("Training record field '{key}' is invalid."));
+    }
+    Ok(text)
+}
+
+fn unique_bounded_string_array(value: &serde_json::Value, key: &str, max_items: usize, max_len: usize) -> Result<Vec<String>, String> {
+    let values = value.get(key).and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("Training record field '{key}' must be an array."))?;
+    if values.len() > max_items {
+        return Err(format!("Training record field '{key}' exceeds its item limit."));
+    }
+    let mut result = Vec::with_capacity(values.len());
+    let mut seen = HashSet::new();
+    for item in values {
+        let text = item.as_str().ok_or_else(|| format!("Training record field '{key}' contains a non-string value."))?;
+        if text.trim().is_empty() || text.len() > max_len || !seen.insert(text.to_string()) {
+            return Err(format!("Training record field '{key}' contains invalid or duplicate values."));
+        }
+        result.push(text.to_string());
+    }
+    Ok(result)
+}
+
+fn validate_training_dataset_payload(value: &serde_json::Value) -> Result<(String, i64, i64), String> {
+    if value.get("schemaVersion").and_then(serde_json::Value::as_i64) != Some(1) {
+        return Err("Unsupported training dataset schema version.".into());
+    }
+    let id = bounded_json_text(value, "id", 160)?.to_string();
+    let version = value.get("version").and_then(serde_json::Value::as_i64)
+        .filter(|number| *number >= 1).ok_or_else(|| "Training dataset version is invalid.".to_string())?;
+    bounded_json_text(value, "name", 160)?;
+    bounded_json_text(value, "license", 300)?;
+    bounded_json_text(value, "privacyClass", 40)?;
+    let privacy = value["privacyClass"].as_str().unwrap_or_default();
+    let consent = value.get("consentStatus").and_then(serde_json::Value::as_str).unwrap_or_default();
+    if !["public", "synthetic", "owner_approved"].contains(&privacy)
+        || !["approved", "not_required"].contains(&consent) {
+        return Err("Training dataset privacy or consent status is not approved.".into());
+    }
+    if privacy == "owner_approved" {
+        if consent != "approved" || value.get("approvalReference").and_then(serde_json::Value::as_str)
+            .map_or(true, |reference| reference.trim().is_empty() || reference.len() > 300) {
+            return Err("Owner-approved datasets require explicit approval provenance.".into());
+        }
+    }
+    let sources = unique_bounded_string_array(value, "sourceReferences", 500, 500)?;
+    if sources.is_empty() {
+        return Err("Training dataset requires source provenance.".into());
+    }
+    let splits = value.get("splits").and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "Training dataset splits are required.".to_string())?;
+    let mut all_ids = HashSet::new();
+    for split in ["train", "validation", "test"] {
+        let values = splits.get(split).and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("Training dataset split '{split}' is required."))?;
+        if values.len() > 100_000 {
+            return Err("Training dataset split exceeds its item limit.".into());
+        }
+        let mut local = HashSet::new();
+        for item in values {
+            let sample_id = item.as_str().ok_or_else(|| "Training sample IDs must be strings.".to_string())?;
+            if sample_id.trim().is_empty() || sample_id.len() > 160
+                || !local.insert(sample_id.to_string()) || !all_ids.insert(sample_id.to_string()) {
+                return Err("Training dataset splits must contain unique, disjoint sample IDs.".into());
+            }
+        }
+    }
+    let created_at = value.get("createdAt").and_then(serde_json::Value::as_i64)
+        .filter(|timestamp| *timestamp > 0).ok_or_else(|| "Training dataset timestamp is invalid.".to_string())?;
+    Ok((id, version, created_at))
+}
+
+fn contains_sensitive_training_key(value: &serde_json::Value, depth: usize) -> bool {
+    if depth > 8 { return true; }
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(key, child)| {
+            let key = key.to_ascii_lowercase();
+            ["api_key", "apikey", "access_token", "password", "secret", "credential", "authorization", "prompt", "messages", "conversation", "raw_data", "sample_text"]
+                .iter().any(|needle| key.contains(needle))
+                || contains_sensitive_training_key(child, depth + 1)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(|child| contains_sensitive_training_key(child, depth + 1)),
+        _ => false,
+    }
+}
+
+fn validate_training_experiment_payload(value: &serde_json::Value) -> Result<(String, String, i64), String> {
+    if value.get("schemaVersion").and_then(serde_json::Value::as_i64) != Some(1) {
+        return Err("Unsupported training experiment schema version.".into());
+    }
+    let id = bounded_json_text(value, "id", 160)?.to_string();
+    let dataset_id = bounded_json_text(value, "datasetManifestId", 160)?.to_string();
+    bounded_json_text(value, "name", 160)?;
+    bounded_json_text(value, "modelId", 160)?;
+    bounded_json_text(value, "codeRevision", 80)?;
+    bounded_json_text(value, "hardware", 300)?;
+    let method = bounded_json_text(value, "method", 40)?;
+    if !["baseline", "prompting", "retrieval", "tooling", "lora"].contains(&method) {
+        return Err("Training experiment method is invalid.".into());
+    }
+    let config = value.get("configuration").filter(|item| item.is_object())
+        .ok_or_else(|| "Training experiment configuration must be an object.".to_string())?;
+    if contains_sensitive_training_key(config, 0) {
+        return Err("Training experiment configuration contains sensitive or raw prompt data.".into());
+    }
+    let metrics = value.get("metrics").and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "Training experiment metrics must be an object.".to_string())?;
+    if metrics.len() > 100 || metrics.iter().any(|(key, metric)| {
+        key.trim().is_empty() || key.len() > 80 || !metric.is_number()
+            || metric.as_f64().map_or(true, |number| !number.is_finite())
+    }) {
+        return Err("Training experiment metrics are invalid.".into());
+    }
+    let created_at = value.get("createdAt").and_then(serde_json::Value::as_i64)
+        .filter(|timestamp| *timestamp > 0).ok_or_else(|| "Training experiment timestamp is invalid.".to_string())?;
+    Ok((id, dataset_id, created_at))
+}
+
+#[tauri::command]
+fn save_training_dataset(database: State<'_, AppDatabase>, manifest: serde_json::Value) -> Result<(), String> {
+    let (id, version, created_at) = validate_training_dataset_payload(&manifest)?;
+    let payload = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
+    if payload.len() > MAX_TRAINING_RECORD_BYTES {
+        return Err("Training dataset manifest exceeds the 1 MB limit.".into());
+    }
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let existing: Option<String> = connection.query_row(
+        "SELECT payload FROM training_datasets WHERE id=?1 AND version=?2",
+        params![id, version], |row| row.get(0)
+    ).optional().map_err(|e| e.to_string())?;
+    if let Some(existing) = existing {
+        return if existing == payload { Ok(()) } else { Err("Dataset versions are immutable; create a new version instead.".into()) };
+    }
+    connection.execute(
+        "INSERT INTO training_datasets(id,version,created_at,payload) VALUES(?1,?2,?3,?4)",
+        params![id, version, created_at, payload]
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn list_training_datasets(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let mut statement = connection.prepare("SELECT payload FROM training_datasets ORDER BY created_at DESC,id,version DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|e| e.to_string())?;
+        serde_json::from_str(&payload).map_err(|e| e.to_string())
+    }).collect()
+}
+
+#[tauri::command]
+fn save_training_experiment(database: State<'_, AppDatabase>, experiment: serde_json::Value) -> Result<(), String> {
+    let (id, dataset_id, created_at) = validate_training_experiment_payload(&experiment)?;
+    let payload = serde_json::to_string(&experiment).map_err(|e| e.to_string())?;
+    if payload.len() > MAX_TRAINING_RECORD_BYTES {
+        return Err("Training experiment exceeds the 1 MB limit.".into());
+    }
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let dataset_exists: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM training_datasets WHERE id=?1)",
+        params![dataset_id], |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    if !dataset_exists {
+        return Err("The referenced training dataset has not been registered.".into());
+    }
+    let existing: Option<String> = connection.query_row(
+        "SELECT payload FROM training_experiments WHERE id=?1",
+        params![id], |row| row.get(0)
+    ).optional().map_err(|e| e.to_string())?;
+    if let Some(existing) = existing {
+        return if existing == payload { Ok(()) } else { Err("Experiment IDs are immutable; create a new experiment instead.".into()) };
+    }
+    connection.execute(
+        "INSERT INTO training_experiments(id,dataset_id,created_at,payload) VALUES(?1,?2,?3,?4)",
+        params![id, dataset_id, created_at, payload]
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn list_training_experiments(database: State<'_, AppDatabase>) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    let mut statement = connection.prepare("SELECT payload FROM training_experiments ORDER BY created_at DESC,id")
+        .map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.map(|row| {
+        let payload = row.map_err(|e| e.to_string())?;
+        serde_json::from_str(&payload).map_err(|e| e.to_string())
+    }).collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1253,13 +1458,45 @@ pub fn run() {
             app.manage(ActiveChatStreams::default());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, save_training_dataset, list_training_datasets, save_training_experiment, list_training_experiments, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    #[test]
+    fn training_dataset_manifest_requires_provenance_and_disjoint_splits() {
+        let valid = serde_json::json!({
+            "schemaVersion":1,"id":"dataset-1","version":1,"name":"Synthetic baseline",
+            "license":"CC0-1.0","privacyClass":"synthetic","consentStatus":"not_required",
+            "sourceReferences":["generated:baseline"],"createdAt":100,
+            "splits":{"train":["a"],"validation":["b"],"test":["c"]}
+        });
+        assert!(validate_training_dataset_payload(&valid).is_ok());
+        let mut overlap = valid.clone();
+        overlap["splits"]["test"] = serde_json::json!(["a"]);
+        assert!(validate_training_dataset_payload(&overlap).is_err());
+        let mut private = valid.clone();
+        private["privacyClass"] = serde_json::json!("owner_approved");
+        private["consentStatus"] = serde_json::json!("pending");
+        assert!(validate_training_dataset_payload(&private).is_err());
+    }
+
+    #[test]
+    fn training_experiment_rejects_secret_bearing_configuration() {
+        let valid = serde_json::json!({
+            "schemaVersion":1,"id":"experiment-1","name":"Baseline","modelId":"gateway/model",
+            "method":"baseline","datasetManifestId":"dataset-1","codeRevision":"abc1234",
+            "hardware":"CI runner","configuration":{"temperature":0.0},
+            "metrics":{"passRate":0.5},"createdAt":100
+        });
+        assert!(validate_training_experiment_payload(&valid).is_ok());
+        let mut unsafe_record = valid.clone();
+        unsafe_record["configuration"] = serde_json::json!({"nested":{"apiKey":"do-not-store"}});
+        assert!(validate_training_experiment_payload(&unsafe_record).is_err());
+    }
+
     #[test]
     fn stream_ids_are_bounded_and_safe() {
         assert!(valid_stream_id("stream-123_ABC"));
@@ -1458,9 +1695,9 @@ mod database_tests {
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
         connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints;").expect("remove v5 and v6 tables");
-        migrate_database(&mut connection).expect("upgrade v4 to v6");
+        migrate_database(&mut connection).expect("upgrade v4 to v7");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
         assert_eq!(table, 1);
         let audit: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tool_audit_events'", [], |row| row.get(0)).expect("audit table");
@@ -1518,7 +1755,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
