@@ -38,7 +38,7 @@ export interface ModelDescriptor {
   contextWindow?: number;
   supportsStreaming: boolean;
   supportsTools: boolean;
-  location?: "local" | "remote" | "unknown";
+  declaredLocation?: "local" | "remote" | "unknown";
   modalities?: Array<"text" | "image" | "audio" | "document">;
 }
 
