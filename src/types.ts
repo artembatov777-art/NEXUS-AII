@@ -24,7 +24,7 @@ export interface Conversation {
 export interface ProviderSettings {
   baseUrl: string;
   model: string;
-  /** Inference location of the selected model, not the gateway URL. */
+  /** Owner-declared model location; OmniRoute backend locality is not independently verified. */
   inferenceLocation: "local" | "remote";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
