@@ -1,7 +1,7 @@
 # NEXUS AU — Personal AI System Architecture
 
 ## Objective
-NEXUS AU is a private, local-first personal AI environment. Its architecture supports NEXUS Model as the intended primary model without coupling the application to one inference engine, hardware target, or external provider.
+NEXUS AU is a private personal AI environment with a hybrid local-and-cloud model strategy. Its architecture supports NEXUS Model as the intended primary model without coupling the application to one inference engine, hardware target, or external provider.
 
 The product is designed for one primary owner. Multi-tenant SaaS concerns are not part of the default architecture. Optional remote compute and external model adapters remain owner-controlled integrations.
 
@@ -59,7 +59,7 @@ Coordinates model selection and inference, context assembly, memory retrieval, t
 ### Model Registry and Runtime
 The registry stores model identity, version, format, capabilities, context limits, quantization, license metadata, hardware requirements, and artifact location. The runtime loads, unloads, health-checks, and invokes models through a stable interface.
 
-Adapters may target local inference engines or optional remote APIs. Vendor-specific formats stay inside adapters. The application must not assume OmniRoute or any single API is present.
+Local inference engines are connected through local adapters. Cloud models are routed through the selected OmniRoute gateway using its OpenAI-compatible `/v1` API. The Model Runtime owns the gateway base URL, model ID, health checks, streaming, cancellation, and error normalization. Vendor-specific provider details remain inside OmniRoute. OmniRoute is required for the selected cloud-routing path, but local-only operation must remain available without it. Credentials are stored in the OS vault; remote processing is disclosed to the owner.
 
 ### NEXUS Model lifecycle
 NEXUS Model is the intended primary model. Its lifecycle includes base checkpoint selection and license review, tokenizer/config/weight metadata, dataset manifests, training experiments, evaluation suites, versioned artifacts, and rollback.
