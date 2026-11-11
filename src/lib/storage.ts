@@ -76,7 +76,8 @@ export function loadProvider(storage: StorageAdapter = localStorage): ProviderSe
     return value?.baseUrl && value?.model ? {
       baseUrl: value.baseUrl,
       model: value.model,
-      inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote"
+      inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote",
+      ...(value.credentialHandle === "none" ? { credentialHandle: "none" as const } : { credentialHandle: "default" as const })
     } : DEFAULT_PROVIDER;
   } catch { return DEFAULT_PROVIDER; }
 }
