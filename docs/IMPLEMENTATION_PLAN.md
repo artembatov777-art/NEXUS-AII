@@ -1,6 +1,6 @@
 # NEXUS AU — Implementation Plan
 
-> **Strategic direction update (2026-11-11):** NEXUS AU is a private, single-owner personal AI ecosystem. NEXUS Model is the intended primary model; OmniRoute is not a required dependency. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
+> **Strategic direction update (2026-11-11):** NEXUS AU is a private, single-owner hybrid local-and-cloud AI ecosystem. Local inference remains available; OmniRoute is the selected gateway for cloud model routing. NEXUS Model adaptation is a later development goal, while from-scratch foundation-model research is deferred outside the active roadmap. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
 
 ## Current verified baseline
 
@@ -252,23 +252,23 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 - [ ] Execute and record credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions; CI cannot validate an unlocked interactive keyring.
 - [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
-**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. No OmniRoute work is included here.
+**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is tracked in active Phase V, after the remaining manual desktop acceptance checks.
 
 
 ## Strategic model and product direction — 2026-11-11
 
-This section is authoritative for future work and supersedes earlier wording that treated OmniRoute or a hosted multi-user client as the product destination.
+This section is authoritative for future work and supersedes earlier wording that treated OmniRoute as optional or a hosted multi-user client as the product destination.
 
 ### Product scope
 - NEXUS AU is a personal AI ecosystem for one primary owner, not a public multi-tenant SaaS service.
 - NEXUS AI Core is the application runtime for context, memory, inference, agents, tools, multimodal services, and model lifecycle.
 - NEXUS Model is the intended primary model.
-- External providers and aggregators are optional adapters for development, comparison, or fallback. OmniRoute is not mandatory.
+- OmniRoute is the selected cloud gateway; direct vendor-specific API adapters are not the preferred integration path. OmniRoute is not mandatory.
 - Local inference is preferred when practical. Owner-configured remote compute remains an option when local hardware is insufficient.
 
 ### New strategic phases
 - [ ] NEXUS AI Core: model registry, runtime lifecycle, inference contracts, streaming, cancellation, health and resource reporting.
-- [ ] Local model vertical slice: evaluate an open-weight checkpoint, document license/hardware constraints, integrate a local inference backend, and deliver real local chat.
+- [ ] Hybrid model vertical slice: implement OmniRoute model discovery and cloud chat, preserve the local inference adapter path, and expose active model/runtime identity.
 - [ ] Personal context integration: connect the local primary model to approved memory, project knowledge, and bounded context assembly with source provenance.
 - [ ] NEXUS Model adaptation: evaluation suites, curated/versioned datasets, reproducible adapter or fine-tuning experiments, model versioning and rollback.
 - [ ] Multimodal capabilities: capability-declared image/audio/voice paths, with local-versus-remote processing clearly identified.
