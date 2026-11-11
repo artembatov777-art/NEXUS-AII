@@ -74,7 +74,7 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
         <button className="icon-btn" onClick={onClose} aria-label="Close search"><X size={18}/></button>
       </header>
       <form className="global-search-form" onSubmit={event => { event.preventDefault(); void searchAll(); }}>
-        <input autoFocus value={query} onChange={event => { setQuery(event.target.value); clearResults(); }} placeholder="Search workspace data…" />
+        <input aria-label="Search workspace" autoFocus value={query} onChange={event => { setQuery(event.target.value); clearResults(); }} placeholder="Search workspace data…" />
         <button className="primary-btn" disabled={!query.trim() || working}><Search size={14}/>{working ? "Searching…" : "Search"}</button>
       </form>
       <div className="global-search-scopes" aria-label="Search scopes">
