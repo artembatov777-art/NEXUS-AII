@@ -1176,7 +1176,7 @@ fn parse_provider_model_ids(body: &[u8]) -> Result<Vec<String>, String> {
         .map_err(|_| "Could not parse the provider model catalog.".to_string())?;
     let entries = payload.get("data").and_then(serde_json::Value::as_array)
         .ok_or_else(|| "Provider model catalog must contain a data array.".to_string())?;
-    let mut ids = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
     for entry in entries.iter().take(1000) {
         let Some(raw_id) = entry.get("id").and_then(serde_json::Value::as_str) else {
             continue;
