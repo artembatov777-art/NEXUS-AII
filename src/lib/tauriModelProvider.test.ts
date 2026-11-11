@@ -36,11 +36,9 @@ describe("TauriModelProvider", () => {
 
   it("sends a native cancellation command when an active stream is aborted", async () => {
     mockedIsTauri.mockReturnValue(true);
-    let onMessage: ((event: { type: "text_delta" | "completed"; text?: string }) => void) | undefined;
     let rejectStream: ((reason?: unknown) => void) | null = null;
-    mockedInvoke.mockImplementation((command, args) => {
+    mockedInvoke.mockImplementation((command) => {
       if (command === "send_chat_stream") {
-        onMessage = (args as { onEvent: { onmessage: (event: { type: "text_delta" | "completed"; text?: string }) => void } }).onEvent.onmessage;
         return new Promise((_resolve, reject) => { rejectStream = reject; });
       }
       if (command === "cancel_chat_stream") {
