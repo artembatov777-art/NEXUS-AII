@@ -14,7 +14,8 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Add responsive iPhone-oriented preview screens for chat, projects, memory, and settings.
 - [x] Keep all demo interactions local and clearly disclose that no AI model is connected.
 - [ ] Run production build and automated checks for the new preview.
-- [ ] Publish a preview URL and verify it in iPhone Safari.
+- [x] Add a GitHub Actions Pages build/deploy workflow for the feature branch.
+- [ ] Confirm the first successful Pages deployment, publish its URL, and verify it in iPhone Safari.
 - [ ] Refine layouts after real-device feedback.
 
 **Acceptance:** the owner can open a hosted URL on iPhone, inspect key workspace screens, and try demo-only interactions without contacting an AI provider or exposing credentials.
