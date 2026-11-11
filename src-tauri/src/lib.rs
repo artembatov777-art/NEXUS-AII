@@ -449,16 +449,33 @@ mod payload_validation_tests {
     #[test]
     fn sse_parser_extracts_text_and_handles_done() {
         let event = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
-        assert_eq!(parse_sse_delta(event).unwrap(), Some("hello".to_string()));
-        assert_eq!(parse_sse_delta("[DONE]").unwrap(), None);
+        assert_eq!(parse_sse_chunk(event).unwrap().unwrap().text.as_deref(), Some("hello"));
+        assert_eq!(parse_sse_chunk("[DONE]").unwrap(), None);
     }
 
     #[test]
     fn sse_parser_handles_empty_role_and_rejects_invalid_payload() {
         let event = r#"{"choices":[{"delta":{"role":"assistant"}}]}"#;
-        assert_eq!(parse_sse_delta(event).unwrap(), Some(String::new()));
-        assert!(parse_sse_delta("not-json").is_err());
-        assert!(parse_sse_delta(r#"{"error":{"message":"bad request"}}"#).is_err());
+        assert_eq!(parse_sse_chunk(event).unwrap().unwrap().text, None);
+        assert!(parse_sse_chunk("not-json").is_err());
+        assert!(parse_sse_chunk(r#"{"error":{"message":"bad request"}}"#).is_err());
+    }
+
+    #[test]
+    fn sse_parser_extracts_finish_reason_and_usage_metadata() {
+        let event = r#"{"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":23,"completion_tokens":7}}"#;
+        let parsed = parse_sse_chunk(event).unwrap().unwrap();
+        assert_eq!(parsed.finish_reason.as_deref(), Some("length"));
+        assert_eq!(parsed.input_tokens, Some(23));
+        assert_eq!(parsed.output_tokens, Some(7));
+    }
+
+    #[test]
+    fn sse_parser_accepts_alternate_usage_token_names() {
+        let event = r#"{"choices":[],"usage":{"input_tokens":11,"output_tokens":4}}"#;
+        let parsed = parse_sse_chunk(event).unwrap().unwrap();
+        assert_eq!(parsed.input_tokens, Some(11));
+        assert_eq!(parsed.output_tokens, Some(4));
     }
 
     #[test]
@@ -891,7 +908,15 @@ fn read_clipboard() -> Result<String, String> {
 }
 
 
-fn parse_sse_delta(data: &str) -> Result<Option<String>, String> {
+#[derive(Debug, Default, PartialEq)]
+struct ParsedSseChunk {
+    text: Option<String>,
+    finish_reason: Option<String>,
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+}
+
+fn parse_sse_chunk(data: &str) -> Result<Option<ParsedSseChunk>, String> {
     if data.trim() == "[DONE]" { return Ok(None); }
     let payload: serde_json::Value = serde_json::from_str(data)
         .map_err(|_| "Provider sent an invalid streaming event.".to_string())?;
@@ -901,16 +926,49 @@ fn parse_sse_delta(data: &str) -> Result<Option<String>, String> {
     }
     let choice = payload.get("choices").and_then(|v| v.as_array())
         .and_then(|items| items.first());
-    let delta = choice.and_then(|v| v.get("delta"))
-        .and_then(|v| v.get("content"));
-    match delta {
-        Some(serde_json::Value::String(text)) => Ok(Some(text.clone())),
-        Some(serde_json::Value::Array(parts)) => {
-            let text = parts.iter().filter_map(|part| part.get("text").and_then(|v| v.as_str())).collect::<String>();
-            if text.is_empty() { Ok(Some(String::new())) } else { Ok(Some(text)) }
+    let delta = choice.and_then(|v| v.get("delta")).and_then(|v| v.get("content"));
+    let text = match delta {
+        Some(serde_json::Value::String(value)) => Some(value.clone()),
+        Some(serde_json::Value::Array(parts)) => Some(parts.iter()
+            .filter_map(|part| part.get("text").and_then(|v| v.as_str()))
+            .collect::<String>()),
+        _ => None
+    };
+    let finish_reason = choice.and_then(|v| v.get("finish_reason"))
+        .and_then(|v| v.as_str()).map(str::to_owned);
+    let usage = payload.get("usage");
+    let input_tokens = usage.and_then(|v| v.get("prompt_tokens").or_else(|| v.get("input_tokens")))
+        .and_then(|v| v.as_u64());
+    let output_tokens = usage.and_then(|v| v.get("completion_tokens").or_else(|| v.get("output_tokens")))
+        .and_then(|v| v.as_u64());
+    Ok(Some(ParsedSseChunk { text, finish_reason, input_tokens, output_tokens }))
+}
+
+fn forward_sse_chunk(
+    on_event: &tauri::ipc::Channel<serde_json::Value>,
+    data: &str,
+    finish_reason: &mut Option<String>,
+    api_key: &str,
+) -> Result<bool, String> {
+    if data.trim() == "[DONE]" { return Ok(true); }
+    let parsed = parse_sse_chunk(data).map_err(|error| error.replace(api_key, "[redacted]"))?;
+    if let Some(chunk) = parsed {
+        if let Some(text) = chunk.text.filter(|value| !value.is_empty()) {
+            on_event.send(serde_json::json!({"type":"text_delta","text":text}))
+                .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
         }
-        _ => Ok(Some(String::new()))
+        if chunk.input_tokens.is_some() || chunk.output_tokens.is_some() {
+            on_event.send(serde_json::json!({
+                "type":"usage",
+                "inputTokens":chunk.input_tokens,
+                "outputTokens":chunk.output_tokens
+            })).map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+        }
+        if chunk.finish_reason.is_some() {
+            *finish_reason = chunk.finish_reason;
+        }
     }
+    Ok(false)
 }
 
 #[tauri::command]
@@ -1008,6 +1066,7 @@ async fn send_chat_stream(
     let mut event_data=String::new();
     let mut total=0usize;
     let mut completed=false;
+    let mut finish_reason: Option<String> = None;
     loop {
         let next_chunk = tokio::select! {
             chunk = response.chunk() => chunk.map_err(|e| format!("Provider stream read failed: {e}"))?,
@@ -1028,17 +1087,11 @@ async fn send_chat_stream(
                 if !event_data.is_empty() {
                     let data=event_data.trim_end_matches('\n').to_string();
                     event_data.clear();
-                    if data=="[DONE]" {
-                        on_event.send(serde_json::json!({"type":"completed","finishReason":"stop"}))
-                            .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+                    if forward_sse_chunk(&on_event, &data, &mut finish_reason, &api_key)? {
+                        on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
+                            .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
                         completed=true;
                         break;
-                    }
-                    if let Some(delta)=parse_sse_delta(&data).map_err(|error| error.replace(&api_key, "[redacted]"))? {
-                        if !delta.is_empty() {
-                            on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
-                                .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
-                        }
                     }
                 }
             } else if line.starts_with(b"data:") {
@@ -1067,16 +1120,10 @@ async fn send_chat_stream(
             }
         }
         if !event_data.trim().is_empty() {
-            if let Some(delta)=parse_sse_delta(event_data.trim_end_matches('\n'))
-                .map_err(|error| error.replace(&api_key, "[redacted]"))? {
-                if !delta.is_empty() {
-                    on_event.send(serde_json::json!({"type":"text_delta","text":delta}))
-                        .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
-                }
-            }
+            let _ = forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, &api_key)?;
         }
-        on_event.send(serde_json::json!({"type":"completed","finishReason":"stop"}))
-            .map_err(|_|"The chat stream consumer disconnected.".to_string())?;
+        on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
+            .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
     }
     Ok(())
 }
