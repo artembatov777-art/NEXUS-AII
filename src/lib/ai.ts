@@ -33,7 +33,7 @@ export async function sendMessage(
   if (!onDelta) {
     return invoke<string>("send_chat", {
       baseUrl: settings.baseUrl,
-      credentialHandle: "default",
+      credentialHandle: settings.credentialHandle ?? "default",
       model: settings.model,
       messages: requestMessages
     });
@@ -66,7 +66,7 @@ export async function sendMessage(
   try {
     await invoke("send_chat_stream", {
       baseUrl: settings.baseUrl,
-      credentialHandle: "default",
+      credentialHandle: settings.credentialHandle ?? "default",
       model: settings.model,
       messages: requestMessages,
       streamId,
