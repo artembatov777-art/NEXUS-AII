@@ -125,3 +125,23 @@ button:disabled {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Training Lab */
+.training-modal{width:min(760px,calc(100vw - 32px));max-height:min(90vh,960px);overflow:auto;background:#141923;border:1px solid #34394a;border-radius:16px;padding:22px;color:#e8eaf1;box-shadow:0 25px 90px #0009}
+.training-modal .memory-header{margin-bottom:14px}
+.training-notice{padding:12px 13px;margin:12px 0 16px;border:1px solid #3a3550;border-radius:9px;background:#171b29;color:#b9b1d2;font-size:10px;line-height:1.6}
+.training-section{display:grid;gap:10px;padding:15px 0;border-top:1px solid #2b3040}
+.training-section-title{display:flex;align-items:center;gap:8px;color:#c9baf0;font-size:12px;font-weight:600}
+.training-modal label{display:grid;gap:6px;color:#aab3c3;font-size:10px}
+.training-modal input,.training-modal textarea,.training-modal select{width:100%;min-width:0;background:#0d1119;border:1px solid #303748;border-radius:8px;padding:9px 10px;color:#e8eaf1;font-size:11px}
+.training-modal textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,monospace}
+.training-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.training-splits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.training-modal .primary-btn{justify-self:end;display:flex;align-items:center;gap:7px}
+.training-record-counts{display:flex;align-items:center;gap:12px;color:#929caf;font-size:10px}
+.training-record-counts button{margin-left:auto}
+.training-record{display:grid;gap:4px;padding:10px 11px;background:#10151e;border:1px solid #2b3040;border-radius:8px}
+.training-record strong{color:#e1e5ee;font-size:11px}
+.training-record small{color:#8f9aae;font-size:9px;overflow-wrap:anywhere}
+@media(max-width:620px){.training-two-col,.training-splits{grid-template-columns:1fr}.training-modal{padding:15px}}
