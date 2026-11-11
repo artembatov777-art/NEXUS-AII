@@ -57,12 +57,17 @@ describe("TauriModelProvider", () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockResolvedValue(["model-a"]);
     const router = createTauriModelRouter({
-      baseUrl: "http://127.0.0.1:20128/v1", model: "model-a", inferenceLocation: "local"
+      baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b",
+      inferenceLocation: "local", credentialHandle: "none"
     });
     if (!router) throw new Error("Expected native model router.");
     expect(await router.listModels()).toMatchObject({
       ok: true,
-      value: [{ id: "model-a", declaredLocation: "local" }]
+      value: [{ id: "qwen2.5:7b", declaredLocation: "local" }]
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
+      baseUrl: "http://127.0.0.1:11434/v1",
+      credentialHandle: "none"
     });
   });
 
