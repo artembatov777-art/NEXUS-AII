@@ -12,7 +12,7 @@ The last baseline with recorded cross-platform CI evidence is older than the cur
 
 The preview is isolated behind the `?demo=1` query parameter. The standard desktop entry point continues to render the existing Tauri-oriented application. The preview uses local in-memory sample content only; it does not invoke Tauri commands, call OmniRoute, read provider credentials, or persist personal workspace data. Chat input is intentionally demo-only and displays a notice instead of calling a model.
 
-The first preview slice includes Chat, Projects, Memory, and Settings layouts with an iPhone-safe viewport, bottom navigation, and demo-only interactions. Next steps are production-build verification, publishing a static preview URL, and checking the layout in Safari on a real iPhone.
+The first preview slice includes Chat, Projects, Memory, and Settings layouts with an iPhone-safe viewport, bottom navigation, and demo-only interactions. The production build and automated test suite have passed on the active branch. GitHub Pages is not yet enabled for this repository; the owner must set **Settings → Pages → Build and deployment → Source: GitHub Actions** once. The workflow cannot create the Pages site with the current GitHub App permissions. After that, the deployment can be rerun and the resulting URL checked in Safari on a real iPhone.
 
 > **Historical implementation record:** The milestone and phase notes below preserve the repository's earlier implementation sequence. For the current seven-phase delivery plan, use the authoritative phase map at the end of this document.
 
