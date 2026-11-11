@@ -145,3 +145,7 @@ button:disabled {
 .training-record strong{color:#e1e5ee;font-size:11px}
 .training-record small{color:#8f9aae;font-size:9px;overflow-wrap:anywhere}
 @media(max-width:620px){.training-two-col,.training-splits{grid-template-columns:1fr}.training-modal{padding:15px}}
+
+.training-evaluation-result{display:grid;gap:4px;padding:11px 12px;border:1px solid #3c3551;border-radius:8px;background:#171b29;color:#c8bce3}
+.training-evaluation-result strong{font-size:14px}
+.training-evaluation-result span{font-size:10px;line-height:1.5;color:#a9a1bf}
