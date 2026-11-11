@@ -31,6 +31,7 @@ const experiment: TrainingExperiment = {
   modelId: "gateway/model-a",
   method: "baseline",
   datasetManifestId: manifest.id,
+  datasetManifestVersion: manifest.version,
   codeRevision: "abc1234",
   hardware: "CI runner",
   configuration: { temperature: 0, maxOutputTokens: 256 },
