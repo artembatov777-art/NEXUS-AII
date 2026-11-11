@@ -1,14 +1,17 @@
-import { env, pipeline } from "@xenova/transformers";
+import { env, pipeline } from "@huggingface/transformers";
 import { err, ok, type Result } from "../core/result";
 import type { EmbeddingProvider } from "../core/knowledge";
 
 type TensorOutput = { tolist(): unknown };
 type Extractor = (texts: string[], options: { pooling: "mean"; normalize: true }) => Promise<TensorOutput>;
-const MODEL_ID = "Xenova/all-MiniLM-L6-v2";
+type ExtractorFactory = () => Promise<Extractor>;
+const MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 
 /** Runs a small sentence-transformer locally in the browser; model weights are downloaded on first use. */
 export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {
   private extractor?: Promise<Extractor>;
+
+  constructor(private readonly createExtractor: ExtractorFactory = loadLocalExtractor) {}
 
   async embed(texts: string[], signal?: AbortSignal): Promise<Result<number[][]>> {
     if (!texts.length || texts.length > 500 || texts.some(text => !text.trim() || text.length > 12_000)) {
@@ -16,7 +19,7 @@ export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {
     }
     if (signal?.aborted) return err("cancelled", "Embedding was cancelled.");
     try {
-      const extractor = await (this.extractor ??= this.load());
+      const extractor = await (this.extractor ??= this.createExtractor());
       if (signal?.aborted) return err("cancelled", "Embedding was cancelled.");
       const output = await extractor(texts, { pooling: "mean", normalize: true });
       const raw = output.tolist();
@@ -31,15 +34,15 @@ export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {
       return err("provider_unavailable", cause instanceof Error ? cause.message : "Local embedding model could not be loaded.", true);
     }
   }
+}
 
-  private async load(): Promise<Extractor> {
-    env.allowRemoteModels = true;
-    env.allowLocalModels = true;
-    const createPipeline = pipeline as unknown as (
-      task: "feature-extraction",
-      model: string,
-      options: { quantized: boolean }
-    ) => Promise<Extractor>;
-    return createPipeline("feature-extraction", MODEL_ID, { quantized: true });
-  }
+async function loadLocalExtractor(): Promise<Extractor> {
+  env.allowRemoteModels = true;
+  env.allowLocalModels = true;
+  const createPipeline = pipeline as unknown as (
+    task: "feature-extraction",
+    model: string,
+    options: { dtype: "q8" }
+  ) => Promise<Extractor>;
+  return createPipeline("feature-extraction", MODEL_ID, { dtype: "q8" });
 }
