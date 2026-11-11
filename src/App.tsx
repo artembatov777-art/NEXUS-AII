@@ -16,6 +16,7 @@ import { KnowledgeRetrievalService } from "./core/knowledge";
 import { WorkspaceProjectRepository } from "./lib/projectStorage";
 import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/nativeRepositories";
 import { MemoryService, type MemoryId } from "./core/memory";
+import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -125,6 +126,16 @@ export default function App() {
     setActiveId(item.id);
     setError("");
   }
+
+  useEffect(() => {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
+      if (!matchesNewConversationShortcut(event)) return;
+      event.preventDefault();
+      newChat();
+    }
+    window.addEventListener("keydown", handleKeyboardShortcut);
+    return () => window.removeEventListener("keydown", handleKeyboardShortcut);
+  }, [conversationsReady]);
   function updateMessages(id: string, next: ChatMessage[]) {
     setConversations(current => current.map(c => c.id === id
       ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
@@ -327,7 +338,13 @@ export default function App() {
       <div className="nav-label nav-label-spaced">SYSTEM</div>
       <button className="nav-item" onClick={() => setFileSystemOpen(true)}><FolderOpen size={17}/> File system</button>
       <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
-      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => setGlobalSearchOpen(true)} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div></div>
+      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => setGlobalSearchOpen(true)} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => {
+        if (!conversations.length) return;
+        if (window.confirm("Delete all conversations? This cannot be undone.")) {
+          setConversations([]);
+          setActiveId(null);
+        }
+      }} title="Clear all history" aria-label="Clear all conversation history"><Trash2 size={14}/></button></div></div>
       <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
         {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
