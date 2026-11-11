@@ -40,7 +40,7 @@ class TauriModelProvider implements ModelProvider {
     if (!isTauri()) throw new Error("Native model requests are available only in the desktop host.");
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
     if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
-    const channel = new Channel<{ type: "text_delta" | "completed"; text?: string; finishReason?: string }>();
+    const channel = new Channel<{ type: "text_delta" | "usage" | "completed"; text?: string; finishReason?: string; inputTokens?: number; outputTokens?: number }>();
     const streamId = crypto.randomUUID();
     let completed = false;
     const cancelNativeStream = () => {
@@ -54,6 +54,7 @@ class TauriModelProvider implements ModelProvider {
     let failure: Error | null = null;
     channel.onmessage = event => {
       if (event.type === "text_delta" && typeof event.text === "string") queue.push({ type: "text_delta", text: event.text });
+      else if (event.type === "usage") queue.push({ type: "usage", inputTokens: event.inputTokens, outputTokens: event.outputTokens });
       else if (event.type === "completed") { queue.push({ type: "completed", finishReason: event.finishReason }); done = true; }
       else failure = new Error("Provider returned an unsupported stream event.");
       wake?.();
