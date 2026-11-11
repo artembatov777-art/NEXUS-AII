@@ -16,7 +16,7 @@ const manifest: DatasetManifest = {
 };
 const experiment: TrainingExperiment = {
   schemaVersion: 1, id: "experiment-1", name: "Baseline", modelId: "gateway/model",
-  method: "baseline", datasetManifestId: manifest.id, codeRevision: "abc1234",
+  method: "baseline", datasetManifestId: manifest.id, datasetManifestVersion: manifest.version, codeRevision: "abc1234",
   hardware: "Test runner", configuration: { temperature: 0 },
   metrics: { passRate: 0.5 }, createdAt: 200
 };
