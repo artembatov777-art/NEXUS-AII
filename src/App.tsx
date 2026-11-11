@@ -149,8 +149,16 @@ export default function App() {
         sourceReferences = retrieved.value.citations;
         if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
       }
-      const answer = await sendMessage(provider, next, contextParts.join("\n\n"));
-      updateMessages(target.id, [...next, { id: makeId(), role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+      const assistantId = makeId();
+      let streamedAnswer = "";
+      const answer = await sendMessage(provider, next, contextParts.join("\n\n"), delta => {
+        streamedAnswer += delta;
+        updateMessages(target!.id, [...next, {
+          id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(),
+          ...(sourceReferences.length ? { sourceReferences } : {})
+        }]);
+      });
+      updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
