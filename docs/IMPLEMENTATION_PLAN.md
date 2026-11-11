@@ -282,9 +282,10 @@ The seven phases below are the only active project phases. The earlier numbered 
 
 1. Finish code-addressable Phase IV work and verify the latest CI baseline.
 2. Record real Windows/macOS/Linux desktop and credential-vault smoke tests when those interactive environments are available.
-3. Complete Phase V model registry/runtime contracts, OmniRoute model discovery, SSE streaming, cancellation and local/cloud routing.
+3. Complete Phase V native stream cancellation, model capability metadata, error/usage normalization, and explicit local/cloud routing.
 4. Connect approved memory and project knowledge to the selected model runtime.
 5. Connect model-driven agents through the existing Tool Gateway and coordinator.
-6. Start Phase VI only after the real model runtime is stable; establish evaluation and data governance before any fine-tuning.
+6. Continue Phase VI with evaluation suites, dataset governance, and experiment persistence; fine-tuning stays gated on evidence and hardware.
+7. Continue Phase VII with attachment ingestion, model-backed image/audio understanding, and explicit local/remote processing disclosure.
 
 **Status rule:** documentation, UI presets, and mock providers are not proof of a working model integration. Every acceptance item requires implementation and automated or manual evidence appropriate to the feature.
