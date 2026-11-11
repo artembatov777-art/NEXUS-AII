@@ -30,6 +30,7 @@ export interface TrainingExperiment {
   modelId: string;
   method: ExperimentMethod;
   datasetManifestId: string;
+  datasetManifestVersion: number;
   codeRevision: string;
   hardware: string;
   configuration: Record<string, unknown>;
@@ -113,6 +114,7 @@ export function validateTrainingExperiment(value: unknown): value is TrainingExp
       !boundedText(experiment.modelId, 160) ||
       !["baseline", "prompting", "retrieval", "tooling", "lora"].includes(experiment.method ?? "") ||
       !boundedText(experiment.datasetManifestId, 160) ||
+      !Number.isSafeInteger(experiment.datasetManifestVersion) || (experiment.datasetManifestVersion ?? 0) < 1 ||
       !boundedText(experiment.codeRevision, 80) ||
       !boundedText(experiment.hardware, 300) ||
       !experiment.configuration || typeof experiment.configuration !== "object" ||
