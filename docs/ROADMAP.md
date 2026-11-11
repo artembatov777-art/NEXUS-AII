@@ -27,7 +27,8 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Projects and project-aware workspace.
 - [x] Settings and provider credential management.
 - [x] Global search, backup and restore UI.
-- [x] Add visible keyboard focus indicators, reduced-motion support, and semantic provider-settings dialog labels.\n- [ ] Complete full keyboard-navigation and screen-reader audit.
+- [x] Add visible keyboard focus indicators, reduced-motion support, and semantic provider-settings dialog labels.
+- [ ] Complete full keyboard-navigation and screen-reader audit.
 - [ ] Finish native file-picker, notification, and deep-link workflows where they belong in the product.
 
 **Acceptance:** the workspace is usable end-to-end, keyboard accessible, and reliable on supported desktop platforms.
