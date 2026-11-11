@@ -286,3 +286,38 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .send-btn:hover:not(:disabled){filter:brightness(1.13)}
 @media(max-width:900px){.sidebar{width:245px}.topbar{padding:0 18px}.runtime-indicator{display:none}}
 @media(max-width:640px){.app-shell{min-height:560px}.sidebar{position:absolute;z-index:80;inset:0 auto 0 0;width:min(292px,86vw);box-shadow:24px 0 70px rgba(0,0,0,.48)}.sidebar.sidebar-hidden{width:0;box-shadow:none}.mobile-only{display:grid}.topbar{height:58px;padding:0 12px}.top-left,.top-right{gap:7px}.breadcrumb{font-size:10px}.model-pill{max-width:48vw;padding:6px 8px;font-size:9px}.chat-area{padding:24px 13px 14px}.chat-heading{margin-bottom:20px}.nexus-system-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:18px}.nexus-system-card{min-height:78px;padding:11px}.nexus-card-label{font-size:8px}.nexus-system-card strong{font-size:11px}.nexus-system-card small{font-size:9px}.chat-project-context{flex-wrap:wrap}.messages{padding-left:2px;padding-right:2px}}
+
+
+/* Unified NEXUS surface language for every workspace module */
+.modal-backdrop,.agent-backdrop,.global-search-backdrop{background:rgba(2,7,12,.78);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}
+.memory-modal,.project-modal,.knowledge-modal,.training-modal,.agent-center,.global-search-modal,.settings-modal{color:#dcebf2;background:linear-gradient(155deg,rgba(15,31,44,.99),rgba(8,16,25,.99));border:1px solid rgba(121,199,232,.2);box-shadow:0 32px 100px rgba(0,0,0,.62),inset 0 1px rgba(215,242,252,.045)}
+.memory-header,.agent-center-header,.modal-header{border-color:rgba(121,199,232,.13)}
+.memory-header h2,.agent-center-title h2,.modal-header h2{color:#e2f3fa}
+.eyebrow{color:#83b5cb}
+.memory-search,.knowledge-search,.global-search-form input,.training-modal input,.training-modal textarea,.training-modal select,.settings-modal input,.settings-modal select{border-color:rgba(121,199,232,.17);background:#091724;color:#dcecf4}
+.memory-search:focus-within,.knowledge-search:focus-within,.global-search-form input:focus,.training-modal input:focus,.training-modal textarea:focus,.training-modal select:focus,.settings-modal input:focus,.settings-modal select:focus{outline:0;border-color:rgba(121,199,232,.55);box-shadow:0 0 0 3px rgba(87,164,195,.1)}
+.memory-record,.project-item,.knowledge-document,.training-record,.agent-card,.agent-feed,.agent-approval-card{border-color:rgba(121,199,232,.14);background:linear-gradient(145deg,rgba(15,32,46,.9),rgba(9,19,29,.9));color:#c9dce6}
+.memory-record strong,.project-item strong,.knowledge-document strong,.training-record strong,.agent-card strong{color:#e0f0f6}
+.memory-record-meta,.memory-record small,.project-footnote,.knowledge-document small,.training-record small,.agent-metadata,.agent-disclaimer{color:#8199a8}
+.memory-tags span,.agent-kicker,.agent-local-tag{border-color:rgba(121,199,232,.18);background:rgba(23,55,73,.48);color:#9acde1}
+.primary-btn,.agent-primary-button{border:1px solid rgba(121,199,232,.28);background:linear-gradient(145deg,#286987,#17435b);color:#e8f7fc;box-shadow:0 5px 18px rgba(20,82,111,.2)}
+.primary-btn:hover,.agent-primary-button:hover{filter:brightness(1.12)}
+.secondary-btn,.agent-small-button{border:1px solid rgba(121,199,232,.18);background:#102232;color:#b9d5e2}
+.secondary-btn:hover,.agent-small-button:hover{border-color:rgba(121,199,232,.42);background:#153044}
+.memory-empty,.agent-empty,.global-search-empty{color:#8399a8}
+.memory-footer,.project-footnote{border-color:rgba(121,199,232,.12)}
+.memory-record-top button,.project-actions button,.agent-danger-button{color:#c18f91}
+.error-banner,.agent-error{border-color:rgba(212,126,126,.25);background:rgba(76,29,34,.32);color:#e6b2b2}
+.training-notice,.security-note,.agent-disclaimer{border-color:rgba(121,199,232,.15);background:rgba(14,35,49,.72);color:#a9c6d3}
+.training-section{border-color:rgba(121,199,232,.12)}
+.training-section-title,.knowledge-results h3,.knowledge-citations strong{color:#a9d8eb}
+.training-evaluation-result{border-color:rgba(121,199,232,.2);background:#102334;color:#c5e3ef}
+.agent-center-grid{gap:15px}
+.agent-card{border-radius:13px}
+.agent-card-heading{border-color:rgba(121,199,232,.12)}
+.agent-feed-dot{background:#79c7e8;box-shadow:0 0 9px rgba(121,199,232,.55)}
+.settings-modal label{color:#a8c0cd}
+.settings-modal label small{color:#829aaa}
+.settings-modal .modal-description{color:#9bb1bd}
+.settings-modal .modal-actions{border-color:rgba(121,199,232,.12)}
+@media(max-width:620px){.memory-modal,.project-modal,.knowledge-modal,.training-modal,.agent-center,.global-search-modal,.settings-modal{max-height:calc(100dvh - 20px);border-radius:14px;padding:16px}.agent-center-grid{grid-template-columns:1fr}.agent-center{width:calc(100vw - 20px)}}
