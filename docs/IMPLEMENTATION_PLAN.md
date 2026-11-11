@@ -4,9 +4,11 @@
 
 ## Current verified baseline
 
-The `feat/foundation-0.1` branch contains a React + TypeScript + Vite UI, Tauri 2/Rust host, a basic chat flow, local browser persistence, provider settings, and an initial CI workflow. The frontend production build passed in GitHub Actions. Native Tauri compilation has not yet been verified.
+The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The existing native provider command supports one-shot OpenAI-compatible chat requests and can target a local OmniRoute `/v1` endpoint; model discovery and token streaming are not yet implemented.
 
-The current draft PR #1 remains separate from this architecture work. Do not merge it automatically as part of this plan.
+The last baseline with recorded cross-platform CI evidence is older than the current documentation/UI changes. The latest branch head must pass fresh CI before those changes are treated as verified. Real interactive desktop and credential-vault smoke tests remain separate manual acceptance items.
+
+> **Historical implementation record:** The milestone and phase notes below preserve the repository's earlier implementation sequence. For the current seven-phase delivery plan, use the authoritative phase map at the end of this document.
 
 ## Milestone 0 — Architecture baseline
 - [x] Create modular system design
@@ -255,37 +257,34 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 **Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is tracked in active Phase V, after the remaining manual desktop acceptance checks.
 
 
-## Strategic model and product direction — 2026-11-11
+## Active phase map — authoritative (2026-11-11)
 
-This section is authoritative for future work and supersedes earlier wording that treated OmniRoute as optional or a hosted multi-user client as the product destination.
+The seven phases below are the only active project phases. The earlier numbered milestones and historical phase notes above record implementation history; they do not override this active map.
 
-### Product scope
-- NEXUS AU is a personal AI ecosystem for one primary owner, not a public multi-tenant SaaS service.
-- NEXUS AI Core is the application runtime for context, memory, inference, agents, tools, multimodal services, and model lifecycle.
-- NEXUS Model is the intended primary model.
-- OmniRoute is the selected cloud gateway; direct vendor-specific API adapters are not the preferred integration path. OmniRoute is not mandatory.
-- Local inference is preferred when practical. Owner-configured remote compute remains an option when local hardware is insufficient.
+1. **Phase I — Architecture and infrastructure:** React/TypeScript/Vite, Tauri/Rust, SQLite, domain contracts, CI and build foundations.
+2. **Phase II — Workspace and interface:** chat, history, projects, settings, search, backup/restore, accessibility and desktop UX.
+3. **Phase III — Memory, agents and tools:** memory/knowledge, document ingestion, retrieval, agent runtime, coordinator, Tool Gateway, MCP and audited execution.
+4. **Phase IV — Desktop, security and stability:** native persistence, OS credential vault, backup recovery, platform builds, dependency/security review, accessibility and real desktop smoke tests.
+5. **Phase V — NEXUS AI Core and OmniRoute:** model registry/runtime, OmniRoute cloud adapter, model discovery, streaming/cancellation, explicit local/cloud routing, context integration and model-backed planning.
+6. **Phase VI — Training Lab and model development:** evaluation, curated datasets, experiment tracking, fine-tuning/adapters, artifact versioning and rollback.
+7. **Phase VII — Multimodal AI and voice:** image/audio/voice capabilities, explicit local/remote processing, interruption and modality-specific adapters.
 
-### New strategic phases
-- [ ] NEXUS AI Core: model registry, runtime lifecycle, inference contracts, streaming, cancellation, health and resource reporting.
-- [ ] Hybrid model vertical slice: implement OmniRoute model discovery and cloud chat, preserve the local inference adapter path, and expose active model/runtime identity.
-- [ ] Personal context integration: connect the local primary model to approved memory, project knowledge, and bounded context assembly with source provenance.
-- [ ] NEXUS Model adaptation: evaluation suites, curated/versioned datasets, reproducible adapter or fine-tuning experiments, model versioning and rollback.
-- [ ] Multimodal capabilities: capability-declared image/audio/voice paths, with local-versus-remote processing clearly identified.
-- [ ] Training/research lab: experiment tracking and, only if justified by data, compute, and expertise, research into an independent foundation model.
+### Current model strategy
 
-### Model-development terminology and constraints
-- An open-weight checkpoint is a bootstrap base, not a model trained from scratch by NEXUS.
-- Prompting and retrieval are not training. Fine-tuning an existing checkpoint is not foundation-model pretraining.
-- Private conversations, files, and memories are excluded from training by default. Dataset inclusion requires deliberate owner curation and provenance.
-- Training runs record data manifests, licenses/permissions, configuration, code revision, hardware, checkpoints, and evaluation results.
-- Do not start expensive pretraining before the project has measured a need and a credible data/compute plan.
+- Local inference remains a supported path when a suitable local runtime is available.
+- OmniRoute is the selected gateway for cloud model routing and is accessed through its OpenAI-compatible `/v1` API.
+- NEXUS AI Core uses provider-neutral contracts; local inference and OmniRoute are separate adapters behind the same runtime.
+- Cloud processing must be visible to the owner. The NEXUS-to-OmniRoute key stays in the OS credential vault.
+- The current native provider command can send a non-streamed OpenAI-compatible chat request to an OmniRoute endpoint. Model discovery, SSE streaming, cancellation and unified runtime lifecycle are not yet complete.
+- NEXUS Model adaptation is a later active development goal, but training a foundation model from scratch is deferred to Future Research. It is not an active phase and does not count toward project completion.
 
-### Immediate next engineering sequence
-1. Finish and verify open Phase IV/VI desktop, security, dependency, accessibility, and manual smoke-test acceptance items.
-2. Add model registry/runtime contracts and contract tests without prematurely replacing existing provider-neutral interfaces.
-3. Implement one local inference adapter and test it end to end.
-4. Integrate memory/context and then model-driven agents.
-5. Establish evaluation and data governance before fine-tuning.
+### Immediate engineering sequence
 
-**Status rule:** this strategy update is documentation only. It does not mean a local model, training pipeline, or NEXUS Foundation Model has been implemented.
+1. Finish code-addressable Phase IV work and verify the latest CI baseline.
+2. Record real Windows/macOS/Linux desktop and credential-vault smoke tests when those interactive environments are available.
+3. Complete Phase V model registry/runtime contracts, OmniRoute model discovery, SSE streaming, cancellation and local/cloud routing.
+4. Connect approved memory and project knowledge to the selected model runtime.
+5. Connect model-driven agents through the existing Tool Gateway and coordinator.
+6. Start Phase VI only after the real model runtime is stable; establish evaluation and data governance before any fine-tuning.
+
+**Status rule:** documentation, UI presets, and mock providers are not proof of a working model integration. Every acceptance item requires implementation and automated or manual evidence appropriate to the feature.
