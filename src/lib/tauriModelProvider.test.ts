@@ -21,6 +21,18 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+  it("rejects unsafe provider URLs before making a native catalog request", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    const router = createTauriModelRouter({
+      baseUrl: "http://remote.example/v1", model: "model-a", inferenceLocation: "remote"
+    });
+    if (!router) throw new Error("Expected native model router.");
+    await expect(router.listModels()).resolves.toMatchObject({
+      ok: false, error: { code: "validation" }
+    });
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   it("routes planner requests through the native credential handle without returning secrets", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
