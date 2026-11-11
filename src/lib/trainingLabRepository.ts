@@ -107,7 +107,7 @@ export class WorkspaceTrainingLabRepository implements TrainingLabRepository {
     }
     const stored = readLocal(this.storage);
     if (!stored.ok) return stored;
-    if (!stored.value.datasets.some(item => item.id === experiment.datasetManifestId)) {
+    if (!stored.value.datasets.some(item => item.id === experiment.datasetManifestId && item.version === experiment.datasetManifestVersion)) {
       return err("validation", "Register the referenced dataset before saving an experiment.");
     }
     const existing = stored.value.experiments.find(item => item.id === experiment.id);
