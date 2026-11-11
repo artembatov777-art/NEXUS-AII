@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
-  ArrowUp, AudioLines, Bell, BookOpen, Brain, Check, ChevronRight,
+  ArrowUp, AudioLines, Bell, BookOpen, Brain, ChevronRight,
   CircleHelp, Command, FolderKanban, MessageSquare, MoreHorizontal,
-  Plus, Search, Settings2, ShieldCheck, Sparkles, SquarePen, Zap
+  Plus, Search, Settings2, ShieldCheck, Sparkles, Zap
 } from "lucide-react";
 import "./mobile-demo.css";
 
