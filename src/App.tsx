@@ -104,6 +104,14 @@ export default function App() {
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
   const messages = active?.messages ?? [welcome];
+  const providerRoute = useMemo(() => {
+    try {
+      const hostname = new URL(provider.baseUrl).hostname.toLowerCase();
+      return ["localhost", "127.0.0.1", "[::1]"].includes(hostname) ? "local" : "remote";
+    } catch {
+      return "remote";
+    }
+  }, [provider.baseUrl]);
 
   function newChat() {
     if (!conversationsReady) return;
@@ -304,7 +312,7 @@ export default function App() {
     </aside>
 
     <main className="main-panel">
-      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="model-pill"><span className="status-dot"/>{provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Chat</strong></div></div><div className="top-right"><div className="model-pill" title={providerRoute === "remote" ? "Remote inference: your message and selected context are sent to the configured cloud endpoint." : "Local inference: requests are sent to the loopback endpoint on this device."} aria-label={`${providerRoute === "remote" ? "Remote" : "Local"} model ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL"} · {provider.model}<ChevronDown size={14}/></div><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
       <section className="chat-area">
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><h1>{active?.title ?? "What are we building today?"}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <label className="chat-project-context">Project context
