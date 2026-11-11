@@ -1,7 +1,7 @@
 # NEXUS AU — Personal AI Product Vision
 
 ## Purpose
-NEXUS AU is a private personal AI ecosystem built for one primary owner. It combines a desktop workspace with a modular AI Core and a long-term effort to develop NEXUS Model as its own primary language model.
+NEXUS AU is a private personal AI ecosystem built for one primary owner. It combines a desktop workspace with a modular AI Core, local inference, and cloud models routed through OmniRoute. NEXUS Model adaptation is a later development goal.
 
 This is not a public multi-user SaaS product and must not remain a thin client for model aggregators. Its purpose is personal control, continuity across projects, integration with the owner's workflows, and the ability to evolve the model and the surrounding system together.
 
