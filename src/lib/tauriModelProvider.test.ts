@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  isTauri: vi.fn(),
+  Channel: class MockChannel<T> {
+    onmessage: ((message: T) => void) | null = null;
+  }
+}));
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
@@ -17,7 +23,16 @@ describe("TauriModelProvider", () => {
 
   it("routes planner requests through the native credential handle without returning secrets", async () => {
     mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockResolvedValue(" {\"goal\":\"safe\"} ");
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        channel.onmessage({ type: "text_delta", text: "{\\"goal\\":\\"safe\\"}" });
+        channel.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     expect(router).not.toBeNull();
     if (!router) throw new Error("Expected native model router.");
@@ -27,10 +42,12 @@ describe("TauriModelProvider", () => {
       model: "model-a", messages: [{ role: "user", content: "plan" }]
     })) events.push(event);
     expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
-    expect(mockedInvoke).toHaveBeenCalledWith("send_chat", {
+    expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
       baseUrl: "https://api.example/v1", credentialHandle: "default", model: "model-a",
-      messages: [{ role: "user", content: "plan" }]
-    });
+      messages: [{ role: "user", content: "plan" }],
+      streamId: expect.any(String),
+      onEvent: expect.any(Object)
+    }));
     expect(JSON.stringify(events)).not.toContain("api_key");
   });
 
