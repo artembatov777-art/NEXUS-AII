@@ -181,6 +181,9 @@ export class ModelRegistry {
   }
 
   getActiveModel(): Result<ModelDescriptor> {
+    if (this.snapshot.state !== "ready") {
+      return err("provider_unavailable", "The model catalog is not currently available.", true);
+    }
     if (!this.activeKey) return err("provider_unavailable", "No active model has been selected.", true);
     const model = this.catalog.get(this.activeKey);
     if (!model) {
