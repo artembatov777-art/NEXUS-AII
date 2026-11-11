@@ -85,3 +85,10 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 - [ ] Run dependency audit and remediate applicable production dependency advisories.
 - [ ] Add GUI automation once a supported WebDriver/desktop test runner is available for all target platforms.
 - [ ] Complete independent security testing before exposing remote MCP or broader desktop automation capabilities.
+
+
+## Model route disclosure
+
+- Provider settings default to a remote route. The selected location is explicitly owner-declared and is not inferred from the OmniRoute gateway hostname.
+- A loopback OmniRoute endpoint may still forward requests to a cloud provider. NEXUS cannot currently verify the gateway's downstream route or enforce local execution from the model ID alone.
+- The UI marks a local declaration as unverified and warns the owner to verify OmniRoute routing before sending private context. Direct local model runtime integration remains incomplete.
