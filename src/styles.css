@@ -209,3 +209,20 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
  .chat-heading{min-height:300px;padding-top:12px}
  .nexus-hero-core{transform:scale(.78);margin:-16px auto -28px}
 }
+
+
+/* NEXUS AU — full command overview */
+.nexus-system-grid{width:min(100%,760px);margin:18px auto 16px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;text-align:left}
+.nexus-system-card{position:relative;min-width:0;min-height:82px;padding:12px 12px 11px;border:1px solid rgba(121,199,232,.16);border-radius:10px;background:linear-gradient(145deg,rgba(14,29,42,.86),rgba(8,17,27,.82));box-shadow:inset 0 1px rgba(210,240,255,.025)}
+.nexus-card-label{display:block;overflow:hidden;color:#6f91a6;font:8px ui-monospace,monospace;letter-spacing:.13em;text-overflow:ellipsis;white-space:nowrap}
+.nexus-system-card strong{display:block;margin-top:9px;color:#c9e8f5;font:600 12px 'Space Grotesk',sans-serif;letter-spacing:.055em;white-space:nowrap}
+.nexus-system-card small{display:block;overflow:hidden;margin-top:4px;color:#72899b;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.nexus-card-indicator{position:absolute;right:11px;top:12px;width:5px;height:5px;border-radius:50%;background:#526b7d}
+.nexus-card-indicator.ready{background:#79c7e8;box-shadow:0 0 9px #79c7e8}
+.nexus-card-indicator.active{background:#9adcf5;box-shadow:0 0 11px #9adcf5;animation:nx-pulse 1.2s ease-in-out infinite}
+@keyframes nx-pulse{50%{opacity:.35;transform:scale(.75)}}
+.chat-project-context{margin-top:8px}
+.messages{max-width:860px;margin-inline:auto}
+@media(max-width:900px){.nexus-system-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:520px}.nexus-system-card{min-height:75px}}
+@media(max-width:760px){.nexus-system-grid{gap:7px;margin:12px auto 13px}.nexus-system-card{padding:10px;min-height:72px}.nexus-system-card strong{font-size:11px}.nexus-card-label{font-size:7px}.nexus-system-card small{font-size:8px}.chat-heading{min-height:0;padding-bottom:14px}}
+@media(prefers-reduced-motion:reduce){.nexus-card-indicator.active{animation:none}}
