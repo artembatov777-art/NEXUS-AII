@@ -75,7 +75,10 @@ describe("TauriModelProvider", () => {
     if (!router) throw new Error("Expected native model router.");
     expect(await router.listModels()).toMatchObject({
       ok: true,
-      value: [{ id: "qwen2.5:7b", declaredLocation: "local" }]
+      value: [
+        { id: "qwen2.5:7b", declaredLocation: "local" },
+        { id: "model-a", declaredLocation: "local" }
+      ]
     });
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
       baseUrl: "http://127.0.0.1:11434/v1",
