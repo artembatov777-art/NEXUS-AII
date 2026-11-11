@@ -21,7 +21,7 @@ describe("TauriModelProvider", () => {
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     expect(router).not.toBeNull();
     if (!router) throw new Error("Expected native model router.");
-    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ providerId: NATIVE_MODEL_PROVIDER_ID, id: "model-a", supportsStreaming: true, location: "remote" }] });
+    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ providerId: NATIVE_MODEL_PROVIDER_ID, id: "model-a", supportsStreaming: true, declaredLocation: "remote" }] });
     const events = [];
     for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
       model: "model-a", messages: [{ role: "user", content: "plan" }]
@@ -43,7 +43,7 @@ describe("TauriModelProvider", () => {
     if (!router) throw new Error("Expected native model router.");
     expect(await router.listModels()).toMatchObject({
       ok: true,
-      value: [{ id: "model-a", location: "local" }]
+      value: [{ id: "model-a", declaredLocation: "local" }]
     });
   });
 
