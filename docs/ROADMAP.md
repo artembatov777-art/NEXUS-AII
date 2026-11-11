@@ -51,7 +51,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase IV — Desktop, security, and stability
 
-**Status:** code implementation substantially complete; manual platform verification open.
+**Status:** code implementation substantially complete; automated dependency scanning has been added to CI, while manual platform verification remains open.
 
 - [x] Native SQLite workspace persistence and migration.
 - [x] OS credential-vault implementation.
@@ -59,6 +59,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Native audit/trace and agent checkpoint persistence.
 - [x] Windows/macOS/Linux CI build and Rust test matrix.
 - [x] Source-level security review and platform smoke-test protocol.
+- [x] Add npm dependency advisory scanning (`npm audit --audit-level=high`) to the Quality workflow.
 - [ ] Resolve applicable dependency advisories and complete dependency review.
 - [ ] Complete full accessibility, CSP/capability, release packaging, and upgrade review.
 - [ ] Run and record interactive Tauri + credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions.
@@ -70,20 +71,21 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 **Status:** initial OmniRoute model discovery and SSE streaming are implemented; cancellation, model capability metadata, and unified routing remain.
 
 - [ ] Define and implement the Model Registry and runtime lifecycle contracts.
-- [ ] Implement the OmniRoute cloud adapter using the OpenAI-compatible `/v1` API.
+- [x] Implement the native OpenAI-compatible cloud adapter used for OmniRoute `/v1` requests, including one-shot and SSE chat.
 - [x] Discover available models through `GET /v1/models` and expose the model catalog to the native ModelProvider.
 - [x] Implement bounded SSE chat completion streaming and incremental chat rendering.
 - [ ] Add native cancellation for active streams and normalize provider errors and usage metadata.
-- [ ] Store the NEXUS-to-OmniRoute credential in the OS vault; never expose it to the webview or logs.
+- [x] Store the provider credential in the OS vault; never expose it to the webview or logs.
 - [ ] Keep local inference as a separate adapter under the same Model Runtime.
-- [ ] Add explicit local/cloud routing and show the active model, adapter, and remote-processing status.
+- [x] Disclose local versus remote model routing in the chat header.
+- [ ] Add persisted route selection and a full active-model/runtime status panel.
 - [ ] Connect chat, context assembly, and model-backed planning through the AI Core facade.
 
 **Acceptance:** NEXUS AU can use a selected OmniRoute cloud model and a configured local model through the same application contracts, with streaming, cancellation, model identity, and clear data-routing disclosure.
 
 ## Phase VI — Training Lab and model development
 
-**Status:** foundational evaluation and dataset-governance contracts are next; fine-tuning remains deferred until the runtime and evaluation baselines are proven.
+**Status:** evaluation scoring, dataset-governance validation, and experiment metadata contracts are implemented; persistence, artifact tracking, and real model evaluation remain.
 
 - [x] Add deterministic evaluation-suite contracts and baseline phrase scoring.
 - [x] Add versioned dataset manifests with license, privacy/consent gates, provenance, and disjoint train/validation/test splits.
@@ -97,7 +99,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase VII — Multimodal AI and voice
 
-**Status:** basic browser/WebView voice controls exist; broader multimodal work is planned.
+**Status:** browser/WebView voice lifecycle and multimodal privacy/capability contracts are implemented; model-backed image/audio workflows and native voice remain planned.
 
 - [x] Optional browser/WebView speech recognition and speech synthesis controls.
 - [x] Harden browser/WebView speech recognition and synthesis lifecycle, permission errors, cancellation, and unmount cleanup.
