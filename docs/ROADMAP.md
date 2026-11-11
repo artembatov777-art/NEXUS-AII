@@ -81,9 +81,10 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase V — NEXUS AI Core and OmniRoute
 
-**Status:** OmniRoute model discovery, bounded SSE streaming, and native cancellation are implemented; capability metadata, local runtime, and unified routing remain.
+**Status:** OmniRoute model discovery, bounded SSE streaming, native cancellation, and provider-neutral Model Registry foundations are implemented; verified runtime lifecycle, capability metadata, local runtime, and unified routing remain.
 
-- [ ] Define and implement the Model Registry and runtime lifecycle contracts.
+- [x] Add provider-neutral in-memory Model Registry, catalog refresh, active-model selection, and discovery-state contracts.
+- [ ] Implement actual model runtime lifecycle and verified health checks.
 - [x] Implement the native OpenAI-compatible cloud adapter used for OmniRoute `/v1` requests, including one-shot and SSE chat.
 - [x] Discover available models through `GET /v1/models` and expose the model catalog to the native ModelProvider.
 - [x] Implement bounded SSE chat completion streaming and incremental chat rendering.
