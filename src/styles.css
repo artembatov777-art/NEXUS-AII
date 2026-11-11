@@ -462,3 +462,9 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 @media(prefers-reduced-motion:reduce){
   .sidebar{transition:none}
 }
+
+
+/* The model route indicator is an actual settings shortcut, not a decorative pill. */
+.model-pill{appearance:none;background:rgba(12,18,27,.76);font-family:inherit;line-height:1;cursor:pointer}
+.model-pill:hover{border-color:rgba(121,199,232,.42);background:rgba(17,35,49,.9)}
+.model-pill:focus-visible{outline:2px solid #79c7e8;outline-offset:3px}
