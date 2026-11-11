@@ -135,7 +135,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleKeyboardShortcut);
     return () => window.removeEventListener("keydown", handleKeyboardShortcut);
-  }, [conversationsReady]);
+  }, [conversationsReady, selectedProjectId]);
   function updateMessages(id: string, next: ChatMessage[]) {
     setConversations(current => current.map(c => c.id === id
       ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
