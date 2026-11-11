@@ -27,6 +27,15 @@ describe("new conversation keyboard shortcut", () => {
     })).toBe(false);
   });
 
+  it("does not intercept the shortcut from inside an open dialog", () => {
+    const target = {
+      closest: (selector: string) => selector.includes('[role="dialog"]') ? {} : null
+    } as unknown as EventTarget;
+    expect(matchesNewConversationShortcut({
+      key: "k", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, target
+    })).toBe(false);
+  });
+
   it("still accepts the shortcut when focus is outside editable controls", () => {
     const target = {
       closest: () => null
