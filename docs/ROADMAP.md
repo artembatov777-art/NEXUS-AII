@@ -66,12 +66,13 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase V — NEXUS AI Core and OmniRoute
 
-**Status:** provider-neutral foundations exist; full gateway integration is next.
+**Status:** initial OmniRoute model discovery and SSE streaming are implemented; cancellation, model capability metadata, and unified routing remain.
 
 - [ ] Define and implement the Model Registry and runtime lifecycle contracts.
 - [ ] Implement the OmniRoute cloud adapter using the OpenAI-compatible `/v1` API.
-- [ ] Discover available models through `GET /v1/models`; retain model IDs and capability metadata.
-- [ ] Implement chat completion streaming through SSE, including bounded parsing, cancellation, and normalized errors.
+- [x] Discover available models through `GET /v1/models` and expose the model catalog to the native ModelProvider.
+- [x] Implement bounded SSE chat completion streaming and incremental chat rendering.
+- [ ] Add native cancellation for active streams and normalize provider errors and usage metadata.
 - [ ] Store the NEXUS-to-OmniRoute credential in the OS vault; never expose it to the webview or logs.
 - [ ] Keep local inference as a separate adapter under the same Model Runtime.
 - [ ] Add explicit local/cloud routing and show the active model, adapter, and remote-processing status.
@@ -81,7 +82,7 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase VI — Training Lab and model development
 
-**Status:** planned.
+**Status:** foundational evaluation and dataset-governance contracts are next; fine-tuning remains deferred until the runtime and evaluation baselines are proven.
 
 - [ ] Add model evaluation suites and baseline task sets.
 - [ ] Add versioned dataset manifests with source, license, permission, filtering, and split metadata.
