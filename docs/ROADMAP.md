@@ -13,9 +13,10 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [x] Add an isolated demo entry point using `?demo=1`; the desktop app entry point remains unchanged.
 - [x] Add responsive iPhone-oriented preview screens for chat, projects, memory, and settings.
 - [x] Keep all demo interactions local and clearly disclose that no AI model is connected.
-- [ ] Run production build and automated checks for the new preview.
+- [x] Run the production build and automated checks for the new preview (Pages build and Quality workflow passed).
 - [x] Add a GitHub Actions Pages build/deploy workflow for the feature branch.
-- [ ] Confirm the first successful Pages deployment, publish its URL, and verify it in iPhone Safari.
+- [x] Confirm the first successful Pages deployment and publish its URL: https://artembatov777-art.github.io/NEXUS-AII/.
+- [ ] Verify the hosted demo in iPhone Safari.
 - [ ] Refine layouts after real-device feedback.
 
 **Acceptance:** the owner can open a hosted URL on iPhone, inspect key workspace screens, and try demo-only interactions without contacting an AI provider or exposing credentials.
@@ -131,6 +132,23 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 - [ ] Consider video only after resource and privacy controls are established.
 
 **Acceptance:** modality support is capability-checked, observable, cancellable, and reports local versus remote processing.
+
+
+## Progress snapshot — 2026-11-11
+
+Percentages below are checklist completion (checked items divided by all checklist items in each active phase), not estimates of code volume or complexity.
+
+| Phase | Completed | Total | Progress |
+|---|---:|---:|---:|
+| I — Architecture and infrastructure | 5 | 6 | 83% |
+| II — Workspace and interface | 5 | 7 | 71% |
+| III — Memory, agents, and tools | 6 | 9 | 67% |
+| IV — Desktop, security, and stability | 7 | 10 | 70% |
+| V — NEXUS AI Core and OmniRoute | 8 | 13 | 62% |
+| VI — Training Lab and model development | 6 | 10 | 60% |
+| VII — Multimodal AI and voice | 3 | 8 | 38% |
+
+**Overall active-phase checklist completion: 40 / 63 = 63%.** The independent foundation-model-from-scratch research remains deferred and is not included. The mobile preview is a parallel delivery track, not an eighth phase; it is 6 / 8 = 75% complete, with iPhone Safari verification and real-device refinement still open.
 
 ## Future Research — independent foundation model
 
