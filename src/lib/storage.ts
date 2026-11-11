@@ -73,7 +73,11 @@ export async function saveConversations(items: Conversation[], storage: StorageA
 export function loadProvider(storage: StorageAdapter = localStorage): ProviderSettings {
   try {
     const value = JSON.parse(storage.getItem(PROVIDER_KEY) ?? "null") as Partial<ProviderSettings> | null;
-    return value?.baseUrl && value?.model ? { baseUrl: value.baseUrl, model: value.model } : DEFAULT_PROVIDER;
+    return value?.baseUrl && value?.model ? {
+      baseUrl: value.baseUrl,
+      model: value.model,
+      inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote"
+    } : DEFAULT_PROVIDER;
   } catch { return DEFAULT_PROVIDER; }
 }
 
