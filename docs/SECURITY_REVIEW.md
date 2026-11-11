@@ -76,7 +76,7 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 - Voice services depend on the OS/browser WebView and may send audio to a platform speech service; NEXUS AU does not provide a native offline speech engine.
 - Desktop automation, arbitrary filesystem access, shell execution, and notification workflows are not implemented. No such capability is silently granted.
 - The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session.
-- Dependency vulnerability scanning and an independent penetration test are not part of this review.
+- The frontend Quality workflow now includes `npm audit --audit-level=high`; the current scan result must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
 
 ## Release checklist
 
