@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConversations, saveConversations, type StorageAdapter } from "./storage";
+import { loadConversations, saveConversations, loadProvider, saveProvider, type StorageAdapter } from "./storage";
 import type { Conversation } from "../types";
 
 class MemoryStorage implements StorageAdapter {
@@ -13,6 +13,17 @@ const base: Conversation = {
 };
 
 describe("conversation workspace storage", () => {
+  it("defaults legacy provider settings to remote instead of inferring locality from localhost", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("nexus-au:provider:v1", JSON.stringify({ baseUrl: "http://127.0.0.1:20128/v1", model: "local-model" }));
+    expect(loadProvider(storage)).toMatchObject({ inferenceLocation: "remote" });
+  });
+  it("persists an explicit model inference location", () => {
+    const storage = new MemoryStorage();
+    const settings = { baseUrl: "http://127.0.0.1:20128/v1", model: "local-model", inferenceLocation: "local" as const };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
   it("round-trips project ownership", async () => {
     const storage = new MemoryStorage();
     await saveConversations([base], storage);
