@@ -8,7 +8,7 @@ function isEditableTarget(target?: EventTarget | null): boolean {
   if (typeof closest !== "function") return false;
   return Boolean(closest.call(
     target,
-    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="dialog"]'
   ));
 }
 
