@@ -100,7 +100,7 @@ function containsSensitiveKey(value: unknown, depth = 0): boolean {
   if (!value || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(item => containsSensitiveKey(item, depth + 1));
   return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
-    /(api.?key|access.?token|password|secret|credential|authorization)/i.test(key) ||
+    /(api.?key|access.?token|password|secret|credential|authorization|prompt|messages|conversation|raw.?data|sample.?text)/i.test(key) ||
     containsSensitiveKey(child, depth + 1)
   );
 }
