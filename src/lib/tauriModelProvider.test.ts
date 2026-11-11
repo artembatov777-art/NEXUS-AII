@@ -28,6 +28,7 @@ describe("TauriModelProvider", () => {
       if (command === "send_chat_stream") {
         const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
         channel.onmessage({ type: "text_delta", text: JSON.stringify({ goal: "safe" }) });
+        channel.onmessage({ type: "usage", inputTokens: 12, outputTokens: 5 });
         channel.onmessage({ type: "completed", finishReason: "stop" });
         return Promise.resolve();
       }
@@ -41,7 +42,8 @@ describe("TauriModelProvider", () => {
     for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
       model: "model-a", messages: [{ role: "user", content: "plan" }]
     })) events.push(event);
-    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "usage", "completed"]);
+    expect(events[1]).toMatchObject({ type: "usage", inputTokens: 12, outputTokens: 5 });
     expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
       baseUrl: "https://api.example/v1", credentialHandle: "default", model: "model-a",
       messages: [{ role: "user", content: "plan" }],
