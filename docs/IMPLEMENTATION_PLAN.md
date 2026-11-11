@@ -4,7 +4,7 @@
 
 ## Current verified baseline
 
-The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The existing native provider command supports one-shot OpenAI-compatible chat requests and can target a local OmniRoute `/v1` endpoint; model discovery and token streaming are not yet implemented.
+The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The existing native provider command supports one-shot OpenAI-compatible chat requests and can target a local OmniRoute `/v1` endpoint; bounded `/v1/models` discovery and SSE token streaming are implemented in the current branch, but cancellation, capability metadata, and unified runtime lifecycle remain open.
 
 The last baseline with recorded cross-platform CI evidence is older than the current documentation/UI changes. The latest branch head must pass fresh CI before those changes are treated as verified. Real interactive desktop and credential-vault smoke tests remain separate manual acceptance items.
 
@@ -219,7 +219,7 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 **Current boundary:** native desktop records for chats, projects, memories, and knowledge chunks are stored in SQLite. Project ownership is checked in SQLite and project deletion cleans associated records. Vector embeddings still use IndexedDB in the WebView; lexical retrieval remains available if semantic indexing is unavailable. API keys are stored in the platform credential vault and provider requests pass only a fixed scoped handle. Backups cover structured workspace data but intentionally exclude provider credentials and cached vector embeddings. Clipboard actions require an explicit user click. Voice remains browser/WebView-based, not a native offline engine. Windows, macOS, and Linux CI matrix has been added and is running; platform build/runtime verification is not considered complete until all matrix jobs pass. The remaining native integrations and audits are still open. The current baseline `a9016a8c05bd5fe91104eda8da2f872767c38677` passes frontend Quality and native build/Rust tests on Windows, macOS, and Linux, but this is compile/test coverage rather than an interactive GUI launch. Phase IV is not complete.
 
 
-## Phase VI — Completion and hardening of Phases II–IV (active)
+## Historical work log — Completion and hardening of earlier Phases II–IV
 
 ### Verified baseline and completed work
 - [x] Repaired duplicate Tauri command registration and credential-vault command exposure.
