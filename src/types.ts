@@ -26,6 +26,8 @@ export interface ProviderSettings {
   model: string;
   /** Owner-declared model location; OmniRoute backend locality is not independently verified. */
   inferenceLocation: "local" | "remote";
+  /** "none" is accepted only by the native host for loopback runtimes such as Ollama. */
+  credentialHandle?: "default" | "none";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
   baseUrl: "http://127.0.0.1:20128/v1",
