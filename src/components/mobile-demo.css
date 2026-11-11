@@ -18,3 +18,172 @@
 .demo-notice{position:absolute;left:14px;right:14px;bottom:83px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border:1px solid #5a4b78;border-radius:11px;background:#28213a;color:#e5dcf6;text-align:left;font-size:10px;box-shadow:0 10px 30px #0008}.demo-notice span{font-size:16px;color:#b8a7d9}.demo-outside-label{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:20px;color:#77748d;font-size:9px;letter-spacing:1.7px}.demo-outside-label b{color:#4e4b60}
 @media(max-width:480px){.mobile-demo{display:block;padding:0;background:#0c0d15}.demo-device{width:100%;height:100dvh;min-height:560px;border:0;border-radius:0;box-shadow:none}.demo-topbar{padding-top:env(safe-area-inset-top);height:calc(66px + env(safe-area-inset-top))}.demo-home-indicator{margin-bottom:calc(7px + env(safe-area-inset-bottom))}.demo-tabbar{padding-bottom:calc(8px + env(safe-area-inset-bottom))}.demo-outside-label{display:none}}
 @media(min-width:481px) and (max-height:700px){.demo-device{height:calc(100dvh - 38px);min-height:0}.demo-chat-intro{padding-top:12px}.demo-chat-intro h1{font-size:22px}}
+
+
+/* Mobile preview refinement: readable type, persistent composer, and larger touch targets */
+.demo-device {
+  background:
+    radial-gradient(ellipse at 82% 0%, rgba(113, 88, 170, .13), transparent 38%),
+    #0c0d15;
+}
+.demo-topbar {
+  background: rgba(16, 17, 27, .94);
+  backdrop-filter: blur(18px);
+}
+.demo-brand-mark {
+  box-shadow: 0 5px 22px rgba(132, 103, 202, .16);
+}
+.demo-context-row {
+  border-bottom: 1px solid rgba(255,255,255,.035);
+}
+.demo-preview-pill {
+  font-size: 9px;
+  font-weight: 700;
+}
+.demo-screen {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.demo-chat-intro h1 {
+  font-size: clamp(27px, 7vw, 32px);
+  line-height: 1.12;
+}
+.demo-chat-intro p {
+  font-size: 12px;
+}
+.demo-model-card strong {
+  font-size: 12px;
+}
+.demo-model-card span {
+  font-size: 10px;
+}
+.demo-message-bubble {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.demo-message-avatar {
+  width: 28px;
+  height: 28px;
+}
+.demo-suggestions button {
+  min-height: 38px;
+  font-size: 10px;
+}
+.demo-chat-footer {
+  flex-shrink: 0;
+  padding: 10px 17px 9px;
+  border-top: 1px solid #262635;
+  background: rgba(17, 18, 28, .97);
+}
+.demo-chat-footer .demo-composer {
+  min-height: 50px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.demo-chat-footer .demo-composer input {
+  font-size: 13px;
+}
+.demo-chat-footer .demo-disclaimer {
+  margin: 7px 0 0;
+  font-size: 9px;
+}
+.demo-add-button,
+.demo-send-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+.demo-send-button {
+  background: linear-gradient(145deg, #a58bdc, #765bb5);
+  box-shadow: 0 4px 12px rgba(130, 99, 194, .25);
+}
+.demo-tabbar {
+  height: 76px;
+  padding-top: 7px;
+}
+.demo-tabbar button {
+  min-height: 54px;
+  gap: 5px;
+  border-radius: 13px;
+}
+.demo-tabbar button span {
+  font-size: 10px;
+  font-weight: 600;
+}
+.demo-tabbar button.active {
+  box-shadow: inset 0 0 0 1px rgba(179, 153, 235, .13);
+}
+.demo-section-heading h2 {
+  font-size: 26px;
+}
+.demo-project-card h3 {
+  font-size: 18px;
+}
+.demo-project-card p,
+.demo-memory-group article p {
+  font-size: 11px;
+  line-height: 1.55;
+}
+.demo-memory-group article strong,
+.demo-settings-profile strong {
+  font-size: 12px;
+}
+.demo-settings-group button {
+  min-height: 50px;
+  font-size: 11px;
+}
+.demo-safe-note {
+  font-size: 10px;
+}
+.demo-notice {
+  z-index: 2;
+  bottom: 96px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.demo-empty-search {
+  padding: 24px 10px;
+  color: #9290a4;
+  text-align: center;
+  font-size: 12px;
+}
+.demo-search {
+  min-height: 44px;
+}
+.demo-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #e8e6f0;
+  font-size: 12px;
+}
+.demo-search input::placeholder {
+  color: #77788b;
+}
+.demo-search:focus-within {
+  border-color: #75609f;
+  box-shadow: 0 0 0 2px rgba(141, 115, 196, .13);
+}
+.demo-tabbar button:focus-visible,
+.demo-composer button:focus-visible,
+.demo-round-button:focus-visible,
+.demo-section button:focus-visible {
+  outline: 2px solid #b8a0ef;
+  outline-offset: 2px;
+}
+@media(max-width:480px) {
+  .demo-chat-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  .demo-tabbar {
+    height: 74px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  .demo-notice {
+    bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+}
