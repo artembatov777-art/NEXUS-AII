@@ -26,6 +26,7 @@ export function MobileDemo() {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState(sampleMessages);
   const [notice, setNotice] = useState("");
+  const [projectQuery, setProjectQuery] = useState("");
   const [knowledgeQuery, setKnowledgeQuery] = useState("");
   const [knowledgeSearched, setKnowledgeSearched] = useState(false);
   const [agentTask, setAgentTask] = useState("");
@@ -95,10 +96,11 @@ export function MobileDemo() {
 
         {tab === "projects" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button aria-label="Создать проект" onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
-          <div className="demo-search"><Search size={16}/><span>Поиск проектов</span></div>
-          <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>
-          <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>
-          <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>LEARNING</span><h3>База знаний</h3><p>Материалы и исследования</p><small>12 материалов</small></article>
+          <div className="demo-search"><Search size={16}/><input aria-label="Поиск проектов" value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder="Поиск проектов..."/></div>
+          {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>}
+          {"Личное развитие".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>}
+          {"База знаний".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>LEARNING</span><h3>База знаний</h3><p>Материалы и исследования</p><small>12 материалов</small></article>}
+          {!["NEXUS AU", "Личное развитие", "База знаний"].some(name => name.toLowerCase().includes(projectQuery.trim().toLowerCase())) && <p className="demo-empty-search">Проекты не найдены.</p>}
         </div>}
 
         {tab === "memory" && <div className="demo-section">
@@ -113,8 +115,8 @@ export function MobileDemo() {
           <div className="demo-section-heading"><div><span>PROJECT KNOWLEDGE</span><h2>База знаний</h2></div><BookOpen size={21}/></div>
           <div className="demo-module-card"><span>ACTIVE PROJECT</span><strong>NEXUS AU</strong><small>Материалы и заметки проекта</small></div>
           <div className="demo-search demo-knowledge-search"><Search size={16}/><input aria-label="Поиск по базе знаний" value={knowledgeQuery} onChange={event => { setKnowledgeQuery(event.target.value); setKnowledgeSearched(false); }} placeholder="Поиск по документам..."/><button onClick={() => setKnowledgeSearched(true)} disabled={!knowledgeQuery.trim()}>Найти</button></div>
-          <div className="demo-document-row"><FileText size={18}/><div><strong>ARCHITECTURE.md</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></div>
-          <div className="demo-document-row"><FileText size={18}/><div><strong>ROADMAP.md</strong><small>План разработки · 8.6 KB</small></div><ChevronRight size={16}/></div>
+          <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ARCHITECTURE.md</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></button>
+          <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ROADMAP.md</strong><small>План разработки · 8.6 KB</small></div><ChevronRight size={16}/></button>
           {knowledgeSearched && <div className="demo-safe-note"><Search size={15}/> Демо-поиск по запросу «{knowledgeQuery}». Реальные документы пока не индексируются в мобильном preview.</div>}
           <div className="demo-safe-note"><ShieldCheck size={16}/> Источники и поиск будут связаны с проектами в рабочей версии.</div>
         </div>}
@@ -131,9 +133,9 @@ export function MobileDemo() {
         {tab === "files" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>DEVICE WORKSPACE</span><h2>Файловая система</h2></div><HardDrive size={21}/></div>
           <div className="demo-module-card"><span>CONNECTION STATUS</span><strong>Не подключено</strong><small>Доступ к папкам Windows пока не активирован</small><div className="demo-status-line warning"><i/> ОЖИДАЕТ РАЗРЕШЕНИЯ</div></div>
-          <div className="demo-file-row"><FolderKanban size={18}/><div><strong>Документы</strong><small>Выбранные папки появятся здесь</small></div><ChevronRight size={16}/></div>
-          <div className="demo-file-row"><FolderKanban size={18}/><div><strong>Проекты</strong><small>Папки с разрешённым доступом</small></div><ChevronRight size={16}/></div>
-          <div className="demo-file-row"><FileText size={18}/><div><strong>Последние файлы</strong><small>Список пока пуст</small></div><ChevronRight size={16}/></div>
+          <button className="demo-file-row" onClick={() => setNotice("Выбор папок Windows будет доступен после подключения NEXUS File System.")}><FolderKanban size={18}/><div><strong>Документы</strong><small>Выбранные папки появятся здесь</small></div><ChevronRight size={16}/></button>
+          <button className="demo-file-row" onClick={() => setNotice("Папки появятся после выдачи разрешения на доступ.")}><FolderKanban size={18}/><div><strong>Проекты</strong><small>Папки с разрешённым доступом</small></div><ChevronRight size={16}/></button>
+          <button className="demo-file-row" onClick={() => setNotice("Последние файлы появятся после подключения файловой системы.")}><FileText size={18}/><div><strong>Последние файлы</strong><small>Список пока пуст</small></div><ChevronRight size={16}/></button>
           <div className="demo-safe-note"><LockKeyhole size={16}/> NEXUS не читает файлы устройства в этом preview. Доступ будет выдаваться отдельно для каждой папки.</div>
         </div>}
 
@@ -148,8 +150,8 @@ export function MobileDemo() {
           <div className="demo-section-heading"><div><span>MODEL DEVELOPMENT</span><h2>Training Lab</h2></div><FlaskConical size={21}/></div>
           <div className="demo-stat-grid"><div><span>DATASETS</span><strong>03</strong></div><div><span>EXPERIMENTS</span><strong>02</strong></div><div><span>MODELS</span><strong>00</strong></div></div>
           <div className="demo-module-card"><span>DATA GOVERNANCE</span><strong>Наборы данных</strong><small>Лицензия, происхождение, согласие и разделение train / validation / test</small></div>
-          <div className="demo-document-row"><Database size={18}/><div><strong>Baseline dataset</strong><small>Synthetic · CC0 · v1</small></div><ChevronRight size={16}/></div>
-          <div className="demo-document-row"><Activity size={18}/><div><strong>Evaluation baseline</strong><small>Детерминированная проверка</small></div><ChevronRight size={16}/></div>
+          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись набора данных.")}><Database size={18}/><div><strong>Baseline dataset</strong><small>Synthetic · CC0 · v1</small></div><ChevronRight size={16}/></button>
+          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись оценки модели.")}><Activity size={18}/><div><strong>Evaluation baseline</strong><small>Детерминированная проверка</small></div><ChevronRight size={16}/></button>
           <button className="demo-primary-action" onClick={() => setNotice("Training Lab preview: запуск обучения и изменение весов модели недоступны.")}>Открыть эксперименты</button>
           <div className="demo-safe-note"><ShieldCheck size={16}/> Личные переписки и файлы не добавляются в датасеты автоматически.</div>
         </div>}
