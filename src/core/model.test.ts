@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModelDescriptor } from "./domain";
-import { ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } from "./model";
+import { ModelRegistry, ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } from "./model";
 import { ok } from "./result";
 
 class FakeProvider implements ModelProvider {
