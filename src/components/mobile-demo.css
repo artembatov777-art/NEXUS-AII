@@ -304,3 +304,7 @@
  .demo-stat-grid strong{font-size:17px}
  .demo-module-card{padding:12px}
 }
+
+.demo-document-row,.demo-file-row{width:100%;font:inherit;text-align:left;cursor:pointer}
+.demo-document-row:active,.demo-file-row:active{border-color:rgba(121,199,232,.38);background:#132b3b}
+.demo-document-row:focus-visible,.demo-file-row:focus-visible{outline:2px solid #79c7e8;outline-offset:2px}
