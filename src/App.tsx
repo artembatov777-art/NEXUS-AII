@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FlaskConical, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste } from "lucide-react";
+import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FlaskConical, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste, FolderOpen, Plug } from "lucide-react";
 import { sendMessage } from "./lib/ai";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { GlobalSearchPanel } from "./components/GlobalSearchPanel";
@@ -8,6 +8,8 @@ import { AgentControlCenter } from "./components/AgentControlCenter";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 import { TrainingLabPanel } from "./components/TrainingLabPanel";
+import { FileSystemPanel } from "./components/FileSystemPanel";
+import { ToolsPanel } from "./components/ToolsPanel";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
 import { KnowledgeRetrievalService } from "./core/knowledge";
@@ -46,6 +48,8 @@ export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [trainingLabOpen, setTrainingLabOpen] = useState(false);
+  const [fileSystemOpen, setFileSystemOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -303,7 +307,9 @@ export default function App() {
       <div className="nav-label nav-label-spaced">INTELLIGENCE</div>
       <button className="nav-item" onClick={() => setAgentsOpen(true)}><Bot size={17}/> Agents <span className="nav-feature-dot"/></button>
       <button className="nav-item" onClick={() => setTrainingLabOpen(true)}><FlaskConical size={17}/> Training Lab</button>
+      <button className="nav-item" onClick={() => setToolsOpen(true)}><Plug size={17}/> Tools & MCP</button>
       <div className="nav-label nav-label-spaced">SYSTEM</div>
+      <button className="nav-item" onClick={() => setFileSystemOpen(true)}><FolderOpen size={17}/> File system</button>
       <button className="nav-item" onClick={() => setSettingsOpen(true)}><Cpu size={17}/> Models & providers</button>
       <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => setGlobalSearchOpen(true)} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => setConversations([])} title="Clear all history"><Trash2 size={14}/></button></div></div>
       <div className="history-search"><Search size={13}/><input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
@@ -347,6 +353,8 @@ export default function App() {
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} onDeleted={async () => { await refreshProjects(); setConversations(await loadConversations()); await reconcileSemanticIndex(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
     {trainingLabOpen && <TrainingLabPanel onClose={() => setTrainingLabOpen(false)} />}
+    {fileSystemOpen && <FileSystemPanel onClose={() => setFileSystemOpen(false)} />}
+    {toolsOpen && <ToolsPanel onClose={() => setToolsOpen(false)} />}
     {agentsOpen && <AgentControlCenter key={`${provider.baseUrl}|${provider.model}|${hasProviderKey}`} onClose={() => setAgentsOpen(false)} providerSettings={provider} hasProviderKey={hasProviderKey} />}
     {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="provider-settings-title"><div className="modal-header"><div><div className="eyebrow">CONFIGURATION</div><h2 id="provider-settings-title">Provider settings</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div><p className="modal-description">Connect an OpenAI-compatible endpoint. Cloud model requests are routed through OmniRoute. Direct local runtime integration is still in development; the route selector is an owner-declared disclosure and does not reconfigure OmniRoute itself. API keys are stored in the operating system credential vault, not in the application database.</p><div className="modal-actions"><button className="secondary-btn" onClick={() => setProvider(p => ({ ...p, baseUrl: "http://127.0.0.1:20128/v1", model: "auto", inferenceLocation: "remote" }))}>Use local OmniRoute gateway</button></div><label>Base URL<input value={provider.baseUrl} onChange={e => { setProvider(p => ({ ...p, baseUrl: e.target.value })); setAvailableModels([]); }} placeholder="http://127.0.0.1:20128/v1"/></label><label>Declared inference location for selected model<select value={provider.inferenceLocation} onChange={e => setProvider(p => ({ ...p, inferenceLocation: e.target.value as ProviderSettings["inferenceLocation"] }))}><option value="remote">Remote cloud model (safe default)</option><option value="local">Local model (verify provider route)</option></select><small>This is an owner-declared disclosure setting, not a verified runtime fact. NEXUS cannot inspect whether OmniRoute forwards a request to a cloud provider. Localhost does not guarantee local inference.</small></label><label>Model ID<input list="provider-model-options" value={provider.model} onChange={e => setProvider(p => ({ ...p, model: e.target.value }))} placeholder="auto or provider/model-id"/><datalist id="provider-model-options">{availableModels.map(model => <option key={model} value={model}/>)}</datalist><small>{availableModels.length ? `${availableModels.length} models loaded from the configured endpoint.` : "Load model IDs from the configured /v1/models endpoint."}</small></label><div className="modal-actions"><button className="secondary-btn" onClick={() => void loadProviderModels()} disabled={modelsLoading || providerVaultStatus !== "available"}>{modelsLoading ? "Loading models…" : "Load available models"}</button></div><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasProviderKey ? "Saved in OS credential vault" : "Enter API key"} autoComplete="off"/><small>{providerVaultStatus === "available" ? "A provider key is saved in the OS credential vault on this device." : providerVaultStatus === "missing" ? "No provider key is saved." : providerVaultStatus === "unavailable" ? "The OS credential vault is unavailable. NEXUS will not fall back to plaintext storage. On Linux, check that your Secret Service/keyring session is running." : providerVaultStatus === "browser" ? "Browser preview does not store or send provider credentials. Use the native desktop app to connect a provider." : "Checking the OS credential vault…"}</small></label><div className="security-note"><ShieldCheck size={16}/> The key is written directly to the OS credential vault. Chat requests send only a scoped credential handle, never the secret itself. macOS uses Keychain, Windows uses Credential Manager, and Linux requires a working Secret Service-compatible keyring.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!hasProviderKey}>Delete saved key</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div><div className="settings-backup"><h3>Workspace backup</h3><p>Export projects, conversations, memories, and knowledge. Provider credentials are never included.</p><div className="modal-actions"><button className="secondary-btn" onClick={() => void exportWorkspaceBackup()}>Export backup</button><label className="secondary-btn">Import backup<input type="file" accept="application/json,.json" hidden onChange={e => { void importWorkspaceBackup(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div></section></div>}
   </div>;
