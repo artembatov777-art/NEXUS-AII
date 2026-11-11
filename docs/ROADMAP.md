@@ -84,9 +84,9 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 **Status:** foundational evaluation and dataset-governance contracts are next; fine-tuning remains deferred until the runtime and evaluation baselines are proven.
 
-- [ ] Add model evaluation suites and baseline task sets.
-- [ ] Add versioned dataset manifests with source, license, permission, filtering, and split metadata.
-- [ ] Add experiment tracking for configuration, code revision, hardware, checkpoints, and evaluation.
+- [x] Add deterministic evaluation-suite contracts and baseline phrase scoring.
+- [x] Add versioned dataset manifests with license, privacy/consent gates, provenance, and disjoint train/validation/test splits.
+- [x] Add validated experiment records with model, code revision, hardware, configuration, and metrics metadata (persistence and checkpoint artifacts remain open).
 - [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
 - [ ] Add reproducible adapter/LoRA fine-tuning only when hardware and measured need justify it.
 - [ ] Version model artifacts and support rollback.
