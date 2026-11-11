@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   ArrowUp, AudioLines, Bell, BookOpen, Brain, Bot, ChevronRight,
-  CircleHelp, Command, FileText, FolderKanban, MessageSquare,
+  CircleHelp, Command, Database, FileText, FolderKanban, MessageSquare,
   MoreHorizontal, Plug, Plus, Search, Settings2, ShieldCheck, Sparkles, Zap,
   FlaskConical, HardDrive, LockKeyhole, Activity
 } from "lucide-react";
