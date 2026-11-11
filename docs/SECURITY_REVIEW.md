@@ -51,7 +51,7 @@
 
 The Tauri CSP sets default-src self, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI.
 
-## Platform credential behavior
+## OmniRoute cloud gateway boundary\n\n- Cloud model requests use the configured OmniRoute `/v1` endpoint; provider-specific cloud credentials are held by OmniRoute, while the NEXUS-to-OmniRoute endpoint key is stored only in the OS credential vault.\n- A local OmniRoute endpoint may use loopback HTTP. Any non-loopback endpoint must use HTTPS. Redirects remain disabled and URL user-info/query/fragment components are rejected by the native provider transport.\n- Model IDs are selected from the gateway's model catalog; model/provider capabilities are not assumed to be uniform.\n- Conversation and selected context content leave the device when a cloud model is selected. The UI must disclose the active remote route and never silently switch a local request to a cloud provider.\n- NEXUS uses only the public inference surface needed by the app. Administrative dashboard and provider-management endpoints are not exposed to agents or tools.\n\n## Platform credential behavior
 
 - **Windows:** keyring crate uses the platform credential store (Windows Credential Manager backend).
 - **macOS:** keyring crate uses Keychain.
