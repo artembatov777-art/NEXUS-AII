@@ -98,14 +98,11 @@ Exit criteria: MCP tools can be enabled/disabled individually and cannot bypass 
 
 Exit criteria: voice and native integration are reliable, optional, and permission-scoped.
 
-## Milestone 9 — Hosted web client
-- [ ] Add server-side model proxy
-- [ ] Add user authentication and per-user quotas
-- [ ] Keep provider keys server-side
-- [ ] Add abuse protection and request limits
-- [ ] Deploy only after security review
+## Milestone 9 — Hosted web client (deferred; not current product scope)
+- [ ] Revisit only if the owner later wants a remote/web companion client.
+- [ ] If introduced, use a server-side model proxy, authentication, scoped secrets, request limits, and a security review.
 
-Exit criteria: public browser clients cannot use a shared secret anonymously or without quotas.
+**Current decision:** a hosted public client, multi-user accounts, and per-user quotas are outside the personal NEXUS AU product scope.
 
 ## Phase I — Agent Control Center (completed: browser-preview scope, 2026-11-08)
 
