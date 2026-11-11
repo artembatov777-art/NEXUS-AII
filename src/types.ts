@@ -28,7 +28,7 @@ export interface ProviderSettings {
   inferenceLocation: "local" | "remote";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
-  baseUrl: "https://api.openai.com/v1",
-  model: "gpt-4o-mini",
+  baseUrl: "http://127.0.0.1:20128/v1",
+  model: "auto",
   inferenceLocation: "remote"
 };
