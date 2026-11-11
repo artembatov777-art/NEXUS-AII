@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, File, FileCode2, FileImage, FileText, Folder, HardDrive, LockKeyhole, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
 
 type WorkspaceFile = { id: string; name: string; folder: string; kind: "code" | "text" | "image"; size: string; modified: string; description: string; preview: string };
@@ -19,7 +19,6 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [treeOpen, setTreeOpen] = useState(true);
   const [notice, setNotice] = useState("");
-  useEffect(() => { const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); }; window.addEventListener("keydown", handleKeyDown); return () => window.removeEventListener("keydown", handleKeyDown); }, [onClose]);
   const visible = useMemo(() => files.filter(file => (folder === "NEXUS AU" || file.folder === folder || file.folder.startsWith(folder + " /")) && file.name.toLowerCase().includes(query.toLowerCase())), [folder, query]);
   const current = files.find(file => file.id === selected && visible.some(item => item.id === file.id)) ?? visible[0] ?? null;
   const Icon = current ? iconFor(current.kind) : File;
