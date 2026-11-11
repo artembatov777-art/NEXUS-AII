@@ -32,7 +32,8 @@ export function MobileDemo() {
     chat: "Новый диалог",
     projects: "Проекты",
     memory: "Память",
-    settings: "Настройки"
+    settings: "Настройки",
+    more: "Разделы NEXUS"
   };
 
   return <main className="mobile-demo">
