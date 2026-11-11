@@ -40,6 +40,13 @@ class TauriModelProvider implements ModelProvider {
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
     if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
     const channel = new Channel<{ type: "text_delta" | "completed"; text?: string; finishReason?: string }>();
+    const streamId = crypto.randomUUID();
+    let completed = false;
+    const cancelNativeStream = () => {
+      void invoke<boolean>("cancel_chat_stream", { streamId }).catch(() => false);
+    };
+    const abortHandler = () => cancelNativeStream();
+    request.signal?.addEventListener("abort", abortHandler, { once: true });
     const queue: ModelEvent[] = [];
     let wake: (() => void) | null = null;
     let done = false;
@@ -56,6 +63,7 @@ class TauriModelProvider implements ModelProvider {
       credentialHandle: "default",
       model: request.model,
       messages: request.messages.map(message => ({ role: message.role, content: message.content })),
+      streamId,
       onEvent: channel
     });
     let requestError: unknown = null;
@@ -68,8 +76,14 @@ class TauriModelProvider implements ModelProvider {
       if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
       await new Promise<void>(resolve => { wake = resolve; });
     }
-    await streamPromise;
-    if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+    try {
+      await streamPromise;
+      if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+      completed = true;
+    } finally {
+      request.signal?.removeEventListener("abort", abortHandler);
+      if (!completed) cancelNativeStream();
+    }
   }
 }
 
