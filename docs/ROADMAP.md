@@ -68,13 +68,14 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase V — NEXUS AI Core and OmniRoute
 
-**Status:** initial OmniRoute model discovery and SSE streaming are implemented; cancellation, model capability metadata, and unified routing remain.
+**Status:** OmniRoute model discovery, bounded SSE streaming, and native cancellation are implemented; capability metadata, local runtime, and unified routing remain.
 
 - [ ] Define and implement the Model Registry and runtime lifecycle contracts.
 - [x] Implement the native OpenAI-compatible cloud adapter used for OmniRoute `/v1` requests, including one-shot and SSE chat.
 - [x] Discover available models through `GET /v1/models` and expose the model catalog to the native ModelProvider.
 - [x] Implement bounded SSE chat completion streaming and incremental chat rendering.
-- [ ] Add native cancellation for active streams and normalize provider errors and usage metadata.
+- [x] Add native cancellation for active streams, including cancellation during connection/stream reads and early consumer exit.
+- [ ] Normalize provider errors and usage metadata.
 - [x] Store the provider credential in the OS vault; never expose it to the webview or logs.
 - [ ] Keep local inference as a separate adapter under the same Model Runtime.
 - [x] Disclose local versus remote model routing in the chat header.
@@ -85,11 +86,14 @@ NEXUS AU is a private personal AI desktop environment for one primary owner. It 
 
 ## Phase VI — Training Lab and model development
 
-**Status:** evaluation scoring, dataset-governance validation, and experiment metadata contracts are implemented; persistence, artifact tracking, and real model evaluation remain.
+**Status:** dataset governance, deterministic phrase-based evaluation, SQLite persistence for dataset manifests and experiment metadata, and a Training Lab workspace are implemented; artifact tracking and real model evaluation remain.
 
 - [x] Add deterministic evaluation-suite contracts and baseline phrase scoring.
 - [x] Add versioned dataset manifests with license, privacy/consent gates, provenance, and disjoint train/validation/test splits.
-- [x] Add validated experiment records with model, code revision, hardware, configuration, and metrics metadata (persistence and checkpoint artifacts remain open).
+- [x] Add validated experiment records with model, code revision, hardware, configuration, and metrics metadata.
+- [x] Persist versioned dataset manifests and immutable experiment records in native SQLite (browser preview uses localStorage).
+- [x] Add a Training Lab workspace for registering dataset manifests and recording experiment metadata.
+- [ ] Add content-addressed model artifact tracking and rollback.
 - [ ] Compare prompting, retrieval, and tool improvements before fine-tuning.
 - [ ] Add reproducible adapter/LoRA fine-tuning only when hardware and measured need justify it.
 - [ ] Version model artifacts and support rollback.
