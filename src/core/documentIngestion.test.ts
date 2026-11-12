@@ -52,6 +52,39 @@ describe("document ingestion", () => {
     expect(indexed).toHaveLength(1);
   });
 
+
+  it("repairs only missing vectors for the selected project", async () => {
+    const chunks: KnowledgeChunk[] = [
+      { id: "p1:ready", documentId: "d1", projectId: "p1", text: "Already indexed", sourceLabel: "one.md" },
+      { id: "p1:missing", documentId: "d2", projectId: "p1", text: "Needs embedding", sourceLabel: "two.md" },
+      { id: "p2:private", documentId: "d3", projectId: "p2", text: "Other project", sourceLabel: "private.md" }
+    ];
+    const repo: KnowledgeRepository = {
+      add: async () => ok(undefined),
+      exportAll: async () => ok(chunks),
+      search: async () => ok([]),
+      removeDocument: async () => ok(undefined)
+    };
+    const reconciledProjects: string[] = [];
+    const indexed: string[] = [];
+    const vectors = {
+      upsert: async (chunk: KnowledgeChunk) => { indexed.push(chunk.id); },
+      removeDocument: async () => undefined,
+      search: async () => [],
+      reconcile: async (projectChunks: KnowledgeChunk[]) => {
+        reconciledProjects.push(...projectChunks.map(chunk => chunk.projectId));
+        return projectChunks.filter(chunk => chunk.id === "p1:missing");
+      }
+    };
+    const embeddings = { embed: async (texts: string[]) => ok(texts.map(() => [1, 0])) };
+    const service = new DocumentIngestionService(repo, {}, embeddings, vectors);
+    const result = await service.rebuildSemanticIndex("p1");
+
+    expect(result).toEqual({ ok: true, value: { indexed: 1, totalChunks: 2 } });
+    expect(reconciledProjects).toEqual(["p1", "p1"]);
+    expect(indexed).toEqual(["p1:missing"]);
+  });
+
   it("supports zero overlap without looping", () => {
     const chunks = chunkDocumentText("a".repeat(700), 300, 0);
     expect(chunks.length).toBe(3);
