@@ -498,6 +498,14 @@ mod payload_validation_tests {
     }
 
     #[test]
+    fn sse_eof_requires_an_explicit_finish_reason() {
+        assert_eq!(completion_reason_for_eof(Some("stop")).unwrap(), "stop");
+        assert_eq!(completion_reason_for_eof(Some("length")).unwrap(), "length");
+        assert!(completion_reason_for_eof(None).is_err());
+        assert!(completion_reason_for_eof(Some("  ")).is_err());
+    }
+
+    #[test]
     fn sse_parser_extracts_text_and_handles_done() {
         let event = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
         assert_eq!(parse_sse_chunk(event).unwrap().unwrap().text.as_deref(), Some("hello"));
@@ -967,6 +975,12 @@ struct ParsedSseChunk {
     output_tokens: Option<u64>,
 }
 
+fn completion_reason_for_eof(finish_reason: Option<&str>) -> Result<&str, String> {
+    finish_reason
+        .filter(|reason| !reason.trim().is_empty())
+        .ok_or_else(|| "Provider stream ended before a completion signal was received.".into())
+}
+
 fn parse_sse_chunk(data: &str) -> Result<Option<ParsedSseChunk>, String> {
     if data.trim() == "[DONE]" { return Ok(None); }
     let payload: serde_json::Value = serde_json::from_str(data)
@@ -1185,10 +1199,8 @@ async fn send_chat_stream(
         // Some compatible providers omit the final [DONE] marker but still send
         // a finish_reason. Accept that explicit terminal signal, never a bare EOF.
         if !completed {
-            if finish_reason.is_none() {
-                return Err("Provider stream ended before a completion signal was received.".into());
-            }
-            on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
+            let terminal_reason = completion_reason_for_eof(finish_reason.as_deref())?;
+            on_event.send(serde_json::json!({"type":"completed","finishReason":terminal_reason}))
                 .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
             completed = true;
         }
