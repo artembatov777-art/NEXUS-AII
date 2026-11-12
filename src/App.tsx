@@ -170,7 +170,7 @@ export default function App() {
         dismissMobileNavigation();
         return;
       }
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "p" && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "p" && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="dialog"]'))) {
         event.preventDefault();
         setCommandPaletteOpen(value => !value);
         return;
