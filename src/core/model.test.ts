@@ -182,6 +182,31 @@ describe("ModelRegistry", () => {
     expect(registry.getSnapshot()).toMatchObject({ state: "unavailable", checkedAt: 99, error: "Gateway offline" });
   });
 
+  it("rejects control characters and oversized model IDs returned by a provider", async () => {
+    class InvalidProvider implements ModelProvider {
+      readonly id = "invalid";
+      constructor(private readonly modelId: string) {}
+      async listModels() {
+        return ok([{
+          id: this.modelId, providerId: this.id, displayName: "Invalid",
+          supportsStreaming: true, supportsTools: false
+        }]);
+      }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> {
+        yield { type: "completed" };
+      }
+    }
+    for (const modelId of ["bad\\nmodel", "я".repeat(65)]) {
+      const router = new ModelRouter();
+      router.register(new InvalidProvider(modelId));
+      const registry = new ModelRegistry(router);
+      expect(await registry.refresh()).toMatchObject({
+        ok: false, error: { code: "validation" }
+      });
+      expect(registry.getSnapshot().state).toBe("unavailable");
+    }
+  });
+
   it("rejects duplicate provider/model identities returned by a provider", async () => {
     class DuplicateProvider implements ModelProvider {
       readonly id = "duplicate";
