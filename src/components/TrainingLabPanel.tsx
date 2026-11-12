@@ -267,7 +267,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <label>Model comparison IDs<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
         <small id="training-model-hint">{availableModels.length ? `Discovered models: ${availableModels.length}. Enter 2 to 4 IDs from the provider catalog.` : "Load the provider model catalog in Settings, then enter 2 to 4 model IDs."}</small>
         <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>Compare selected models</button>
-        {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>
+        {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>}
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
       <div className="training-section">
