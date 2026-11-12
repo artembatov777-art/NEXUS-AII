@@ -8,7 +8,7 @@ import { ToolsPanel } from "./ToolsPanel";
 
 let container: HTMLDivElement;
 let root: Root;
-let onClose: ReturnType<typeof vi.fn>;
+let onClose: ReturnType<typeof vi.fn<() => void>>;
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -69,7 +69,7 @@ describe("FileSystemPanel preview interactions", () => {
   });
 
   it("shows both list and inspector empty states when search has no matches", () => {
-    const search = container.querySelector<HTMLInputElement>('input[aria-label="Search files and folders..."]');
+    const search = container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
     if (!search) throw new Error("File search input was not found.");
     setInputValue(search, "file-that-does-not-exist");
 
