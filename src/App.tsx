@@ -495,7 +495,7 @@ export default function App() {
       <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={dismissMobileNavigation} aria-label="Close navigation"><X size={17}/></button></div>
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
       <div className="nav-label">WORKSPACE</div>
-      <button className={`nav-item ${!moduleOpen ? "selected" : ""}`} aria-current={!moduleOpen ? "page" : undefined} aria-label="Chat workspace"><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
+      <button className={`nav-item ${!moduleOpen ? "selected" : ""}`} aria-current={!moduleOpen ? "page" : undefined} aria-label="Chat workspace" onClick={() => { setCommandPaletteOpen(false); setSettingsOpen(false); setMemoryOpen(false); setGlobalSearchOpen(false); setAgentsOpen(false); setProjectsOpen(false); setKnowledgeOpen(false); setTrainingLabOpen(false); setFileSystemOpen(false); setToolsOpen(false); setActiveId(null); setFocusMode(false); closeMobileNavigation(); }}><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
       <button className={`nav-item ${projectsOpen ? "selected" : ""}`} aria-current={projectsOpen ? "page" : undefined} onClick={() => { setProjectsOpen(true); closeMobileNavigation(); }}><FolderKanban size={17}/> Projects</button>
       <button className={`nav-item ${memoryOpen ? "selected" : ""}`} aria-current={memoryOpen ? "page" : undefined} onClick={() => { setMemoryOpen(true); closeMobileNavigation(); }}><Sparkles size={17}/> Memory</button>
       <button className={`nav-item ${knowledgeOpen ? "selected" : ""}`} aria-current={knowledgeOpen ? "page" : undefined} onClick={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}><BookOpen size={17}/> Knowledge base</button>
@@ -549,6 +549,7 @@ export default function App() {
             onOpenProjects={() => { setProjectsOpen(true); closeMobileNavigation(); }}
             onOpenFiles={() => { setFileSystemOpen(true); closeMobileNavigation(); }}
             onOpenTools={() => { setToolsOpen(true); closeMobileNavigation(); }}
+            onOpenTrainingLab={() => { setTrainingLabOpen(true); closeMobileNavigation(); }}
             onOpenSettings={() => { setSettingsOpen(true); closeMobileNavigation(); }}
             onStartPlanning={() => { setDraft("Help me plan and break down my next task into clear steps."); setError(""); }}
           />}
