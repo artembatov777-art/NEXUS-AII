@@ -76,7 +76,7 @@ describe("ModelRouter", () => {
     };
     await expect(consume(Array.from({ length: 101 }, () => ({ role: "user" as const, content: "x" })))).rejects.toThrow(/1 and 100/i);
     await expect(consume([{ role: "user", content: "я".repeat(50_001) }])).rejects.toThrow(/100 KB/i);
-    await expect(consume([{ role: "user", content: "я".repeat(500_001) }, { role: "assistant", content: "я" }])).rejects.toThrow(/1 MB/i);
+    await expect(consume(Array.from({ length: 11 }, () => ({ role: "user" as const, content: "x".repeat(90_910) })))).rejects.toThrow(/1 MB/i);
   });
 
   it("rejects control characters and oversized model IDs before dispatch", async () => {
