@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FlaskConical, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste, FolderOpen, Plug } from "lucide-react";
-import { sendMessage } from "./lib/ai";
+import { sendMessage, testProviderGeneration } from "./lib/ai";
+import { ModelRegistry } from "./core/model";
+import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./lib/tauriModelProvider";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { GlobalSearchPanel } from "./components/GlobalSearchPanel";
 import { AgentControlCenter } from "./components/AgentControlCenter";
@@ -25,6 +27,7 @@ import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 type ProviderVaultStatus = "loading" | "available" | "missing" | "unavailable" | "browser";
 type ProviderConnectionState = "unchecked" | "checking" | "reachable" | "failed";
+type ModelTestState = "unchecked" | "testing" | "passed" | "failed";
 
 const makeId = () => crypto.randomUUID();
 const welcome: ChatMessage = {
@@ -46,6 +49,8 @@ export default function App() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [providerConnectionState, setProviderConnectionState] = useState<ProviderConnectionState>("unchecked");
   const [providerConnectionMessage, setProviderConnectionMessage] = useState("The endpoint has not been checked in this session.");
+  const [modelTestState, setModelTestState] = useState<ModelTestState>("unchecked");
+  const [modelTestMessage, setModelTestMessage] = useState("A successful /models response does not prove generation works.");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
@@ -289,30 +294,74 @@ export default function App() {
     setProviderConnectionState("checking");
     setProviderConnectionMessage("Requesting the model catalog from the configured endpoint…");
     try {
-      const models = await invoke<string[]>("list_provider_models", {
-        baseUrl: provider.baseUrl,
-        credentialHandle: provider.credentialHandle ?? "default"
-      });
-      const safeModels = Array.isArray(models)
-        ? [...new Set(models.filter(id => typeof id === "string" && id.trim().length > 0 && id.length <= 128))]
-        : [];
+      const router = createTauriModelRouter(provider);
+      if (!router) throw new Error("The native model runtime is unavailable.");
+      const registry = new ModelRegistry(router);
+      const refreshed = await registry.refresh();
+      if (!refreshed.ok) throw new Error(refreshed.error.message);
+      const selected = registry.setActiveModel(NATIVE_MODEL_PROVIDER_ID, provider.model);
+      if (!selected.ok) throw new Error(selected.error.message);
+      const safeModels = registry.listModels().map(model => model.id);
       setAvailableModels(safeModels);
-      if (safeModels.length === 0) {
-        setProviderConnectionState("failed");
-        setProviderConnectionMessage("The endpoint responded, but returned no usable model IDs.");
-        setError("The endpoint returned no usable model IDs.");
-      } else {
-        setProviderConnectionState("reachable");
-        setProviderConnectionMessage(`/models responded with ${safeModels.length} model ID(s). Chat generation has not been tested.`);
-        setError("");
-      }
+      setProviderConnectionState("reachable");
+      setProviderConnectionMessage("/models responded with " + safeModels.length + " model ID(s). Selected model \"" + provider.model + "\" is in the catalog. Generation still needs a separate test.");
+      setModelTestState("unchecked");
+      setModelTestMessage("Model generation has not been tested in this session.");
+      setError("");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setProviderConnectionState("failed");
       setProviderConnectionMessage(message);
+      setModelTestState("failed");
+      setModelTestMessage("Model test is unavailable until the endpoint and model catalog are reachable.");
       setError(message);
     } finally {
       setModelsLoading(false);
+    }
+  }
+
+  async function testProviderModel() {
+    if (!isTauri()) {
+      setModelTestState("failed");
+      setModelTestMessage("Model generation requires the native desktop app.");
+      return;
+    }
+    if (providerConnectionState !== "reachable") {
+      setModelTestState("failed");
+      setModelTestMessage("Check the endpoint and load the model catalog first.");
+      return;
+    }
+    if (!localNoAuth && providerVaultStatus !== "available") {
+      setModelTestState("failed");
+      setModelTestMessage("Save the provider API key in the operating-system credential vault first.");
+      return;
+    }
+
+    const controller = new AbortController();
+    let timedOut = false;
+    setModelTestState("testing");
+    setModelTestMessage("Sending a short generation request to \"" + provider.model + "\"…");
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 45_000);
+    try {
+      const result = await testProviderGeneration(provider, controller.signal);
+      setModelTestState("passed");
+      const usage = result.usage
+        ? " Token usage: " + (result.usage.inputTokens ?? "?") + " input / " + (result.usage.outputTokens ?? "?") + " output."
+        : "";
+      setModelTestMessage("Generation succeeded. The selected model returned a non-empty response." + usage);
+      setError("");
+    } catch (cause) {
+      const message = timedOut
+        ? "The model did not finish within 45 seconds. Check the provider and try again."
+        : cause instanceof Error ? cause.message : "The model generation test failed.";
+      setModelTestState("failed");
+      setModelTestMessage(message);
+      setError(message);
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   }
 
