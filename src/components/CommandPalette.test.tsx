@@ -32,6 +32,20 @@ describe("NEXUS command palette", () => {
     expect(container.textContent).not.toContain("Agent center");
   });
 
+  it("exposes new conversation and global search as commands", () => {
+    expect(container.textContent).toContain("New conversation");
+    expect(container.textContent).toContain("Global search");
+  });
+
+  it("supports arrow-key selection and Enter activation", () => {
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Search commands"]');
+    expect(input).not.toBeNull();
+    act(() => input!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    expect(input!.getAttribute("aria-activedescendant")).toBe("command-option-new-chat");
+    act(() => input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(onRun).toHaveBeenCalledWith("new-chat");
+  });
+
   it("dispatches a selected command and exposes close control", () => {
     const agents = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Agent center"));
     expect(agents).toBeDefined();
