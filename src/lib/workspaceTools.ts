@@ -65,7 +65,11 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
         try {
           const entries = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
           if (context.signal.aborted) return err("cancelled", "Workspace listing was cancelled.");
-          return ok({ path, entries: entries.slice(0, MAX_LIST_ENTRIES), totalEntries: entries.length, truncated: entries.length > MAX_LIST_ENTRIES });
+          let visible = entries.slice(0, MAX_LIST_ENTRIES);
+          while (visible.length > 0 && new TextEncoder().encode(JSON.stringify({
+            path, entries: visible, totalEntries: entries.length, truncated: visible.length < entries.length
+          })).byteLength > MAX_SERIALIZED_OUTPUT_BYTES) visible = visible.slice(0, -1);
+          return ok({ path, entries: visible, totalEntries: entries.length, truncated: visible.length < entries.length });
         } catch (cause) { return failure(cause, "Could not list the approved workspace directory."); }
       }
     },
@@ -89,11 +93,6 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
           let best = 0;
           while (low <= high) {
             let middle = Math.floor((low + high) / 2);
-            // Do not split a UTF-16 surrogate pair at the truncation boundary.
-            if (middle > 0 && middle < content.length) {
-              const code = content.charCodeAt(middle - 1);
-              if (code >= 0xD800 && code <= 0xDBFF) middle -= 1;
-            }
             const candidate = content.slice(0, middle);
             const output = { path, content: candidate, truncated: middle < content.length, totalCharacters: content.length };
             const size = new TextEncoder().encode(JSON.stringify(output)).byteLength;
@@ -103,6 +102,10 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
             } else {
               high = middle - 1;
             }
+          }
+          if (best > 0 && best < content.length) {
+            const code = content.charCodeAt(best - 1);
+            if (code >= 0xD800 && code <= 0xDBFF) best -= 1;
           }
           const bounded = content.slice(0, best);
           return ok({ path, content: bounded, truncated: best < content.length || maxContentBytes > MAX_TOOL_TEXT_BYTES, totalCharacters: content.length });
