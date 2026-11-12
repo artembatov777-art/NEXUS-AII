@@ -485,6 +485,19 @@ mod payload_validation_tests {
     }
 
     #[test]
+    fn generation_controls_are_validated_at_the_native_boundary() {
+        assert!(validate_generation_parameters(None, None).is_ok());
+        assert!(validate_generation_parameters(Some(0.0), Some(1)).is_ok());
+        assert!(validate_generation_parameters(Some(2.0), Some(1_000_000)).is_ok());
+        assert!(validate_generation_parameters(Some(f32::NAN), None).is_err());
+        assert!(validate_generation_parameters(Some(f32::INFINITY), None).is_err());
+        assert!(validate_generation_parameters(Some(-0.1), None).is_err());
+        assert!(validate_generation_parameters(Some(2.1), None).is_err());
+        assert!(validate_generation_parameters(None, Some(0)).is_err());
+        assert!(validate_generation_parameters(None, Some(1_000_001)).is_err());
+    }
+
+    #[test]
     fn sse_parser_extracts_text_and_handles_done() {
         let event = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
         assert_eq!(parse_sse_chunk(event).unwrap().unwrap().text.as_deref(), Some("hello"));
