@@ -21,6 +21,7 @@ import { MemoryService, type MemoryId } from "./core/memory";
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
+import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -55,6 +56,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -167,6 +170,11 @@ export default function App() {
         dismissMobileNavigation();
         return;
       }
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "p" && !event.target?.toString().includes("HTMLInputElement")) {
+        event.preventDefault();
+        setCommandPaletteOpen(value => !value);
+        return;
+      }
       if (!matchesNewConversationShortcut(event)) return;
       event.preventDefault();
       newChat();
@@ -178,7 +186,7 @@ export default function App() {
   // Keep keyboard focus inside the active workspace dialog and make Escape a
   // consistent close action across every module.
   useEffect(() => {
-    const dialogOpen = settingsOpen || memoryOpen || globalSearchOpen || agentsOpen ||
+    const dialogOpen = commandPaletteOpen || settingsOpen || memoryOpen || globalSearchOpen || agentsOpen ||
       projectsOpen || knowledgeOpen || trainingLabOpen || fileSystemOpen || toolsOpen;
     if (!dialogOpen) return;
 
@@ -201,7 +209,8 @@ export default function App() {
       event.preventDefault();
       if (action.type === "close") {
         event.stopPropagation();
-        if (globalSearchOpen) setGlobalSearchOpen(false);
+        if (commandPaletteOpen) setCommandPaletteOpen(false);
+        else if (globalSearchOpen) setGlobalSearchOpen(false);
         else if (agentsOpen) setAgentsOpen(false);
         else if (fileSystemOpen) setFileSystemOpen(false);
         else if (toolsOpen) setToolsOpen(false);
@@ -227,7 +236,7 @@ export default function App() {
         }
       }
     };
-  }, [settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen]);
+  }, [commandPaletteOpen, settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen]);
   function updateMessages(id: string, next: ChatMessage[]) {
     setConversations(current => current.map(c => c.id === id
       ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
@@ -478,10 +487,10 @@ export default function App() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not read clipboard."); }
   }
 
-  const activeSection = settingsOpen ? "Models & providers" : memoryOpen ? "Memory" : globalSearchOpen ? "Search" : agentsOpen ? "Agents" : projectsOpen ? "Projects" : knowledgeOpen ? "Knowledge base" : trainingLabOpen ? "Training Lab" : fileSystemOpen ? "File system" : toolsOpen ? "Tools & MCP" : "Chat";
+  const activeSection = commandPaletteOpen ? "Command palette" : settingsOpen ? "Models & providers" : memoryOpen ? "Memory" : globalSearchOpen ? "Search" : agentsOpen ? "Agents" : projectsOpen ? "Projects" : knowledgeOpen ? "Knowledge base" : trainingLabOpen ? "Training Lab" : fileSystemOpen ? "File system" : toolsOpen ? "Tools & MCP" : "Chat";
   const moduleOpen = activeSection !== "Chat";
 
-  return <div className="app-shell" data-shell="cinematic" data-state={busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"} data-route={providerRoute}>
+  return <div className="app-shell" data-shell="cinematic" data-focus-mode={focusMode ? "true" : "false"} data-state={busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"} data-route={providerRoute}>
     <aside id="nexus-sidebar" className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
       <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={dismissMobileNavigation} aria-label="Close navigation"><X size={17}/></button></div>
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
@@ -514,7 +523,7 @@ export default function App() {
     {sidebarOpen && <button className="sidebar-scrim" onClick={dismissMobileNavigation} aria-label="Close navigation"/>}
 
     <main className="main-panel">
-      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><button type="button" className="model-pill" onClick={() => setSettingsOpen(true)} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><button type="button" className="model-pill" onClick={() => setSettingsOpen(true)} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => setFocusMode(value => !value)} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
       <section className="chat-area">
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><div className="nexus-hero-core" aria-label={`NEXUS system core: ${busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"}`}><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">NEXUS CORE <b>{busy ? "PROCESSING" : modelTestState === "passed" ? "CONNECTED" : "STANDBY"}</b></div><div className="core-label core-label-bottom">NEXUS AU <span>·</span> SYSTEM INTERFACE</div></div><h1>{active?.title ?? "Your intelligence. Connected."}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <div className="nexus-system-grid" aria-label="System overview">
@@ -557,6 +566,19 @@ export default function App() {
       </section>
     </main>
 
+    {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
+      setCommandPaletteOpen(false);
+      if (id === "focus") { setFocusMode(value => !value); return; }
+      if (id === "chat") { setSettingsOpen(false); setMemoryOpen(false); setGlobalSearchOpen(false); setAgentsOpen(false); setProjectsOpen(false); setKnowledgeOpen(false); setTrainingLabOpen(false); setFileSystemOpen(false); setToolsOpen(false); closeMobileNavigation(); return; }
+      setSettingsOpen(id === "models");
+      setAgentsOpen(id === "agents");
+      setMemoryOpen(id === "memory");
+      setKnowledgeOpen(id === "knowledge");
+      setProjectsOpen(id === "projects");
+      setFileSystemOpen(id === "files");
+      setToolsOpen(id === "tools");
+      if (id !== "focus") closeMobileNavigation();
+    }} />}
     {globalSearchOpen && <GlobalSearchPanel conversations={conversations} projects={workspaceProjects} onClose={() => setGlobalSearchOpen(false)} onOpenConversation={conversation => { setSelectedProjectId(conversation.projectId ?? ""); setActiveId(conversation.id); setGlobalSearchOpen(false); setError(""); }} onOpenMemory={() => { setGlobalSearchOpen(false); setMemoryOpen(true); }} onOpenKnowledge={() => { setGlobalSearchOpen(false); setKnowledgeOpen(true); }} />}
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} onDeleted={async () => { await refreshProjects(); setConversations(await loadConversations()); await reconcileSemanticIndex(); }} />}
