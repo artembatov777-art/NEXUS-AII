@@ -384,7 +384,7 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .file-workspace-footer>span{display:flex;align-items:center;gap:7px;color:#80a9b7;font-size:9px}
 .file-workspace-footer>span svg{color:#8ec4ad}
 .file-notice{position:absolute;left:50%;bottom:70px;z-index:3;transform:translateX(-50%);width:min(520px,calc(100% - 30px));display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid rgba(121,199,232,.3);border-radius:9px;background:#102638;color:#d7edf6;text-align:left;font-size:10px;box-shadow:0 10px 35px #0009}
-.file-notice span{font-size:16px;color:#91b7c8}
+.file-notice>span{flex:1;min-width:0}.file-notice-dismiss{flex:0 0 auto;padding:0 0 0 8px;border:0;background:transparent;color:#91b7c8;font-size:16px;line-height:1;cursor:pointer}
 .tools-workspace{width:min(880px,calc(100vw - 48px))}
 .tools-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:15px 20px;border-bottom:1px solid rgba(121,199,232,.1)}
 .tools-summary>div{display:grid;gap:5px;padding:12px;border:1px solid rgba(121,199,232,.13);border-radius:9px;background:rgba(12,29,42,.72)}
