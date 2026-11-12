@@ -953,3 +953,33 @@
 .command-activity li:not(:last-child):after { position:absolute; bottom:-7px; left:-1px; width:1px; height:7px; background:rgba(145,122,230,.22); content:""; }
 .command-activity-dot { position:absolute; left:-4px; top:14px; width:7px; height:7px; border:1px solid #17152e; }
 .command-activity li div { padding-left:4px; }
+
+/* Agent control plane: match the JARVIS-style command environment */
+.agent-backdrop { background:rgba(2,4,13,.84); backdrop-filter:blur(12px); }
+.agent-center { border-color:rgba(119,139,218,.28); background:radial-gradient(ellipse at 10% 0%,rgba(95,69,174,.16),transparent 42%),linear-gradient(145deg,#10172b,#080d1c 72%); box-shadow:0 32px 110px rgba(0,0,0,.72),0 0 50px rgba(88,89,190,.09); }
+.agent-center-icon { border-color:rgba(148,126,231,.4); background:linear-gradient(145deg,rgba(88,65,151,.5),rgba(29,34,75,.72)); color:#c7b5ff; box-shadow:0 0 22px rgba(120,92,211,.16); }
+.agent-center-title h2 { color:#f0efff; }
+.agent-center-title p { color:#8993b3; }
+.agent-card { border-color:rgba(123,139,205,.18); background:linear-gradient(145deg,rgba(24,29,57,.78),rgba(8,14,30,.88)); box-shadow:inset 0 1px rgba(220,225,255,.025); }
+.agent-card-heading h3 { color:#ecebff; }
+.agent-kicker { color:#ad9aff; }
+.agent-local-tag,.agent-count { border-color:rgba(129,190,255,.22); background:rgba(36,61,91,.34); color:#a8c9f5; }
+.agent-card textarea,.agent-profile-input,.agent-profile-fields input { border-color:rgba(122,139,202,.25); background:rgba(5,10,24,.82); color:#e8eaff; }
+.agent-card textarea:focus,.agent-profile-input:focus,.agent-profile-fields input:focus { border-color:rgba(160,139,255,.7); box-shadow:0 0 0 3px rgba(125,100,215,.12); }
+.agent-primary-button { border-color:rgba(163,139,255,.5); background:linear-gradient(110deg,#694bc0,#315d9e); box-shadow:0 5px 18px rgba(91,72,184,.2); }
+.agent-small-button { border-color:rgba(124,151,219,.24); background:rgba(30,43,73,.68); color:#c2c8e7; }
+.agent-feed-item { border-bottom-color:rgba(117,135,192,.14); }
+.agent-feed-item pre { color:#b9c2df; }
+.agent-approval-item,.agent-history-item { border-top-color:rgba(117,135,192,.16); }
+.agent-approval-actions button { border-color:rgba(72,182,146,.32); background:rgba(27,74,66,.62); color:#b4ecd8; }
+.agent-approval-actions button+button { border-color:rgba(208,109,137,.3); background:rgba(75,34,55,.55); color:#efb8ca; }
+.agent-status { border:1px solid rgba(132,145,200,.18); background:rgba(36,44,70,.62); }
+.agent-status.running { border-color:rgba(105,172,255,.3); background:rgba(33,66,105,.45); color:#b1d5ff; }
+.agent-status.waiting_for_approval { border-color:rgba(212,175,102,.32); background:rgba(82,62,29,.5); color:#efd39b; }
+.agent-status.completed { border-color:rgba(75,196,143,.28); background:rgba(26,77,55,.48); color:#a5e7c4; }
+.agent-status.failed,.agent-status.cancelled { border-color:rgba(219,118,145,.28); background:rgba(81,38,54,.5); color:#efb0c1; }
+.agent-center-footer { border-top-color:rgba(117,135,192,.2); color:#828cab; }
+.agent-disclaimer { border-top-color:rgba(117,135,192,.18); color:#9ca2bd; }
+.agent-empty { color:#828cab; }
+.agent-error { border-color:rgba(228,113,143,.35); background:rgba(66,25,43,.55); }
+.agent-saved-output { border-color:rgba(122,139,202,.22); background:rgba(5,10,24,.65); }
