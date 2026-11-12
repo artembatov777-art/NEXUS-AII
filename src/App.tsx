@@ -601,7 +601,7 @@ export default function App() {
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} onDeleted={async () => { await refreshProjects(); setConversations(await loadConversations()); await reconcileSemanticIndex(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
-    {trainingLabOpen && <TrainingLabPanel onClose={() => setTrainingLabOpen(false)} />}
+    {trainingLabOpen && <TrainingLabPanel provider={provider} onClose={() => setTrainingLabOpen(false)} />}
     {fileSystemOpen && <FileSystemPanel onClose={() => setFileSystemOpen(false)} />}
     {toolsOpen && <ToolsPanel onClose={() => setToolsOpen(false)} />}
     {agentsOpen && <AgentControlCenter key={`${provider.baseUrl}|${provider.model}|${hasProviderKey}|${localNoAuth}`} onClose={() => setAgentsOpen(false)} providerSettings={provider} hasProviderKey={hasProviderKey || localNoAuth} />}
