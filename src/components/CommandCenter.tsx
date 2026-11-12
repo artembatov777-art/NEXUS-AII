@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Bot, Command, FolderKanban, FolderOpen, MemoryStick, Plug, Settings2, Sparkles, Zap } from "lucide-react";
+import { Activity, BookOpen, Bot, Command, FlaskConical, FolderKanban, FolderOpen, MemoryStick, Plug, Settings2, Sparkles, Zap } from "lucide-react";
 
 function formatActivityTime(timestamp: number): string {
   const elapsed = Math.max(0, Date.now() - timestamp);
@@ -62,7 +62,7 @@ export function CommandCenter({
           <button onClick={onOpenProjects}><FolderKanban/><span><b>Projects</b><small>Organize your work</small></span><i>↗</i></button>
           <button onClick={onOpenFiles}><FolderOpen/><span><b>File system</b><small>Manage permitted files</small></span><i>↗</i></button>
           <button onClick={onOpenTools}><Plug/><span><b>Tools & MCP</b><small>Connected capabilities</small></span><i>↗</i></button>
-          <button onClick={onOpenTrainingLab}><Activity/><span><b>Training Lab</b><small>Explore model experiments</small></span><i>↗</i></button>
+          <button onClick={onOpenTrainingLab}><FlaskConical/><span><b>Training Lab</b><small>Explore model experiments</small></span><i>↗</i></button>
         </div>
       </div>
       <aside className="command-focus">
@@ -79,7 +79,7 @@ export function CommandCenter({
       <div className="command-monitor-grid">
         <article data-health={workspaceReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Workspace storage</strong><small>{workspaceReady ? "Conversation data loaded" : "Loading workspace data"}</small></div><b>{workspaceReady ? "READY" : "LOADING"}</b></article>
         <article data-health={providerConnection === "reachable" ? "good" : providerConnection === "failed" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Provider endpoint</strong><small>{providerConnection === "reachable" ? "Endpoint responded" : providerConnection === "failed" ? "Last endpoint check failed" : providerConnection === "checking" ? "Checking endpoint" : "Not checked this session"}</small></div><b>{providerConnection.toUpperCase()}</b></article>
-        <article data-health={credentialVault === "available" || credentialVault === "browser" ? "good" : credentialVault === "unavailable" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Credential vault</strong><small>{credentialVault === "available" ? "OS vault available" : credentialVault === "browser" ? "Native vault unavailable in browser preview" : credentialVault === "missing" ? "No provider key saved" : credentialVault === "unavailable" ? "OS vault unavailable" : "Checking vault"}</small></div><b>{credentialVault.toUpperCase()}</b></article>
+        <article data-health={credentialVault === "available" ? "good" : credentialVault === "unavailable" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Credential vault</strong><small>{credentialVault === "available" ? "OS vault available" : credentialVault === "browser" ? "Native vault unavailable in browser preview" : credentialVault === "missing" ? "No provider key saved" : credentialVault === "unavailable" ? "OS vault unavailable" : "Checking vault"}</small></div><b>{credentialVault.toUpperCase()}</b></article>
         <article data-health={providerReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Model generation</strong><small>{providerReady ? "Generation test passed" : "Generation not verified"}</small></div><b>{providerReady ? "VERIFIED" : "UNTESTED"}</b></article>
       </div>
     </section>
