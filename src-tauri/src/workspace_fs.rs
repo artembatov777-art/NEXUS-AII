@@ -38,6 +38,11 @@ impl WorkspaceAccess {
             .map_err(|e| format!("Could not write workspace permissions: {e}"))?;
         file.write_all(&serialized).map_err(|e| format!("Could not save workspace permissions: {e}"))?;
         file.sync_all().map_err(|e| format!("Could not flush workspace permissions: {e}"))?;
+        #[cfg(windows)]
+        if self.persistence_path.exists() {
+            fs::remove_file(&self.persistence_path)
+                .map_err(|e| format!("Could not replace workspace permissions: {e}"))?;
+        }
         fs::rename(&temporary, &self.persistence_path)
             .map_err(|e| format!("Could not finalize workspace permissions: {e}"))
     }
@@ -61,7 +66,7 @@ pub struct WorkspaceEntry {
     path: String,
     kind: String,
     size_bytes: u64,
-    modified_at_ms: Option<u128>,
+    modified_at_ms: Option<u64>,
 }
 
 #[tauri::command]
@@ -150,7 +155,11 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
     }
     let mut file = fs::File::open(&canonical).map_err(|e| format!("Could not read file: {e}"))?;
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.read_to_end(&mut bytes).map_err(|e| format!("Could not read file: {e}"))?;
+    file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut bytes)
+        .map_err(|e| format!("Could not read file: {e}"))?;
+    if bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err("This file grew beyond the 2 MB preview limit while being read.".into());
+    }
     String::from_utf8(bytes).map_err(|_| "This file is not UTF-8 text and cannot be previewed.".into())
 }
 
@@ -196,6 +205,24 @@ mod tests {
         assert!(Path::new("/safe/work/project").starts_with(&root));
         assert!(!Path::new("/safe/work-evil/project").starts_with(&root));
         assert!(!Path::new("/safe/other").starts_with(&root));
+    }
+
+    #[test]
+    fn access_is_granted_only_for_canonical_paths_inside_an_approved_root() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-{}-{nonce}", std::process::id()));
+        let root = base.join("allowed");
+        let sibling = base.join("allowed-escape");
+        fs::create_dir_all(&root).expect("create allowed root");
+        fs::create_dir_all(&sibling).expect("create sibling");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+        assert!(access.allowed_root_for(&root).is_ok());
+        assert!(access.allowed_root_for(&sibling).is_err());
+        fs::remove_dir_all(&base).expect("cleanup");
     }
 
     #[test]
