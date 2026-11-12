@@ -901,3 +901,6 @@
 .command-monitor-grid article[data-health="good"]>b { color:#61dcb0; }
 .command-monitor-grid article[data-health="bad"]>b { color:#ff8298; }
 @media(max-width:640px) { .command-monitor-grid { grid-template-columns:1fr; } }
+
+.command-palette-list>button.is-active { border-color:rgba(157,132,255,.32); background:linear-gradient(100deg,rgba(73,57,130,.3),rgba(32,43,83,.22)); box-shadow:inset 2px 0 #9c82f2; }
+.command-palette-list>button[aria-selected="true"] .command-palette-icon { color:#d3c5ff; border-color:rgba(177,151,255,.42); background:rgba(91,68,161,.35); }
