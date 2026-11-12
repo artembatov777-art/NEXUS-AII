@@ -68,6 +68,27 @@ describe("ModelRouter", () => {
     }).rejects.toThrow(/output tokens/i);
   });
 
+  it("rejects requests that exceed native host message limits before dispatch", async () => {
+    const router = new ModelRouter();
+    router.register(new FakeProvider());
+    const consume = (messages: ModelRequest["messages"]) => async () => {
+      for await (const _event of router.stream("fake", { model: "fake-model", messages })) { /* consume */ }
+    };
+    await expect(consume(Array.from({ length: 101 }, () => ({ role: "user" as const, content: "x" })))).rejects.toThrow(/1 and 100/i);
+    await expect(consume([{ role: "user", content: "я".repeat(50_001) }])).rejects.toThrow(/100 KB/i);
+    await expect(consume([{ role: "user", content: "я".repeat(500_001) }, { role: "assistant", content: "я" }])).rejects.toThrow(/1 MB/i);
+  });
+
+  it("rejects control characters and oversized model IDs before dispatch", async () => {
+    const router = new ModelRouter();
+    router.register(new FakeProvider());
+    const consume = (model: string) => async () => {
+      for await (const _event of router.stream("fake", { model, messages: [{ role: "user", content: "Hi" }] })) { /* consume */ }
+    };
+    await expect(consume("bad\nmodel")).rejects.toThrow(/Model ID/i);
+    await expect(consume("x".repeat(129))).rejects.toThrow(/Model ID/i);
+  });
+
   it("reports an unavailable provider", async () => {
     const router = new ModelRouter();
     await expect(async () => {
