@@ -9,6 +9,10 @@ class FakeMemoryRepository implements MemoryRepository {
     return ok([...this.records.values()].filter(record => scope === "all" || record.scope === scope).slice(0, limit));
   }
 
+  async getById(id: MemoryId): Promise<Result<MemoryRecord | null>> {
+    return ok(this.records.get(id) ?? null);
+  }
+
   async search(query: string, scope: "all" | "profile" | "project" | "conversation", limit: number): Promise<Result<MemoryRecord[]>> {
     const matches = [...this.records.values()].filter(record =>
       (scope === "all" || record.scope === scope) &&
@@ -105,10 +109,25 @@ describe("MemoryService", () => {
     }
   });
 
+  it("revises records beyond the first 200 without truncating lookup", async () => {
+    const { service, repository } = setup();
+    for (let index = 0; index < 250; index += 1) {
+      const id = `memory-${index}` as MemoryId;
+      repository.records.set(id, {
+        id, content: `Memory ${index}`, category: "fact", scope: "profile",
+        source: { type: "user_confirmed", label: "Manual" }, tags: [],
+        createdAt: index, updatedAt: index, schemaVersion: 1
+      });
+    }
+    const result = await service.revise("memory-249" as MemoryId, { content: "Updated final memory" });
+    expect(result.ok && result.value.content).toBe("Updated final memory");
+  });
+
   it("passes repository failures through unchanged", async () => {
     const failing: MemoryRepository = {
       list: async () => err("storage_failed", "Storage unavailable"),
       search: async () => err("storage_failed", "Storage unavailable"),
+      getById: async () => err("storage_failed", "Storage unavailable"),
       save: async () => err("storage_failed", "Storage unavailable"),
       delete: async () => err("storage_failed", "Storage unavailable")
     };
