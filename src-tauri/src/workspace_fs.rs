@@ -128,7 +128,7 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
         };
         let metadata = fs::metadata(&canonical).map_err(|e| format!("Could not inspect {}: {e}", item.file_name().to_string_lossy()))?;
         let kind = if metadata.is_dir() { "directory" } else if metadata.is_file() { "file" } else { "other" };
-        let modified_at_ms = metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map(|duration| duration.as_millis());
+        let modified_at_ms = metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
         entries.push(WorkspaceEntry {
             name: item.file_name().to_string_lossy().into_owned(),
             path: canonical.to_string_lossy().into_owned(),
