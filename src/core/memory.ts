@@ -102,6 +102,7 @@ export class MemoryService {
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
       return err("validation", "Memory list limit must be between 1 and 200.");
     }
+    if (scope === "project" && !projectId?.trim()) return err("validation", "Project-scoped memory listing requires a project ID.");
     return this.repository.list(scope, limit, projectId);
   }
 
