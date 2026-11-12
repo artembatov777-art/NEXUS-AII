@@ -53,8 +53,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource }) => {
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
-            const action = scope === "filesystem:read:selected" ? "read files" : "create or edit files and folders";
-            return window.confirm(`Allow the NEXUS agent to ${action} using ${resource}? Access remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
+            const action = scope === "filesystem:read:selected" ? "read" : "create or edit";
+            return window.confirm(`Allow the NEXUS agent to ${action} this workspace path?\\n\\n${resource}\\n\\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
           }
           return "deny";
         }
@@ -184,7 +184,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
       for await (const event of plannedWorkflow.run(planned.value, coordinationId, nextController.signal)) {
         if (event.type === "started") addFeed("Planned workflow started: " + event.runId);
         else if (event.type === "agent_started") addFeed("Executing step " + event.step + " with " + event.agentId + "…");
-        else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.", "success");
+        else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.\\n" + (event.detail ?? "No output returned."), "success");
         else if (event.type === "waiting_for_approval") addFeed("Approval required for step " + event.step + ".", "warning");
         else if (event.type === "completed") addFeed(event.detail ?? "Planned workflow completed.", "success");
         else if (event.type === "failed") addFeed(event.detail ?? "Planned workflow failed.", "error");
