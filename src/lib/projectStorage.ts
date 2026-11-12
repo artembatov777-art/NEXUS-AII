@@ -7,6 +7,7 @@ function valid(value:unknown):value is WorkspaceProject { if(!value||typeof valu
 export class LocalStorageProjectRepository implements ProjectRepository {
  constructor(private readonly storage:StorageLike,private readonly key=KEY){}
  async list(includeArchived:boolean):Promise<Result<WorkspaceProject[]>>{const all=this.read();return all.ok?ok(all.value.filter(p=>includeArchived||!p.archived).sort((a,b)=>b.updatedAt-a.updatedAt)):all;}
+ clearLegacy():void{this.storage.setItem(this.key,"[]");}
  async save(project:WorkspaceProject):Promise<Result<void>>{const all=this.read();if(!all.ok)return all;try{this.storage.setItem(this.key,JSON.stringify([...all.value.filter(p=>p.id!==project.id),project]));return ok(undefined);}catch{return err("storage_failed","Could not save project.",true);}}
  async delete(id:ProjectId):Promise<Result<void>>{const all=this.read();if(!all.ok)return all;try{this.storage.setItem(this.key,JSON.stringify(all.value.filter(p=>p.id!==id)));return ok(undefined);}catch{return err("storage_failed","Could not delete project.",true);}}
  private read():Result<WorkspaceProject[]>{try{const raw=this.storage.getItem(this.key);if(!raw)return ok([]);const data:unknown=JSON.parse(raw);return Array.isArray(data)&&data.every(valid)?ok(data):err("storage_failed","Project storage contains invalid data.");}catch{return err("storage_failed","Could not read projects.",true);}}
@@ -33,7 +34,10 @@ export class WorkspaceProjectRepository implements ProjectRepository {
    for (const project of legacy.value) {
     if (!existing.has(project.id)) await invoke("save_project", { project });
    }
-   const merged = projects.length ? [...projects, ...legacy.value.filter(project => !existing.has(project.id))] : legacy.value;
+   // Keep one authoritative copy. Otherwise deleting a native project would
+   // cause the stale localStorage copy to recreate it on the next launch.
+   this.local.clearLegacy();
+   const merged = [...projects, ...legacy.value.filter(project => !existing.has(project.id))];
    return ok(merged.filter(project => includeArchived || !project.archived).sort((a,b) => b.updatedAt-a.updatedAt));
   } catch (error) {
    return err("storage_failed", error instanceof Error ? error.message : "Could not load native projects.", true);
