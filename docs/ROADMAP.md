@@ -24,10 +24,10 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add responsive layouts for the main desktop application and the mobile preview.
 - [x] Add visible keyboard focus, reduced-motion behavior, and explicit preview/runtime disclosures.
 - [x] Add mobile navigation dismissal and dialog Escape/focus/scroll handling.
-- [ ] Complete a full interaction audit of every visible control and every module state.
-- [ ] Add automated UI-level coverage for navigation, dialogs, and mobile behavior where the current test stack supports it.
+- [x] Complete a full interaction audit of visible controls and module states; native-only and preview-only actions are explicitly disabled or disclosed, and destructive memory/document actions require confirmation.
+- [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
 - [ ] Verify the hosted preview and main responsive workspace on a real iPhone Safari session.
-- [ ] Pass fresh frontend, mobile-preview, and native CI workflows on the final Phase I commit.
+- [ ] Pass fresh frontend, mobile-preview, and native CI workflows on the final Phase I commit (latest run is in progress).
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -112,6 +112,9 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
+- The mobile preview has five jsdom interaction tests; the latest verified run passed 41 test files / 208 tests, including those five tests. A fresh run is required after the current final code change.
+- Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
+- The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
 - Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
 - A frontend test previously failed because the model-catalog expectation omitted the configured model; the test now covers both the configured model and the discovered catalog. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. CI for the current head must pass before this phase is treated as verified.
