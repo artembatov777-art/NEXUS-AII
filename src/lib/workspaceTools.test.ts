@@ -47,7 +47,7 @@ describe("workspace agent tools", () => {
     const { registry, gateway, permissions } = setup();
     registerWorkspaceTools(registry);
     invokeMock.mockResolvedValue([{ name: "notes.md", path: "C:\\approved\\notes.md", kind: "file", sizeBytes: 5, modifiedAtMs: null }]);
-    const result = await gateway.execute<{ entries: WorkspaceEntry[]; matchedEntries: number }>("workspace.search", {
+    const result = await gateway.execute("workspace.search", {
       path: "C:\\approved", query: "notes"
     }, { traceId: "trace", runId: "run", signal: new AbortController().signal }, "local-user");
     expect(result.ok).toBe(true);
