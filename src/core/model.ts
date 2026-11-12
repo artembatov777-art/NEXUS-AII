@@ -2,7 +2,7 @@ import type { ModelDescriptor } from "./domain";
 import { err, ok, type Result } from "./result";
 
 export interface ModelMessage {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -23,6 +23,15 @@ export interface ModelProvider {
   readonly id: string;
   listModels(): Promise<Result<ModelDescriptor[]>>;
   stream(request: ModelRequest): AsyncIterable<ModelEvent>;
+}
+
+const MAX_MODEL_ID_LENGTH = 128;
+const MAX_MESSAGES = 100;
+const MAX_MESSAGE_BYTES = 100_000;
+const MAX_REQUEST_BYTES = 1_000_000;
+
+function utf8Length(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 export class ModelRouter {
@@ -57,8 +66,22 @@ export class ModelRouter {
   async *stream(providerId: string, request: ModelRequest): AsyncIterable<ModelEvent> {
     const resolved = this.getProvider(providerId);
     if (!resolved.ok) throw new Error(resolved.error.message);
-    if (!request.model.trim()) throw new Error("A model must be selected.");
-    if (request.messages.length === 0) throw new Error("At least one message is required.");
+    if (!request.model.trim() || utf8Length(request.model) > MAX_MODEL_ID_LENGTH || /[\\u0000-\\u001f\\u007f]/.test(request.model)) {
+      throw new Error("Model ID must be a non-empty string of at most 128 UTF-8 bytes without control characters.");
+    }
+    if (request.messages.length === 0 || request.messages.length > MAX_MESSAGES) {
+      throw new Error("A request must contain between 1 and 100 messages.");
+    }
+    let requestBytes = 0;
+    for (const message of request.messages) {
+      if (!["system", "user", "assistant"].includes(message.role) || typeof message.content !== "string") {
+        throw new Error("Message role or content is invalid.");
+      }
+      const messageBytes = utf8Length(message.content);
+      if (messageBytes > MAX_MESSAGE_BYTES) throw new Error("A message exceeds the 100 KB content limit.");
+      requestBytes += messageBytes;
+      if (requestBytes > MAX_REQUEST_BYTES) throw new Error("The request exceeds the 1 MB content limit.");
+    }
     if (request.temperature !== undefined && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)) {
       throw new Error("Temperature must be a finite number between 0 and 2.");
     }
