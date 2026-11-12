@@ -27,6 +27,7 @@ export interface MemoryRepository {
   list(scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
   search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
   getById(id: MemoryId): Promise<Result<MemoryRecord | null>>;
+  exportAll(): Promise<Result<MemoryRecord[]>>;
   save(record: MemoryRecord): Promise<Result<void>>;
   delete(id: MemoryId): Promise<Result<void>>;
 }
@@ -129,6 +130,10 @@ export class MemoryService {
     if (!next.source.label) return err("validation", "A memory source label is required.");
     const saved = await this.repository.save(next);
     return saved.ok ? ok(next) : saved;
+  }
+
+  async exportAll(): Promise<Result<MemoryRecord[]>> {
+    return this.repository.exportAll();
   }
 
   async forget(id: MemoryId): Promise<Result<void>> {
