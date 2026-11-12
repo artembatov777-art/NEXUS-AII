@@ -41,6 +41,10 @@ describe("LocalStorageMemoryRepository", () => {
     expect(results.ok).toBe(true);
     if (results.ok) expect(results.value[0].id).toBe(first.id);
 
+    expect((await repository.getById(second.id)).ok).toBe(true);
+    const all = await repository.exportAll();
+    expect(all.ok && all.value).toHaveLength(2);
+
     expect((await repository.delete(first.id)).ok).toBe(true);
     const remaining = await repository.search("learning", "all", 10);
     expect(remaining.ok && remaining.value.map(item => item.id)).toEqual([second.id]);
@@ -88,6 +92,13 @@ describe("LocalStorageMemoryRepository", () => {
     const results = await repository.search("architecture", "project", 10, "project-1");
     expect(results.ok && results.value).toHaveLength(1);
     expect(results.ok && results.value[0].scope).toBe("project");
+  });
+
+  it("tokenizes Cyrillic and Unicode terms consistently", async () => {
+    const repository = new LocalStorageMemoryRepository(new FakeStorage());
+    await repository.save(record({ content: "Память проекта NEXUS и архитектура" }));
+    const results = await repository.search("архитектура память", "all", 10);
+    expect(results.ok && results.value).toHaveLength(1);
   });
 
   it("returns no results for punctuation-only queries", async () => {
