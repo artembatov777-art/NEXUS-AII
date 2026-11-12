@@ -28,6 +28,7 @@ describe("MultiAgentCoordinator", () => {
       ]
     }, { a: "agent-a" as AgentId, b: "agent-b" as AgentId }, new AbortController().signal));
     expect(events.at(-1)?.type).toBe("completed");
+    expect(events.find(event => event.type === "agent_completed")).toMatchObject({ detail: expect.stringContaining('"input"') });
     expect(execute).toHaveBeenCalledTimes(2);
     expect(policy.authorize).toHaveBeenCalledTimes(2);
   });
