@@ -33,3 +33,38 @@ export function normalizeProviderModelIds(value: unknown): string[] {
   ).map(id => id.trim());
   return [...new Set(ids)];
 }
+
+
+export interface NormalizedProviderFailure {
+  code: "authentication" | "rate_limited" | "timeout" | "validation" | "cancelled" | "provider_unavailable";
+  message: string;
+  retryable: boolean;
+}
+
+/** Converts native gateway failures into stable application-level categories. */
+export function normalizeProviderFailure(cause: unknown): NormalizedProviderFailure {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  const status = message.match(/HTTP\\s+(\\d{3})/i)?.[1];
+  if (/cancelled|canceled|aborted/i.test(message)) {
+    return { code: "cancelled", message: "The provider request was cancelled.", retryable: false };
+  }
+  if (status === "401" || status === "403") {
+    return { code: "authentication", message: "The provider rejected the saved credentials. Check the API key and its permissions.", retryable: false };
+  }
+  if (status === "429") {
+    return { code: "rate_limited", message: "The provider rate limit was reached. Wait briefly before retrying.", retryable: true };
+  }
+  if (status === "408" || status === "504" || /timed? ?out|timeout/i.test(message)) {
+    return { code: "timeout", message: "The provider request timed out. Check the gateway and try again.", retryable: true };
+  }
+  if (status && Number(status) >= 500) {
+    return { code: "provider_unavailable", message: "The provider is temporarily unavailable. Try again later.", retryable: true };
+  }
+  if (status && ["400", "404", "422"].includes(status)) {
+    return { code: "validation", message: "The provider rejected the endpoint or model configuration. Check the URL and model ID.", retryable: false };
+  }
+  if (/URL is invalid|must use HTTPS|cannot contain credentials|model name is invalid/i.test(message)) {
+    return { code: "validation", message, retryable: false };
+  }
+  return { code: "provider_unavailable", message: "Could not reach the configured provider. Check that the gateway is running and try again.", retryable: true };
+}
