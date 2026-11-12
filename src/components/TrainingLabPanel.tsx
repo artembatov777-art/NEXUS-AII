@@ -120,7 +120,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Live model comparison is available only in the native desktop app.");
       return;
     }
-    const models = [...new Set(comparisonModels.split(/[\\n,]+/).map(item => item.trim()).filter(Boolean))];
+    const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
     if (models.length < 2 || models.length > 4) {
       setError("Enter between two and four distinct model IDs, separated by commas.");
       return;
@@ -147,7 +147,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
         return { model, response, latencyMs: Math.round(performance.now() - startedAt) };
       }));
-      setCandidateOutput(results.map(result => `MODEL: ${result.model}\\nLATENCY: ${result.latencyMs} ms\\n\\n${result.response}`).join("\\n\\n════════════════════════════════\\n\\n"));
+      setCandidateOutput(results.map(result => `MODEL: ${result.model}\nLATENCY: ${result.latencyMs} ms\n\n${result.response}`).join("\n\n════════════════════════════════\n\n"));
       setModelId(models.join(", "));
       setMetrics(JSON.stringify(Object.fromEntries(results.map((result, index) => [`model${index + 1}LatencyMs`, result.latencyMs])), null, 2));
       setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length }, null, 2));
