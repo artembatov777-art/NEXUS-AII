@@ -384,14 +384,14 @@ export default function App() {
 
   async function saveProviderSettings() {
     try {
-      if (apiKey.trim() && !localNoAuth) { providerCheckGeneration.current += 1; providerTestAbortController.current?.abort(); providerTestAbortController.current = null; await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); setProviderVaultStatus("available"); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("API key changed. Check the endpoint again."); setModelTestState("unchecked"); setModelTestMessage("API key changed. Run a new generation test."); }
+      if (apiKey.trim() && !localNoAuth) { providerCheckGeneration.current += 1; providerTestAbortController.current?.abort(); providerTestAbortController.current = null; setModelsLoading(false); await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); setProviderVaultStatus("available"); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("API key changed. Check the endpoint again."); setModelTestState("unchecked"); setModelTestMessage("API key changed. Run a new generation test."); }
       saveProvider(provider);
       setSettingsOpen(false);
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save provider credentials."); }
   }
   async function deleteProviderKey() {
-    try { providerCheckGeneration.current += 1; providerTestAbortController.current?.abort(); providerTestAbortController.current = null; await invoke("delete_provider_key"); setHasProviderKey(false); setProviderVaultStatus("missing"); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Provider key was deleted."); setModelTestState("unchecked"); setModelTestMessage("Save a provider key before testing cloud generation."); }
+    try { providerCheckGeneration.current += 1; providerTestAbortController.current?.abort(); providerTestAbortController.current = null; setModelsLoading(false); await invoke("delete_provider_key"); setHasProviderKey(false); setProviderVaultStatus("missing"); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Provider key was deleted."); setModelTestState("unchecked"); setModelTestMessage("Save a provider key before testing cloud generation."); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
