@@ -29,7 +29,7 @@ describe("NEXUS Command Center", () => {
     root = createRoot(container);
     act(() => root.render(<CommandCenter
       projectCount={3} conversationCount={12} model="auto" route="remote"
-      providerReady={false} busy={false} {...actions}
+      providerReady={false} busy={false} recentActivity={[]} {...actions}
     />));
   });
   afterEach(() => {
