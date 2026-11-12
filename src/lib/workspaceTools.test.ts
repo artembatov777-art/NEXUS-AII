@@ -51,7 +51,7 @@ describe("workspace agent tools", () => {
       traceId: "trace", runId: "run", signal: new AbortController().signal
     }, "local-user");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toMatchObject({ truncated: true, totalCharacters: 60_000 });
+    if (result.ok) expect(result.value).toMatchObject({ truncated: true, totalCharacters: 120_000 });
     if (result.ok) {
       expect(new TextEncoder().encode(JSON.stringify(result.value)).byteLength).toBeLessThanOrEqual(64_000);
       expect(result.value.content.length).toBeLessThan(48_000);
