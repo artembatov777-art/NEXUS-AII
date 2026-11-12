@@ -43,6 +43,27 @@ describe("ModelRouterPlanner", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
   });
 
+  it("preserves normalized authentication errors from the model provider", async () => {
+    const router = new ModelRouter();
+    router.register({
+      id: "test",
+      listModels: async () => ok([]),
+      stream: async function* () {
+        throw Object.assign(new Error("The provider rejected the saved credentials."), {
+          code: "authentication",
+          retryable: false
+        });
+      }
+    });
+    const result = await new ModelRouterPlanner(router, "test", "mock").createPlan({
+      goal: "Build", tools: [], signal: new AbortController().signal
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "authentication", retryable: false }
+    });
+  });
+
   it("rejects a valid-looking plan when the provider stream never completes", async () => {
     const router = new ModelRouter();
     router.register({
