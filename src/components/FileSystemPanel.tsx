@@ -36,14 +36,14 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       <div className="file-workspace-body">
         <aside className="file-tree">
           <div className="file-pane-label">LOCATIONS</div>
-          <button className="file-tree-root" aria-expanded={treeOpen} onClick={() => setTreeOpen(value => !value)}><ChevronDown className={treeOpen ? "" : "collapsed"} size={14}/><HardDrive size={15}/> Workspace</button>
-          {treeOpen && <div className="file-tree-children">{folders.map(path => <button key={path} className={folder === path ? "active" : ""} onClick={() => { setFolder(path); setSelected(""); }}><Folder size={14}/><span>{path.split(" / ").pop()}</span></button>)}</div>}
+          <button className="file-tree-root" aria-expanded={treeOpen} aria-controls="file-workspace-tree" onClick={() => setTreeOpen(value => !value)}><ChevronDown className={treeOpen ? "" : "collapsed"} size={14}/><HardDrive size={15}/> Workspace</button>
+          {treeOpen && <div className="file-tree-children" id="file-workspace-tree">{folders.map(path => <button key={path} className={folder === path ? "active" : ""} aria-current={folder === path ? "location" : undefined} onClick={() => { setFolder(path); setSelected(""); }}><Folder size={14}/><span>{path.split(" / ").pop()}</span></button>)}</div>}
           <div className="file-tree-security"><LockKeyhole size={15}/><span>Access is not connected. NEXUS cannot read or change Windows files in this preview.</span></div>
         </aside>
         <div className="file-list-pane">
           <div className="file-pane-heading"><div><span className="file-pane-label">CURRENT LOCATION</span><strong>{folder.replaceAll(" / ", "  /  ")}</strong></div><span>{visible.length} items</span></div>
           <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
-          <div className="file-list" role="list" aria-label="Workspace files">{visible.map(file => { const RowIcon = iconFor(file.kind); return <button key={file.id} className={current?.id === file.id ? "selected" : ""} onClick={() => setSelected(file.id)}><span className="file-name"><RowIcon size={16}/><span><strong>{file.name}</strong><small>{file.description}</small></span></span><span>{file.size}</span><span>{file.modified}</span></button>; })}{!visible.length && <div className="file-empty">No matching files in this location.</div>}</div>
+          <div className="file-list" role="group" aria-label="Workspace files">{visible.map(file => { const RowIcon = iconFor(file.kind); return <button key={file.id} className={current?.id === file.id ? "selected" : ""} aria-pressed={current?.id === file.id} onClick={() => setSelected(file.id)}><span className="file-name"><RowIcon size={16}/><span><strong>{file.name}</strong><small>{file.description}</small></span></span><span>{file.size}</span><span>{file.modified}</span></button>; })}{!visible.length && <div className="file-empty">No matching files in this location.</div>}</div>
         </div>
         <aside className="file-preview-pane">
           <div className="file-pane-label">INSPECTOR</div>
@@ -51,7 +51,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
         </aside>
       </div>
       <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-first access · Read/write operations are not enabled</span><button className="secondary-btn" onClick={onClose}>Close workspace</button></footer>
-      {notice && <button className="file-notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+      {notice && <div className="file-notice" role="status" aria-live="polite"><span>{notice}</span><button type="button" className="file-notice-dismiss" aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}
     </section>
   </div>;
 }
