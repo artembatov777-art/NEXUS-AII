@@ -93,6 +93,11 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
     return this.readAll();
   }
 
+  /** Clear the legacy browser copy only after a successful native migration. */
+  clearLegacy(): void {
+    this.storage.setItem(this.key, "[]");
+  }
+
   async getById(id: MemoryRecord["id"]): Promise<Result<MemoryRecord | null>> {
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
