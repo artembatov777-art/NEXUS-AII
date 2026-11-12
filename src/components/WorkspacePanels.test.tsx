@@ -50,44 +50,14 @@ afterEach(() => {
   container.remove();
 });
 
-describe("FileSystemPanel preview interactions", () => {
+describe("FileSystemPanel native access boundary", () => {
   beforeEach(() => mount(<FileSystemPanel onClose={onClose} />));
 
-  it("clearly identifies sample files as a disconnected design preview", () => {
+  it("clearly states that browser preview cannot access local folders", () => {
     const dialog = container.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain("DESIGN PREVIEW");
-    expect(dialog?.textContent).toContain("Access is not connected");
-    expect(dialog?.textContent).toContain("README.md");
-  });
-
-  it("changes folders and exposes the selected file state", () => {
-    act(() => buttonContaining("docs").click());
-
-    expect(container.textContent).toContain("ARCHITECTURE.md");
-    expect(container.textContent).not.toContain("App.tsx");
-    expect(container.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.textContent).toContain("ARCHITECTURE.md");
-  });
-
-  it("shows both list and inspector empty states when search has no matches", () => {
-    const search = container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
-    if (!search) throw new Error("File search input was not found.");
-    setInputValue(search, "file-that-does-not-exist");
-
-    expect(container.textContent).toContain("No matching files in this location.");
-    expect(container.querySelector(".file-preview-pane")?.textContent).toContain("Select a file to inspect it.");
-  });
-
-  it("announces preview-only refresh and import actions as dismissible status messages", () => {
-    act(() => buttonContaining("Refresh").click());
-    let status = container.querySelector('[role="status"][aria-live="polite"]');
-    expect(status?.textContent).toContain("folder connection is part of the native integration phase");
-
-    act(() => status?.querySelector<HTMLButtonElement>('[aria-label="Dismiss notice"]')?.click());
-    expect(container.querySelector('[role="status"][aria-live="polite"]')).toBeNull();
-
-    act(() => buttonContaining("Import").click());
-    status = container.querySelector('[role="status"][aria-live="polite"]');
-    expect(status?.textContent).toContain("File import will be enabled");
+    expect(dialog?.textContent).toContain("DESKTOP REQUIRED");
+    expect(dialog?.textContent).toContain("Native desktop access required");
+    expect(dialog?.textContent).not.toContain("README.md");
   });
 
   it("closes from its close control and from the backdrop", () => {
