@@ -52,13 +52,14 @@ describe("TauriModelProvider", () => {
     expect(await router.listModels()).toMatchObject({ ok: true, value: [{ providerId: NATIVE_MODEL_PROVIDER_ID, id: "model-a", supportsStreaming: true, declaredLocation: "remote" }] });
     const events = [];
     for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
-      model: "model-a", messages: [{ role: "user", content: "plan" }]
+      model: "model-a", messages: [{ role: "user", content: "plan" }], temperature: 0.4, maxOutputTokens: 128
     })) events.push(event);
     expect(events.map(event => event.type)).toEqual(["text_delta", "usage", "completed"]);
     expect(events[1]).toMatchObject({ type: "usage", inputTokens: 12, outputTokens: 5 });
     expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
       baseUrl: "https://api.example/v1", credentialHandle: "default", model: "model-a",
       messages: [{ role: "user", content: "plan" }],
+      temperature: 0.4, maxOutputTokens: 128,
       streamId: expect.any(String),
       onEvent: expect.any(Object)
     }));
