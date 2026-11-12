@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import "./file-system.css";
 import { ArrowLeft, File, FileCode2, FileText, Folder, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, ShieldCheck, X } from "lucide-react";
 
 type WorkspaceEntry = {
@@ -85,7 +86,8 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       setRoots(allowed);
       setGrantPath("");
       setNotice("Directory access granted. NEXUS can now browse and edit files inside this directory.");
-      await refresh(allowed[allowed.length - 1]);
+      const granted = allowed.find(root => root.toLocaleLowerCase() === grantPath.trim().toLocaleLowerCase()) ?? allowed[0];
+      if (granted) await refresh(granted);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
