@@ -157,12 +157,16 @@ export class ModelRegistry {
 
       const next = new Map<string, ModelDescriptor>();
       for (const model of result.value) {
-        if (!model.id.trim() || !model.providerId.trim() || !model.displayName.trim()) {
+        if (
+          !model.id.trim() || utf8Length(model.id) > MAX_MODEL_ID_LENGTH ||
+          /[\u0000-\u001f\u007f]/.test(model.id) ||
+          !model.providerId.trim() || !model.displayName.trim()
+        ) {
           this.snapshot = {
             state: "unavailable",
             checkedAt: this.now(),
             modelCount: this.catalog.size,
-            error: "Provider returned a model with missing identity metadata."
+            error: "Provider returned a model with invalid identity metadata."
           };
           return err("validation", this.snapshot.error!);
         }
