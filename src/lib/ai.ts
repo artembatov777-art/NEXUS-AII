@@ -8,7 +8,8 @@ export async function sendMessage(
   messages: ChatMessage[],
   knowledgeContext = "",
   onDelta?: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void
 ): Promise<string> {
   if (!isTauri()) {
     return "Browser preview mode is active. The NEXUS AU interface and local conversation history work here, but AI requests need the native Tauri backend. Open the desktop app to connect your provider securely. No API key was sent or stored by this preview.";
@@ -38,6 +39,8 @@ export async function sendMessage(
     if (event.type === "text_delta") {
       answer += event.text;
       onDelta?.(event.text);
+    } else if (event.type === "usage") {
+      onUsage?.({ inputTokens: event.inputTokens, outputTokens: event.outputTokens });
     } else if (event.type === "completed") {
       receivedCompletion = true;
     }
