@@ -304,7 +304,7 @@ export default function App() {
       const safeModels = registry.listModels().map(model => model.id);
       setAvailableModels(safeModels);
       setProviderConnectionState("reachable");
-      setProviderConnectionMessage("/models responded with " + safeModels.length + " model ID(s). Selected model \"" + provider.model + "\" is in the catalog. Generation still needs a separate test.");
+      setProviderConnectionMessage("Model catalog loaded with " + safeModels.length + " selectable ID(s). The configured model is \"" + provider.model + "\". Run the generation test to verify that it actually responds.");
       setModelTestState("unchecked");
       setModelTestMessage("Model generation has not been tested in this session.");
       setError("");
