@@ -115,17 +115,26 @@ fn append_bounded_response(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), Strin
 struct AppDatabase(Mutex<Connection>);
 
 type ActiveStreamMap = HashMap<String, Arc<AtomicBool>>;
+const MAX_PENDING_STREAM_CANCELLATIONS: usize = 128;
+
+#[derive(Default)]
+struct ActiveStreamState {
+    active: ActiveStreamMap,
+    pending_cancellations: HashSet<String>,
+}
+
 #[derive(Clone, Default)]
-struct ActiveChatStreams(Arc<Mutex<ActiveStreamMap>>);
+struct ActiveChatStreams(Arc<Mutex<ActiveStreamState>>);
 
 struct ActiveStreamGuard {
-    streams: Arc<Mutex<ActiveStreamMap>>,
+    streams: Arc<Mutex<ActiveStreamState>>,
     stream_id: String,
 }
 impl Drop for ActiveStreamGuard {
     fn drop(&mut self) {
         if let Ok(mut streams) = self.streams.lock() {
-            streams.remove(&self.stream_id);
+            streams.active.remove(&self.stream_id);
+            streams.pending_cancellations.remove(&self.stream_id);
         }
     }
 }
@@ -134,6 +143,31 @@ fn valid_stream_id(stream_id: &str) -> bool {
     !stream_id.is_empty()
         && stream_id.len() <= 128
         && stream_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+fn register_active_stream(state: &mut ActiveStreamState, stream_id: &str, cancelled: Arc<AtomicBool>) -> Result<(), String> {
+    if state.active.contains_key(stream_id) {
+        return Err("A chat stream with this ID is already active.".into());
+    }
+    if state.pending_cancellations.remove(stream_id) {
+        cancelled.store(true, Ordering::Release);
+    }
+    state.active.insert(stream_id.to_string(), cancelled);
+    Ok(())
+}
+
+fn request_stream_cancellation(state: &mut ActiveStreamState, stream_id: &str) -> bool {
+    if let Some(cancelled) = state.active.get(stream_id) {
+        cancelled.store(true, Ordering::Release);
+        return true;
+    }
+    if state.pending_cancellations.len() >= MAX_PENDING_STREAM_CANCELLATIONS {
+        if let Some(oldest) = state.pending_cancellations.iter().next().cloned() {
+            state.pending_cancellations.remove(&oldest);
+        }
+    }
+    state.pending_cancellations.insert(stream_id.to_string());
+    true
 }
 
 async fn wait_for_stream_cancellation(cancelled: Arc<AtomicBool>) {
@@ -150,13 +184,8 @@ fn cancel_chat_stream(
     if !valid_stream_id(&stream_id) {
         return Err("Stream ID is invalid.".into());
     }
-    let active = streams.0.lock().map_err(|_| "Stream registry is unavailable.")?;
-    if let Some(cancelled) = active.get(&stream_id) {
-        cancelled.store(true, Ordering::Release);
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    let mut state = streams.0.lock().map_err(|_| "Stream registry is unavailable.")?;
+    Ok(request_stream_cancellation(&mut state, &stream_id))
 }
 fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
     // One exclusive transaction serializes concurrent first-launch upgrades and
@@ -477,6 +506,35 @@ fn delete_provider_key() -> Result<(), String> {
 #[cfg(test)]
 mod payload_validation_tests {
     use super::*;
+    #[test]
+    fn stream_cancellation_is_not_lost_when_requested_before_registration() {
+        let mut state = ActiveStreamState::default();
+        assert!(request_stream_cancellation(&mut state, "stream-early"));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        register_active_stream(&mut state, "stream-early", cancelled.clone()).expect("register cancelled stream");
+        assert!(cancelled.load(Ordering::Acquire));
+        assert!(state.pending_cancellations.is_empty());
+        assert!(state.active.contains_key("stream-early"));
+    }
+
+    #[test]
+    fn active_stream_cancellation_marks_the_registered_token() {
+        let mut state = ActiveStreamState::default();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        register_active_stream(&mut state, "stream-active", cancelled.clone()).expect("register stream");
+        assert!(request_stream_cancellation(&mut state, "stream-active"));
+        assert!(cancelled.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn pending_stream_cancellations_are_bounded() {
+        let mut state = ActiveStreamState::default();
+        for index in 0..(MAX_PENDING_STREAM_CANCELLATIONS + 10) {
+            request_stream_cancellation(&mut state, &format!("stream-{index}"));
+        }
+        assert_eq!(state.pending_cancellations.len(), MAX_PENDING_STREAM_CANCELLATIONS);
+    }
+
     #[test]
     fn unauthenticated_provider_credentials_are_limited_to_loopback() {
         assert_eq!(load_provider_credential("none", true).unwrap(), None);
@@ -1054,10 +1112,7 @@ async fn send_chat_stream(
     let cancelled = Arc::new(AtomicBool::new(false));
     {
         let mut active = streams.0.lock().map_err(|_| "Stream registry is unavailable.")?;
-        if active.contains_key(&stream_id) {
-            return Err("A chat stream with this ID is already active.".into());
-        }
-        active.insert(stream_id.clone(), cancelled.clone());
+        register_active_stream(&mut active, &stream_id, cancelled.clone())?;
     }
     let _registration = ActiveStreamGuard { streams: streams.0.clone(), stream_id };
     let mut endpoint = reqwest::Url::parse(base_url.trim())
