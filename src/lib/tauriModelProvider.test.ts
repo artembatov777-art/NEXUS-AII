@@ -231,6 +231,21 @@ describe("TauriModelProvider", () => {
     });
     await expect((async () => { for await (const _ of stream) { /* consume */ } })())
       .rejects.toThrow(/without a completion event/i);
+    expect(mockedInvoke).not.toHaveBeenCalledWith("cancel_chat_stream", expect.anything());
+  });
+
+  it("does not enqueue cancellation for a native request that already failed", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockRejectedValue(new Error("Provider returned HTTP 503: unavailable"));
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "plan" }]
+    });
+    await expect((async () => { for await (const _ of stream) { /* consume */ } })())
+      .rejects.toThrow(/temporarily unavailable/i);
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    expect(mockedInvoke).not.toHaveBeenCalledWith("cancel_chat_stream", expect.anything());
   });
 
   it("unblocks an idle stream immediately when its abort signal fires", async () => {
