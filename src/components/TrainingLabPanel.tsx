@@ -36,15 +36,19 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   const [working, setWorking] = useState(false);
 
   async function refresh() {
-    const [datasetResult, experimentResult] = await Promise.all([
-      repository.listDatasets(), repository.listExperiments()
-    ]);
-    if (!datasetResult.ok) { setError(datasetResult.error.message); return; }
-    if (!experimentResult.ok) { setError(experimentResult.error.message); return; }
-    setDatasets(datasetResult.value);
-    setSelectedDatasetKey(current => datasetResult.value.some(item => JSON.stringify([item.id, item.version]) === current) ? current : datasetResult.value[0] ? JSON.stringify([datasetResult.value[0].id, datasetResult.value[0].version]) : "");
-    setExperiments(experimentResult.value);
-    setError("");
+    try {
+      const [datasetResult, experimentResult] = await Promise.all([
+        repository.listDatasets(), repository.listExperiments()
+      ]);
+      if (!datasetResult.ok) { setError(datasetResult.error.message); return; }
+      if (!experimentResult.ok) { setError(experimentResult.error.message); return; }
+      setDatasets(datasetResult.value);
+      setSelectedDatasetKey(current => datasetResult.value.some(item => JSON.stringify([item.id, item.version]) === current) ? current : datasetResult.value[0] ? JSON.stringify([datasetResult.value[0].id, datasetResult.value[0].version]) : "");
+      setExperiments(experimentResult.value);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load Training Lab records.");
+    }
   }
   useEffect(() => { void refresh(); }, [repository]);
 
@@ -67,65 +71,63 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
 
   async function saveDataset() {
     setWorking(true); setError(""); setStatus("");
-    const manifest: DatasetManifest = {
-      schemaVersion: 1,
-      id: datasetId.trim(),
-      version: Math.max(0, ...datasets.filter(item => item.id === datasetId.trim()).map(item => item.version)) + 1,
-      name: datasetName.trim(),
-      license: license.trim(),
-      privacyClass,
-      consentStatus: privacyClass === "owner_approved" ? consentStatus : "not_required",
-      ...(privacyClass === "owner_approved" ? { approvalReference: approvalReference.trim() } : {}),
-      sourceReferences: [sourceReference.trim()],
-      splits: { train: splitIds(trainIds), validation: splitIds(validationIds), test: splitIds(testIds) },
-      createdAt: Date.now()
-    };
-    if (!validateDatasetManifest(manifest)) {
-      setError("Dataset metadata is invalid. Check its license, provenance, consent, and disjoint split IDs.");
-      setWorking(false);
-      return;
-    }
-    const result = await repository.saveDataset(manifest);
-    if (!result.ok) setError(result.error.message);
-    else { setStatus("Dataset manifest saved. No raw sample content was copied into Training Lab."); await refresh(); }
-    setWorking(false);
+    try {
+      const manifest: DatasetManifest = {
+        schemaVersion: 1,
+        id: datasetId.trim(),
+        version: Math.max(0, ...datasets.filter(item => item.id === datasetId.trim()).map(item => item.version)) + 1,
+        name: datasetName.trim(),
+        license: license.trim(),
+        privacyClass,
+        consentStatus: privacyClass === "owner_approved" ? consentStatus : "not_required",
+        ...(privacyClass === "owner_approved" ? { approvalReference: approvalReference.trim() } : {}),
+        sourceReferences: [sourceReference.trim()],
+        splits: { train: splitIds(trainIds), validation: splitIds(validationIds), test: splitIds(testIds) },
+        createdAt: Date.now()
+      };
+      if (!validateDatasetManifest(manifest)) {
+        setError("Dataset metadata is invalid. Check its license, provenance, consent, and disjoint split IDs.");
+        return;
+      }
+      const result = await repository.saveDataset(manifest);
+      if (!result.ok) setError(result.error.message);
+      else { setStatus("Dataset manifest saved. No raw sample content was copied into Training Lab."); await refresh(); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save dataset metadata.");
+    } finally { setWorking(false); }
   }
 
   async function saveExperiment() {
     setWorking(true); setError(""); setStatus("");
-    let parsedConfiguration: Record<string, unknown>;
-    let parsedMetrics: Record<string, number>;
     try {
-      parsedConfiguration = JSON.parse(configuration) as Record<string, unknown>;
-      parsedMetrics = JSON.parse(metrics) as Record<string, number>;
-    } catch {
-      setError("Configuration and metrics must be valid JSON objects.");
-      setWorking(false);
-      return;
-    }
-    const experiment: TrainingExperiment = {
-      schemaVersion: 1,
-      id: crypto.randomUUID(),
-      name: method + " experiment",
-      modelId: modelId.trim(),
-      method,
-      datasetManifestId: (JSON.parse(selectedDataset) as [string, number])[0],
-      datasetManifestVersion: (JSON.parse(selectedDataset) as [string, number])[1],
-      codeRevision: codeRevision.trim(),
-      hardware: hardware.trim(),
-      configuration: parsedConfiguration,
-      metrics: parsedMetrics,
-      createdAt: Date.now()
-    };
-    if (!validateTrainingExperiment(experiment)) {
-      setError("Experiment metadata is invalid. Check the model, dataset, code revision, hardware, configuration, and metrics.");
-      setWorking(false);
-      return;
-    }
-    const result = await repository.saveExperiment(experiment);
-    if (!result.ok) setError(result.error.message);
-    else { setStatus("Experiment metadata saved. This records a run plan/result; it does not start model training."); await refresh(); }
-    setWorking(false);
+      const parsedConfiguration = JSON.parse(configuration) as Record<string, unknown>;
+      const parsedMetrics = JSON.parse(metrics) as Record<string, number>;
+      if (!selectedDataset) throw new Error("Save a dataset manifest before recording an experiment.");
+      const [datasetManifestId, datasetManifestVersion] = JSON.parse(selectedDataset) as [string, number];
+      const experiment: TrainingExperiment = {
+        schemaVersion: 1,
+        id: crypto.randomUUID(),
+        name: method + " experiment",
+        modelId: modelId.trim(),
+        method,
+        datasetManifestId,
+        datasetManifestVersion,
+        codeRevision: codeRevision.trim(),
+        hardware: hardware.trim(),
+        configuration: parsedConfiguration,
+        metrics: parsedMetrics,
+        createdAt: Date.now()
+      };
+      if (!validateTrainingExperiment(experiment)) {
+        setError("Experiment metadata is invalid. Check the model, dataset, code revision, hardware, configuration, and metrics.");
+        return;
+      }
+      const result = await repository.saveExperiment(experiment);
+      if (!result.ok) setError(result.error.message);
+      else { setStatus("Experiment metadata saved. This records a run plan/result; it does not start model training."); await refresh(); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save experiment metadata.");
+    } finally { setWorking(false); }
   }
 
   const selectedDataset = selectedDatasetKey;

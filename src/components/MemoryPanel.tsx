@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Plus, Search, Trash2, X, Pencil, Check } from "lucide-react";
 import { MemoryService, type MemoryCategory, type MemoryRecord, type MemoryScope, type MemoryId } from "../core/memory";
 import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
@@ -34,16 +34,25 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [editCategory, setEditCategory] = useState<MemoryCategory>("fact");
   const [editScope, setEditScope] = useState<Exclude<MemoryScope, "all">>("profile");
   const [editProjectId, setEditProjectId] = useState("");
+  const refreshSequence = useRef(0);
 
   async function refresh(search = query) {
-    const result = search.trim()
-      ? await service.search(search, "all", 50)
-      : await service.list("all", 50);
-    if (result.ok) {
-      setRecords(result.value);
-      setError("");
-    } else {
-      setError(result.error.message);
+    const requestId = ++refreshSequence.current;
+    try {
+      const result = search.trim()
+        ? await service.search(search, "all", 50)
+        : await service.list("all", 50);
+      if (requestId !== refreshSequence.current) return;
+      if (result.ok) {
+        setRecords(result.value);
+        setError("");
+      } else {
+        setError(result.error.message);
+      }
+    } catch (cause) {
+      if (requestId === refreshSequence.current) {
+        setError(cause instanceof Error ? cause.message : "Could not load saved memories.");
+      }
     }
   }
 
@@ -80,6 +89,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
     if (!result.ok) setError(result.error.message); else { setEditing(null); await refresh(""); }
   }
   async function removeMemory(id: MemoryId) {
+    if (!window.confirm("Delete this saved memory? This cannot be undone.")) return;
     const result = await service.forget(id);
     if (!result.ok) setError(result.error.message);
     else await refresh();

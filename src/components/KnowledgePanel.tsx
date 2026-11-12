@@ -48,11 +48,15 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
 
   async function removeDocument(documentId: string) {
     if (!projectId || working) return;
+    if (!window.confirm("Remove this document and its indexed passages from the selected project?")) return;
     setWorking(true); setError(""); setStatus("");
-    const result = await ingestion.remove(documentId, projectId);
-    if (!result.ok) setError(result.error.message);
-    else { setStatus("Document removed from this project's knowledge base."); await refreshDocuments(projectId); setAnswer(""); setCitations([]); }
-    setWorking(false);
+    try {
+      const result = await ingestion.remove(documentId, projectId);
+      if (!result.ok) setError(result.error.message);
+      else { setStatus("Document removed from this project's knowledge base."); await refreshDocuments(projectId); setAnswer(""); setCitations([]); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove this document.");
+    } finally { setWorking(false); }
   }
 
   async function importFile(file?: File) {
@@ -76,13 +80,16 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   async function searchKnowledge() {
     if (!projectId || !query.trim() || working) return;
     setWorking(true); setError(""); setAnswer(""); setCitations([]);
-    const result = await retrieval.retrieve(query, projectId, 8);
-    if (!result.ok) setError(result.error.message);
-    else {
-      setAnswer(result.value.context || "No matching passages were found in this project's documents.");
-      setCitations(result.value.citations);
-    }
-    setWorking(false);
+    try {
+      const result = await retrieval.retrieve(query, projectId, 8);
+      if (!result.ok) setError(result.error.message);
+      else {
+        setAnswer(result.value.context || "No matching passages were found in this project's documents.");
+        setCitations(result.value.citations);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Knowledge search failed.");
+    } finally { setWorking(false); }
   }
 
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -92,7 +99,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         <button className="icon-btn" onClick={onClose} aria-label="Close knowledge"><X size={18}/></button>
       </header>
       <label className="knowledge-project">Project
-        <select value={projectId} onChange={e => { setProjectId(e.target.value); setAnswer(""); setCitations([]); }}>
+        <select value={projectId} disabled={working} onChange={e => { setProjectId(e.target.value); setAnswer(""); setCitations([]); }}>
           {items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
@@ -105,7 +112,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         </div>
         <div className="knowledge-search">
           <label>Search project knowledge</label>
-          <div><input aria-label="Search project knowledge" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
+          <div><input aria-label="Search project knowledge" value={query} disabled={working} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
           <button className="primary-btn" disabled={!query.trim() || working} onClick={() => void searchKnowledge()}><Search size={14}/> Search</button></div>
         </div>
       </>}

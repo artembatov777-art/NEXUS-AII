@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Search, MessageSquare, Brain, BookOpen, X } from "lucide-react";
 import type { Conversation } from "../types";
 import type { WorkspaceProject } from "../core/projects";
@@ -25,8 +25,11 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
   const [knowledgeResults, setKnowledgeResults] = useState<Array<{ chunk: KnowledgeChunk; projectName: string }>>([]);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
+  const searchGeneration = useRef(0);
 
   function clearResults() {
+    searchGeneration.current += 1;
+    setWorking(false);
     setChatResults([]);
     setMemoryResults([]);
     setKnowledgeResults([]);
@@ -41,8 +44,9 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
       setError("Select at least one search scope.");
       return;
     }
-    setWorking(true);
     clearResults();
+    const requestGeneration = ++searchGeneration.current;
+    setWorking(true);
     try {
       const chat = includeConversations
         ? conversations.filter(item => (item.title + " " + item.messages.map(message => message.content).join(" "))
@@ -52,6 +56,7 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
         includeMemories ? memories.search(term, "all", 12) : Promise.resolve(null),
         includeKnowledge ? knowledge.searchAll(term, 30) : Promise.resolve(null)
       ]);
+      if (requestGeneration !== searchGeneration.current) return;
       if (memoryResult && !memoryResult.ok) throw new Error(memoryResult.error.message);
       if (knowledgeResult && !knowledgeResult.ok) throw new Error(knowledgeResult.error.message);
       setChatResults(chat);
@@ -61,9 +66,11 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
         projectName: projects.find(project => project.id === chunk.projectId)?.name ?? "Unknown project"
       })) : []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Search failed.");
+      if (requestGeneration === searchGeneration.current) {
+        setError(cause instanceof Error ? cause.message : "Search failed.");
+      }
     } finally {
-      setWorking(false);
+      if (requestGeneration === searchGeneration.current) setWorking(false);
     }
   }
 
