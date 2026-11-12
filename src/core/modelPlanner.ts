@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "./result";
+import { err, ok, type AppErrorCode, type Result } from "./result";
 import type { ModelRouter } from "./model";
 import type { AgentPlan, PlannerModel } from "./agentPlanner";
 
@@ -19,7 +19,14 @@ export class ModelRouterPlanner implements PlannerModel {
     if(event.type==="text_delta"){text+=event.text;if(text.length>48_000)return err("validation","Planner response exceeded 48 KB.");}
     else if(event.type==="completed")completed=true;
    }
-  }catch(cause){return err(input.signal.aborted?"cancelled":"provider_unavailable",cause instanceof Error?cause.message:"Planner model request failed.");}
+  }catch(cause){
+   const metadata = cause as { code?: unknown; retryable?: unknown };
+   const supportedCodes: AppErrorCode[] = ["authentication", "rate_limited", "timeout", "provider_unavailable", "cancelled"];
+   const code = input.signal.aborted ? "cancelled" :
+    supportedCodes.includes(metadata.code as AppErrorCode) ? metadata.code as AppErrorCode : "provider_unavailable";
+   const message = cause instanceof Error ? cause.message : "Planner model request failed.";
+   return err(code, message, code !== "cancelled" && metadata.retryable === true);
+  }
   if(input.signal.aborted)return err("cancelled","Planning was cancelled.");
   if(!completed)return err("provider_unavailable","Planner model stream ended without a completion event.",true);
   const cleaned=text.trim().replace(/^\x60\x60\x60(?:json)?\s*/i,"").replace(/\s*\x60\x60\x60$/,"");
