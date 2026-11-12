@@ -2,7 +2,7 @@ import type { ModelDescriptor } from "./domain";
 import { err, ok, type Result } from "./result";
 
 export interface ModelMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
 }
 
@@ -74,7 +74,7 @@ export class ModelRouter {
     }
     let requestBytes = 0;
     for (const message of request.messages) {
-      if (!["system", "user", "assistant"].includes(message.role) || typeof message.content !== "string") {
+      if (!["system", "user", "assistant", "tool"].includes(message.role) || typeof message.content !== "string") {
         throw new Error("Message role or content is invalid.");
       }
       const messageBytes = utf8Length(message.content);
