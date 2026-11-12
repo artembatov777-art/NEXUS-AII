@@ -33,6 +33,20 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+  it("rejects configured model IDs containing controls or exceeding the UTF-8 byte limit", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    for (const model of ["bad" + String.fromCharCode(10) + "model", "я".repeat(65)]) {
+      const router = createTauriModelRouter({
+        baseUrl: "https://api.example/v1", model, inferenceLocation: "remote"
+      });
+      if (!router) throw new Error("Expected native model router.");
+      await expect(router.listModels()).resolves.toMatchObject({
+        ok: false, error: { code: "validation" }
+      });
+    }
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   it("retries one transient model catalog request but does not retry generation", async () => {
     mockedIsTauri.mockReturnValue(true);
     vi.useFakeTimers();
