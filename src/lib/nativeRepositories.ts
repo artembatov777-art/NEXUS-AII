@@ -103,14 +103,14 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   async search(query:string,projectId:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
     if(!isTauri())return this.local.search(query,projectId,limit);
     const all=await this.readResult();if(!all.ok)return all;
-    const terms=[...new Set(query.toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu)??[])];
+    const terms=[...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[])];
     const ranked=all.value.filter(c=>c.projectId===projectId).map(chunk=>({chunk,score:terms.reduce((n,t)=>n+(chunk.text.toLocaleLowerCase().includes(t)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
     return ok(ranked.slice(0,limit).map(x=>x.chunk));
   }
   async searchAll(query:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
     if(!query.trim()||!Number.isInteger(limit)||limit<1||limit>100)return err("validation","Workspace knowledge search query or limit is invalid.");
     const all=await this.readResult();if(!all.ok)return all;
-    const terms=[...new Set(query.toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu)??[])];
+    const terms=[...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[])];
     if(!terms.length)return ok([]);
     const ranked=all.value.map(chunk=>({chunk,score:terms.reduce((n,t)=>n+(chunk.text.toLocaleLowerCase().includes(t)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
     return ok(ranked.slice(0,limit).map(x=>x.chunk));
