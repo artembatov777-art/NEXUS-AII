@@ -46,14 +46,32 @@ describe("workspace agent tools", () => {
   it("reads only through the native command and bounds output to the tool gateway limit", async () => {
     const { registry, gateway } = setup();
     registerWorkspaceTools(registry);
-    invokeMock.mockResolvedValue("x".repeat(60_000));
+    invokeMock.mockResolvedValue("\\n".repeat(60_000));
     const result = await gateway.execute("workspace.read", { path: "C:\\approved\\notes.txt" }, {
       traceId: "trace", runId: "run", signal: new AbortController().signal
     }, "local-user");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toMatchObject({ truncated: true, totalCharacters: 60_000 });
-    if (result.ok) expect(new TextEncoder().encode(result.value.content).byteLength).toBeLessThanOrEqual(48_000);
+    if (result.ok) {
+      expect(new TextEncoder().encode(JSON.stringify(result.value)).byteLength).toBeLessThanOrEqual(64_000);
+      expect(result.value.content.length).toBeLessThan(48_000);
+    }
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: "C:\\approved\\notes.txt" });
+  });
+
+  it("never truncates a Unicode surrogate pair or exceeds serialized output bounds", async () => {
+    const { registry, gateway } = setup();
+    registerWorkspaceTools(registry);
+    invokeMock.mockResolvedValue("😀".repeat(30_000));
+    const result = await gateway.execute("workspace.read", { path: "C:\\approved\\unicode.txt" }, {
+      traceId: "trace", runId: "run", signal: new AbortController().signal
+    }, "local-user");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(new TextEncoder().encode(JSON.stringify(result.value)).byteLength).toBeLessThanOrEqual(64_000);
+      const last = result.value.content.charCodeAt(result.value.content.length - 1);
+      expect(last >= 0xD800 && last <= 0xDBFF).toBe(false);
+    }
   });
 
   it("rejects oversized writes before native execution", async () => {
