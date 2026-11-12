@@ -40,6 +40,9 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
           await invoke("save_memory", { record });
           existing.add(record.id);
         }
+        // Leaving the old copy in localStorage would resurrect records deleted
+        // from SQLite on the next app launch. Clear only after every write succeeds.
+        this.local.clearLegacy();
       })();
       this.migration = pending.catch(error => {
         this.migration = undefined;
@@ -146,6 +149,8 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
         const existing = new Set(nativeChunks.map(chunk => chunk.id));
         const missing = legacy.value.filter(chunk => !existing.has(chunk.id));
         if (missing.length) await invoke("save_knowledge_chunks", { chunks: missing });
+        // Prevent deleted native documents from being re-imported on next launch.
+        this.local.clearLegacy();
       })();
       this.migration = pending.catch(error => {
         this.migration = undefined;
