@@ -134,3 +134,67 @@ body{background:radial-gradient(ellipse at 72% 0%,rgba(47,42,103,.28),transparen
 .chat-area[data-home=false] .chat-heading>h1{font-size:20px;letter-spacing:-.4px;margin:0}
 .chat-area[data-home=false] .chat-heading>p{display:none}
 @media(max-width:520px){.chat-area[data-home=true] .suggestions{justify-content:flex-start}.chat-area[data-home=true] .suggestions button{flex:1;min-width:0;justify-content:center}.chat-area[data-home=true] .composer-wrap{margin-top:3px}}
+
+
+/* Final interface pass: readable telemetry, safe-area support and reliable touch targets. */
+:root{color-scheme:dark}
+html,body,#root{min-height:100%;min-width:320px}
+.app-shell,.main-panel,.chat-area{min-width:0;min-height:0}
+.main-panel{overflow:hidden}
+.chat-area{overscroll-behavior:contain;scrollbar-gutter:stable}
+.chat-area::-webkit-scrollbar,.memory-modal::-webkit-scrollbar,.project-modal::-webkit-scrollbar,.knowledge-modal::-webkit-scrollbar,.training-modal::-webkit-scrollbar,.global-search-modal::-webkit-scrollbar,.settings-modal::-webkit-scrollbar,.tools-catalog::-webkit-scrollbar,.file-list-pane::-webkit-scrollbar{width:7px}
+.chat-area::-webkit-scrollbar-thumb,.memory-modal::-webkit-scrollbar-thumb,.project-modal::-webkit-scrollbar-thumb,.knowledge-modal::-webkit-scrollbar-thumb,.training-modal::-webkit-scrollbar-thumb,.global-search-modal::-webkit-scrollbar-thumb,.settings-modal::-webkit-scrollbar-thumb,.tools-catalog::-webkit-scrollbar-thumb,.file-list-pane::-webkit-scrollbar-thumb{border-radius:8px;background:rgba(133,143,199,.28)}
+.deck-overline{font-size:9px}
+.deck-core-copy p{font-size:11px;line-height:1.55}
+.deck-core-tags span{font-size:8px}
+.deck-core-readout span{font-size:8px}
+.deck-core-readout strong{font-size:12px}
+.deck-tool-copy strong{font-size:11px}
+.deck-tool-copy small{font-size:9px}
+.command-monitor-grid strong,.command-activity li strong{font-size:9px}
+.command-monitor-grid small,.command-activity li small,.command-activity>p{font-size:8px}
+.deck-footer{font-size:8px}
+:where(button,input,textarea,select){touch-action:manipulation}
+:where(button,input,textarea,select):focus-visible{outline:2px solid rgba(179,160,255,.9);outline-offset:3px;box-shadow:0 0 0 4px rgba(135,111,228,.16)}
+.modal-backdrop{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:max(12px,env(safe-area-inset-bottom))}
+.settings-modal,.memory-modal,.project-modal,.knowledge-modal,.training-modal,.global-search-modal,.file-workspace,.tools-workspace{overscroll-behavior:contain}
+@media(max-width:780px){
+  .app-shell{height:100dvh;min-height:100dvh}
+  .sidebar{padding-top:max(20px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+  .chat-area{padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  .composer-wrap{padding-bottom:env(safe-area-inset-bottom)}
+  .deck-core-copy p{font-size:10px}
+  .deck-core-tags span{font-size:8px}
+  .deck-core-readout span{font-size:8px}
+  .deck-core-readout strong{font-size:10px}
+  .deck-tool-copy small{font-size:9px}
+}
+@media(max-width:520px){
+  .topbar{min-height:56px;padding-left:10px;padding-right:10px}
+  .top-right>.icon-btn,.top-left>.icon-btn{width:40px;height:40px;min-width:40px}
+  .nav-item,.new-chat{min-height:44px}
+  .chat-area{padding-left:12px;padding-right:12px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+  .chat-heading>.eyebrow{font-size:8px}
+  .chat-heading>p{font-size:11px;line-height:1.55}
+  .deck-heading p{font-size:10px;line-height:1.55}
+  .deck-core-copy p{font-size:9px}
+  .deck-core-tags span{font-size:7px}
+  .deck-core-readout span{font-size:7px}
+  .deck-core-readout strong{font-size:9px}
+  .deck-tool-copy strong{font-size:11px}
+  .deck-tool-copy small{font-size:9px}
+  .command-monitor-grid strong,.command-activity li strong{font-size:10px}
+  .command-monitor-grid small,.command-activity li small,.command-activity>p{font-size:9px}
+  .deck-footer{font-size:7px}
+  .deck-tool{min-height:54px}
+  .deck-plan-button,.deck-settings-link,.suggestions button,.send-btn{min-height:42px}
+  .composer textarea{font-size:16px}
+  .model-pill{min-height:36px}
+  .file-workspace-body{min-height:0}
+  .file-list-pane{min-width:0}
+  .file-workspace-toolbar .secondary-btn,.tools-toolbar .secondary-btn{min-height:38px}
+  .file-workspace-footer .secondary-btn,.tools-workspace .file-workspace-footer .secondary-btn{min-height:38px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
