@@ -58,6 +58,7 @@ class TauriModelProvider implements ModelProvider {
     let failure: Error | null = null;
     let requestError: unknown = null;
     let rejectAbort!: (reason: Error) => void;
+    let waitingForNativeCompletion = false;
     const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
     const abortHandler = () => {
       const error = new Error("Model request was cancelled.");
@@ -66,7 +67,7 @@ class TauriModelProvider implements ModelProvider {
       done = true;
       wake?.();
       wake = null;
-      rejectAbort(error);
+      if (waitingForNativeCompletion) rejectAbort(error);
     };
     request.signal?.addEventListener("abort", abortHandler, { once: true });
     channel.onmessage = event => {
@@ -114,6 +115,7 @@ class TauriModelProvider implements ModelProvider {
       }
       if (failure) throw failure;
       if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
+      waitingForNativeCompletion = true;
       await Promise.race([streamPromise, abortPromise]);
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
       completed = true;
