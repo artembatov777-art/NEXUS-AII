@@ -7,6 +7,7 @@ type CommandCenterProps = {
   route: "remote" | "local";
   providerReady: boolean;
   busy: boolean;
+  recentActivity: Array<{ id: string; title: string; updatedAt: number; messageCount: number }>;
   onOpenAgents: () => void;
   onOpenMemory: () => void;
   onOpenKnowledge: () => void;
@@ -18,7 +19,7 @@ type CommandCenterProps = {
 };
 
 export function CommandCenter({
-  projectCount, conversationCount, model, route, providerReady, busy,
+  projectCount, conversationCount, model, route, providerReady, busy, recentActivity,
   onOpenAgents, onOpenMemory, onOpenKnowledge, onOpenProjects,
   onOpenFiles, onOpenTools, onOpenSettings, onStartPlanning
 }: CommandCenterProps) {
@@ -55,5 +56,9 @@ export function CommandCenter({
         <button className="command-secondary" onClick={onOpenSettings}><Settings2 size={14}/> Model settings</button>
       </aside>
     </div>
+    <section className="command-activity" aria-label="Recent workspace activity">
+      <div className="command-subheading"><span>RECENT WORKSPACE ACTIVITY</span><small>FROM SAVED CONVERSATIONS</small></div>
+      {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · {new Date(item.updatedAt).toLocaleString()}</small></div></li>)}</ol> : <p>No conversation activity yet. Start a chat and it will appear here.</p>}
+    </section>
   </section>;
 }
