@@ -85,7 +85,7 @@ describe("NEXUS Command Center", () => {
     click("File system");
     click("Tools & MCP");
     click("Training Lab");
-    click("Model settings");
+    click("Open model configuration");
     click("Draft a plan");
     expect(actions.onOpenAgents).toHaveBeenCalledOnce();
     expect(actions.onOpenMemory).toHaveBeenCalledOnce();
