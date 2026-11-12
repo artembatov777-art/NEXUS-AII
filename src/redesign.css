@@ -123,3 +123,14 @@ body{background:radial-gradient(ellipse at 72% 0%,rgba(47,42,103,.28),transparen
 .error-banner{border-color:rgba(222,111,145,.25);background:rgba(67,25,46,.5);color:#f0b3c4}
 .chat-heading .chat-project-context{width:fit-content;max-width:100%}
 @media(max-width:700px){.modal-backdrop{padding:8px}.memory-modal,.project-modal,.knowledge-modal,.training-modal,.global-search-modal,.settings-modal{max-height:96vh;padding:15px;border-radius:13px}.file-workspace,.tools-workspace{height:96vh;padding:13px}.file-workspace-body{overflow:auto}.file-workspace-footer{flex-wrap:wrap}.memory-header h2{font-size:20px}}
+
+/* Landing view is a command dashboard, not an empty chat with a welcome bubble */
+.chat-area[data-home=true] .messages{display:none}
+.chat-area[data-home=true] .chat-heading{margin-bottom:0}
+.chat-area[data-home=true] .composer-wrap{padding-top:2px}
+.chat-area[data-home=true] .suggestions{margin-top:0}
+.chat-area[data-home=false] .chat-heading{padding-top:0;margin-bottom:0}
+.chat-area[data-home=false] .chat-heading>.eyebrow{margin-bottom:6px}
+.chat-area[data-home=false] .chat-heading>h1{font-size:20px;letter-spacing:-.4px;margin:0}
+.chat-area[data-home=false] .chat-heading>p{display:none}
+@media(max-width:520px){.chat-area[data-home=true] .suggestions{justify-content:flex-start}.chat-area[data-home=true] .suggestions button{flex:1;min-width:0;justify-content:center}.chat-area[data-home=true] .composer-wrap{margin-top:3px}}
