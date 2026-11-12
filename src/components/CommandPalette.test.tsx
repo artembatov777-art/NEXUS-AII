@@ -35,6 +35,7 @@ describe("NEXUS command palette", () => {
   it("exposes new conversation and global search as commands", () => {
     expect(container.textContent).toContain("New conversation");
     expect(container.textContent).toContain("Global search");
+    expect(container.textContent).toContain("Training Lab");
   });
 
   it("supports arrow-key selection and Enter activation", () => {
