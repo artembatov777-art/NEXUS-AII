@@ -12,12 +12,16 @@ export class ModelRouterPlanner implements PlannerModel {
    {role:"user" as const,content:JSON.stringify({goal:input.goal,availableTools:toolList})}
   ];
   let text="";
+  let completed=false;
   try{
    for await(const event of this.models.stream(this.providerId,{model:this.model,messages,temperature:0,maxOutputTokens:3000,signal:input.signal})){
     if(input.signal.aborted)return err("cancelled","Planning was cancelled.");
     if(event.type==="text_delta"){text+=event.text;if(text.length>48_000)return err("validation","Planner response exceeded 48 KB.");}
+    else if(event.type==="completed")completed=true;
    }
   }catch(cause){return err(input.signal.aborted?"cancelled":"provider_unavailable",cause instanceof Error?cause.message:"Planner model request failed.");}
+  if(input.signal.aborted)return err("cancelled","Planning was cancelled.");
+  if(!completed)return err("provider_unavailable","Planner model stream ended without a completion event.",true);
   const cleaned=text.trim().replace(/^\x60\x60\x60(?:json)?\s*/i,"").replace(/\s*\x60\x60\x60$/,"");
   try{const parsed=JSON.parse(cleaned) as AgentPlan;return ok(parsed);}catch{return err("validation","Planner model did not return valid JSON.");}
  }
