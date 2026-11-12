@@ -50,6 +50,20 @@ describe("NEXUS Command Center", () => {
     expect(container.textContent).toContain("Awaiting a verified model connection");
   });
 
+  it("renders saved conversation history in the workspace timeline", () => {
+    act(() => root.render(<CommandCenter
+      projectCount={1} conversationCount={1} model="auto" route="remote"
+      providerReady={true} providerConnection="reachable" credentialVault="available"
+      workspaceReady={true} busy={false}
+      recentActivity={[{ id: "recent-1", title: "NEXUS interface review", updatedAt: Date.now(), messageCount: 8 }]}
+      {...actions}
+    />));
+    expect(container.textContent).toContain("WORKSPACE TIMELINE");
+    expect(container.textContent).toContain("NEXUS interface review");
+    expect(container.textContent).toContain("8 messages");
+    expect(container.textContent).toContain("updated just now");
+  });
+
   it("routes quick-launch and briefing actions to their real workspace handlers", () => {
     click("Agents");
     click("Memory");
