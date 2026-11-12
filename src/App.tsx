@@ -66,11 +66,14 @@ export default function App() {
   const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const providerCheckGeneration = useRef(0);
+  const providerTestAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
     providerCheckGeneration.current += 1;
+    providerTestAbortController.current?.abort();
+    providerTestAbortController.current = null;
     setModelsLoading(false);
   }, [provider.baseUrl, provider.model, provider.inferenceLocation, provider.credentialHandle]);
 
@@ -348,6 +351,7 @@ export default function App() {
 
     const testId = ++providerCheckGeneration.current;
     const controller = new AbortController();
+    providerTestAbortController.current = controller;
     let timedOut = false;
     setModelTestState("testing");
     setModelTestMessage("Sending a short generation request to \"" + provider.model + "\"…");
@@ -374,6 +378,7 @@ export default function App() {
       setError(message);
     } finally {
       window.clearTimeout(timeoutId);
+      if (providerTestAbortController.current === controller) providerTestAbortController.current = null;
     }
   }
 
