@@ -539,6 +539,7 @@ export default function App() {
             route={providerRoute}
             providerReady={modelTestState === "passed"}
             busy={busy}
+            recentActivity={[...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5).map(item => ({ id: item.id, title: item.title, updatedAt: item.updatedAt, messageCount: item.messages.length }))}
             onOpenAgents={() => { setAgentsOpen(true); closeMobileNavigation(); }}
             onOpenMemory={() => { setMemoryOpen(true); closeMobileNavigation(); }}
             onOpenKnowledge={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}
