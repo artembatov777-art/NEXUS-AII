@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import "./file-system.css";
-import { ArrowLeft, File, FileCode2, FileText, Folder, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, Search, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, File, FileCode2, FileText, Folder, FolderOpen, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, Search, ShieldCheck, X } from "lucide-react";
 
 type WorkspaceEntry = {
   name: string;
@@ -98,6 +99,20 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function chooseDirectory() {
+    setError("");
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Choose a folder NEXUS may access"
+      });
+      if (typeof selected === "string") setGrantPath(selected);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open the native folder picker.");
     }
   }
 
@@ -225,7 +240,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
         </div>
         <div className="file-access-grant">
           <div className="file-pane-label">APPROVED DIRECTORIES</div>
-          <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Enter a folder path, e.g. C:\\Users\\You\\Documents" aria-label="Folder path to grant"/><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
+          <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
           {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => void refresh(root)}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
