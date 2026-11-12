@@ -178,6 +178,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
  .sidebar.sidebar-hidden .nav-item.selected{box-shadow:inset 0 -2px #79d8ed}
  /* Keep the fixed icon rail inside the shell's available width. */
  .app-shell{padding-left:64px}
+ .app-shell[data-focus-mode="true"]{padding-left:0}
  .main-panel{margin-left:0;min-width:0}
  .sidebar-scrim{z-index:7}
  .deck-briefing{display:block}
