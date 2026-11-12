@@ -25,7 +25,9 @@ describe("workspace agent tools", () => {
   it("registers list, read, write and mkdir tools with scoped permissions", () => {
     const { registry } = setup();
     expect(registerWorkspaceTools(registry).ok).toBe(true);
-    expect(registry.search("", 20).value?.map(tool => tool.id)).toEqual([
+    const search = registry.search("", 20);
+    expect(search.ok).toBe(true);
+    if (search.ok) expect(search.value.map(tool => tool.id)).toEqual([
       "workspace.list", "workspace.read", "workspace.write", "workspace.mkdir"
     ]);
   });
