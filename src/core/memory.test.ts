@@ -78,6 +78,7 @@ describe("MemoryService", () => {
     expect((await service.search("  ")).ok).toBe(false);
     expect((await service.search("preference", "all", 51)).ok).toBe(false);
     expect((await service.search("preference", "all", 5)).ok).toBe(true);
+    expect((await service.list("project", 10)).ok).toBe(false);
   });
 
   it("searches by scope and can forget a record", async () => {
