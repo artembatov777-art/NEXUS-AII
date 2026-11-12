@@ -63,7 +63,7 @@ export async function testProviderGeneration(
   settings: ProviderSettings,
   signal?: AbortSignal
 ): Promise<ProviderGenerationCheck> {
-  let usage: ProviderGenerationCheck["usage"] = null;
+  const usage: { value: ProviderGenerationCheck["usage"] } = { value: null };
   const response = await sendMessage(
     settings,
     [{
@@ -75,7 +75,7 @@ export async function testProviderGeneration(
     "",
     undefined,
     signal,
-    value => { usage = value; }
+    value => { usage.value = value; }
   );
-  return { response, usage };
+  return { response, usage: usage.value };
 }
