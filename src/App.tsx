@@ -58,6 +58,7 @@ export default function App() {
   const [historyQuery, setHistoryQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
@@ -253,13 +254,14 @@ export default function App() {
       }
       const assistantId = makeId();
       let streamedAnswer = "";
+      setLastUsage(null);
       const answer = await sendMessage(provider, next, contextParts.join("\n\n"), delta => {
         streamedAnswer += delta;
         updateMessages(target!.id, [...next, {
           id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(),
           ...(sourceReferences.length ? { sourceReferences } : {})
         }]);
-      }, controller.signal);
+      }, controller.signal, usage => setLastUsage(usage));
       updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
     } catch (e) {
       if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
@@ -465,7 +467,7 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft("Help me plan the next development milestone for NEXUS AU.")}><Zap size={15}/> Plan a project <span>↗</span></button><button onClick={() => setDraft("Explain a complex technical concept in simple terms.")}><Command size={15}/> Learn something <span>↗</span></button><button onClick={() => setDraft("Review this idea and identify its biggest risks.")}><Bot size={15}/> Analyze an idea <span>↗</span></button></div>}
-        <div className="composer-wrap"><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea aria-label="Message NEXUS" aria-describedby="composer-note" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> {localNoAuth ? "Local Ollama endpoint · no API key required" : providerVaultStatus === "available" ? "API key is stored in the OS credential vault" : providerVaultStatus === "unavailable" ? "OS credential vault unavailable · provider requests disabled" : providerVaultStatus === "browser" ? "Provider requests are disabled in browser preview" : providerVaultStatus === "loading" ? "Checking OS credential vault…" : "Provider key is not configured"}</span><button className="send-btn" disabled={!busy && (!draft.trim() || !conversationsReady)} onClick={() => busy ? chatAbortController.current?.abort() : void submit()}>{busy ? "Stop" : "Send"} {busy ? <X size={15}/> : <Send size={15}/>}</button></div></div><div className="composer-note" id="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
+        <div className="composer-wrap"><div className="composer"><div className="composer-tools"><button className="icon-btn" onClick={() => void pasteText()} aria-label="Paste from system clipboard" title="Paste from clipboard"><ClipboardPaste size={15}/></button></div><textarea aria-label="Message NEXUS" aria-describedby="composer-note" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Message NEXUS… (Enter to send, Shift + Enter for newline)" rows={2}/><div className="composer-bottom"><span><ShieldCheck size={13}/> {localNoAuth ? "Local Ollama endpoint · no API key required" : providerVaultStatus === "available" ? "API key is stored in the OS credential vault" : providerVaultStatus === "unavailable" ? "OS credential vault unavailable · provider requests disabled" : providerVaultStatus === "browser" ? "Provider requests are disabled in browser preview" : providerVaultStatus === "loading" ? "Checking OS credential vault…" : "Provider key is not configured"}</span>{lastUsage && <small className="usage-indicator">Last response: {lastUsage.inputTokens ?? "?"} in / {lastUsage.outputTokens ?? "?"} out</small>}<button className="send-btn" disabled={!busy && (!draft.trim() || !conversationsReady)} onClick={() => busy ? chatAbortController.current?.abort() : void submit()}>{busy ? "Stop" : "Send"} {busy ? <X size={15}/> : <Send size={15}/>}</button></div></div><div className="composer-note" id="composer-note">NEXUS AU can make mistakes. Verify important information.</div></div>
       </section>
     </main>
 
