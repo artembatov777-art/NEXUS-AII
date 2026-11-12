@@ -64,6 +64,34 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
   });
 
+  it("searches recursively by name only within the current approved directory", async () => {
+    const rootPath = "C:\\Users\\Owner\\Documents";
+    const matchPath = rootPath + "\\Projects\\meeting-notes.md";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      if (command === "search_workspace_entries") return [{
+        name: "meeting-notes.md", path: matchPath, kind: "file", sizeBytes: 12, modifiedAtMs: 0
+      }];
+      return undefined;
+    });
+    await renderPanel();
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search approved folders"]');
+    expect(searchInput).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(searchInput, "notes");
+      searchInput!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const searchButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Search"));
+    expect(searchButton).toBeDefined();
+    await act(async () => { searchButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("search_workspace_entries", { path: rootPath, query: "notes" });
+    expect(container.textContent).toContain("SEARCH RESULTS");
+    expect(container.textContent).toContain("meeting-notes.md");
+  });
+
   it("closes from the header and backdrop", async () => {
     await renderPanel();
     const headerClose = container.querySelector<HTMLButtonElement>('button[aria-label="Close file system"]');
