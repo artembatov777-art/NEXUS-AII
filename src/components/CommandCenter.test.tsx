@@ -9,7 +9,7 @@ let container: HTMLDivElement;
 let root: Root;
 const actions = {
   onOpenAgents: vi.fn(), onOpenMemory: vi.fn(), onOpenKnowledge: vi.fn(),
-  onOpenProjects: vi.fn(), onOpenFiles: vi.fn(), onOpenTools: vi.fn(),
+  onOpenProjects: vi.fn(), onOpenFiles: vi.fn(), onOpenTools: vi.fn(), onOpenTrainingLab: vi.fn(),
   onOpenSettings: vi.fn(), onStartPlanning: vi.fn()
 };
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -71,6 +71,7 @@ describe("NEXUS Command Center", () => {
     click("Projects");
     click("File system");
     click("Tools & MCP");
+    click("Training Lab");
     click("Model settings");
     click("Draft a plan");
     expect(actions.onOpenAgents).toHaveBeenCalledOnce();
@@ -79,6 +80,7 @@ describe("NEXUS Command Center", () => {
     expect(actions.onOpenProjects).toHaveBeenCalledOnce();
     expect(actions.onOpenFiles).toHaveBeenCalledOnce();
     expect(actions.onOpenTools).toHaveBeenCalledOnce();
+    expect(actions.onOpenTrainingLab).toHaveBeenCalledOnce();
     expect(actions.onOpenSettings).toHaveBeenCalledOnce();
     expect(actions.onStartPlanning).toHaveBeenCalledOnce();
   });
