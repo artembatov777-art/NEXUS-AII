@@ -32,7 +32,7 @@ function tokenize(value: string): string[] {
  * inverse document frequency reduces the impact of common terms, while tags
  * receive a modest boost. This is not semantic/vector search.
  */
-function rankMemories(records: MemoryRecord[], query: string): MemoryRecord[] {
+export function rankMemories(records: MemoryRecord[], query: string): MemoryRecord[] {
   const terms = [...new Set(tokenize(query))];
   if (terms.length === 0) return [];
 
@@ -88,6 +88,16 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
     private readonly storage: StorageLike,
     private readonly key = MEMORY_STORAGE_KEY
   ) {}
+
+  async exportAll(): Promise<Result<MemoryRecord[]>> {
+    return this.readAll();
+  }
+
+  async getById(id: MemoryRecord["id"]): Promise<Result<MemoryRecord | null>> {
+    const loaded = this.readAll();
+    if (!loaded.ok) return loaded;
+    return ok(loaded.value.find(record => record.id === id) ?? null);
+  }
 
   async list(scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>> {
     const loaded = this.readAll();
