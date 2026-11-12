@@ -843,3 +843,5 @@
   .chat-area[data-home="false"] .chat-heading { padding:10px 0; }
   .chat-area[data-home="false"] .chat-heading h1 { font-size:17px; }
 }
+
+.app-shell[data-focus-mode="true"] .sidebar-scrim { display:none; }
