@@ -140,6 +140,17 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
   });
 
+  it("rejects tool-role messages until the native payload supports tool call IDs", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "tool", content: "tool output" }]
+    });
+    await expect((async () => { for await (const _ of stream) { /* consume */ } })()).rejects.toThrow(/tool-role messages/i);
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   it("rejects cancellation before making a native request", async () => {
     mockedIsTauri.mockReturnValue(true);
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
