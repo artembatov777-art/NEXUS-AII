@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isTauri } from "@tauri-apps/api/core";
 import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
-import { sendMessage } from "./ai";
+import { sendMessage, testProviderGeneration } from "./ai";
 import type { ModelEvent, ModelRequest } from "../core/model";
 import type { ProviderSettings, ChatMessage } from "../types";
 
@@ -65,6 +65,27 @@ describe("sendMessage AI Core integration", () => {
         expect.objectContaining({ role: "system", content: expect.stringContaining("Approved project reference") }),
         { role: "user", content: "Hello" }
       ]
+    }));
+  });
+
+  it("performs a context-free generation check and returns usage telemetry", async () => {
+    native.mockReturnValue(true);
+    const stream = vi.fn(async function* (): AsyncGenerator<ModelEvent, void, unknown> {
+      yield { type: "text_delta", text: "NEXUS_OK" };
+      yield { type: "usage", inputTokens: 8, outputTokens: 2 };
+      yield { type: "completed", finishReason: "stop" };
+    });
+    createRouter.mockReturnValue({ stream } as never);
+    const controller = new AbortController();
+    const result = await testProviderGeneration(settings, controller.signal);
+    expect(result).toEqual({
+      response: "NEXUS_OK",
+      usage: { inputTokens: 8, outputTokens: 2 }
+    });
+    expect(stream).toHaveBeenCalledWith(NATIVE_MODEL_PROVIDER_ID, expect.objectContaining({
+      model: "model-a",
+      messages: [{ role: "user", content: "Reply with exactly NEXUS_OK and nothing else." }],
+      signal: controller.signal
     }));
   });
 
