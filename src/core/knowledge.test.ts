@@ -31,7 +31,7 @@ describe("knowledge retrieval",()=>{
   const vectors={
    upsert:async()=>{},remove:async()=>{},search:async()=>[
     {id:"same-project",score:.8},{id:"other-project",score:.99}
-   ],hasProject:async()=>true
+   ],removeDocument:async()=>{},hasProject:async()=>true
   };
   const result=await new KnowledgeRetrievalService(repository,embeddings,vectors).retrieve("project content","p1");
   expect(result.ok).toBe(true);
