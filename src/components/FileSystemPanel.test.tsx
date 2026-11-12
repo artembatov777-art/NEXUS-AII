@@ -17,14 +17,6 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 async function renderPanel() {
   await act(async () => { root.render(<FileSystemPanel onClose={onClose} />); });
 }
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setter?.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
 describe("FileSystemPanel native workspace access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
