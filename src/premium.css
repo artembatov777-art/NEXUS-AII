@@ -137,3 +137,54 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 @media(max-width:780px){.chat-area{padding-inline:15px}.deck-core{grid-template-columns:minmax(0,1fr) 165px;min-height:230px;padding:18px}.deck-reactor{grid-column:2;grid-row:1;transform:scale(.78)}.deck-core-readout{grid-column:1/-1;justify-self:stretch;max-width:none;grid-template-columns:repeat(4,minmax(0,1fr));padding-top:13px;border-top:1px solid rgba(112,185,203,.14)}.deck-workspace{grid-template-columns:1fr}.deck-bottom{grid-template-columns:1fr}}
 @media(max-width:520px){.chat-area{padding-inline:12px}.deck-heading{align-items:flex-start}.deck-heading h2{font-size:20px}.deck-heading p{max-width:240px;line-height:1.5}.deck-configure{font-size:0;padding:8px}.deck-configure svg{width:15px;height:15px}.deck-core{grid-template-columns:minmax(0,1fr) 112px;min-height:180px;padding:13px;border-radius:12px}.deck-core-copy h3{font-size:17px;letter-spacing:.02em}.deck-core-copy p{max-width:175px;font-size:8px}.deck-core-tags{gap:5px;margin-top:11px}.deck-core-tags span{font-size:6px;padding:4px 6px}.deck-reactor{width:112px;height:112px;transform:scale(.65)}.deck-core-readout{gap:9px 7px}.deck-core-readout span{font-size:6px}.deck-core-readout strong{font-size:8px}.deck-tools,.deck-briefing,.command-monitor,.command-activity{padding:12px}.deck-tool-grid{grid-template-columns:1fr}.deck-tool{min-height:53px}.deck-briefing-mark{margin:14px 0 10px}.command-monitor-grid{grid-template-columns:1fr}.deck-footer{flex-wrap:wrap;font-size:6px;letter-spacing:.08em}}
 @media(prefers-reduced-motion:reduce){.deck-core:before,.reactor-ring,.reactor-halo,.deck-reactor:after,.deck-core.is-processing .reactor-center{animation:none!important}.deck-tool{transition:none}}
+
+
+/* Persistent module navigation: keep functions in the left rail, not duplicated as dashboard tiles. */
+.deck-tools{display:none!important}
+.deck-workspace{grid-template-columns:minmax(0,1fr)}
+.deck-briefing{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(180px,1.2fr) minmax(180px,.8fr);align-items:center;column-gap:22px}
+.deck-briefing .deck-section-heading{grid-column:1/-1;margin-bottom:2px}
+.deck-briefing-mark{margin:4px 0}
+.deck-briefing h4{align-self:end}
+.deck-briefing p{align-self:start}
+.deck-plan-button,.deck-settings-link{grid-column:3}
+.deck-plan-button{grid-row:2}
+.deck-settings-link{grid-row:3;margin-top:0}
+.sidebar{width:276px}
+.sidebar .nav-item{min-height:42px;border-radius:6px}
+.sidebar .nav-item.selected{background:linear-gradient(90deg,rgba(49,139,160,.22),rgba(17,50,64,.18));border-color:rgba(116,215,239,.2);box-shadow:inset 2px 0 #79d8ed}
+.sidebar .nav-item.selected svg{color:#8ee4f2}
+.sidebar .nav-label,.sidebar .history-heading{color:#7199a7}
+.sidebar .nav-feature-dot{background:#79d8ed;box-shadow:0 0 9px rgba(121,216,237,.65)}
+.sidebar .new-chat{border-color:rgba(116,215,239,.25);background:linear-gradient(100deg,rgba(32,103,122,.42),rgba(16,43,56,.55));color:#d9f5fa}
+.sidebar .new-chat:hover{border-color:rgba(116,215,239,.5);background:rgba(35,104,123,.42)}
+@media(max-width:780px){
+ .sidebar{position:absolute;left:0;top:0;bottom:0;height:100%;width:276px;z-index:8}
+ .sidebar.sidebar-hidden{display:flex;position:absolute;left:0;top:0;bottom:0;width:64px;height:100%;margin-left:0;padding:16px 7px 10px;overflow:hidden;border-right:1px solid rgba(113,190,211,.2);box-shadow:8px 0 28px rgba(0,0,0,.28)}
+ .sidebar.sidebar-hidden .brand{justify-content:center;padding:0 0 22px}
+ .sidebar.sidebar-hidden .brand>div:last-of-type,
+ .sidebar.sidebar-hidden .brand .mobile-only,
+ .sidebar.sidebar-hidden .new-chat span,
+ .sidebar.sidebar-hidden .nav-label,
+ .sidebar.sidebar-hidden .nav-count,
+ .sidebar.sidebar-hidden .nav-feature-dot,
+ .sidebar.sidebar-hidden .history-heading,
+ .sidebar.sidebar-hidden .history-search,
+ .sidebar.sidebar-hidden .history-list,
+ .sidebar.sidebar-hidden .sidebar-bottom{display:none!important}
+ .sidebar.sidebar-hidden .new-chat{width:46px;min-width:46px;height:42px;justify-content:center;padding:0;margin:0 auto 18px;font-size:0}
+ .sidebar.sidebar-hidden .nav-item{width:46px;min-width:46px;height:43px;min-height:43px;justify-content:center;gap:0;margin:0 auto 6px;padding:0;font-size:0}
+ .sidebar.sidebar-hidden .nav-item svg{width:18px;height:18px;flex:none}
+ .sidebar.sidebar-hidden .nav-item.selected{box-shadow:inset 0 -2px #79d8ed}
+ .main-panel{margin-left:64px;min-width:0}
+ .sidebar-scrim{z-index:7}
+ .deck-briefing{display:block}
+ .deck-briefing-mark{margin:14px 0 10px}
+ .deck-plan-button,.deck-settings-link{width:100%;margin-top:8px}
+}
+@media(max-width:520px){
+ .main-panel{margin-left:64px}
+ .chat-area{padding-inline:9px}
+ .deck-briefing{padding:12px}
+}
+@media(prefers-reduced-motion:reduce){.sidebar .nav-item{transition:none}}
