@@ -367,14 +367,14 @@ export default function App() {
 
   async function saveProviderSettings() {
     try {
-      if (apiKey.trim() && !localNoAuth) { await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); setProviderVaultStatus("available"); }
+      if (apiKey.trim() && !localNoAuth) { await invoke("store_provider_key", { apiKey }); setApiKey(""); setHasProviderKey(true); setProviderVaultStatus("available"); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("API key changed. Check the endpoint again."); setModelTestState("unchecked"); setModelTestMessage("API key changed. Run a new generation test."); }
       saveProvider(provider);
       setSettingsOpen(false);
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save provider credentials."); }
   }
   async function deleteProviderKey() {
-    try { await invoke("delete_provider_key"); setHasProviderKey(false); setProviderVaultStatus("missing"); setApiKey(""); }
+    try { await invoke("delete_provider_key"); setHasProviderKey(false); setProviderVaultStatus("missing"); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Provider key was deleted."); setModelTestState("unchecked"); setModelTestMessage("Save a provider key before testing cloud generation."); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider credentials."); }
   }
 
