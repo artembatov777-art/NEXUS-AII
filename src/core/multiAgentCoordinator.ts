@@ -209,7 +209,11 @@ export class MultiAgentCoordinator {
         return;
       }
       outputs.set(step.id, bounded.value);
-      yield { type: "agent_completed", runId, agentId, step: index + 1 };
+      const renderedOutput = typeof bounded.value === "string" ? bounded.value : JSON.stringify(bounded.value);
+      const detail = renderedOutput.length > 10_000
+        ? renderedOutput.slice(0, 10_000) + "\\n[Output preview truncated at 10,000 characters.]"
+        : renderedOutput;
+      yield { type: "agent_completed", runId, agentId, step: index + 1, detail };
     }
     await this.trace(runId, "completed", { agents: plan.steps.length });
     yield { type: "completed", runId, detail: `Completed ${outputs.size} delegated steps.` };
