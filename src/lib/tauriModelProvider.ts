@@ -7,6 +7,12 @@ import { normalizeProviderFailure, normalizeProviderModelIds, providerEndpointEr
 
 export const NATIVE_MODEL_PROVIDER_ID = "nexus.native-provider";
 
+function isValidModelId(model: string): boolean {
+  return model.trim().length > 0
+    && new TextEncoder().encode(model).byteLength <= 128
+    && !/[\\u0000-\\u001f\\u007f]/.test(model);
+}
+
 /** Model discovery is an idempotent GET, so retry one transient failure. Chat POSTs are never auto-retried to avoid duplicate generation or billing. */
 async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string): Promise<unknown> {
   let lastError: unknown;
@@ -28,7 +34,7 @@ class TauriModelProvider implements ModelProvider {
   constructor(private readonly settings: ProviderSettings) {}
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
-    if (!this.settings.model.trim() || this.settings.model.length > 128) {
+    if (!isValidModelId(this.settings.model)) {
       return err("validation", "Configured model name is invalid.");
     }
     const endpointError = providerEndpointError(this.settings.baseUrl);
