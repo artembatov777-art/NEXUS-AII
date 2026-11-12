@@ -1,0 +1,20 @@
+/* Native file workspace */
+.file-workspace-body{grid-template-columns:minmax(0,1fr) minmax(260px,.8fr)}
+.file-access-grant{display:grid;gap:8px;padding:12px 19px;border-bottom:1px solid rgba(121,199,232,.12);background:rgba(5,13,21,.28)}
+.file-access-grant>.file-pane-label{margin:0}
+.file-grant-input{display:flex;gap:8px;min-width:0}
+.file-grant-input input,.file-create-row input{min-width:0;flex:1;padding:9px 11px;border:1px solid rgba(121,199,232,.2);border-radius:8px;background:rgba(4,11,20,.7);color:#d5e9f2;font:inherit;font-size:10px}
+.file-root-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.file-root-row>button:first-child{display:flex;align-items:center;gap:7px;min-width:0;border:0;background:transparent;color:#a9c8d8;text-align:left;font-size:9px;cursor:pointer}
+.file-root-row>button:first-child span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-revoke{border:1px solid rgba(220,130,145,.2);border-radius:6px;padding:4px 8px;background:rgba(80,30,45,.2);color:#dbaab6;font-size:8px;cursor:pointer}
+.file-access-grant>p{margin:0;color:#879dac;font-size:9px;line-height:1.5}
+.file-workspace-empty{display:grid;justify-items:center;gap:10px;padding:50px 24px;color:#9bb5c4;text-align:center}
+.file-workspace-empty svg{color:#9b8de5}
+.file-workspace-empty h3{margin:0;color:#dce9f4;font-size:15px}
+.file-workspace-empty p{max-width:420px;margin:0;font-size:11px;line-height:1.6}
+.file-create-row,.file-editor-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.file-create-row .secondary-btn,.file-editor-actions .secondary-btn,.file-editor-actions .primary-btn{min-height:34px;padding:7px 10px;font-size:9px}
+.file-editor{width:100%;min-height:280px;resize:vertical;padding:11px;border:1px solid rgba(121,199,232,.2);border-radius:8px;background:rgba(3,8,16,.75);color:#d4e8f2;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2}
+.file-preview-content pre{max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:760px){.file-workspace-body{grid-template-columns:minmax(0,1fr);overflow:auto}.file-preview-pane{border-left:0;border-top:1px solid rgba(121,199,232,.12)}.file-access-grant{padding:10px}.file-grant-input{flex-wrap:wrap}.file-grant-input .primary-btn{width:100%}.file-create-row input{flex-basis:100%}}
