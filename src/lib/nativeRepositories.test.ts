@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => false
 }));
 
-import { WorkspaceMemoryRepository } from "./nativeRepositories";
+import { WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
 import { LocalStorageMemoryRepository, type StorageLike } from "./memoryStorage";
 import type { MemoryRecord } from "../core/memory";
 
@@ -59,5 +59,11 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
 
     expect(scoped.ok && scoped.value.map(record => record.id)).toEqual(["project-one"]);
     expect(unscoped.ok && unscoped.value).toEqual([]);
+  });
+});
+
+describe("native knowledge query tokenization", () => {
+  it("recognizes Cyrillic and Latin terms without splitting Unicode letters", () => {
+    expect(tokenizeKnowledgeTerms("Архитектура NEXUS память 2026")).toEqual(["архитектура", "nexus", "память", "2026"]);
   });
 });
