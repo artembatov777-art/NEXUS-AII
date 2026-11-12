@@ -40,7 +40,7 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     }
 
     const repository = new WorkspaceMemoryRepository(storage);
-    const found = await repository.search("archive entry 249", "all", 10);
+    const found = await repository.search("249", "all", 10);
     const exported = await repository.exportAll();
 
     expect(found.ok && found.value.map(record => record.id)).toEqual(["memory-249"]);
