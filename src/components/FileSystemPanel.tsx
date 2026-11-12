@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import "./file-system.css";
-import { ArrowLeft, File, FileCode2, FileText, Folder, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, File, FileCode2, FileText, Folder, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, Search, ShieldCheck, X } from "lucide-react";
 
 type WorkspaceEntry = {
   name: string;
@@ -35,6 +35,8 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [grantPath, setGrantPath] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -47,6 +49,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       const result = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
       setEntries(result);
       setCurrentPath(path);
+      setSearchActive(false);
       setError("");
       if (selectedPath && !result.some(entry => entry.path === selectedPath)) {
         setSelectedPath("");
@@ -77,6 +80,26 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
   }
 
   useEffect(() => { void loadRoots(); }, []);
+
+  async function searchFiles() {
+    const query = searchQuery.trim();
+    if (!currentPath || !query) return;
+    setBusy(true);
+    setError("");
+    setSelectedPath("");
+    setPreview("");
+    setDraft("");
+    setEditing(false);
+    try {
+      const result = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path: currentPath, query });
+      setEntries(result);
+      setSearchActive(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function grantDirectory() {
     if (!grantPath.trim()) return;
@@ -195,6 +218,11 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
           <button className="secondary-btn" onClick={() => void refresh()} disabled={!currentPath || busy}><RefreshCw size={14}/> Refresh</button>
           <button className="secondary-btn" onClick={() => void refresh(parentPath(currentPath))} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
         </div>
+        <div className="file-search-toolbar">
+          <label className="file-search-input"><Search size={14}/><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchFiles(); }} placeholder="Search names in this folder and subfolders" aria-label="Search approved folders"/></label>
+          <button className="secondary-btn" onClick={() => void searchFiles()} disabled={busy || !currentPath || !searchQuery.trim()}><Search size={13}/> Search</button>
+          {searchActive && <button className="secondary-btn" onClick={() => { setSearchQuery(""); void refresh(); }} disabled={busy}>Clear</button>}
+        </div>
         <div className="file-access-grant">
           <div className="file-pane-label">APPROVED DIRECTORIES</div>
           <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Enter a folder path, e.g. C:\\Users\\You\\Documents" aria-label="Folder path to grant"/><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
@@ -205,11 +233,11 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
-            <div className="file-pane-heading"><div><span className="file-pane-label">CURRENT LOCATION</span><strong>{currentPath || "Choose an approved folder"}</strong></div><span>{entries.length} items</span></div>
+            <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong></div><span>{entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
             <div className="file-list" role="list" aria-label="Workspace files">
               {entries.map(entry => { const EntryIcon = entry.kind === "directory" ? Folder : fileIcon(entry.name); return <button key={entry.path} className={selectedPath === entry.path ? "selected" : ""} aria-pressed={selectedPath === entry.path} onClick={() => void openEntry(entry)}><span className="file-name"><EntryIcon size={16}/><span><strong>{entry.name}</strong><small>{entry.kind}</small></span></span><span>{entry.kind === "file" ? formatSize(entry.sizeBytes) : "—"}</span><span>{entry.modifiedAtMs ? new Date(Number(entry.modifiedAtMs)).toLocaleDateString() : "—"}</span></button>; })}
-              {!entries.length && <div className="file-empty">{busy ? "Loading..." : "This folder is empty or not selected."}</div>}
+              {!entries.length && <div className="file-empty">{busy ? "Loading..." : searchActive ? "No matching file or folder names were found." : "This folder is empty or not selected."}</div>}
             </div>
             {currentPath && <div className="file-create-row"><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="New file or folder name"/><button className="secondary-btn" onClick={() => void createEntry("file")} disabled={busy || !newName.trim()}><File size={14}/> New file</button><button className="secondary-btn" onClick={() => void createEntry("directory")} disabled={busy || !newName.trim()}><FolderPlus size={14}/> New folder</button></div>}
           </div>
