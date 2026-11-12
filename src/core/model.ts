@@ -66,7 +66,7 @@ export class ModelRouter {
   async *stream(providerId: string, request: ModelRequest): AsyncIterable<ModelEvent> {
     const resolved = this.getProvider(providerId);
     if (!resolved.ok) throw new Error(resolved.error.message);
-    if (!request.model.trim() || utf8Length(request.model) > MAX_MODEL_ID_LENGTH || /[\\u0000-\\u001f\\u007f]/.test(request.model)) {
+    if (!request.model.trim() || utf8Length(request.model) > MAX_MODEL_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(request.model)) {
       throw new Error("Model ID must be a non-empty string of at most 128 UTF-8 bytes without control characters.");
     }
     if (request.messages.length === 0 || request.messages.length > MAX_MESSAGES) {
