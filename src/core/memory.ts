@@ -26,6 +26,7 @@ export interface MemoryRecord {
 export interface MemoryRepository {
   list(scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
   search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
+  getById(id: MemoryId): Promise<Result<MemoryRecord | null>>;
   save(record: MemoryRecord): Promise<Result<void>>;
   delete(id: MemoryId): Promise<Result<void>>;
 }
@@ -116,9 +117,9 @@ export class MemoryService {
   }
 
   async revise(id: MemoryId, changes: Partial<Pick<MemoryRecord, "content" | "category" | "scope" | "projectId" | "tags" | "source">>): Promise<Result<MemoryRecord>> {
-    const current = await this.repository.list("all", 200);
+    const current = await this.repository.getById(id);
     if (!current.ok) return current;
-    const existing = current.value.find(item => item.id === id);
+    const existing = current.value;
     if (!existing) return err("validation", "Memory record was not found.");
     const content = changes.content === undefined ? existing.content : changes.content.trim();
     if (!content || content.length > 4_000) return err("validation", "Memory content must contain 1 to 4,000 characters.");
