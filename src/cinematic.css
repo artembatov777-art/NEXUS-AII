@@ -845,3 +845,44 @@
 }
 
 .app-shell[data-focus-mode="true"] .sidebar-scrim { display:none; }
+
+/* Shared module surfaces: consistent midnight glass and violet interaction language */
+.memory-header h2,.agent-center-title h2,.file-workspace-heading h2 { color:#f0edff; }
+.memory-header .eyebrow,.agent-center-title .eyebrow,.file-workspace-heading .eyebrow { color:#aa98e8; }
+.memory-search,.memory-add textarea,.memory-tags,.memory-fields select,
+.global-search-form input,.knowledge-search input,.file-search input {
+  border-color:rgba(137,126,210,.22);
+  background:rgba(5,8,21,.72);
+}
+.memory-record,.project-item,.knowledge-document,.training-record,.agent-card,
+.agent-approval-item,.agent-history-item {
+  border-color:rgba(137,126,210,.17);
+  background:linear-gradient(145deg,rgba(25,24,56,.58),rgba(8,12,27,.72));
+}
+.project-item:hover,.knowledge-document:hover,.agent-history-item:hover {
+  border-color:rgba(164,143,255,.34);
+  box-shadow:0 8px 22px rgba(0,0,0,.2),0 0 20px rgba(112,84,210,.08);
+}
+.project-item strong,.knowledge-document strong,.agent-card-heading strong { color:#e8e4fa; }
+.project-item small,.knowledge-document small,.agent-metadata { color:#8185a5; }
+.memory-record-top,.knowledge-documents-heading,.training-section-title { color:#b5a1ff; }
+.memory-add,.memory-list,.knowledge-documents,.training-section { border-color:rgba(137,126,210,.16); }
+.agent-center-header,.file-workspace-header,.tools-workspace-header { border-color:rgba(137,126,210,.2); }
+.agent-card-heading,.agent-history-top { border-color:rgba(137,126,210,.14); }
+.agent-primary-button,.primary-btn { background:linear-gradient(120deg,#7354d0,#315caa); box-shadow:0 5px 16px rgba(94,72,185,.2); }
+.agent-primary-button:hover,.primary-btn:hover { filter:brightness(1.12); }
+.file-tree,.file-list-pane,.file-preview-pane,.tools-catalog { background:rgba(5,9,22,.44); }
+.file-tree-children button:hover,.file-list>button:hover,.tool-card-main:hover {
+  border-color:rgba(164,143,255,.32);
+  background:rgba(52,42,99,.22);
+}
+.file-workspace-footer,.tools-workspace-footer,.agent-center-footer { border-color:rgba(137,126,210,.16); }
+.settings-modal,.memory-modal,.project-modal,.knowledge-modal,.training-modal,
+.agent-center,.global-search-modal,.file-workspace,.tools-workspace {
+  animation:nx-module-enter .22s cubic-bezier(.2,.75,.25,1) both;
+}
+@keyframes nx-module-enter { from { opacity:0; transform:translateY(8px) scale(.992); } to { opacity:1; transform:translateY(0) scale(1); } }
+@media(prefers-reduced-motion:reduce) {
+  .settings-modal,.memory-modal,.project-modal,.knowledge-modal,.training-modal,
+  .agent-center,.global-search-modal,.file-workspace,.tools-workspace { animation:none; }
+}
