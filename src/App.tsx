@@ -477,7 +477,7 @@ export default function App() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not read clipboard."); }
   }
 
-  return <div className="app-shell">
+  return <div className="app-shell" data-shell="cinematic" data-state={busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"} data-route={providerRoute}>
     <aside id="nexus-sidebar" className={`sidebar ${sidebarOpen ? "" : "sidebar-hidden"}`}>
       <div className="brand"><div className="brand-mark"><Sparkles size={18}/></div><div><strong>NEXUS</strong><span>AU WORKSPACE</span></div><button className="icon-btn mobile-only" onClick={dismissMobileNavigation} aria-label="Close navigation"><X size={17}/></button></div>
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
