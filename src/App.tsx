@@ -570,15 +570,24 @@ export default function App() {
     {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
       setCommandPaletteOpen(false);
       if (id === "focus") { setFocusMode(value => !value); return; }
-      if (id === "chat") { setSettingsOpen(false); setMemoryOpen(false); setGlobalSearchOpen(false); setAgentsOpen(false); setProjectsOpen(false); setKnowledgeOpen(false); setTrainingLabOpen(false); setFileSystemOpen(false); setToolsOpen(false); closeMobileNavigation(); return; }
-      setSettingsOpen(id === "models");
-      setAgentsOpen(id === "agents");
-      setMemoryOpen(id === "memory");
-      setKnowledgeOpen(id === "knowledge");
-      setProjectsOpen(id === "projects");
-      setFileSystemOpen(id === "files");
-      setToolsOpen(id === "tools");
-      if (id !== "focus") closeMobileNavigation();
+      setGlobalSearchOpen(false);
+      setTrainingLabOpen(false);
+      setSettingsOpen(false);
+      setAgentsOpen(false);
+      setMemoryOpen(false);
+      setKnowledgeOpen(false);
+      setProjectsOpen(false);
+      setFileSystemOpen(false);
+      setToolsOpen(false);
+      if (id === "chat") { closeMobileNavigation(); return; }
+      if (id === "models") setSettingsOpen(true);
+      if (id === "agents") setAgentsOpen(true);
+      if (id === "memory") setMemoryOpen(true);
+      if (id === "knowledge") setKnowledgeOpen(true);
+      if (id === "projects") setProjectsOpen(true);
+      if (id === "files") setFileSystemOpen(true);
+      if (id === "tools") setToolsOpen(true);
+      closeMobileNavigation();
     }} />}
     {globalSearchOpen && <GlobalSearchPanel conversations={conversations} projects={workspaceProjects} onClose={() => setGlobalSearchOpen(false)} onOpenConversation={conversation => { setSelectedProjectId(conversation.projectId ?? ""); setActiveId(conversation.id); setGlobalSearchOpen(false); setError(""); }} onOpenMemory={() => { setGlobalSearchOpen(false); setMemoryOpen(true); }} onOpenKnowledge={() => { setGlobalSearchOpen(false); setKnowledgeOpen(true); }} />}
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
