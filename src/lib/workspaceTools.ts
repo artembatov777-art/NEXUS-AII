@@ -112,6 +112,7 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
       risk: "medium",
       timeoutMs: 15_000,
       validateInput: validPathInput,
+      resourceForInput: input => input.path,
       execute: async ({ path }, context) => {
         if (!nativeCheck.ok) return nativeCheck;
         if (context.signal.aborted) return err("cancelled", "Workspace read was cancelled.");
@@ -169,6 +170,7 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
       risk: "medium",
       timeoutMs: 15_000,
       validateInput: validPathInput,
+      resourceForInput: input => input.path,
       execute: async ({ path }, context) => {
         if (!nativeCheck.ok) return nativeCheck;
         if (context.signal.aborted) return err("cancelled", "Directory creation was cancelled.");
