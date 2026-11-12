@@ -38,6 +38,11 @@ export function CommandCenter({
       <article><span>CONVERSATIONS</span><strong>{conversationCount.toLocaleString()}</strong><small>Saved conversations</small></article>
       <article><span>AI PROVIDER</span><strong>{providerReady ? "VERIFIED" : "NOT VERIFIED"}</strong><small>{providerReady ? "Generation test passed" : "Run a model test in settings"}</small></article>
     </div>
+    <section className={"command-core " + (busy ? "is-processing" : providerReady ? "is-connected" : "is-standby")} aria-label={"NEXUS AI Core status: " + status.toLowerCase()}>
+      <div className="command-core-copy"><span>NEURAL INTERFACE</span><h3>NEXUS <em>AI CORE</em></h3><p>{busy ? "Processing an active request" : providerReady ? "Generation test verified for this session" : "Awaiting a verified model connection"}</p></div>
+      <div className="command-core-visual" aria-hidden="true"><i className="command-core-orbit orbit-one"/><i className="command-core-orbit orbit-two"/><i className="command-core-orbit orbit-three"/><div className="command-core-sphere"><span>N</span><small>CORE</small></div><b className="core-node node-one"/><b className="core-node node-two"/><b className="core-node node-three"/></div>
+      <div className="command-core-meta"><span><i/> ROUTE <b>{route.toUpperCase()}</b></span><span><i/> MODEL <b>{model || "NOT SELECTED"}</b></span><span><i/> STATE <b>{status}</b></span></div>
+    </section>
     <div className="command-center-lower">
       <div className="command-launch">
         <div className="command-subheading"><span>QUICK LAUNCH</span><small>OPEN A WORKSPACE</small></div>
