@@ -52,12 +52,23 @@ class TauriModelProvider implements ModelProvider {
     const cancelNativeStream = () => {
       void invoke<boolean>("cancel_chat_stream", { streamId }).catch(() => false);
     };
-    const abortHandler = () => cancelNativeStream();
-    request.signal?.addEventListener("abort", abortHandler, { once: true });
     const queue: ModelEvent[] = [];
     let wake: (() => void) | null = null;
     let done = false;
     let failure: Error | null = null;
+    let requestError: unknown = null;
+    let rejectAbort!: (reason: Error) => void;
+    const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+    const abortHandler = () => {
+      const error = new Error("Model request was cancelled.");
+      cancelNativeStream();
+      failure = error;
+      done = true;
+      wake?.();
+      wake = null;
+      rejectAbort(error);
+    };
+    request.signal?.addEventListener("abort", abortHandler, { once: true });
     channel.onmessage = event => {
       if (event.type === "text_delta" && typeof event.text === "string") queue.push({ type: "text_delta", text: event.text });
       else if (event.type === "usage") queue.push({ type: "usage", inputTokens: event.inputTokens, outputTokens: event.outputTokens });
@@ -77,8 +88,22 @@ class TauriModelProvider implements ModelProvider {
         streamId,
         onEvent: channel
       });
-      let requestError: unknown = null;
-      void streamPromise.catch(error => { requestError = error; done = true; wake?.(); wake = null; });
+      void streamPromise.then(
+        () => {
+          if (!done) {
+            failure = new Error("Provider stream ended without a completion event.");
+            done = true;
+            wake?.();
+            wake = null;
+          }
+        },
+        error => {
+          requestError = error;
+          done = true;
+          wake?.();
+          wake = null;
+        }
+      );
       while (!done || queue.length) {
         if (request.signal?.aborted) throw new Error("Model request was cancelled.");
         if (failure) throw failure;
@@ -87,7 +112,9 @@ class TauriModelProvider implements ModelProvider {
         if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
         await new Promise<void>(resolve => { wake = resolve; });
       }
-      await streamPromise;
+      if (failure) throw failure;
+      if (requestError) throw requestError instanceof Error ? requestError : new Error(String(requestError));
+      await Promise.race([streamPromise, abortPromise]);
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
       completed = true;
     } finally {
