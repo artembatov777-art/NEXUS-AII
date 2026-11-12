@@ -3,7 +3,7 @@ import { ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } f
 import { ok, err, type Result } from "../core/result";
 import type { ModelDescriptor } from "../core/domain";
 import type { ProviderSettings } from "../types";
-import { normalizeProviderModelIds, providerEndpointError } from "./providerEndpoint";
+import { normalizeProviderFailure, normalizeProviderModelIds, providerEndpointError } from "./providerEndpoint";
 
 export const NATIVE_MODEL_PROVIDER_ID = "nexus.native-provider";
 
@@ -33,7 +33,8 @@ class TauriModelProvider implements ModelProvider {
         declaredLocation: this.settings.inferenceLocation
       })));
     } catch (cause) {
-      return err("provider_unavailable", cause instanceof Error ? cause.message : "Could not load models from the configured gateway.", true);
+      const failure = normalizeProviderFailure(cause);
+      return err(failure.code, failure.message, failure.retryable);
     }
   }
 
