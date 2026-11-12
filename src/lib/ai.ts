@@ -51,3 +51,31 @@ export async function sendMessage(
   if (!answer.trim()) throw new Error("Provider returned an empty streaming response.");
   return answer;
 }
+
+
+export interface ProviderGenerationCheck {
+  response: string;
+  usage: { inputTokens?: number; outputTokens?: number } | null;
+}
+
+/** Sends a small, context-free prompt to verify actual generation, not just /models reachability. */
+export async function testProviderGeneration(
+  settings: ProviderSettings,
+  signal?: AbortSignal
+): Promise<ProviderGenerationCheck> {
+  let usage: ProviderGenerationCheck["usage"] = null;
+  const response = await sendMessage(
+    settings,
+    [{
+      id: "nexus-provider-health-check",
+      role: "user",
+      content: "Reply with exactly NEXUS_OK and nothing else.",
+      createdAt: Date.now()
+    }],
+    "",
+    undefined,
+    signal,
+    value => { usage = value; }
+  );
+  return { response, usage };
+}
