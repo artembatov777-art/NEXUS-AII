@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, BookOpen, Bot, Command, Cpu, Focus, FolderKanban, FolderOpen, MemoryStick, Plug, Search, Settings2, Sparkles, X } from "lucide-react";
+import { Activity, BookOpen, Bot, Command, Cpu, Focus, FolderKanban, FolderOpen, MemoryStick, Plug, Search, Sparkles, X } from "lucide-react";
 
 export type NexusCommandId = "chat" | "agents" | "memory" | "knowledge" | "projects" | "files" | "tools" | "models" | "focus";
 
