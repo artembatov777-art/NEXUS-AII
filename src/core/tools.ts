@@ -40,6 +40,7 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   risk: ToolRisk;
   timeoutMs: number;
   validateInput(input: unknown): Result<Input>;
+  resourceForInput?(input: Input): string;
   execute(input: Input, context: ToolExecutionContext): Promise<Result<Output>>;
 }
 
@@ -93,6 +94,7 @@ export class ToolGateway {
     if (!["low", "medium", "high"].includes(definition.risk) || typeof definition.validateInput !== "function" || typeof definition.execute !== "function") {
       return err("validation", "Tool risk, validator, or executor is invalid.");
     }
+    if (definition.resourceForInput !== undefined && typeof definition.resourceForInput !== "function") return err("validation", "Tool resource resolver must be a function.");
     if (this.tools.has(definition.id)) return err("validation", `Tool "${definition.id}" is already registered.`);
     if (!Number.isInteger(definition.timeoutMs) || definition.timeoutMs < 100 || definition.timeoutMs > 120_000) {
       return err("validation", "Tool timeoutMs must be between 100 and 120,000.");
@@ -105,8 +107,8 @@ export class ToolGateway {
     this.tools.delete(toolId);
   }
 
-  list(): Array<Omit<ToolDefinition, "execute" | "validateInput">> {
-    return [...this.tools.values()].map(({ execute: _execute, validateInput: _validate, ...metadata }) => metadata);
+  list(): Array<Omit<ToolDefinition, "execute" | "validateInput" | "resourceForInput">> {
+    return [...this.tools.values()].map(({ execute: _execute, validateInput: _validate, resourceForInput: _resource, ...metadata }) => metadata);
   }
 
   async execute<Output = unknown>(
@@ -128,13 +130,20 @@ export class ToolGateway {
     const validated = tool.validateInput(input);
     if (!validated.ok) return validated;
 
+    let resource: string;
+    try { resource = tool.resourceForInput ? tool.resourceForInput(validated.value) : tool.id; }
+    catch { return err("validation", "Tool permission resource could not be resolved."); }
+    if (typeof resource !== "string" || !resource.trim() || resource.length > 4096) {
+      return err("validation", "Tool permission resource is invalid.");
+    }
+
     for (const scope of tool.requiredPermissions) {
       let decision: "allow" | "deny" | "ask_user";
       try {
         decision = await this.permissions.authorize({
           actorId,
           scope,
-          resource: tool.id,
+          resource,
           reason: `Tool "${tool.id}" requires ${scope}.`,
           risk: tool.risk
         });
