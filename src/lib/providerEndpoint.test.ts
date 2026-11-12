@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeProviderModelIds, providerEndpointError } from "./providerEndpoint";
+import { normalizeProviderFailure, normalizeProviderModelIds, providerEndpointError } from "./providerEndpoint";
 
 describe("provider endpoint validation", () => {
   it("accepts HTTPS provider URLs", () => {
@@ -37,5 +37,24 @@ describe("provider model catalog normalization", () => {
 
   it("returns an empty list for non-array payloads", () => {
     expect(normalizeProviderModelIds({ data: [] })).toEqual([]);
+  });
+});
+
+
+describe("provider failure normalization", () => {
+  it.each([
+    ["Provider returned HTTP 401: invalid key", "authentication", false],
+    ["Provider returned HTTP 429: slow down", "rate_limited", true],
+    ["Provider returned HTTP 504: gateway timeout", "timeout", true],
+    ["Provider returned HTTP 503: unavailable", "provider_unavailable", true],
+    ["Provider returned HTTP 400: bad model", "validation", false],
+    ["Model request was cancelled.", "cancelled", false]
+  ] as const)("classifies %s", (message, code, retryable) => {
+    expect(normalizeProviderFailure(new Error(message))).toMatchObject({ code, retryable });
+  });
+
+  it("does not expose raw provider error bodies in user-facing failures", () => {
+    expect(normalizeProviderFailure(new Error("Provider returned HTTP 401: secret=abc123")))
+      .toMatchObject({ code: "authentication", message: expect.not.stringContaining("abc123") });
   });
 });
