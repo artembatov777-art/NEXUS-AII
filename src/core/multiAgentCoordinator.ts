@@ -209,9 +209,14 @@ export class MultiAgentCoordinator {
         return;
       }
       outputs.set(step.id, bounded.value);
-      const renderedOutput = typeof bounded.value === "string" ? bounded.value : JSON.stringify(bounded.value);
+      const outputRecord = bounded.value && typeof bounded.value === "object" && !Array.isArray(bounded.value)
+        ? bounded.value as Record<string, unknown> : null;
+      const renderedOutput = typeof bounded.value === "string" ? bounded.value
+        : outputRecord && typeof outputRecord.content === "string"
+          ? `File: ${typeof outputRecord.path === "string" ? outputRecord.path : "workspace file"}\\n\\n${outputRecord.content}`
+          : JSON.stringify(bounded.value);
       const detail = renderedOutput.length > 10_000
-        ? renderedOutput.slice(0, 10_000) + "\\n[Output preview truncated at 10,000 characters.]"
+        ? renderedOutput.slice(0, 10_000) + "\n[Output preview truncated at 10,000 characters.]"
         : renderedOutput;
       yield { type: "agent_completed", runId, agentId, step: index + 1, detail };
     }
