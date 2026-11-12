@@ -505,3 +505,195 @@
     transition-duration: .01ms !important;
   }
 }
+
+
+/* NEXUS AU · violet / midnight / electric-blue palette
+   The violet layer balances the existing cold-blue core instead of replacing it. */
+:root {
+  --nx-violet: #9b78ff;
+  --nx-violet-bright: #c0a8ff;
+  --nx-violet-soft: rgba(145, 103, 255, .2);
+  --nx-blue: #4c9dff;
+  --nx-blue-soft: rgba(76, 157, 255, .18);
+  --nx-cyan-bright: #a9e7ff;
+  --nx-glass: rgba(12, 13, 29, .78);
+  --nx-glass-strong: rgba(8, 9, 20, .96);
+}
+
+.app-shell[data-shell="cinematic"] {
+  background:
+    radial-gradient(ellipse at 72% 12%, rgba(74, 74, 178, .13), transparent 34%),
+    radial-gradient(ellipse at 24% 58%, rgba(112, 58, 190, .075), transparent 38%),
+    linear-gradient(135deg, #070812 0%, #080b18 52%, #090817 100%);
+}
+
+.main-panel::before {
+  background-image:
+    linear-gradient(rgba(126, 143, 224, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(126, 143, 224, .035) 1px, transparent 1px);
+}
+
+.topbar {
+  border-bottom-color: rgba(126, 143, 224, .14);
+  background: rgba(6, 8, 19, .82);
+}
+
+.chat-heading .eyebrow {
+  color: #b39aff;
+  text-shadow: 0 0 18px rgba(155, 120, 255, .3);
+}
+
+.nexus-hero-core {
+  filter: drop-shadow(0 16px 34px rgba(88, 78, 205, .18));
+}
+
+.nexus-hero-core::before {
+  border-color: rgba(155, 120, 255, .14);
+  box-shadow: 0 0 42px rgba(109, 91, 230, .1), inset 0 0 36px rgba(91, 119, 255, .06);
+}
+
+.nexus-hero-core::after {
+  border-color: rgba(130, 157, 255, .14);
+}
+
+.core-glow {
+  background: radial-gradient(circle, rgba(123, 115, 255, .28), rgba(49, 100, 190, .14) 48%, transparent 72%);
+}
+
+.core-center {
+  border-color: rgba(170, 174, 255, .78);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(130, 111, 226, .76), transparent 34%),
+    radial-gradient(circle at 50% 50%, #1b2450 0%, #10172f 68%, #090d1d 100%);
+  box-shadow:
+    0 0 0 7px rgba(155, 120, 255, .045),
+    0 0 28px rgba(107, 119, 255, .4),
+    0 0 76px rgba(112, 77, 219, .18),
+    inset 0 0 24px rgba(92, 145, 255, .25);
+}
+
+.core-center span {
+  text-shadow: 0 0 12px rgba(170, 174, 255, .9), 0 0 34px rgba(105, 145, 255, .42);
+}
+
+.core-orbit {
+  border-color: rgba(129, 145, 255, .34);
+  box-shadow: 0 0 15px rgba(107, 119, 255, .13), inset 0 0 12px rgba(137, 105, 255, .05);
+}
+
+.orbit-two { border-color: rgba(155, 120, 255, .42); }
+.orbit-three { border-color: rgba(95, 158, 255, .27); }
+.core-crosshair { border-color: rgba(155, 120, 255, .15); }
+.core-label { color: #9a9fc9; }
+
+.nexus-system-card {
+  border-color: rgba(127, 135, 224, .2);
+  background:
+    linear-gradient(145deg, rgba(25, 28, 61, .88), rgba(9, 13, 29, .9)),
+    var(--nx-glass);
+}
+
+.nexus-system-card::after {
+  background: radial-gradient(ellipse, rgba(135, 100, 255, .14), transparent 70%);
+}
+
+.nexus-system-card:hover {
+  border-color: rgba(166, 143, 255, .42);
+  box-shadow: inset 0 1px rgba(225, 220, 255, .075), 0 15px 34px rgba(0, 0, 0, .24), 0 0 24px rgba(115, 87, 220, .08);
+}
+
+.app-shell[data-state="processing"] .core-center {
+  box-shadow: 0 0 0 8px rgba(155, 120, 255, .07), 0 0 36px rgba(107, 119, 255, .58), 0 0 100px rgba(112, 77, 219, .28), inset 0 0 26px rgba(92, 145, 255, .34);
+}
+
+.app-shell[data-state="connected"] .core-center {
+  box-shadow: 0 0 0 7px rgba(155, 120, 255, .05), 0 0 34px rgba(107, 119, 255, .42), 0 0 84px rgba(112, 77, 219, .2), inset 0 0 24px rgba(92, 145, 255, .25);
+}
+
+.composer {
+  background: linear-gradient(145deg, rgba(20, 22, 48, .97), rgba(8, 12, 28, .98));
+  border-color: rgba(133, 126, 220, .3);
+}
+
+.composer:focus-within {
+  border-color: rgba(173, 150, 255, .66);
+  box-shadow: 0 0 0 3px rgba(126, 100, 240, .13), 0 18px 52px rgba(0, 0, 0, .34);
+}
+
+.send-btn {
+  background: linear-gradient(135deg, #7255d8, #315da9);
+  box-shadow: 0 5px 18px rgba(105, 77, 213, .24), inset 0 1px rgba(235, 229, 255, .13);
+}
+
+.send-btn:not(:disabled):hover {
+  box-shadow: 0 8px 24px rgba(105, 77, 213, .34);
+}
+
+.sidebar {
+  background: linear-gradient(180deg, rgba(10, 11, 27, .99), rgba(6, 8, 19, .99));
+}
+
+.brand-mark {
+  box-shadow: 0 0 26px rgba(126, 99, 235, .22), inset 0 1px rgba(230, 224, 255, .13);
+}
+
+.modal-backdrop,
+.memory-backdrop,
+.agent-backdrop {
+  background: rgba(2, 3, 12, .82);
+}
+
+.settings-modal,
+.memory-modal,
+.project-modal,
+.knowledge-modal,
+.training-modal,
+.agent-center,
+.global-search-modal,
+.file-workspace,
+.tools-workspace {
+  border-color: rgba(139, 125, 230, .26);
+  background: linear-gradient(145deg, rgba(20, 21, 44, .99), rgba(8, 10, 24, .99));
+}
+
+.secondary-btn:hover,
+.agent-small-button:hover {
+  border-color: rgba(164, 143, 255, .42);
+  background: rgba(47, 38, 91, .68);
+  color: #eee8ff;
+}
+
+:where(button, input, textarea, select):focus-visible {
+  outline-color: rgba(177, 157, 255, .9);
+}
+
+.mobile-demo {
+  background:
+    radial-gradient(ellipse at 50% -12%, rgba(71, 82, 166, .36), transparent 45%),
+    radial-gradient(ellipse at 50% 110%, rgba(93, 53, 155, .2), transparent 42%),
+    #050611;
+}
+
+.demo-device {
+  border-color: rgba(144, 132, 238, .3);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(83, 78, 168, .18), transparent 42%),
+    #080a19;
+  box-shadow: 0 34px 110px rgba(0, 0, 0, .7), 0 0 0 7px rgba(13, 14, 31, .92), 0 0 48px rgba(102, 88, 208, .13);
+}
+
+.demo-brand-mark {
+  box-shadow: 0 0 26px rgba(132, 106, 245, .22), inset 0 1px rgba(230, 224, 255, .13);
+}
+
+.demo-orb {
+  box-shadow: 0 0 38px rgba(107, 119, 255, .25), inset 0 0 24px rgba(130, 105, 230, .22);
+}
+
+.demo-orb::before { border-color: rgba(177, 157, 255, .48); }
+.demo-orb::after { border-color: rgba(105, 157, 255, .34); }
+.demo-orb-inner { filter: drop-shadow(0 0 9px rgba(177, 157, 255, .9)); }
+
+.demo-tabbar button.active {
+  box-shadow: inset 0 0 0 1px rgba(177, 157, 255, .24), 0 0 18px rgba(111, 91, 220, .12);
+}
