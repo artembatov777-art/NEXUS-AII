@@ -46,7 +46,7 @@ describe("sendMessage AI Core integration", () => {
       { type: "text_delta", text: "from NEXUS" },
       { type: "completed", finishReason: "stop" }
     ];
-    const stream = vi.fn(async function* (_providerId: string, _request: ModelRequest): AsyncIterable<ModelEvent> {
+    const stream = vi.fn(async function* (_providerId: string, _request: ModelRequest): AsyncGenerator<ModelEvent, void, unknown> {
       for (const event of events) yield event;
     });
     createRouter.mockReturnValue({ stream } as never);
@@ -68,7 +68,7 @@ describe("sendMessage AI Core integration", () => {
 
   it("does not treat an incomplete provider stream as a successful answer", async () => {
     native.mockReturnValue(true);
-    const stream = vi.fn(async function* (): AsyncIterable<ModelEvent> {
+    const stream = vi.fn(async function* (): AsyncGenerator<ModelEvent, void, unknown> {
       yield { type: "text_delta", text: "partial" };
     });
     createRouter.mockReturnValue({ stream } as never);
