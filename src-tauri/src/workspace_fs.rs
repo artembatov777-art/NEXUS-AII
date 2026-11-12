@@ -381,7 +381,8 @@ mod tests {
 
         let results = search_workspace_entries_in(&root, &root, "notes").expect("search approved root");
         assert_eq!(results.len(), 2);
-        assert!(results.iter().all(|entry| entry.path.starts_with(fs::canonicalize(&root).expect("canonical root").to_str().unwrap())));
+        let canonical_root = fs::canonicalize(&root).expect("canonical root");
+        assert!(results.iter().all(|entry| Path::new(&entry.path).starts_with(&canonical_root)));
         assert!(results.iter().any(|entry| entry.name == "meeting-notes.md"));
         assert!(search_workspace_entries_in(&root, &root, " ").is_err());
         assert!(search_workspace_entries_in(&root, &sibling, "notes").is_err());
