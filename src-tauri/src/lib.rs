@@ -95,6 +95,12 @@ fn valid_knowledge_chunk(chunk: &serde_json::Value) -> bool {
 
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 2_000_000;
 
+fn valid_provider_model_id(model: &str) -> bool {
+    !model.trim().is_empty()
+        && model.len() <= 128
+        && !model.chars().any(char::is_control)
+}
+
 fn validate_generation_parameters(temperature: Option<f32>, max_output_tokens: Option<u32>) -> Result<(), String> {
     if temperature.map_or(false, |value| !value.is_finite() || !(0.0..=2.0).contains(&value)) {
         return Err("Temperature must be a finite number between 0 and 2.".into());
@@ -540,6 +546,15 @@ mod payload_validation_tests {
         assert_eq!(load_provider_credential("none", true).unwrap(), None);
         assert!(load_provider_credential("none", false).is_err());
         assert_eq!(redact_provider_secret("provider error", None), "provider error");
+    }
+
+    #[test]
+    fn native_provider_model_ids_reject_empty_oversized_and_control_values() {
+        assert!(valid_provider_model_id("auto"));
+        assert!(valid_provider_model_id("qwen2.5:7b"));
+        assert!(!valid_provider_model_id("  "));
+        assert!(!valid_provider_model_id(&"x".repeat(129)));
+        assert!(!valid_provider_model_id("bad\nmodel"));
     }
 
     #[test]
@@ -1131,7 +1146,7 @@ async fn send_chat_stream(
         let path = format!("{}/chat/completions", endpoint.path().trim_end_matches('/'));
         endpoint.set_path(&path);
     }
-    if model.trim().is_empty() || model.len() > 128 || messages.is_empty() || messages.len() > 100 {
+    if !valid_provider_model_id(&model) || messages.is_empty() || messages.len() > 100 {
         return Err("A valid model and between 1 and 100 messages are required.".into());
     }
     let mut total_bytes = 0usize;
@@ -1297,7 +1312,7 @@ async fn send_chat(
         let path = format!("{}/chat/completions", endpoint.path().trim_end_matches('/'));
         endpoint.set_path(&path);
     }
-    if model.trim().is_empty() || model.len() > 128 || messages.is_empty() || messages.len() > 100 {
+    if !valid_provider_model_id(&model) || messages.is_empty() || messages.len() > 100 {
         return Err("A valid model and between 1 and 100 messages are required.".into());
     }
     let mut total_bytes = 0usize;
