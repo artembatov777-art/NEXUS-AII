@@ -4,6 +4,7 @@ import App from "./App";
 import { MobileDemo } from "./components/MobileDemo";
 import "./styles.css";
 import "./cinematic.css";
+import "./redesign.css";
 
 const isMobileDemo = new URLSearchParams(window.location.search).get("demo") === "1";
 
