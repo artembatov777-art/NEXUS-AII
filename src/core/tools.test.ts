@@ -54,6 +54,17 @@ describe("ToolGateway", () => {
     expect(permissions.authorize).not.toHaveBeenCalled();
   });
 
+  it("resolves a scoped permission resource from validated input without exposing the resolver in metadata", async () => {
+    const { gateway, permissions } = setup();
+    const tool = { ...definition(), resourceForInput: (input: { query: string }) => input.query };
+    expect(gateway.register(tool).ok).toBe(true);
+    expect(gateway.list()[0]).not.toHaveProperty("resourceForInput");
+    await gateway.execute("sample", { query: "C:\\approved\\notes.txt" }, context(), "user-1");
+    expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "C:\\approved\\notes.txt"
+    }));
+  });
+
   it("executes only after every permission is granted and audits lifecycle", async () => {
     const { gateway, permissions, audit } = setup();
     const tool = definition();
