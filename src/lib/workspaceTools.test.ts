@@ -47,7 +47,7 @@ describe("workspace agent tools", () => {
     const { registry, gateway } = setup();
     registerWorkspaceTools(registry);
     invokeMock.mockResolvedValue("\\n".repeat(60_000));
-    const result = await gateway.execute("workspace.read", { path: "C:\\approved\\notes.txt" }, {
+    const result = await gateway.execute<{ path: string; content: string; truncated: boolean; totalCharacters: number }>("workspace.read", { path: "C:\\approved\\notes.txt" }, {
       traceId: "trace", runId: "run", signal: new AbortController().signal
     }, "local-user");
     expect(result.ok).toBe(true);
@@ -63,7 +63,7 @@ describe("workspace agent tools", () => {
     const { registry, gateway } = setup();
     registerWorkspaceTools(registry);
     invokeMock.mockResolvedValue("😀".repeat(30_000));
-    const result = await gateway.execute("workspace.read", { path: "C:\\approved\\unicode.txt" }, {
+    const result = await gateway.execute<{ path: string; content: string; truncated: boolean; totalCharacters: number }>("workspace.read", { path: "C:\\approved\\unicode.txt" }, {
       traceId: "trace", runId: "run", signal: new AbortController().signal
     }, "local-user");
     expect(result.ok).toBe(true);
