@@ -250,7 +250,7 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
     if metadata.len() > MAX_TEXT_FILE_BYTES {
         return Err("This file is larger than the 2 MB preview limit.".into());
     }
-    let mut file = fs::File::open(&canonical).map_err(|e| format!("Could not read file: {e}"))?;
+    let file = fs::File::open(&canonical).map_err(|e| format!("Could not read file: {e}"))?;
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut bytes)
         .map_err(|e| format!("Could not read file: {e}"))?;
@@ -380,10 +380,11 @@ mod tests {
         fs::write(sibling.join("secret-notes.txt"), "outside note").expect("write outside note");
 
         let results = search_workspace_entries_in(&root, &root, "notes").expect("search approved root");
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
         let canonical_root = fs::canonicalize(&root).expect("canonical root");
         assert!(results.iter().all(|entry| Path::new(&entry.path).starts_with(&canonical_root)));
         assert!(results.iter().any(|entry| entry.name == "meeting-notes.md"));
+        assert!(results.iter().any(|entry| entry.name == "notes" && entry.kind == "directory"));
         assert!(search_workspace_entries_in(&root, &root, " ").is_err());
         assert!(search_workspace_entries_in(&root, &sibling, "notes").is_err());
         fs::remove_dir_all(&base).expect("cleanup");
