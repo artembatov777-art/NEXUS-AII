@@ -468,3 +468,7 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .model-pill{appearance:none;background:rgba(12,18,27,.76);font-family:inherit;line-height:1;cursor:pointer}
 .model-pill:hover{border-color:rgba(121,199,232,.42);background:rgba(17,35,49,.9)}
 .model-pill:focus-visible{outline:2px solid #79c7e8;outline-offset:3px}
+
+
+/* Token usage is surfaced as compact operational telemetry, not mixed into chat text. */
+.usage-indicator{color:var(--nx-muted,#829aaa);font-size:9px;white-space:nowrap;align-self:center;font-variant-numeric:tabular-nums}
