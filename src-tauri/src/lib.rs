@@ -94,6 +94,16 @@ fn valid_knowledge_chunk(chunk: &serde_json::Value) -> bool {
 }
 
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 2_000_000;
+
+fn validate_generation_parameters(temperature: Option<f32>, max_output_tokens: Option<u32>) -> Result<(), String> {
+    if temperature.map_or(false, |value| !value.is_finite() || !(0.0..=2.0).contains(&value)) {
+        return Err("Temperature must be a finite number between 0 and 2.".into());
+    }
+    if max_output_tokens.map_or(false, |value| value == 0 || value > 1_000_000) {
+        return Err("Maximum output tokens must be an integer between 1 and 1,000,000.".into());
+    }
+    Ok(())
+}
 fn append_bounded_response(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), String> {
     if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
         return Err("Provider response exceeded the 2 MB limit.".into());
@@ -1005,6 +1015,8 @@ async fn send_chat_stream(
     credential_handle: String,
     model: String,
     messages: Vec<ProviderInputMessage>,
+    temperature: Option<f32>,
+    max_output_tokens: Option<u32>,
     stream_id: String,
     on_event: tauri::ipc::Channel<serde_json::Value>,
     streams: State<'_, ActiveChatStreams>,
@@ -1051,12 +1063,15 @@ async fn send_chat_stream(
             return Err("Chat request exceeds the 1 MB content limit.".into());
         }
     }
+    validate_generation_parameters(temperature, max_output_tokens)?;
     let api_key = load_provider_credential(&credential_handle, loopback)?;
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "model": model.trim(),
         "messages": messages.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
         "stream": true
     });
+    if let Some(value) = temperature { payload["temperature"] = serde_json::json!(value); }
+    if let Some(value) = max_output_tokens { payload["max_tokens"] = serde_json::json!(value); }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(180))
         .redirect(reqwest::redirect::Policy::none())
