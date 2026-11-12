@@ -32,7 +32,7 @@ export function CommandCenter({
       <article><span>MODEL ROUTE</span><strong>{route === "remote" ? "REMOTE" : "LOCAL*"}</strong><small>{model || "No model selected"}</small></article>
       <article><span>PROJECTS</span><strong>{projectCount.toLocaleString()}</strong><small>Workspace projects</small></article>
       <article><span>CONVERSATIONS</span><strong>{conversationCount.toLocaleString()}</strong><small>Saved conversations</small></article>
-      <article><span>AI PROVIDER</span><strong>{providerReady ? "CONFIGURED" : "NOT VERIFIED"}</strong><small>{providerReady ? "Credential available" : "Connection not verified"}</small></article>
+      <article><span>AI PROVIDER</span><strong>{providerReady ? "VERIFIED" : "NOT VERIFIED"}</strong><small>{providerReady ? "Generation test passed" : "Run a model test in settings"}</small></article>
     </div>
     <div className="command-center-lower">
       <div className="command-launch">
@@ -49,9 +49,9 @@ export function CommandCenter({
       <aside className="command-focus">
         <div className="command-subheading"><span>COMMAND BRIEFING</span><Sparkles size={15}/></div>
         <div className="command-focus-orb"><Command size={24}/></div>
-        <h3>Make your next move.</h3>
-        <p>Start a focused planning session or configure the intelligence layer.</p>
-        <button className="command-primary" onClick={onStartPlanning}><Zap size={14}/> Plan a task</button>
+        <h3>Prepare your next move.</h3>
+        <p>Draft a task-planning prompt or configure the intelligence layer.</p>
+        <button className="command-primary" onClick={onStartPlanning}><Zap size={14}/> Draft a plan</button>
         <button className="command-secondary" onClick={onOpenSettings}><Settings2 size={14}/> Model settings</button>
       </aside>
     </div>
