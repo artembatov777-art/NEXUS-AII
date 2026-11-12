@@ -8,6 +8,8 @@ const terms=(s:string):string[]=>Array.from(s.toLocaleLowerCase().match(/[\p{L}\
 export class LocalStorageKnowledgeRepository implements KnowledgeRepository{
  constructor(private readonly storage:StorageLike,private readonly key=KEY){}
  async exportAll():Promise<Result<KnowledgeChunk[]>>{return this.read();}
+ /** Clear the legacy browser copy only after a successful native migration. */
+ clearLegacy():void{this.storage.setItem(this.key,"[]");}
  async replaceDocument(documentId:string,projectId:string,chunks:KnowledgeChunk[]):Promise<Result<void>>{
   if(chunks.length>500||!chunks.every(valid)||chunks.some(c=>c.documentId!==documentId||c.projectId!==projectId))return err("validation","Replacement document chunks are invalid.");
   const current=this.read();if(!current.ok)return current;
