@@ -38,11 +38,15 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
     catch(e) { return failure(e,"Could not load memory."); }
   }
   async list(scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
-    try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(r.scope!=="project"||!projectId||r.projectId===projectId)).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
+    try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(scope!=="project"||(!!projectId&&r.projectId===projectId))).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
     catch(e){return failure(e,"Could not load memories.");}
   }
   async search(query:string,scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
-    const records=await this.list(scope,200,projectId); if(!records.ok)return records; return ok(rankMemories(records.value,query).slice(0,limit));
+    try {
+      const records=await this.all();
+      const scoped=records.filter(record=>(scope==="all"||record.scope===scope)&&(scope!=="project"||(!!projectId&&record.projectId===projectId)));
+      return ok(rankMemories(scoped,query).slice(0,limit));
+    } catch(e) { return failure(e,"Could not search memories."); }
   }
   async save(record:MemoryRecord):Promise<Result<void>> {
     if(!isTauri())return this.local.save(record);
