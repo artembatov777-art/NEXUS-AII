@@ -44,8 +44,8 @@ describe("NEXUS Command Center", () => {
     expect(container.textContent).toContain("12");
     expect(container.textContent).toContain("NOT VERIFIED");
     expect(container.textContent).toContain("SYSTEM MONITOR");
-    expect(container.textContent).toContain("WORKSPACE STORAGE");
-    expect(container.textContent).toContain("MODEL GENERATION");
+    expect(container.textContent).toContain("Workspace storage");
+    expect(container.textContent).toContain("Model generation");
     expect(container.textContent).toContain("NEXUS AI CORE");
     expect(container.textContent).toContain("Awaiting a verified model connection");
   });
