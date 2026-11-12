@@ -196,7 +196,7 @@ describe("ModelRegistry", () => {
         yield { type: "completed" };
       }
     }
-    for (const modelId of ["bad\\nmodel", "я".repeat(65)]) {
+    for (const modelId of ["bad" + String.fromCharCode(10) + "model", "я".repeat(65)]) {
       const router = new ModelRouter();
       router.register(new InvalidProvider(modelId));
       const registry = new ModelRegistry(router);
