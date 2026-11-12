@@ -15,7 +15,7 @@ body{background:radial-gradient(ellipse at 72% 0%,rgba(47,42,103,.28),transparen
 .chat-heading>.eyebrow{justify-content:flex-start;color:#9c8cdb;font-size:8px;letter-spacing:2.5px;margin:0 0 10px}
 .chat-heading>h1{font:500 clamp(25px,2.8vw,38px) 'Space Grotesk';letter-spacing:-1.5px;color:#f1efff;margin:0 0 7px;max-width:70%;text-align:left}
 .chat-heading>p{font-size:11px;color:#8994b4;margin:0 0 18px;text-align:left;max-width:60%}
-.nexus-hero-core{position:absolute;right:8%;top:-4px;width:190px;height:190px;margin:0;transform:scale(.94);filter:drop-shadow(0 0 25px rgba(100,91,230,.14))}
+.nexus-hero-core{display:none;position:absolute;right:8%;top:-4px;width:190px;height:190px;margin:0;transform:scale(.94);filter:drop-shadow(0 0 25px rgba(100,91,230,.14))}
 .core-center{width:58px;height:58px;border-color:rgba(157,151,255,.68);background:radial-gradient(circle at 35% 28%,#6c65c8,#25244f 52%,#0b1126 82%);box-shadow:0 0 25px rgba(107,111,255,.5),inset 0 0 16px rgba(171,158,255,.35)}
 .core-center span{font-size:27px;color:#e5e0ff;text-shadow:0 0 14px #b5a2ff}
 .core-orbit{border-color:rgba(134,133,236,.38)}.core-orbit.orbit-two{border-color:rgba(83,159,237,.32)}.core-orbit.orbit-three{border-color:rgba(173,131,255,.24)}
