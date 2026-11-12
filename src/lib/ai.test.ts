@@ -51,11 +51,13 @@ describe("sendMessage AI Core integration", () => {
     });
     createRouter.mockReturnValue({ stream } as never);
     const deltas: string[] = [];
+    const usage: Array<{ inputTokens?: number; outputTokens?: number }> = [];
 
-    const result = await sendMessage(settings, messages, "Approved project reference", value => deltas.push(value));
+    const result = await sendMessage(settings, messages, "Approved project reference", value => deltas.push(value), undefined, value => usage.push(value));
 
     expect(result).toBe("Hello from NEXUS");
     expect(deltas).toEqual(["Hello ", "from NEXUS"]);
+    expect(usage).toEqual([{ inputTokens: 12, outputTokens: 4 }]);
     expect(createRouter).toHaveBeenCalledWith(settings);
     expect(stream).toHaveBeenCalledWith(NATIVE_MODEL_PROVIDER_ID, expect.objectContaining({
       model: "model-a",
