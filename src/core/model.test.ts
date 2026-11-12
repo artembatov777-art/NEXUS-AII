@@ -49,6 +49,25 @@ describe("ModelRouter", () => {
     expect(events.map(event => event.type)).toEqual(["text_delta", "text_delta", "completed"]);
   });
 
+  it("validates optional generation parameters before dispatch", async () => {
+    const router = new ModelRouter();
+    router.register(new FakeProvider());
+    await expect(async () => {
+      for await (const _event of router.stream("fake", {
+        model: "fake-model",
+        messages: [{ role: "user", content: "Hi" }],
+        temperature: 2.1
+      })) { /* consume */ }
+    }).rejects.toThrow(/temperature/i);
+    await expect(async () => {
+      for await (const _event of router.stream("fake", {
+        model: "fake-model",
+        messages: [{ role: "user", content: "Hi" }],
+        maxOutputTokens: 0
+      })) { /* consume */ }
+    }).rejects.toThrow(/output tokens/i);
+  });
+
   it("reports an unavailable provider", async () => {
     const router = new ModelRouter();
     await expect(async () => {
@@ -74,6 +93,39 @@ describe("ModelRegistry", () => {
     expect(selected.ok).toBe(true);
     const active = registry.getActiveModel();
     expect(active.ok && active.value.displayName).toBe("Fake Model");
+  });
+
+  it("prevents an older overlapping refresh from overwriting a newer catalog", async () => {
+    type ListResult = Awaited<ReturnType<ModelProvider["listModels"]>>;
+    const pending: Array<(result: ListResult) => void> = [];
+    class DeferredProvider implements ModelProvider {
+      readonly id = "deferred";
+      listModels(): Promise<ListResult> {
+        return new Promise(resolve => pending.push(resolve));
+      }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
+    }
+    const router = new ModelRouter();
+    router.register(new DeferredProvider());
+    const registry = new ModelRegistry(router, () => 777);
+
+    const olderRefresh = registry.refresh();
+    const newerRefresh = registry.refresh();
+    const newerModel: ModelDescriptor = {
+      id: "new-model", providerId: "deferred", displayName: "New Model",
+      supportsStreaming: true, supportsTools: false
+    };
+    pending[1](ok([newerModel]));
+    expect((await newerRefresh).ok).toBe(true);
+
+    const olderModel: ModelDescriptor = {
+      id: "old-model", providerId: "deferred", displayName: "Old Model",
+      supportsStreaming: true, supportsTools: false
+    };
+    pending[0](ok([olderModel]));
+    expect(await olderRefresh).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(registry.listModels().map(model => model.id)).toEqual(["new-model"]);
+    expect(registry.getSnapshot()).toMatchObject({ state: "ready", modelCount: 1 });
   });
 
   it("does not select models before a successful catalog refresh", () => {
