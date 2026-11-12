@@ -59,6 +59,12 @@ export class ModelRouter {
     if (!resolved.ok) throw new Error(resolved.error.message);
     if (!request.model.trim()) throw new Error("A model must be selected.");
     if (request.messages.length === 0) throw new Error("At least one message is required.");
+    if (request.temperature !== undefined && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)) {
+      throw new Error("Temperature must be a finite number between 0 and 2.");
+    }
+    if (request.maxOutputTokens !== undefined && (!Number.isInteger(request.maxOutputTokens) || request.maxOutputTokens < 1 || request.maxOutputTokens > 1_000_000)) {
+      throw new Error("Maximum output tokens must be an integer between 1 and 1,000,000.");
+    }
     if (request.signal?.aborted) throw new Error("Request cancelled.");
     yield* resolved.value.stream(request);
   }
@@ -82,6 +88,7 @@ export interface ModelRegistrySnapshot {
 export class ModelRegistry {
   private readonly catalog = new Map<string, ModelDescriptor>();
   private activeKey: string | null = null;
+  private refreshGeneration = 0;
   private snapshot: ModelRegistrySnapshot = {
     state: "unknown",
     checkedAt: null,
@@ -109,8 +116,12 @@ export class ModelRegistry {
   }
 
   async refresh(): Promise<Result<ModelDescriptor[]>> {
+    const generation = ++this.refreshGeneration;
+    const isCurrent = () => generation === this.refreshGeneration;
+    const superseded = () => err("cancelled", "A newer model catalog refresh superseded this request.");
     try {
       const result = await this.router.listModels();
+      if (!isCurrent()) return superseded();
       if (!result.ok) {
         this.snapshot = {
           state: "unavailable",
@@ -158,6 +169,7 @@ export class ModelRegistry {
       };
       return ok(this.listModels());
     } catch (cause) {
+      if (!isCurrent()) return superseded();
       const message = cause instanceof Error ? cause.message : "Model catalog refresh failed.";
       this.snapshot = {
         state: "unavailable",
