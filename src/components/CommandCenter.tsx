@@ -1,6 +1,6 @@
 import { Activity, BookOpen, Bot, Command, FolderKanban, FolderOpen, MemoryStick, Plug, Settings2, Sparkles, Zap } from "lucide-react";
 
-type CommandCenterProps = {
+function formatActivityTime(timestamp: number): string {\n  const elapsed = Math.max(0, Date.now() - timestamp);\n  if (elapsed < 60_000) return "just now";\n  if (elapsed < 3_600_000) return Math.floor(elapsed / 60_000) + "m ago";\n  if (elapsed < 86_400_000) return Math.floor(elapsed / 3_600_000) + "h ago";\n  return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });\n}\n\ntype CommandCenterProps = {
   projectCount: number;
   conversationCount: number;
   model: string;
@@ -74,8 +74,8 @@ export function CommandCenter({
       </div>
     </section>
     <section className="command-activity" aria-label="Recent workspace activity">
-      <div className="command-subheading"><span>RECENT WORKSPACE ACTIVITY</span><small>FROM SAVED CONVERSATIONS</small></div>
-      {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · {new Date(item.updatedAt).toLocaleString()}</small></div></li>)}</ol> : <p>No conversation activity yet. Start a chat and it will appear here.</p>}
+      <div className="command-subheading"><span>WORKSPACE TIMELINE</span><small>RECENT SAVED ACTIVITY</small></div>
+      {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · updated {formatActivityTime(item.updatedAt)}</small></div></li>)}</ol> : <p>No conversation activity yet. Start a chat and it will appear here.</p>}
     </section>
   </section>;
 }
