@@ -27,7 +27,7 @@ describe("NEXUS command palette", () => {
   it("filters commands by title and description", () => {
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Search commands"]');
     expect(input).not.toBeNull();
-    act(() => { input!.value = "Ollama"; input!.dispatchEvent(new Event("input", { bubbles: true })); });
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "Ollama"); input!.dispatchEvent(new Event("input", { bubbles: true })); });
     expect(container.textContent).toContain("Models & providers");
     expect(container.textContent).not.toContain("Agent center");
   });
