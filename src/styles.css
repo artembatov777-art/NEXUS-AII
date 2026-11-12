@@ -155,7 +155,7 @@ button:disabled {
 :root{color-scheme:dark;--nx-bg:#070b12;--nx-panel:#0b121d;--nx-line:rgba(117,166,197,.17);--nx-cyan:#79c7e8;--nx-muted:#8294a7;--nx-text:#e5f0f7}
 body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e 100%);color:var(--nx-text)}
 .app-shell{position:relative;background:linear-gradient(135deg,rgba(7,13,21,.97),rgba(6,10,17,.96))}
-.sidebar{background:rgba(7,13,21,.94);border-right:1px solid var(--nx-line);backdrop-filter:blur(18px)}
+.sidebar{background:linear-gradient(180deg,rgba(8,15,21,.99),rgba(5,10,15,.99));border-right:1px solid var(--nx-line);backdrop-filter:none;-webkit-backdrop-filter:none;filter:none}
 .brand-mark{color:#a7def5;background:linear-gradient(145deg,#183b52,#0b1b2a);border:1px solid rgba(121,199,232,.25);box-shadow:0 0 24px rgba(66,157,199,.12)}
 .brand strong{letter-spacing:.22em}.brand span{letter-spacing:.19em;color:#7897aa}
 .new-chat,.nav-item,.profile-row,.icon-btn,.model-pill,.composer{border-color:var(--nx-line)}
