@@ -37,6 +37,10 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
     try { return ok((await this.all()).find(record=>record.id===id)??null); }
     catch(e) { return failure(e,"Could not load memory."); }
   }
+  async exportAll():Promise<Result<MemoryRecord[]>> {
+    try { return ok(await this.all()); }
+    catch(e) { return failure(e,"Could not export memories."); }
+  }
   async list(scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
     try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(scope!=="project"||(!!projectId&&r.projectId===projectId))).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
     catch(e){return failure(e,"Could not load memories.");}
