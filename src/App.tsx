@@ -587,6 +587,7 @@ export default function App() {
       if (id === "new-chat") { newChat(); return; }
       if (id === "search") { setGlobalSearchOpen(true); closeMobileNavigation(); return; }
       if (id === "models") setSettingsOpen(true);
+      if (id === "training") setTrainingLabOpen(true);
       if (id === "agents") setAgentsOpen(true);
       if (id === "memory") setMemoryOpen(true);
       if (id === "knowledge") setKnowledgeOpen(true);
