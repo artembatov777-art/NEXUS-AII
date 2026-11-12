@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { MobileDemo } from "./components/MobileDemo";
 import "./styles.css";
+import "./cinematic.css";
 
 const isMobileDemo = new URLSearchParams(window.location.search).get("demo") === "1";
 
