@@ -583,6 +583,8 @@ export default function App() {
       setFileSystemOpen(false);
       setToolsOpen(false);
       if (id === "chat") { closeMobileNavigation(); return; }
+      if (id === "new-chat") { newChat(); return; }
+      if (id === "search") { setGlobalSearchOpen(true); closeMobileNavigation(); return; }
       if (id === "models") setSettingsOpen(true);
       if (id === "agents") setAgentsOpen(true);
       if (id === "memory") setMemoryOpen(true);
