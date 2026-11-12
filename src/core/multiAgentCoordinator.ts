@@ -214,7 +214,7 @@ export class MultiAgentCoordinator {
       const renderedOutput = typeof bounded.value === "string" ? bounded.value
         : outputRecord && typeof outputRecord.content === "string"
           ? `File: ${typeof outputRecord.path === "string" ? outputRecord.path : "workspace file"}\n\n${outputRecord.content}`
-          : JSON.stringify(bounded.value);
+          : (JSON.stringify(bounded.value) ?? String(bounded.value));
       const detail = renderedOutput.length > 10_000
         ? renderedOutput.slice(0, 10_000) + "\n[Output preview truncated at 10,000 characters.]"
         : renderedOutput;
