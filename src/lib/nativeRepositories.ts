@@ -128,69 +128,148 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
 export interface KnowledgeDocumentSummary { documentId:string; fileName:string; chunkCount:number; characterCount:number; }
 export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   private readonly local: LocalStorageKnowledgeRepository;
-  private migration?: Promise<KnowledgeChunk[]>;
-  constructor(storage:StorageLike){this.local=new LocalStorageKnowledgeRepository(storage);}
-  private async all():Promise<KnowledgeChunk[]> {
-    if(!isTauri()){const exported=await this.local.exportAll();if(!exported.ok)throw new Error(exported.error.message);return exported.value;}
+  private migration?: Promise<void>;
+
+  constructor(storage: StorageLike) {
+    this.local = new LocalStorageKnowledgeRepository(storage);
+  }
+
+  /** Import legacy chunks once; never cache the mutable native knowledge set. */
+  private async ensureMigrated(): Promise<void> {
+    if (!isTauri()) return;
     if (!this.migration) {
-      const pending = (async()=>{
-        const chunks=await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
-        const legacy=await this.local.exportAll();
-        if(!legacy.ok)throw new Error(legacy.error.message);
-        const existing = new Set(chunks.map(chunk => chunk.id));
+      const pending = (async () => {
+        const nativeChunks = await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
+        const legacy = await this.local.exportAll();
+        if (!legacy.ok) throw new Error(legacy.error.message);
+
+        const existing = new Set(nativeChunks.map(chunk => chunk.id));
         const missing = legacy.value.filter(chunk => !existing.has(chunk.id));
-        // Upsert only missing chunks so interrupted first-launch migrations
-        // can resume without replacing newer native document versions.
-        if(missing.length) await invoke("save_knowledge_chunks",{chunks:missing});
-        return chunks.length ? [...chunks, ...missing] : legacy.value;
+        if (missing.length) await invoke("save_knowledge_chunks", { chunks: missing });
       })();
-      this.migration = pending.catch(error => { this.migration = undefined; throw error; });
+      this.migration = pending.catch(error => {
+        this.migration = undefined;
+        throw error;
+      });
     }
-    return this.migration;
+    await this.migration;
   }
-  private async persist(chunks:KnowledgeChunk[]):Promise<Result<void>> {
-    if(!isTauri())return this.local.add(chunks);
-    try{await invoke("save_knowledge_chunks",{chunks});this.migration=Promise.resolve(chunks);return ok(undefined);}catch(e){return failure(e,"Could not persist project knowledge.");}
+
+  private async all(): Promise<KnowledgeChunk[]> {
+    if (!isTauri()) {
+      const exported = await this.local.exportAll();
+      if (!exported.ok) throw new Error(exported.error.message);
+      return exported.value;
+    }
+
+    await this.ensureMigrated();
+    // Separate UI services hold separate repository instances. Reload from
+    // SQLite on every operation so imports/deletions are visible immediately.
+    return invoke<KnowledgeChunk[]>("load_knowledge_chunks");
   }
-  async add(chunks:KnowledgeChunk[]):Promise<Result<void>> {const all=await this.readResult();if(!all.ok)return all;const ids=new Set(chunks.map(c=>c.id));return this.persist([...all.value.filter(c=>!ids.has(c.id)),...chunks]);}
-  async replaceDocument(documentId:string,projectId:string,chunks:KnowledgeChunk[]):Promise<Result<void>> {
-    if(!isTauri())return this.local.replaceDocument(documentId,projectId,chunks);
+
+  private async persist(chunks: KnowledgeChunk[]): Promise<Result<void>> {
+    if (!isTauri()) return this.local.add(chunks);
     try {
-      await invoke("replace_knowledge_document",{documentId,projectId,chunks});
-      this.migration=undefined;
+      await this.ensureMigrated();
+      await invoke("save_knowledge_chunks", { chunks });
       return ok(undefined);
-    } catch(e) { return failure(e,"Could not replace project knowledge document."); }
+    } catch (error) {
+      return failure(error, "Could not persist project knowledge.");
+    }
   }
-  async exportAll():Promise<Result<KnowledgeChunk[]>> { return this.readResult(); }
-  async getByIds(ids:string[]):Promise<Result<KnowledgeChunk[]>> {const all=await this.readResult();if(!all.ok)return all;const set=new Set(ids);return ok(all.value.filter(c=>set.has(c.id)));}
-  async search(query:string,projectId:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
-    if(!isTauri())return this.local.search(query,projectId,limit);
-    const all=await this.readResult();if(!all.ok)return all;
-    const terms=tokenizeKnowledgeTerms(query);
-    const ranked=all.value.filter(c=>c.projectId===projectId).map(chunk=>({chunk,score:terms.reduce((n,t)=>n+(chunk.text.toLocaleLowerCase().includes(t)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
-    return ok(ranked.slice(0,limit).map(x=>x.chunk));
+
+  async add(chunks: KnowledgeChunk[]): Promise<Result<void>> {
+    const all = await this.readResult();
+    if (!all.ok) return all;
+    const ids = new Set(chunks.map(chunk => chunk.id));
+    return this.persist([...all.value.filter(chunk => !ids.has(chunk.id)), ...chunks]);
   }
-  async searchAll(query:string,limit:number):Promise<Result<KnowledgeChunk[]>> {
-    if(!query.trim()||!Number.isInteger(limit)||limit<1||limit>100)return err("validation","Workspace knowledge search query or limit is invalid.");
-    const all=await this.readResult();if(!all.ok)return all;
-    const terms=tokenizeKnowledgeTerms(query);
-    if(!terms.length)return ok([]);
-    const ranked=all.value.map(chunk=>({chunk,score:terms.reduce((n,t)=>n+(chunk.text.toLocaleLowerCase().includes(t)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
-    return ok(ranked.slice(0,limit).map(x=>x.chunk));
-  }
-  async removeDocument(documentId:string,projectId:string):Promise<Result<void>> {
-    if(!isTauri())return this.local.removeDocument(documentId,projectId);
+
+  async replaceDocument(documentId: string, projectId: string, chunks: KnowledgeChunk[]): Promise<Result<void>> {
+    if (!isTauri()) return this.local.replaceDocument(documentId, projectId, chunks);
     try {
-      await invoke("delete_knowledge_document",{documentId,projectId});
-      this.migration=undefined;
+      await this.ensureMigrated();
+      await invoke("replace_knowledge_document", { documentId, projectId, chunks });
       return ok(undefined);
-    } catch(e) { return failure(e,"Could not remove project knowledge document."); }
+    } catch (error) {
+      return failure(error, "Could not replace project knowledge document.");
+    }
   }
-  async listDocuments(projectId:string):Promise<Result<KnowledgeDocumentSummary[]>> {
-    const all=await this.readResult();if(!all.ok)return all;
-    const grouped=new Map<string,KnowledgeDocumentSummary>();
-    for(const chunk of all.value.filter(c=>c.projectId===projectId)){const item=grouped.get(chunk.documentId)??{documentId:chunk.documentId,fileName:chunk.sourceLabel,chunkCount:0,characterCount:0};item.chunkCount++;item.characterCount+=chunk.text.length;grouped.set(chunk.documentId,item);}
-    return ok([...grouped.values()].sort((a,b)=>a.fileName.localeCompare(b.fileName)));
+
+  async exportAll(): Promise<Result<KnowledgeChunk[]>> {
+    return this.readResult();
   }
-  private async readResult():Promise<Result<KnowledgeChunk[]>> {try{return ok(await this.all());}catch(e){return failure(e,"Could not load project knowledge.");}}
+
+  async getByIds(ids: string[]): Promise<Result<KnowledgeChunk[]>> {
+    const all = await this.readResult();
+    if (!all.ok) return all;
+    const set = new Set(ids);
+    return ok(all.value.filter(chunk => set.has(chunk.id)));
+  }
+
+  async search(query: string, projectId: string, limit: number): Promise<Result<KnowledgeChunk[]>> {
+    if (!isTauri()) return this.local.search(query, projectId, limit);
+    const all = await this.readResult();
+    if (!all.ok) return all;
+    const terms = tokenizeKnowledgeTerms(query);
+    const ranked = all.value
+      .filter(chunk => chunk.projectId === projectId)
+      .map(chunk => ({ chunk, score: terms.reduce((count, term) => count + (chunk.text.toLocaleLowerCase().includes(term) ? 1 : 0), 0) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return ok(ranked.slice(0, limit).map(item => item.chunk));
+  }
+
+  async searchAll(query: string, limit: number): Promise<Result<KnowledgeChunk[]>> {
+    if (!query.trim() || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return err("validation", "Workspace knowledge search query or limit is invalid.");
+    }
+    const all = await this.readResult();
+    if (!all.ok) return all;
+    const terms = tokenizeKnowledgeTerms(query);
+    if (!terms.length) return ok([]);
+    const ranked = all.value
+      .map(chunk => ({ chunk, score: terms.reduce((count, term) => count + (chunk.text.toLocaleLowerCase().includes(term) ? 1 : 0), 0) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return ok(ranked.slice(0, limit).map(item => item.chunk));
+  }
+
+  async removeDocument(documentId: string, projectId: string): Promise<Result<void>> {
+    if (!isTauri()) return this.local.removeDocument(documentId, projectId);
+    try {
+      await this.ensureMigrated();
+      await invoke("delete_knowledge_document", { documentId, projectId });
+      return ok(undefined);
+    } catch (error) {
+      return failure(error, "Could not remove project knowledge document.");
+    }
+  }
+
+  async listDocuments(projectId: string): Promise<Result<KnowledgeDocumentSummary[]>> {
+    const all = await this.readResult();
+    if (!all.ok) return all;
+    const grouped = new Map<string, KnowledgeDocumentSummary>();
+    for (const chunk of all.value.filter(item => item.projectId === projectId)) {
+      const item = grouped.get(chunk.documentId) ?? {
+        documentId: chunk.documentId,
+        fileName: chunk.sourceLabel,
+        chunkCount: 0,
+        characterCount: 0
+      };
+      item.chunkCount += 1;
+      item.characterCount += chunk.text.length;
+      grouped.set(chunk.documentId, item);
+    }
+    return ok([...grouped.values()].sort((a, b) => a.fileName.localeCompare(b.fileName)));
+  }
+
+  private async readResult(): Promise<Result<KnowledgeChunk[]>> {
+    try {
+      return ok(await this.all());
+    } catch (error) {
+      return failure(error, "Could not load project knowledge.");
+    }
+  }
 }
