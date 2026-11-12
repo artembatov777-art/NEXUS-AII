@@ -76,6 +76,7 @@ describe("TauriModelProvider", () => {
     });
     await expect((async () => { for await (const _ of stream) { /* consume */ } })())
       .rejects.toThrow(/temporarily unavailable/i);
+    expect(mockedInvoke.mock.calls.filter(([command]) => command === "send_chat_stream")).toHaveLength(1);
   });
 
   it("routes planner requests through the native credential handle without returning secrets", async () => {
