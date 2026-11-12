@@ -72,7 +72,10 @@ class TauriModelProvider implements ModelProvider {
     const channel = new Channel<{ type: "text_delta" | "usage" | "completed"; text?: string; finishReason?: string; inputTokens?: number; outputTokens?: number }>();
     const streamId = crypto.randomUUID();
     let completed = false;
+    let cancellationSent = false;
     const cancelNativeStream = () => {
+      if (cancellationSent) return;
+      cancellationSent = true;
       void invoke<boolean>("cancel_chat_stream", { streamId }).catch(() => false);
     };
     const queue: ModelEvent[] = [];
@@ -85,7 +88,7 @@ class TauriModelProvider implements ModelProvider {
     const abortPromise = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
     const abortHandler = () => {
       const error = new Error("Model request was cancelled.");
-      cancelNativeStream();
+      if (!done) cancelNativeStream();
       failure = error;
       done = true;
       wake?.();
@@ -148,9 +151,13 @@ class TauriModelProvider implements ModelProvider {
       await Promise.race([streamPromise, abortPromise]);
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
       completed = true;
+    } catch (cause) {
+      // A failed native request has already released its registration. Do not
+      // enqueue a cancellation for an ID that is no longer active.
+      throw cause;
     } finally {
       request.signal?.removeEventListener("abort", abortHandler);
-      if (!completed) cancelNativeStream();
+      if (!completed && !failure && !requestError) cancelNativeStream();
     }
   }
 }
