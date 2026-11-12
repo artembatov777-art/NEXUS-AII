@@ -1,0 +1,507 @@
+/* NEXUS AU · Cinematic interface layer
+   Visual-only refinement. Runtime state is supplied by App's data attributes. */
+
+:root {
+  --nx-cyan-bright: #a7e7ff;
+  --nx-cyan-soft: rgba(121, 199, 232, .22);
+  --nx-glass: rgba(9, 20, 31, .76);
+  --nx-glass-strong: rgba(8, 17, 27, .94);
+  --nx-depth: 0 24px 80px rgba(0, 0, 0, .34);
+}
+
+.app-shell[data-shell="cinematic"] {
+  background:
+    radial-gradient(ellipse at 58% 8%, rgba(37, 100, 132, .13), transparent 38%),
+    linear-gradient(135deg, #07101a 0%, #060b13 54%, #080e17 100%);
+}
+
+.main-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.main-panel::before,
+.main-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.main-panel::before {
+  z-index: 0;
+  opacity: .2;
+  background-image:
+    linear-gradient(rgba(112, 180, 210, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(112, 180, 210, .045) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+.main-panel::after {
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 50% 18%, transparent 0%, transparent 34%, rgba(2, 7, 13, .24) 100%),
+    linear-gradient(90deg, rgba(2, 7, 13, .12), transparent 14%, transparent 86%, rgba(2, 7, 13, .12));
+}
+
+.main-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.topbar {
+  flex: 0 0 68px;
+  border-bottom-color: rgba(121, 199, 232, .13);
+  background: rgba(5, 12, 20, .78);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .12);
+}
+
+.runtime-indicator {
+  background: rgba(10, 24, 36, .56);
+  backdrop-filter: blur(12px);
+}
+
+.model-pill {
+  box-shadow: inset 0 1px rgba(218, 244, 255, .035), 0 5px 20px rgba(0, 0, 0, .12);
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.chat-area {
+  position: relative;
+  z-index: 1;
+  padding-top: clamp(22px, 3.8vh, 42px);
+  padding-bottom: 26px;
+}
+
+.chat-heading {
+  min-height: 0;
+  padding: 10px 0 22px;
+  margin-bottom: 12px;
+}
+
+.chat-heading .eyebrow {
+  font-size: 9px;
+  text-shadow: 0 0 18px rgba(121, 199, 232, .24);
+}
+
+.nexus-hero-core {
+  width: 270px;
+  height: 270px;
+  margin: 0 auto -2px;
+  filter: drop-shadow(0 16px 34px rgba(13, 83, 117, .14));
+}
+
+.nexus-hero-core::before,
+.nexus-hero-core::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.nexus-hero-core::before {
+  inset: 17px;
+  border: 1px solid rgba(121, 199, 232, .09);
+  box-shadow: 0 0 42px rgba(75, 177, 218, .08), inset 0 0 36px rgba(75, 177, 218, .055);
+}
+
+.nexus-hero-core::after {
+  inset: 4px;
+  border: 1px solid rgba(121, 199, 232, .08);
+  mask-image: conic-gradient(from 15deg, black 0 14%, transparent 14% 23%, black 23% 38%, transparent 38% 55%, black 55% 72%, transparent 72% 83%, black 83%);
+  animation: nx-dial-turn 38s linear infinite;
+}
+
+.core-glow {
+  width: 158px;
+  height: 158px;
+  background: radial-gradient(circle, rgba(102, 207, 247, .29), rgba(33, 103, 143, .12) 48%, transparent 72%);
+  filter: blur(13px);
+  animation: nx-core-breathe 4.8s ease-in-out infinite;
+}
+
+.core-center {
+  width: 94px;
+  height: 94px;
+  border-color: rgba(170, 231, 255, .72);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(81, 156, 188, .72), transparent 34%),
+    radial-gradient(circle at 50% 50%, #15344a 0%, #091927 68%, #06111b 100%);
+  box-shadow:
+    0 0 0 7px rgba(121, 199, 232, .035),
+    0 0 28px rgba(88, 185, 226, .36),
+    0 0 76px rgba(49, 147, 190, .13),
+    inset 0 0 24px rgba(83, 173, 214, .25);
+  animation: nx-core-float 5.6s ease-in-out infinite;
+}
+
+.core-center span {
+  text-shadow: 0 0 12px rgba(121, 199, 232, .8), 0 0 34px rgba(121, 199, 232, .36);
+}
+
+.core-orbit {
+  will-change: transform;
+  border-color: rgba(121, 199, 232, .38);
+  box-shadow: 0 0 15px rgba(64, 151, 192, .1), inset 0 0 12px rgba(64, 151, 192, .035);
+}
+
+.orbit-one {
+  width: 154px;
+  height: 154px;
+  animation: nx-orbit-flat 22s linear infinite;
+}
+
+.orbit-two {
+  width: 204px;
+  height: 204px;
+  border-color: rgba(121, 199, 232, .46);
+  animation: nx-orbit-x 29s linear infinite;
+}
+
+.orbit-three {
+  width: 238px;
+  height: 238px;
+  border-color: rgba(121, 199, 232, .24);
+  animation: nx-orbit-y 37s linear infinite reverse;
+}
+
+.core-crosshair {
+  width: 254px;
+  height: 254px;
+  border-color: rgba(121, 199, 232, .13);
+  animation: nx-dial-turn 72s linear infinite reverse;
+}
+
+.core-label {
+  color: #7fa6ba;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
+}
+
+.chat-heading h1 {
+  text-shadow: 0 4px 28px rgba(0, 0, 0, .4);
+}
+
+.chat-heading > p {
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.nexus-system-grid {
+  width: min(100%, 820px);
+  gap: 12px;
+  margin: 20px auto 15px;
+}
+
+.nexus-system-card {
+  min-height: 96px;
+  overflow: hidden;
+  border-color: rgba(121, 199, 232, .16);
+  background:
+    linear-gradient(145deg, rgba(16, 39, 55, .9), rgba(7, 17, 27, .86)),
+    var(--nx-glass);
+  box-shadow: inset 0 1px rgba(220, 246, 255, .045), 0 10px 28px rgba(0, 0, 0, .13);
+  backdrop-filter: blur(14px);
+}
+
+.nexus-system-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -25% -48px -25%;
+  height: 70px;
+  background: radial-gradient(ellipse, rgba(91, 183, 220, .1), transparent 70%);
+  opacity: .55;
+  pointer-events: none;
+}
+
+.nexus-system-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(141, 218, 246, .36);
+  box-shadow: inset 0 1px rgba(220, 246, 255, .07), 0 15px 34px rgba(0, 0, 0, .2);
+}
+
+.app-shell[data-state="processing"] .core-center {
+  animation-duration: 1.9s;
+  box-shadow: 0 0 0 8px rgba(121, 199, 232, .055), 0 0 36px rgba(88, 185, 226, .55), 0 0 100px rgba(49, 147, 190, .24), inset 0 0 26px rgba(83, 173, 214, .34);
+}
+
+.app-shell[data-state="processing"] .core-glow {
+  animation-duration: 1.3s;
+  opacity: 1;
+}
+
+.app-shell[data-state="processing"] .orbit-one {
+  animation-duration: 8s;
+}
+
+.app-shell[data-state="processing"] .orbit-two {
+  animation-duration: 11s;
+}
+
+.app-shell[data-state="processing"] .orbit-three {
+  animation-duration: 14s;
+}
+
+.app-shell[data-state="connected"] .core-center {
+  box-shadow: 0 0 0 7px rgba(121, 199, 232, .04), 0 0 34px rgba(88, 185, 226, .4), 0 0 84px rgba(49, 147, 190, .18), inset 0 0 24px rgba(83, 173, 214, .25);
+}
+
+.app-shell[data-route="remote"] .model-pill .status-dot {
+  background: #e0bd82;
+  box-shadow: 0 0 10px rgba(224, 189, 130, .58);
+}
+
+.messages {
+  border-top-color: rgba(121, 199, 232, .16);
+  scroll-behavior: smooth;
+  scrollbar-color: rgba(102, 158, 184, .28) transparent;
+}
+
+.message {
+  animation: nx-message-enter .34s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+.message-avatar {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .16);
+}
+
+.message.assistant .message-content {
+  line-height: 1.78;
+}
+
+.composer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(13, 29, 42, .97), rgba(7, 16, 26, .97));
+  border-color: rgba(121, 199, 232, .25);
+  box-shadow: inset 0 1px rgba(220, 246, 255, .045), 0 18px 48px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(18px);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.composer:focus-within {
+  border-color: rgba(151, 224, 250, .58);
+  box-shadow: 0 0 0 3px rgba(80, 160, 200, .1), 0 18px 52px rgba(0, 0, 0, .32);
+}
+
+.send-btn {
+  min-width: 84px;
+  justify-content: center;
+  background: linear-gradient(135deg, #287493, #123c55);
+  box-shadow: 0 5px 18px rgba(39, 123, 157, .18), inset 0 1px rgba(220, 246, 255, .1);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+.send-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.12);
+  box-shadow: 0 8px 22px rgba(39, 123, 157, .26);
+}
+
+.sidebar {
+  background: linear-gradient(180deg, rgba(8, 19, 29, .98), rgba(6, 13, 21, .98));
+  box-shadow: 12px 0 44px rgba(0, 0, 0, .12);
+}
+
+.brand-mark {
+  box-shadow: 0 0 26px rgba(66, 157, 199, .18), inset 0 1px rgba(220, 246, 255, .12);
+}
+
+.brand-mark:after {
+  animation-duration: 5.5s;
+}
+
+.modal-backdrop,
+.memory-backdrop,
+.agent-backdrop {
+  background: rgba(1, 6, 11, .78);
+  backdrop-filter: blur(12px) saturate(115%);
+}
+
+.settings-modal,
+.memory-modal,
+.project-modal,
+.knowledge-modal,
+.training-modal,
+.agent-center,
+.global-search-modal,
+.file-workspace,
+.tools-workspace {
+  border-color: rgba(121, 199, 232, .22);
+  background: linear-gradient(145deg, rgba(15, 29, 42, .99), rgba(7, 15, 24, .99));
+  box-shadow: 0 30px 110px rgba(0, 0, 0, .62), inset 0 1px rgba(220, 246, 255, .045);
+}
+
+.secondary-btn,
+.agent-small-button {
+  transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
+}
+
+.secondary-btn:hover,
+.agent-small-button:hover {
+  border-color: rgba(121, 199, 232, .36);
+  background: rgba(27, 62, 82, .72);
+  color: #dff5ff;
+}
+
+:where(button, input, textarea, select):focus-visible {
+  outline: 2px solid rgba(151, 224, 250, .88);
+  outline-offset: 3px;
+}
+
+@keyframes nx-orbit-flat {
+  to { transform: rotate(360deg); }
+}
+@keyframes nx-orbit-x {
+  to { transform: rotateX(67deg) rotateZ(335deg); }
+}
+@keyframes nx-orbit-y {
+  to { transform: rotateY(66deg) rotateZ(388deg); }
+}
+@keyframes nx-dial-turn {
+  to { transform: rotate(360deg); }
+}
+@keyframes nx-core-breathe {
+  0%, 100% { transform: scale(.92); opacity: .78; }
+  50% { transform: scale(1.13); opacity: 1; }
+}
+@keyframes nx-core-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes nx-message-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cinematic mobile preview: the phone surface shares the desktop core language. */
+.mobile-demo {
+  background:
+    radial-gradient(ellipse at 50% -12%, rgba(33, 94, 126, .46), transparent 45%),
+    radial-gradient(ellipse at 50% 110%, rgba(15, 57, 79, .2), transparent 42%),
+    #050b12;
+}
+
+.demo-device {
+  border-color: rgba(121, 199, 232, .28);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(35, 88, 116, .16), transparent 42%),
+    #080f18;
+  box-shadow: 0 34px 110px rgba(0, 0, 0, .68), 0 0 0 7px rgba(11, 23, 34, .9), 0 0 48px rgba(63, 151, 190, .1);
+}
+
+.demo-topbar,
+.demo-tabbar {
+  background: rgba(7, 16, 26, .96);
+  backdrop-filter: blur(20px);
+}
+
+.demo-brand-mark {
+  box-shadow: 0 0 26px rgba(80, 176, 216, .2), inset 0 1px rgba(220, 246, 255, .12);
+}
+
+.demo-orb {
+  isolation: isolate;
+  box-shadow: 0 0 38px rgba(88, 185, 226, .22), inset 0 0 24px rgba(83, 173, 214, .2);
+  animation: nx-mobile-core 4.2s ease-in-out infinite;
+}
+
+.demo-orb::before {
+  border-color: rgba(151, 224, 250, .46);
+  animation: nx-mobile-orbit 13s linear infinite;
+}
+
+.demo-orb::after {
+  border-color: rgba(121, 199, 232, .3);
+  animation: nx-mobile-orbit 19s linear infinite reverse;
+}
+
+.demo-orb-inner {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 9px rgba(121, 199, 232, .9));
+}
+
+.demo-model-card,
+.demo-module-card,
+.demo-project-card,
+.demo-memory-summary,
+.demo-memory-group article,
+.demo-settings-profile,
+.demo-tool-row,
+.demo-document-row,
+.demo-file-row {
+  box-shadow: inset 0 1px rgba(220, 246, 255, .035), 0 8px 22px rgba(0, 0, 0, .12);
+}
+
+.demo-tabbar button,
+.demo-round-button,
+.demo-suggestions button,
+.demo-send-button {
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, filter .18s ease;
+}
+
+.demo-tabbar button:active,
+.demo-round-button:active,
+.demo-suggestions button:active,
+.demo-send-button:active {
+  transform: scale(.97);
+}
+
+.demo-tabbar button.active {
+  box-shadow: inset 0 0 0 1px rgba(151, 224, 250, .2), 0 0 18px rgba(73, 154, 192, .08);
+}
+
+.demo-chat-footer {
+  background: rgba(7, 16, 26, .97);
+  backdrop-filter: blur(18px);
+}
+
+@keyframes nx-mobile-core {
+  0%, 100% { transform: translateY(0) scale(.985); }
+  50% { transform: translateY(-3px) scale(1.015); }
+}
+@keyframes nx-mobile-orbit {
+  to { transform: rotateX(65deg) rotateZ(385deg); }
+}
+
+@media (max-width: 760px) {
+  .chat-area { padding: 16px 13px 14px; }
+  .chat-heading { padding-top: 5px; padding-bottom: 13px; }
+  .nexus-hero-core { width: 222px; height: 222px; transform: scale(.9); margin: -8px auto -12px; }
+  .core-crosshair { width: 218px; height: 218px; }
+  .orbit-three { width: 208px; height: 208px; }
+  .core-label { font-size: 7px; }
+  .nexus-system-grid { margin-top: 12px; gap: 7px; }
+  .nexus-system-card { min-height: 75px; padding: 10px; }
+  .nexus-system-card strong { margin-top: 7px; font-size: 10px; }
+  .nexus-system-card small { font-size: 8px; }
+  .composer-wrap { padding-bottom: env(safe-area-inset-bottom); }
+  .composer { border-radius: 15px; }
+  .composer textarea { min-height: 54px; font-size: 16px; }
+  .composer-bottom { gap: 8px; flex-wrap: wrap; }
+  .composer-bottom > span { min-width: 0; flex: 1 1 100%; font-size: 9px; line-height: 1.4; }
+  .usage-indicator { margin-left: auto; }
+  .send-btn { min-height: 38px; }
+  .topbar { gap: 8px; }
+  .top-right { gap: 6px; }
+  .runtime-indicator { display: none; }
+  .model-pill { max-width: 56vw; }
+}
+
+@media (max-width: 390px) {
+  .breadcrumb { display: none; }
+  .chat-heading h1 { font-size: 23px; }
+  .chat-heading > p { font-size: 11px; }
+  .nexus-system-card { min-height: 70px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
