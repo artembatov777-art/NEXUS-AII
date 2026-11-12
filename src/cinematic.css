@@ -821,3 +821,25 @@
 .command-activity li small { color:#777d9d; font-size:8px; }
 .command-activity>p { margin:4px 0 2px; color:#8185a3; font-size:9px; }
 @media(max-width:640px) { .command-activity ol { grid-template-columns:1fr; } }
+
+/* Dashboard-first home and compact conversation layout */
+.chat-area[data-home="true"] { overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(141,119,220,.25) transparent; }
+.chat-area[data-home="true"] .chat-heading,
+.chat-area[data-home="true"] .nexus-system-grid,
+.chat-area[data-home="true"] .messages,
+.chat-area[data-home="true"] .suggestions { display:none; }
+.chat-area[data-home="true"] .command-center { flex-shrink:0; }
+.chat-area[data-home="true"] .chat-project-context { flex-shrink:0; margin:0 auto 10px; }
+.chat-area[data-home="true"] .composer-wrap { position:sticky; bottom:0; z-index:3; flex-shrink:0; padding-top:12px; background:linear-gradient(180deg,rgba(7,8,18,0),rgba(7,8,18,.94) 18%); }
+.chat-area[data-home="false"] .chat-heading { min-height:0; padding:14px 0 10px; margin-bottom:12px; }
+.chat-area[data-home="false"] .nexus-hero-core,
+.chat-area[data-home="false"] .nexus-system-grid { display:none; }
+.chat-area[data-home="false"] .chat-heading .eyebrow { justify-content:flex-start; }
+.chat-area[data-home="false"] .chat-heading h1 { margin:5px 0 3px; font-size:20px; }
+.chat-area[data-home="false"] .chat-heading>p { margin:0; font-size:10px; }
+@media(max-width:640px) {
+  .chat-area[data-home="true"] { padding-top:12px; }
+  .chat-area[data-home="true"] .command-center { margin-top:6px; }
+  .chat-area[data-home="false"] .chat-heading { padding:10px 0; }
+  .chat-area[data-home="false"] .chat-heading h1 { font-size:17px; }
+}
