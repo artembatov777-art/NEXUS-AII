@@ -8,6 +8,7 @@ import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriMo
 import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
 import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
+import { registerWorkspaceTools } from "../lib/workspaceTools";
 import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
 import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
 
@@ -50,10 +51,18 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
       const models = hasProviderKey ? createTauriModelRouter(providerSettings) : null;
       const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
-        authorizeTool: async () => "deny"
+        authorizeTool: async ({ scope, resource }) => {
+          if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
+            const action = scope === "filesystem:read:selected" ? "read files" : "create or edit files and folders";
+            return window.confirm(`Allow the NEXUS agent to ${action} using ${resource}? Access remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
+          }
+          return "deny";
+        }
       }, models ?? undefined);
       const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
       if (!registered.ok) throw new Error(registered.error.message);
+      const workspaceTools = registerWorkspaceTools(runtime.toolRegistry);
+      if (!workspaceTools.ok) throw new Error(workspaceTools.error.message);
       return { runtime, error: "", profile: loadedProfile.value };
     } catch (cause) {
       return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
@@ -68,7 +77,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
-  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview"]) ?? null, [runtime, providerSettings.model]);
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview", "workspace.list", "workspace.read", "workspace.write", "workspace.mkdir"]) ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
@@ -156,7 +165,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   async function startPlannedWorkflow() {
     if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
     const goal = task.trim();
-    if (!window.confirm("Send this task to your configured AI provider? The planner may execute only the built-in local preview tool. No external tool or system action is permitted.")) return;
+    if (!window.confirm("Send this task to your configured AI provider? The planner may use the built-in preview and workspace tools. File access remains limited to directories you explicitly approved, and each read or write requires confirmation. No external tool or system action is permitted.")) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
@@ -265,7 +274,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
             <label className="agent-task-label" htmlFor="agent-task">Task input</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
             <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!hasProviderKey || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow ? "Create a model plan and execute registered tools through the permission-gated runtime" : "Save a provider API key in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
-            <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can execute only registered tools through the permission-gated runtime; unapproved external tools remain blocked.</div>
+            <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
           <article className="agent-card">
