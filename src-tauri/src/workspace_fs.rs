@@ -39,12 +39,36 @@ impl WorkspaceAccess {
         file.write_all(&serialized).map_err(|e| format!("Could not save workspace permissions: {e}"))?;
         file.sync_all().map_err(|e| format!("Could not flush workspace permissions: {e}"))?;
         #[cfg(windows)]
-        if self.persistence_path.exists() {
-            fs::remove_file(&self.persistence_path)
-                .map_err(|e| format!("Could not replace workspace permissions: {e}"))?;
+        {
+            // Windows rename does not replace an existing destination. Keep a
+            // rollback copy so a failed replacement never destroys the last
+            // saved permission list.
+            let backup = self.persistence_path.with_extension("json.bak");
+            if backup.exists() {
+                fs::remove_file(&backup)
+                    .map_err(|e| format!("Could not clear old workspace permission backup: {e}"))?;
+            }
+            let had_previous = self.persistence_path.exists();
+            if had_previous {
+                fs::rename(&self.persistence_path, &backup)
+                    .map_err(|e| format!("Could not preserve existing workspace permissions: {e}"))?;
+            }
+            if let Err(error) = fs::rename(&temporary, &self.persistence_path) {
+                if had_previous {
+                    let _ = fs::rename(&backup, &self.persistence_path);
+                }
+                return Err(format!("Could not finalize workspace permissions: {error}"));
+            }
+            if had_previous {
+                let _ = fs::remove_file(&backup);
+            }
+            Ok(())
         }
-        fs::rename(&temporary, &self.persistence_path)
-            .map_err(|e| format!("Could not finalize workspace permissions: {e}"))
+        #[cfg(not(windows))]
+        {
+            fs::rename(&temporary, &self.persistence_path)
+                .map_err(|e| format!("Could not finalize workspace permissions: {e}"))
+        }
     }
 
     fn allowed_root_for(&self, path: &Path) -> Result<PathBuf, String> {
@@ -222,6 +246,49 @@ mod tests {
         };
         assert!(access.allowed_root_for(&root).is_ok());
         assert!(access.allowed_root_for(&sibling).is_err());
+        fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[test]
+    fn permissions_persist_and_reload_after_multiple_updates() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-persist-{}-{nonce}", std::process::id()));
+        let first = base.join("first");
+        let second = base.join("second");
+        fs::create_dir_all(&first).expect("create first root");
+        fs::create_dir_all(&second).expect("create second root");
+        let persistence_path = base.join("settings").join("allowed-workspace-directories.json");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&first).expect("canonical first root")]),
+            persistence_path: persistence_path.clone(),
+        };
+
+        access.persist(&[fs::canonicalize(&first).expect("canonical first")]).expect("persist first root");
+        access.persist(&[
+            fs::canonicalize(&first).expect("canonical first"),
+            fs::canonicalize(&second).expect("canonical second"),
+        ]).expect("replace with two roots");
+
+        let reloaded = WorkspaceAccess::load(persistence_path);
+        let roots = reloaded.roots.lock().expect("lock reloaded roots");
+        assert_eq!(roots.len(), 2);
+        assert!(roots.contains(&fs::canonicalize(&first).expect("canonical first")));
+        assert!(roots.contains(&fs::canonicalize(&second).expect("canonical second")));
+        drop(roots);
+        fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[test]
+    fn permission_persistence_rejects_no_valid_paths_by_default() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-invalid-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&base).expect("create test directory");
+        let persistence_path = base.join("allowed-workspace-directories.json");
+        fs::write(&persistence_path, r#"["/path/that/does/not/exist"]"#).expect("write stale permission");
+        let access = WorkspaceAccess::load(persistence_path);
+        assert!(access.roots.lock().expect("lock roots").is_empty());
         fs::remove_dir_all(&base).expect("cleanup");
     }
 
