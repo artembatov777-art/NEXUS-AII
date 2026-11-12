@@ -64,7 +64,7 @@ export function CommandCenter(props: CommandCenterProps) {
         <div className="deck-briefing-mark"><Command size={22}/><span>READY FOR INPUT</span></div>
         <h4>Turn an idea into a plan.</h4><p>Break a goal into steps, identify dependencies and prepare a bounded workflow.</p>
         <button className="deck-plan-button" onClick={onStartPlanning}><Zap size={14}/> Draft a plan <ArrowUpRight size={13}/></button>
-        <button className="deck-settings-link" onClick={onOpenSettings}><Cpu size={14}/> Open model configuration</button>
+        <button className="deck-settings-link" onClick={onOpenSettings} aria-label="Open model settings"><Cpu size={14}/> Open model configuration</button>
       </aside>
     </div>
     <div className="deck-bottom">
