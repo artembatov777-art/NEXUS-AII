@@ -7,6 +7,22 @@ import { normalizeProviderFailure, normalizeProviderModelIds, providerEndpointEr
 
 export const NATIVE_MODEL_PROVIDER_ID = "nexus.native-provider";
 
+/** Model discovery is an idempotent GET, so retry one transient failure. Chat POSTs are never auto-retried to avoid duplicate generation or billing. */
+async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string): Promise<unknown> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await invoke<unknown>("list_provider_models", { baseUrl, credentialHandle });
+    } catch (cause) {
+      lastError = cause;
+      const failure = normalizeProviderFailure(cause);
+      if (!failure.retryable || attempt === 1) throw cause;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+  throw lastError;
+}
+
 class TauriModelProvider implements ModelProvider {
   readonly id = NATIVE_MODEL_PROVIDER_ID;
   constructor(private readonly settings: ProviderSettings) {}
@@ -18,10 +34,10 @@ class TauriModelProvider implements ModelProvider {
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) return err("validation", endpointError);
     try {
-      const ids = await invoke<unknown>("list_provider_models", {
-        baseUrl: this.settings.baseUrl,
-        credentialHandle: this.settings.credentialHandle ?? "default"
-      });
+      const ids = await invokeCatalogWithRetry(
+        this.settings.baseUrl,
+        this.settings.credentialHandle ?? "default"
+      );
       const uniqueIds = normalizeProviderModelIds(ids);
       if (!uniqueIds.includes(this.settings.model)) uniqueIds.unshift(this.settings.model);
       return ok(uniqueIds.map(id => ({
