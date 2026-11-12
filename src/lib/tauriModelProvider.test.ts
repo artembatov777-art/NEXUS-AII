@@ -33,6 +33,32 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+  it("normalizes provider discovery authentication failures", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockRejectedValue(new Error("Provider returned HTTP 401: secret=hidden"));
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    await expect(router.listModels()).resolves.toMatchObject({
+      ok: false,
+      error: { code: "authentication", retryable: false, message: expect.not.stringContaining("hidden") }
+    });
+  });
+
+  it("normalizes transient provider failures during streaming", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation(command => {
+      if (command === "send_chat_stream") return Promise.reject(new Error("Provider returned HTTP 503: backend unavailable"));
+      return Promise.resolve(true);
+    });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "plan" }]
+    });
+    await expect((async () => { for await (const _ of stream) { /* consume */ } })())
+      .rejects.toThrow(/temporarily unavailable/i);
+  });
+
   it("routes planner requests through the native credential handle without returning secrets", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
