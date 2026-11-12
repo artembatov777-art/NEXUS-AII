@@ -1176,10 +1176,25 @@ async fn send_chat_stream(
             }
         }
         if !event_data.trim().is_empty() {
-            let _ = forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, api_key.as_deref())?;
+            if forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, api_key.as_deref())? {
+                on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
+                    .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+                completed = true;
+            }
         }
-        on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
-            .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+        // Some compatible providers omit the final [DONE] marker but still send
+        // a finish_reason. Accept that explicit terminal signal, never a bare EOF.
+        if !completed {
+            if finish_reason.is_none() {
+                return Err("Provider stream ended before a completion signal was received.".into());
+            }
+            on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
+                .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+            completed = true;
+        }
+    }
+    if !completed {
+        return Err("Provider stream ended before a completion signal was received.".into());
     }
     Ok(())
 }
