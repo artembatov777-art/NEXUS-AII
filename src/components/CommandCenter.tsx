@@ -69,7 +69,7 @@ export function CommandCenter(props: CommandCenterProps) {
     </div>
     <div className="deck-bottom">
       <section className="command-monitor" aria-label="System monitor">
-        <div className="deck-section-heading"><div><span>SYSTEM DIAGNOSTICS</span><h3>Live status</h3></div><small>SESSION HEALTH</small></div>
+        <div className="deck-section-heading"><div><span>SYSTEM MONITOR</span><h3>Live status</h3></div><small>SESSION HEALTH</small></div>
         <div className="command-monitor-grid">
           <article data-health={workspaceReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Workspace storage</strong><small>{workspaceReady ? "Conversation data loaded" : "Loading workspace data"}</small></div><b>{workspaceReady ? "READY" : "LOADING"}</b></article>
           <article data-health={providerConnection === "reachable" ? "good" : providerConnection === "failed" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Provider endpoint</strong><small>{providerConnection === "reachable" ? "Endpoint responded" : providerConnection === "failed" ? "Last endpoint check failed" : providerConnection === "checking" ? "Checking endpoint" : "Not checked this session"}</small></div><b>{providerConnection.toUpperCase()}</b></article>
@@ -78,7 +78,7 @@ export function CommandCenter(props: CommandCenterProps) {
         </div>
       </section>
       <section className="command-activity" aria-label="Recent workspace activity">
-        <div className="deck-section-heading"><div><span>RECENT ACTIVITY</span><h3>Workspace timeline</h3></div><small>{recentActivity.length} ITEMS</small></div>
+        <div className="deck-section-heading"><div><span>WORKSPACE TIMELINE</span><h3>Recent saved activity</h3></div><small>{recentActivity.length} ITEMS</small></div>
         {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · updated {formatActivityTime(item.updatedAt)}</small></div></li>)}</ol> : <p>No activity recorded yet. Start a conversation to populate the timeline.</p>}
       </section>
     </div>
