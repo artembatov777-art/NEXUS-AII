@@ -28,7 +28,7 @@ describe("knowledge retrieval",()=>{
    getByIds:async ids=>ok(chunks.filter(chunk=>ids.includes(chunk.id)))
   };
   const embeddings:EmbeddingProvider={embed:async()=>ok([[1,0]])};
-  const vectors:VectorMemoryIndex & {hasProject:()=>Promise<boolean>}={
+  const vectors={
    upsert:async()=>{},remove:async()=>{},search:async()=>[
     {id:"same-project",score:.8},{id:"other-project",score:.99}
    ],hasProject:async()=>true
