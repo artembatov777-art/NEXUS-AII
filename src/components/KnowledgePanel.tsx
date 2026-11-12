@@ -77,6 +77,18 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     } finally { setWorking(false); }
   }
 
+  async function rebuildSemanticIndex() {
+    if (!projectId || working) return;
+    setWorking(true); setError(""); setStatus("Checking the project's local semantic index and rebuilding missing vectors…");
+    try {
+      const result = await ingestion.rebuildSemanticIndex(projectId);
+      if (!result.ok) setError(result.error.message);
+      else setStatus(`Semantic index ready: ${result.value.totalChunks} passages checked, ${result.value.indexed} vectors rebuilt.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not rebuild the semantic index.");
+    } finally { setWorking(false); }
+  }
+
   async function searchKnowledge() {
     if (!projectId || !query.trim() || working) return;
     setWorking(true); setError(""); setAnswer(""); setCitations([]);
@@ -117,7 +129,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         </div>
       </>}
       {documents.length > 0 && <div className="knowledge-documents">
-        <div className="knowledge-documents-heading"><strong>Project documents</strong><span>{documents.length} files</span></div>
+        <div className="knowledge-documents-heading"><strong>Project documents</strong><span>{documents.length} files</span><button className="secondary-btn" disabled={working || !projectId} onClick={() => void rebuildSemanticIndex()}>Repair semantic index</button></div>
         {documents.map(document => <div className="knowledge-document" key={document.documentId}>
           <div><FileText size={14}/><span><strong>{document.fileName}</strong><small>{document.chunkCount} chunks · {document.characterCount.toLocaleString()} characters</small></span></div>
           <button className="icon-btn" disabled={working} onClick={() => void removeDocument(document.documentId)} aria-label={"Remove " + document.fileName}><Trash2 size={14}/></button>
