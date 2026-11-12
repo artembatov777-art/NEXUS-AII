@@ -46,6 +46,8 @@ describe("NEXUS Command Center", () => {
     expect(container.textContent).toContain("SYSTEM MONITOR");
     expect(container.textContent).toContain("WORKSPACE STORAGE");
     expect(container.textContent).toContain("MODEL GENERATION");
+    expect(container.textContent).toContain("NEXUS AI CORE");
+    expect(container.textContent).toContain("Awaiting a verified model connection");
   });
 
   it("routes quick-launch and briefing actions to their real workspace handlers", () => {
