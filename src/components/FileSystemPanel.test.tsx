@@ -4,8 +4,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invokeMock, isTauriMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), isTauriMock: vi.fn() }));
+const { invokeMock, isTauriMock, openMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), isTauriMock: vi.fn(), openMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, isTauri: isTauriMock }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: openMock }));
 
 import { FileSystemPanel } from "./FileSystemPanel";
 
@@ -22,6 +23,7 @@ describe("FileSystemPanel native workspace access", () => {
     vi.clearAllMocks();
     isTauriMock.mockReturnValue(false);
     invokeMock.mockReset();
+    openMock.mockReset();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -62,6 +64,22 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.querySelector(".file-preview-pane h3")?.textContent).toBe("notes.txt");
     expect(container.querySelector(".file-preview-content pre")?.textContent).toBe("hello");
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
+  });
+
+  it("uses the native folder picker to populate the explicit approval path", async () => {
+    isTauriMock.mockReturnValue(true);
+    openMock.mockResolvedValue("C:\\Users\\Owner\\Work");
+    invokeMock.mockResolvedValue([]);
+    await renderPanel();
+    const browse = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Browse"));
+    expect(browse).toBeDefined();
+    await act(async () => { browse!.click(); });
+    expect(openMock).toHaveBeenCalledWith({
+      directory: true, multiple: false, title: "Choose a folder NEXUS may access"
+    });
+    const pathInput = container.querySelector<HTMLInputElement>('input[aria-label="Folder path to grant"]');
+    expect(pathInput?.value).toBe("C:\\Users\\Owner\\Work");
+    expect(invokeMock).not.toHaveBeenCalledWith("grant_workspace_directory", expect.anything());
   });
 
   it("searches recursively by name only within the current approved directory", async () => {
