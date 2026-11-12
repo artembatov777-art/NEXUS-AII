@@ -10,9 +10,10 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: isTauriMock
 }));
 
-import { WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
+import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
 import { LocalStorageMemoryRepository, type StorageLike } from "./memoryStorage";
 import type { MemoryRecord } from "../core/memory";
+import type { KnowledgeChunk } from "../core/knowledge";
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -107,6 +108,72 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
 
     expect(scoped.ok && scoped.value.map(record => record.id)).toEqual(["project-one"]);
     expect(unscoped.ok && unscoped.value).toEqual([]);
+  });
+});
+
+
+describe("WorkspaceKnowledgeRepository native freshness", () => {
+  it("exposes document imports, replacements, and deletions across repository instances", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "replace_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "delete_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const chatServiceRepository = new WorkspaceKnowledgeRepository(storage);
+    const knowledgePanelRepository = new WorkspaceKnowledgeRepository(storage);
+    const original: KnowledgeChunk = {
+      id: "chunk-v1",
+      documentId: "doc-1",
+      projectId: "project-1",
+      text: "The architecture uses a modular monolith.",
+      sourceLabel: "architecture.md"
+    };
+
+    const added = await knowledgePanelRepository.add([original]);
+    expect(added.ok).toBe(true);
+    const visibleToChat = await chatServiceRepository.search("modular monolith", "project-1", 10);
+    expect(visibleToChat.ok && visibleToChat.value.map(chunk => chunk.id)).toEqual(["chunk-v1"]);
+
+    const replacement: KnowledgeChunk = {
+      ...original,
+      id: "chunk-v2",
+      text: "The updated architecture uses isolated module contracts."
+    };
+    const replaced = await knowledgePanelRepository.replaceDocument("doc-1", "project-1", [replacement]);
+    expect(replaced.ok).toBe(true);
+    const oldSearch = await chatServiceRepository.search("modular monolith", "project-1", 10);
+    const newSearch = await chatServiceRepository.search("isolated module contracts", "project-1", 10);
+    expect(oldSearch.ok && oldSearch.value).toEqual([]);
+    expect(newSearch.ok && newSearch.value.map(chunk => chunk.id)).toEqual(["chunk-v2"]);
+
+    const removed = await knowledgePanelRepository.removeDocument("doc-1", "project-1");
+    expect(removed.ok).toBe(true);
+    const afterDelete = await chatServiceRepository.search("isolated module contracts", "project-1", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
   });
 });
 
