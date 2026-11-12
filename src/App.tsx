@@ -20,6 +20,7 @@ import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/n
 import { MemoryService, type MemoryId } from "./core/memory";
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
+import { CommandCenter } from "./components/CommandCenter";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -522,6 +523,22 @@ export default function App() {
             <article className="nexus-system-card"><span className="nexus-card-label">WORKSPACE</span><strong>{workspaceProjects.length} PROJECTS</strong><small>{conversations.length} conversations</small><i className="nexus-card-indicator"/></article>
             <article className="nexus-system-card"><span className="nexus-card-label">CURRENT ACTIVITY</span><strong>{busy ? "PROCESSING" : "STANDBY"}</strong><small>{busy ? "Generating a response" : "Waiting for input"}</small><i className={`nexus-card-indicator ${busy ? "active" : ""}`}/></article>
           </div>
+          <CommandCenter
+            projectCount={workspaceProjects.length}
+            conversationCount={conversations.length}
+            model={provider.model}
+            route={providerRoute}
+            providerReady={modelTestState === "passed"}
+            busy={busy}
+            onOpenAgents={() => { setAgentsOpen(true); closeMobileNavigation(); }}
+            onOpenMemory={() => { setMemoryOpen(true); closeMobileNavigation(); }}
+            onOpenKnowledge={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}
+            onOpenProjects={() => { setProjectsOpen(true); closeMobileNavigation(); }}
+            onOpenFiles={() => { setFileSystemOpen(true); closeMobileNavigation(); }}
+            onOpenTools={() => { setToolsOpen(true); closeMobileNavigation(); }}
+            onOpenSettings={() => { setSettingsOpen(true); closeMobileNavigation(); }}
+            onStartPlanning={() => { setDraft("Help me plan and break down my next task into clear steps."); setError(""); }}
+          />
           <label className="chat-project-context">Project context
             <select value={selectedProjectId} onChange={e => { setSelectedProjectId(e.target.value); setActiveId(null); setError(""); }}>
               <option value="">No project context</option>
