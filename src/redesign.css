@@ -219,3 +219,32 @@ html,body,#root{min-height:100%;min-width:320px}
   .breadcrumb{max-width:76px}
   .topbar{padding-left:7px;padding-right:7px}
 }
+
+
+/* Bring the remaining native workspace controls into the selected violet/blue system. */
+.file-workspace-mark,.tool-icon{border-color:rgba(157,139,240,.28);background:linear-gradient(145deg,rgba(77,62,139,.5),rgba(22,35,72,.8));color:#c4b3ff}
+.file-preview-state{border-color:rgba(155,137,236,.25);background:rgba(50,43,91,.34);color:#c3b5f1}
+.file-preview-state i{background:#a993f2;box-shadow:0 0 8px rgba(169,147,242,.42)}
+.file-search{border-color:rgba(132,143,207,.2);background:rgba(5,10,23,.72);color:#a697e9}
+.file-search:focus-within{border-color:rgba(166,143,255,.58);box-shadow:0 0 0 3px rgba(135,111,228,.1)}
+.file-search input{color:#e7eaff}
+.file-tree-security{border-color:rgba(168,145,225,.2);background:rgba(56,43,87,.2);color:#b6a9d8}
+.file-tree-security svg{color:#b5a0ef}
+.file-name>svg,.file-preview-icon{color:#b7a5f2}
+.file-preview-icon{border-color:rgba(157,139,240,.24);background:rgba(54,45,100,.35)}
+.file-table-head{border-color:rgba(132,145,205,.15);color:#8d8dbd}
+.file-list>button:hover,.file-list>button.selected,.file-tree-children button:hover,.file-tree-children button.active{border-color:rgba(160,139,255,.22);background:rgba(77,62,139,.2);color:#e0d9ff}
+.tools-summary{border-color:rgba(132,145,205,.15)}
+.tools-summary>div{border-color:rgba(132,145,205,.16);background:rgba(16,22,45,.7)}
+.tools-summary span,.tool-card-details>div span{color:#9690c6}
+.tools-summary strong{color:#d7d8f5}
+.tool-card{border-color:rgba(132,145,205,.16);background:rgba(9,14,31,.72)}
+.tool-card.expanded{border-color:rgba(160,139,255,.34);background:rgba(20,22,49,.9)}
+.tool-card-main{border-color:rgba(132,145,205,.14);background:rgba(12,18,39,.6);color:#c5c9e7}
+.tool-card-copy>span{color:#a497df}
+.tool-preview-badge{color:#b9a7ef}
+.tool-card-details{border-top-color:rgba(132,145,205,.15)}
+.tool-card-details>div strong{color:#d5d8f2}
+.tool-card-details>p{color:#a6abc8}
+.file-workspace-footer>span{color:#9eabc8}
+.file-workspace-footer>span svg{color:#91d3bd}
