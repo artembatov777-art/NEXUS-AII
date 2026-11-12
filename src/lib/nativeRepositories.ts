@@ -6,7 +6,7 @@ import { LocalStorageMemoryRepository, rankMemories, type StorageLike } from "./
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 
 export function tokenizeKnowledgeTerms(value: string): string[] {
-  return [...new Set(value.toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [])];
+  return [...new Set(value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])];
 }
 
 function failure(error: unknown, fallback: string): Result<never> {
