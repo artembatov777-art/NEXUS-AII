@@ -538,6 +538,9 @@ export default function App() {
             model={provider.model}
             route={providerRoute}
             providerReady={modelTestState === "passed"}
+            providerConnection={providerConnectionState}
+            credentialVault={providerVaultStatus}
+            workspaceReady={conversationsReady}
             busy={busy}
             recentActivity={[...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5).map(item => ({ id: item.id, title: item.title, updatedAt: item.updatedAt, messageCount: item.messages.length }))}
             onOpenAgents={() => { setAgentsOpen(true); closeMobileNavigation(); }}
