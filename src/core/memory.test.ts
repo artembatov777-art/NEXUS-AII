@@ -13,6 +13,10 @@ class FakeMemoryRepository implements MemoryRepository {
     return ok(this.records.get(id) ?? null);
   }
 
+  async exportAll(): Promise<Result<MemoryRecord[]>> {
+    return ok([...this.records.values()]);
+  }
+
   async search(query: string, scope: "all" | "profile" | "project" | "conversation", limit: number): Promise<Result<MemoryRecord[]>> {
     const matches = [...this.records.values()].filter(record =>
       (scope === "all" || record.scope === scope) &&
@@ -122,6 +126,8 @@ describe("MemoryService", () => {
     }
     const result = await service.revise("memory-249" as MemoryId, { content: "Updated final memory" });
     expect(result.ok && result.value.content).toBe("Updated final memory");
+    const exported = await service.exportAll();
+    expect(exported.ok && exported.value).toHaveLength(250);
   });
 
   it("passes repository failures through unchanged", async () => {
@@ -129,6 +135,7 @@ describe("MemoryService", () => {
       list: async () => err("storage_failed", "Storage unavailable"),
       search: async () => err("storage_failed", "Storage unavailable"),
       getById: async () => err("storage_failed", "Storage unavailable"),
+      exportAll: async () => err("storage_failed", "Storage unavailable"),
       save: async () => err("storage_failed", "Storage unavailable"),
       delete: async () => err("storage_failed", "Storage unavailable")
     };
