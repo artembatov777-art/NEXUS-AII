@@ -50,6 +50,16 @@ describe("NEXUS Command Center", () => {
     expect(container.textContent).toContain("Awaiting a verified model connection");
   });
 
+  it("does not present browser preview credential storage as available", () => {
+    act(() => root.render(<CommandCenter
+      projectCount={0} conversationCount={0} model="auto" route="remote"
+      providerReady={false} providerConnection="unchecked" credentialVault="browser"
+      workspaceReady={true} busy={false} recentActivity={[]} {...actions}
+    />));
+    expect(container.querySelector('[aria-label="System monitor"] article:nth-child(3)')?.getAttribute("data-health")).toBe("pending");
+    expect(container.textContent).toContain("Native vault unavailable in browser preview");
+  });
+
   it("renders saved conversation history in the workspace timeline", () => {
     act(() => root.render(<CommandCenter
       projectCount={1} conversationCount={1} model="auto" route="remote"
