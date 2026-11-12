@@ -111,11 +111,17 @@ class TauriModelProvider implements ModelProvider {
         if (failure) throw failure;
         const event = queue.shift();
         if (event) { yield event; continue; }
-        if (requestError) throw new Error(normalizeProviderFailure(requestError).message);
+        if (requestError) {
+          const failure = normalizeProviderFailure(requestError);
+          throw Object.assign(new Error(failure.message), { code: failure.code, retryable: failure.retryable });
+        }
         await new Promise<void>(resolve => { wake = resolve; });
       }
       if (failure) throw failure;
-      if (requestError) throw new Error(normalizeProviderFailure(requestError).message);
+      if (requestError) {
+          const failure = normalizeProviderFailure(requestError);
+          throw Object.assign(new Error(failure.message), { code: failure.code, retryable: failure.retryable });
+        }
       waitingForNativeCompletion = true;
       await Promise.race([streamPromise, abortPromise]);
       if (request.signal?.aborted) throw new Error("Model request was cancelled.");
