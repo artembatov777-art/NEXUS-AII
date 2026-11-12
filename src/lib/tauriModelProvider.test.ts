@@ -160,4 +160,37 @@ describe("TauriModelProvider", () => {
     await expect((async () => { for await (const _ of stream) { /* consume */ } })()).rejects.toThrow(/cancelled/);
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
+
+  it("rejects a native stream that resolves without a completion event", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(undefined);
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "plan" }]
+    });
+    await expect((async () => { for await (const _ of stream) { /* consume */ } })())
+      .rejects.toThrow(/without a completion event/i);
+  });
+
+  it("unblocks an idle stream immediately when its abort signal fires", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command) => {
+      if (command === "send_chat_stream") return new Promise(() => { /* native request remains pending */ });
+      if (command === "cancel_chat_stream") return Promise.resolve(true);
+      return Promise.resolve([]);
+    });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const controller = new AbortController();
+    const iterator = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal
+    })[Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort();
+    await expect(pending).rejects.toThrow(/cancelled/i);
+    expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
+  });
 });
