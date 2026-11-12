@@ -1,6 +1,14 @@
 import { Activity, BookOpen, Bot, Command, FolderKanban, FolderOpen, MemoryStick, Plug, Settings2, Sparkles, Zap } from "lucide-react";
 
-function formatActivityTime(timestamp: number): string {\n  const elapsed = Math.max(0, Date.now() - timestamp);\n  if (elapsed < 60_000) return "just now";\n  if (elapsed < 3_600_000) return Math.floor(elapsed / 60_000) + "m ago";\n  if (elapsed < 86_400_000) return Math.floor(elapsed / 3_600_000) + "h ago";\n  return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });\n}\n\ntype CommandCenterProps = {
+function formatActivityTime(timestamp: number): string {
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  if (elapsed < 60_000) return "just now";
+  if (elapsed < 3_600_000) return Math.floor(elapsed / 60_000) + "m ago";
+  if (elapsed < 86_400_000) return Math.floor(elapsed / 3_600_000) + "h ago";
+  return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+type CommandCenterProps = {
   projectCount: number;
   conversationCount: number;
   model: string;
