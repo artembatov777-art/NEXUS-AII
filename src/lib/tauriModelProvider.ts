@@ -43,6 +43,9 @@ class TauriModelProvider implements ModelProvider {
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
     if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
+    if (request.messages.some(message => message.role === "tool")) {
+      throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
+    }
     const channel = new Channel<{ type: "text_delta" | "usage" | "completed"; text?: string; finishReason?: string; inputTokens?: number; outputTokens?: number }>();
     const streamId = crypto.randomUUID();
     let completed = false;
