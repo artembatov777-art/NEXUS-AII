@@ -47,6 +47,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Phase III — Memory & Knowledge
 
+**Status: groundwork active in parallel with Phase II runtime validation; Phase II remains formally active until its exit criteria pass.**
+
 - [ ] Complete inspectable long-term memory with user-controlled create, revise, search, export, and deletion.
 - [ ] Complete document ingestion and project-scoped knowledge retrieval with provenance.
 - [ ] Add reliable indexing, rebuild, and recovery behavior.
