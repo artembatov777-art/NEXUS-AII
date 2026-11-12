@@ -7,14 +7,14 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 ## Product direction
 
 - **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
-- **Design:** restrained JARVIS-inspired interface, graphite surfaces, muted blue/cyan accents, a dynamic central core, and consistent desktop/mobile behavior.
+- **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted violet and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
 - **Model strategy:** hybrid local and cloud. OmniRoute is the selected gateway for cloud models; Ollama is the planned local runtime.
 - **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
 - **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
 
 ## Phase I — Complete interface
 
-**Status: complete.** This phase is about the complete user experience and stable UI contracts. Mock data is acceptable where a backend belongs to a later phase, but every visible control must behave honestly and clearly identify unavailable integrations.
+**Status: in progress — final visual refinement and CI verification.** This phase is about the complete user experience and stable UI contracts. Mock data is acceptable where a backend belongs to a later phase, but every visible control must behave honestly and clearly identify unavailable integrations.
 
 - [x] Establish the restrained JARVIS visual language and shared responsive styling.
 - [x] Build the desktop workspace shell, navigation, chat, history, and system overview.
@@ -26,8 +26,9 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add mobile navigation dismissal and dialog Escape/focus/scroll handling.
 - [x] Complete a full interaction audit of visible controls and module states; native-only and preview-only actions are explicitly disabled or disclosed, and destructive memory/document actions require confirmation.
 - [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
-- [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed).
-- [x] Pass fresh frontend, mobile-preview, and native CI workflows on the final Phase I commit (`38d23706260adf037885158bae3dbfb03284210c`): Quality, Mobile Interface Preview, and Native desktop quality all succeeded.
+- [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
+- [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
+- [ ] Pass fresh frontend Quality, Mobile Interface Preview, and Native desktop quality workflows on the final Phase I commit. Historical baseline `38d23706260adf037885158bae3dbfb03284210c` passed all three workflows; the current visual refresh still requires a fresh green run.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -116,7 +117,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
-- The mobile preview has five jsdom interaction tests; the final Phase I Quality workflow passed on `38d23706260adf037885158bae3dbfb03284210c`.
+- The mobile preview has five jsdom interaction tests. The earlier Phase I baseline passed Quality, mobile preview build/deploy, and native desktop CI; the current visual refresh is undergoing a new verification pass.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
