@@ -86,7 +86,7 @@ export class MemoryService {
       content,
       category: input.category,
       scope: input.scope,
-      ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(input.scope === "project" ? { projectId: input.projectId } : {}),
       source: { ...input.source, label },
       tags: [...new Set((input.tags ?? []).map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20),
       createdAt: now,
@@ -126,7 +126,19 @@ export class MemoryService {
     const content = changes.content === undefined ? existing.content : changes.content.trim();
     if (!content || content.length > 4_000) return err("validation", "Memory content must contain 1 to 4,000 characters.");
     if ((changes.scope ?? existing.scope) === "project" && !(changes.projectId ?? existing.projectId)?.trim()) return err("validation", "Project-scoped memories require a project ID.");
-    const next: MemoryRecord = { ...existing, ...changes, content, tags: changes.tags ? [...new Set(changes.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20) : existing.tags, source: changes.source ? { ...changes.source, label: changes.source.label.trim() } : existing.source, updatedAt: this.clock.now() };
+    const nextScope = changes.scope ?? existing.scope;
+    const nextProjectId = nextScope === "project" ? (changes.projectId ?? existing.projectId) : undefined;
+    const next: MemoryRecord = {
+      ...existing,
+      ...changes,
+      scope: nextScope,
+      ...(nextProjectId ? { projectId: nextProjectId } : {}),
+      content,
+      tags: changes.tags ? [...new Set(changes.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20) : existing.tags,
+      source: changes.source ? { ...changes.source, label: changes.source.label.trim() } : existing.source,
+      updatedAt: this.clock.now()
+    };
+    if (!nextProjectId) delete next.projectId;
     if (!next.source.label) return err("validation", "A memory source label is required.");
     const saved = await this.repository.save(next);
     return saved.ok ? ok(next) : saved;
