@@ -198,3 +198,24 @@ html,body,#root{min-height:100%;min-width:320px}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+
+/* Compact command bar: preserve every primary action without horizontal overflow. */
+.topbar,.top-left,.top-right{min-width:0}
+.top-left{flex:1}
+.top-right{flex:0 0 auto}
+.breadcrumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:520px){
+  .topbar{gap:8px}
+  .top-left{gap:7px}
+  .top-right{gap:4px}
+  .top-right>.icon-btn,.top-left>.icon-btn{width:36px;height:36px;min-width:36px}
+  .model-pill{max-width:118px;min-width:0;padding:7px 8px;font-size:8px}
+  .breadcrumb{max-width:112px;font-size:9px}
+}
+@media(max-width:380px){
+  .focus-mode-toggle{display:none}
+  .model-pill{max-width:104px}
+  .breadcrumb{max-width:76px}
+  .topbar{padding-left:7px;padding-right:7px}
+}
