@@ -33,6 +33,24 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+  it("retries one transient model catalog request but does not retry generation", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    vi.useFakeTimers();
+    try {
+      mockedInvoke
+        .mockRejectedValueOnce(new Error("Provider returned HTTP 503: temporary outage"))
+        .mockResolvedValueOnce(["model-a"]);
+      const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+      if (!router) throw new Error("Expected native model router.");
+      const pending = router.listModels();
+      await vi.advanceTimersByTimeAsync(250);
+      await expect(pending).resolves.toMatchObject({ ok: true });
+      expect(mockedInvoke).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("normalizes provider discovery authentication failures", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockRejectedValue(new Error("Provider returned HTTP 401: secret=hidden"));
@@ -42,6 +60,7 @@ describe("TauriModelProvider", () => {
       ok: false,
       error: { code: "authentication", retryable: false, message: expect.not.stringContaining("hidden") }
     });
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes transient provider failures during streaming", async () => {
