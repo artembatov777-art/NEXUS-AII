@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
 import { LocalStorageMemoryRepository, type StorageLike } from "./memoryStorage";
+import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 import type { MemoryRecord } from "../core/memory";
 import type { KnowledgeChunk } from "../core/knowledge";
 
@@ -96,6 +97,36 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     expect(afterDelete.ok && afterDelete.value.map(record => record.id)).not.toContain("shared-native");
   });
 
+  it("does not resurrect a native memory deleted after legacy migration", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const item = args?.record as MemoryRecord;
+        nativeRecords.set(item.id, item);
+        return undefined;
+      }
+      if (command === "delete_memory") {
+        nativeRecords.delete(String(args?.id));
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageMemoryRepository(storage);
+    await legacy.save(memory("legacy-memory", "A migrated memory"));
+    const migrated = new WorkspaceMemoryRepository(storage);
+    const beforeDelete = await migrated.list("all", 10);
+    expect(beforeDelete.ok && beforeDelete.value.map(item => item.id)).toEqual(["legacy-memory"]);
+
+    await migrated.delete("legacy-memory" as MemoryRecord["id"]);
+    const reopened = new WorkspaceMemoryRepository(storage);
+    const afterDelete = await reopened.list("all", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+
   it("keeps project memory search isolated and refuses an unscoped project listing", async () => {
     const storage = new FakeStorage();
     const seed = new LocalStorageMemoryRepository(storage);
@@ -113,6 +144,42 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
 
 
 describe("WorkspaceKnowledgeRepository native freshness", () => {
+  it("does not resurrect a native knowledge document deleted after legacy migration", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "delete_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageKnowledgeRepository(storage);
+    await legacy.add([{
+      id: "legacy-chunk", documentId: "legacy-doc", projectId: "project-1",
+      text: "Legacy knowledge content", sourceLabel: "legacy.md"
+    }]);
+    const migrated = new WorkspaceKnowledgeRepository(storage);
+    const beforeDelete = await migrated.search("Legacy knowledge", "project-1", 10);
+    expect(beforeDelete.ok && beforeDelete.value.map(item => item.id)).toEqual(["legacy-chunk"]);
+
+    await migrated.removeDocument("legacy-doc", "project-1");
+    const reopened = new WorkspaceKnowledgeRepository(storage);
+    const afterDelete = await reopened.search("Legacy knowledge", "project-1", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+
   it("exposes document imports, replacements, and deletions across repository instances", async () => {
     isTauriMock.mockReturnValue(true);
     const nativeChunks = new Map<string, KnowledgeChunk>();
