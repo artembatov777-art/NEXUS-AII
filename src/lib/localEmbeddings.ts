@@ -1,4 +1,3 @@
-import { env, pipeline } from "@huggingface/transformers";
 import { err, ok, type Result } from "../core/result";
 import type { EmbeddingProvider } from "../core/knowledge";
 
@@ -37,6 +36,9 @@ export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {
 }
 
 async function loadLocalExtractor(): Promise<Extractor> {
+  // Keep the large transformer runtime out of the initial workspace bundle.
+  // It is downloaded only when semantic embeddings are actually requested.
+  const { env, pipeline } = await import("@huggingface/transformers");
   env.allowRemoteModels = true;
   env.allowLocalModels = true;
   const createPipeline = pipeline as unknown as (
