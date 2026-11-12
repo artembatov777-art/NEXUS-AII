@@ -1,13 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>(),
+  isTauriMock: vi.fn<() => boolean>(() => false)
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-  isTauri: () => false
+  invoke: invokeMock,
+  isTauri: isTauriMock
 }));
 
 import { WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
 import { LocalStorageMemoryRepository, type StorageLike } from "./memoryStorage";
 import type { MemoryRecord } from "../core/memory";
+
+beforeEach(() => {
+  invokeMock.mockReset();
+  isTauriMock.mockReturnValue(false);
+});
 
 class FakeStorage implements StorageLike {
   private values = new Map<string, string>();
@@ -45,6 +55,44 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
 
     expect(found.ok && found.value.map(record => record.id)).toEqual(["memory-249"]);
     expect(exported.ok && exported.value).toHaveLength(250);
+  });
+
+
+  it("refreshes native snapshots across repository instances and observes external updates", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const record = args?.record as MemoryRecord;
+        nativeRecords.set(record.id, record);
+        return undefined;
+      }
+      if (command === "delete_memory") {
+        nativeRecords.delete(String(args?.id));
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const firstPanel = new WorkspaceMemoryRepository(storage);
+    const secondPanel = new WorkspaceMemoryRepository(storage);
+
+    const initial = await firstPanel.list("all", 50);
+    expect(initial.ok && initial.value).toEqual([]);
+
+    const created = await secondPanel.save(memory("shared-native", "Created in another panel"));
+    expect(created.ok).toBe(true);
+
+    const afterCreate = await firstPanel.list("all", 50);
+    expect(afterCreate.ok && afterCreate.value.map(record => record.id)).toContain("shared-native");
+
+    const removed = await secondPanel.delete("shared-native" as MemoryRecord["id"]);
+    expect(removed.ok).toBe(true);
+
+    const afterDelete = await firstPanel.list("all", 50);
+    expect(afterDelete.ok && afterDelete.value.map(record => record.id)).not.toContain("shared-native");
   });
 
   it("keeps project memory search isolated and refuses an unscoped project listing", async () => {
