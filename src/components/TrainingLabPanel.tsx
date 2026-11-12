@@ -8,7 +8,7 @@ import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
 
-export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; provider: ProviderSettings }) {
+export function TrainingLabPanel({ onClose, provider, availableModels }: { onClose: () => void; provider: ProviderSettings; availableModels: string[] }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
   const [datasets, setDatasets] = useState<DatasetManifest[]>([]);
   const [selectedDatasetKey, setSelectedDatasetKey] = useState("");
@@ -24,6 +24,7 @@ export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; p
   const [validationIds, setValidationIds] = useState("validation-001");
   const [testIds, setTestIds] = useState("test-001");
   const [modelId, setModelId] = useState("provider/model-id");
+  const [comparisonModels, setComparisonModels] = useState("");
   const [method, setMethod] = useState<ExperimentMethod>("baseline");
   const [codeRevision, setCodeRevision] = useState("local-uncommitted");
   const [hardware, setHardware] = useState("Not recorded");
@@ -106,6 +107,53 @@ export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; p
       setStatus(`Live generation completed in ${elapsedMs} ms via ${provider.model}. Review the response, then score it with the evaluation bench.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Live model test failed.");
+      setStatus("");
+    } finally {
+      if (liveTestAbort.current === controller) liveTestAbort.current = null;
+      setLiveTestRunning(false);
+      setWorking(false);
+    }
+  }
+
+  async function runModelComparison() {
+    if (!isTauri()) {
+      setError("Live model comparison is available only in the native desktop app.");
+      return;
+    }
+    const models = [...new Set(comparisonModels.split(/[\\n,]+/).map(item => item.trim()).filter(Boolean))];
+    if (models.length < 2 || models.length > 4) {
+      setError("Enter between two and four distinct model IDs, separated by commas.");
+      return;
+    }
+    if (!evaluationPrompt.trim()) {
+      setError("Add an evaluation prompt before comparing models.");
+      return;
+    }
+    const controller = new AbortController();
+    liveTestAbort.current?.abort();
+    liveTestAbort.current = controller;
+    setLiveTestRunning(true);
+    setWorking(true);
+    setError("");
+    setStatus("Sending the same evaluation prompt to each selected model...");
+    try {
+      const results = await Promise.all(models.map(async model => {
+        const startedAt = performance.now();
+        const response = await sendMessage({ ...provider, model }, [{
+          id: crypto.randomUUID(),
+          role: "user",
+          content: evaluationPrompt.trim(),
+          createdAt: Date.now()
+        }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
+        return { model, response, latencyMs: Math.round(performance.now() - startedAt) };
+      }));
+      setCandidateOutput(results.map(result => `MODEL: ${result.model}\\nLATENCY: ${result.latencyMs} ms\\n\\n${result.response}`).join("\\n\\n════════════════════════════════\\n\\n"));
+      setModelId(models.join(", "));
+      setMetrics(JSON.stringify(Object.fromEntries(results.map((result, index) => [`model${index + 1}LatencyMs`, result.latencyMs])), null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length }, null, 2));
+      setStatus(`Comparison completed: ${results.length} models tested with the same prompt. Review outputs and score them separately.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Model comparison failed.");
       setStatus("");
     } finally {
       if (liveTestAbort.current === controller) liveTestAbort.current = null;
@@ -216,6 +264,9 @@ export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; p
         <label>Required phrases<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
         <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="A live model response appears here, or paste one manually"/></label>
         <div className="training-two-col"><button className="primary-btn" onClick={() => void runLiveModelTest()} disabled={working || !isTauri()}>Run live model test</button><button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button></div>
+        <label>Model comparison IDs<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
+        <small id="training-model-hint">{availableModels.length ? `Discovered models: ${availableModels.length}. Enter 2 to 4 IDs from the provider catalog.` : "Load the provider model catalog in Settings, then enter 2 to 4 model IDs."}</small>
+        <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>Compare selected models</button>
         {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
