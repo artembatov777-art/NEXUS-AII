@@ -25,6 +25,7 @@ type CommandCenterProps = {
   onOpenProjects: () => void;
   onOpenFiles: () => void;
   onOpenTools: () => void;
+  onOpenTrainingLab: () => void;
   onOpenSettings: () => void;
   onStartPlanning: () => void;
 };
@@ -32,7 +33,7 @@ type CommandCenterProps = {
 export function CommandCenter({
   projectCount, conversationCount, model, route, providerReady, providerConnection, credentialVault, workspaceReady, busy, recentActivity,
   onOpenAgents, onOpenMemory, onOpenKnowledge, onOpenProjects,
-  onOpenFiles, onOpenTools, onOpenSettings, onStartPlanning
+  onOpenFiles, onOpenTools, onOpenTrainingLab, onOpenSettings, onStartPlanning
 }: CommandCenterProps) {
   const status = busy ? "PROCESSING" : providerReady ? "READY" : "STANDBY";
   return <section className="command-center" aria-label="NEXUS command center">
@@ -61,6 +62,7 @@ export function CommandCenter({
           <button onClick={onOpenProjects}><FolderKanban/><span><b>Projects</b><small>Organize your work</small></span><i>↗</i></button>
           <button onClick={onOpenFiles}><FolderOpen/><span><b>File system</b><small>Manage permitted files</small></span><i>↗</i></button>
           <button onClick={onOpenTools}><Plug/><span><b>Tools & MCP</b><small>Connected capabilities</small></span><i>↗</i></button>
+          <button onClick={onOpenTrainingLab}><Activity/><span><b>Training Lab</b><small>Explore model experiments</small></span><i>↗</i></button>
         </div>
       </div>
       <aside className="command-focus">
