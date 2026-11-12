@@ -70,6 +70,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const runtime = runtimeState.runtime;
   const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview"]) ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
+  const runningCount = checkpoints.filter(item => item.status === "running").length;
+  const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
+  const completedCount = checkpoints.filter(item => item.status === "completed").length;
+  const failedCount = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").length;
 
   const addFeed = useCallback((text: string, tone: FeedItem["tone"] = "normal") => {
     feedSequence.current += 1;
@@ -239,6 +243,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
       </header>
 
       {runtimeState.error && <div className="agent-error"><AlertTriangle size={16}/>{runtimeState.error}</div>}
+
+      <section className="agent-runtime-strip" aria-label="Agent runtime overview">
+        <article><span className="agent-runtime-mark"/><div><strong>{registeredAgents.length}</strong><small>Registered agents</small></div></article>
+        <article data-state="running"><span className="agent-runtime-mark"/><div><strong>{runningCount}</strong><small>Running</small></div></article>
+        <article data-state="approval"><span className="agent-runtime-mark"/><div><strong>{pendingApprovalCount}</strong><small>Awaiting approval</small></div></article>
+        <article data-state="completed"><span className="agent-runtime-mark"/><div><strong>{completedCount}</strong><small>Completed</small></div></article>
+        <article data-state="failed"><span className="agent-runtime-mark"/><div><strong>{failedCount}</strong><small>Failed / cancelled</small></div></article>
+      </section>
 
       <div className="agent-center-grid">
         <section className="agent-main-column">
