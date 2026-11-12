@@ -13,6 +13,7 @@ type WorkspaceEntry = {
 
 type PathInput = { path: string };
 type WriteInput = { path: string; content: string };
+type SearchInput = { path: string; query: string };
 
 const MAX_PATH_LENGTH = 4096;
 const MAX_TOOL_TEXT_BYTES = 48_000;
@@ -27,6 +28,16 @@ function validPathInput(input: unknown): Result<PathInput> {
   const path = (input as { path: string }).path;
   if (!path.trim() || path.length > MAX_PATH_LENGTH) return err("validation", "Workspace path must contain 1 to 4,096 characters.");
   return ok({ path });
+}
+
+function validSearchInput(input: unknown): Result<SearchInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A workspace path and search query are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
+      typeof record.query !== "string" || !record.query.trim() || record.query.length > 256) {
+    return err("validation", "Workspace path or search query is invalid.");
+  }
+  return ok({ path: record.path, query: record.query.trim() });
 }
 
 function validWriteInput(input: unknown): Result<WriteInput> {
@@ -72,6 +83,25 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
           })).byteLength > MAX_SERIALIZED_OUTPUT_BYTES) visible = visible.slice(0, -1);
           return ok({ path, entries: visible, totalEntries: entries.length, truncated: visible.length < entries.length });
         } catch (cause) { return failure(cause, "Could not list the approved workspace directory."); }
+      }
+    },
+    {
+      id: "workspace.search",
+      version: "1.0.0",
+      description: "Search file and folder names recursively inside an explicitly approved directory. Input: {path,query}. Search is bounded by depth and entry limits.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "low",
+      timeoutMs: 15_000,
+      validateInput: validSearchInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path, query }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace search was cancelled.");
+        try {
+          const entries = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path, query });
+          if (context.signal.aborted) return err("cancelled", "Workspace search was cancelled.");
+          return ok({ path, query, entries: entries.slice(0, 10), matchedEntries: entries.length, truncated: entries.length > 10 });
+        } catch (cause) { return failure(cause, "Could not search the approved workspace directory."); }
       }
     },
     {
