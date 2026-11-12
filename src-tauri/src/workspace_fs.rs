@@ -165,6 +165,79 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
     Ok(entries)
 }
 
+const MAX_SEARCH_VISITED_ENTRIES: usize = 5_000;
+const MAX_SEARCH_RESULTS: usize = 100;
+const MAX_SEARCH_DEPTH: usize = 12;
+
+fn search_workspace_entries_in(root: &Path, start: &Path, query: &str) -> Result<Vec<WorkspaceEntry>, String> {
+    if query.trim().is_empty() || query.len() > 256 {
+        return Err("Search query must contain 1 to 256 characters.".into());
+    }
+    let canonical_root = fs::canonicalize(root).map_err(|e| format!("Could not resolve approved root: {e}"))?;
+    let canonical_start = fs::canonicalize(start).map_err(|e| format!("Could not open search directory: {e}"))?;
+    if !canonical_start.is_dir() || !canonical_start.starts_with(&canonical_root) {
+        return Err("Search location is not inside an approved directory.".into());
+    }
+
+    let needle = query.to_lowercase();
+    let mut pending = vec![(canonical_start, 0usize)];
+    let mut visited = 0usize;
+    let mut results = Vec::new();
+
+    'walk: while let Some((directory, depth)) = pending.pop() {
+        let iterator = fs::read_dir(&directory).map_err(|e| format!("Could not search directory: {e}"))?;
+        for item in iterator {
+            let item = item.map_err(|e| format!("Could not inspect search entry: {e}"))?;
+            visited += 1;
+            if visited > MAX_SEARCH_VISITED_ENTRIES { break 'walk; }
+
+            let entry_path = item.path();
+            let link_metadata = match fs::symlink_metadata(&entry_path) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if link_metadata.file_type().is_symlink() { continue; }
+            let canonical = match fs::canonicalize(&entry_path) {
+                Ok(value) if value.starts_with(&canonical_root) => value,
+                _ => continue,
+            };
+            let metadata = match fs::metadata(&canonical) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            let name = item.file_name().to_string_lossy().into_owned();
+            let kind = if metadata.is_dir() { "directory" } else if metadata.is_file() { "file" } else { "other" };
+
+            if name.to_lowercase().contains(&needle) && results.len() < MAX_SEARCH_RESULTS {
+                let modified_at_ms = metadata.modified().ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+                results.push(WorkspaceEntry {
+                    name,
+                    path: canonical.to_string_lossy().into_owned(),
+                    kind: kind.into(),
+                    size_bytes: metadata.len(),
+                    modified_at_ms,
+                });
+            }
+            if metadata.is_dir() && depth < MAX_SEARCH_DEPTH {
+                pending.push((canonical, depth + 1));
+            }
+            if results.len() >= MAX_SEARCH_RESULTS { break 'walk; }
+        }
+    }
+
+    results.sort_by(|a, b| (a.kind != "directory").cmp(&(b.kind != "directory"))
+        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(results)
+}
+
+#[tauri::command]
+pub fn search_workspace_entries(path: String, query: String, access: State<'_, WorkspaceAccess>) -> Result<Vec<WorkspaceEntry>, String> {
+    let root = access.allowed_root_for(Path::new(&path))?;
+    search_workspace_entries_in(&root, Path::new(&path), &query)
+}
+
 #[tauri::command]
 pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> Result<String, String> {
     let root = access.allowed_root_for(Path::new(&path))?;
@@ -289,6 +362,29 @@ mod tests {
         fs::write(&persistence_path, r#"["/path/that/does/not/exist"]"#).expect("write stale permission");
         let access = WorkspaceAccess::load(persistence_path);
         assert!(access.roots.lock().expect("lock roots").is_empty());
+        fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[test]
+    fn workspace_search_finds_nested_names_and_stays_inside_the_approved_root() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-search-{}-{nonce}", std::process::id()));
+        let root = base.join("allowed");
+        let nested = root.join("projects").join("notes");
+        let sibling = base.join("outside");
+        fs::create_dir_all(&nested).expect("create nested search directory");
+        fs::create_dir_all(&sibling).expect("create outside directory");
+        fs::write(root.join("notes.txt"), "root note").expect("write root note");
+        fs::write(nested.join("meeting-notes.md"), "nested note").expect("write nested note");
+        fs::write(sibling.join("secret-notes.txt"), "outside note").expect("write outside note");
+
+        let results = search_workspace_entries_in(&root, &root, "notes").expect("search approved root");
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|entry| entry.path.starts_with(fs::canonicalize(&root).expect("canonical root").to_str().unwrap())));
+        assert!(results.iter().any(|entry| entry.name == "meeting-notes.md"));
+        assert!(search_workspace_entries_in(&root, &root, " ").is_err());
+        assert!(search_workspace_entries_in(&root, &sibling, "notes").is_err());
         fs::remove_dir_all(&base).expect("cleanup");
     }
 
