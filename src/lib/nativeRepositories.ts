@@ -16,53 +16,112 @@ function failure(error: unknown, fallback: string): Result<never> {
 
 export class WorkspaceMemoryRepository implements MemoryRepository {
   private readonly local: LocalStorageMemoryRepository;
-  private migration?: Promise<MemoryRecord[]>;
-  constructor(storage: StorageLike) { this.local = new LocalStorageMemoryRepository(storage); }
-  private async all(): Promise<MemoryRecord[]> {
-    if (!isTauri()) { const result=await this.local.exportAll(); if(!result.ok) throw new Error(result.error.message); return result.value; }
+  private migration?: Promise<void>;
+
+  constructor(storage: StorageLike) {
+    this.local = new LocalStorageMemoryRepository(storage);
+  }
+
+  /**
+   * Import legacy browser records once per repository instance. The promise is
+   * only a migration lock: it must not become a cache of the live native data.
+   */
+  private async ensureMigrated(): Promise<void> {
+    if (!isTauri()) return;
     if (!this.migration) {
       const pending = (async () => {
-        const records = await invoke<MemoryRecord[]>("load_memories");
+        const nativeRecords = await invoke<MemoryRecord[]>("load_memories");
         const legacy = await this.local.exportAll();
         if (!legacy.ok) throw new Error(legacy.error.message);
-        const existing = new Set(records.map(record => record.id));
-        // Import only missing IDs: retries after a partial migration are safe
-        // and never overwrite newer native edits with stale browser data.
+
+        const existing = new Set(nativeRecords.map(record => record.id));
         for (const record of legacy.value) {
-          if (!existing.has(record.id)) await invoke("save_memory",{record});
+          if (existing.has(record.id)) continue;
+          await invoke("save_memory", { record });
+          existing.add(record.id);
         }
-        return records.length ? [...records, ...legacy.value.filter(record => !existing.has(record.id))] : legacy.value;
       })();
-      this.migration = pending.catch(error => { this.migration = undefined; throw error; });
+      this.migration = pending.catch(error => {
+        this.migration = undefined;
+        throw error;
+      });
     }
-    return this.migration;
+    await this.migration;
   }
-  async getById(id:MemoryRecord["id"]):Promise<Result<MemoryRecord|null>> {
-    try { return ok((await this.all()).find(record=>record.id===id)??null); }
-    catch(e) { return failure(e,"Could not load memory."); }
+
+  private async all(): Promise<MemoryRecord[]> {
+    if (!isTauri()) {
+      const result = await this.local.exportAll();
+      if (!result.ok) throw new Error(result.error.message);
+      return result.value;
+    }
+
+    await this.ensureMigrated();
+    // Always read the database again. Multiple panels/services own separate
+    // repository instances, so caching this result would make them stale.
+    return invoke<MemoryRecord[]>("load_memories");
   }
-  async exportAll():Promise<Result<MemoryRecord[]>> {
-    try { return ok(await this.all()); }
-    catch(e) { return failure(e,"Could not export memories."); }
-  }
-  async list(scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
-    try { const records=await this.all(); return ok(records.filter(r=>(scope==="all"||r.scope===scope)&&(scope!=="project"||(!!projectId&&r.projectId===projectId))).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,limit)); }
-    catch(e){return failure(e,"Could not load memories.");}
-  }
-  async search(query:string,scope:MemoryScope,limit:number,projectId?:string):Promise<Result<MemoryRecord[]>> {
+
+  async getById(id: MemoryRecord["id"]): Promise<Result<MemoryRecord | null>> {
     try {
-      const records=await this.all();
-      const scoped=records.filter(record=>(scope==="all"||record.scope===scope)&&(scope!=="project"||(!!projectId&&record.projectId===projectId)));
-      return ok(rankMemories(scoped,query).slice(0,limit));
-    } catch(e) { return failure(e,"Could not search memories."); }
+      return ok((await this.all()).find(record => record.id === id) ?? null);
+    } catch (error) {
+      return failure(error, "Could not load memory.");
+    }
   }
-  async save(record:MemoryRecord):Promise<Result<void>> {
-    if(!isTauri())return this.local.save(record);
-    try { await invoke("save_memory",{record}); this.migration=undefined; return ok(undefined); } catch(e){return failure(e,"Could not save memory.");}
+
+  async exportAll(): Promise<Result<MemoryRecord[]>> {
+    try {
+      return ok(await this.all());
+    } catch (error) {
+      return failure(error, "Could not export memories.");
+    }
   }
-  async delete(id:MemoryRecord["id"]):Promise<Result<void>> {
-    if(!isTauri())return this.local.delete(id);
-    try { await invoke("delete_memory",{id}); this.migration=undefined; return ok(undefined); } catch(e){return failure(e,"Could not delete memory.");}
+
+  async list(scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>> {
+    try {
+      const records = await this.all();
+      return ok(records
+        .filter(record => (scope === "all" || record.scope === scope) &&
+          (scope !== "project" || (!!projectId && record.projectId === projectId)))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, limit));
+    } catch (error) {
+      return failure(error, "Could not load memories.");
+    }
+  }
+
+  async search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>> {
+    try {
+      const records = await this.all();
+      const scoped = records.filter(record => (scope === "all" || record.scope === scope) &&
+        (scope !== "project" || (!!projectId && record.projectId === projectId)));
+      return ok(rankMemories(scoped, query).slice(0, limit));
+    } catch (error) {
+      return failure(error, "Could not search memories.");
+    }
+  }
+
+  async save(record: MemoryRecord): Promise<Result<void>> {
+    if (!isTauri()) return this.local.save(record);
+    try {
+      await this.ensureMigrated();
+      await invoke("save_memory", { record });
+      return ok(undefined);
+    } catch (error) {
+      return failure(error, "Could not save memory.");
+    }
+  }
+
+  async delete(id: MemoryRecord["id"]): Promise<Result<void>> {
+    if (!isTauri()) return this.local.delete(id);
+    try {
+      await this.ensureMigrated();
+      await invoke("delete_memory", { id });
+      return ok(undefined);
+    } catch (error) {
+      return failure(error, "Could not delete memory.");
+    }
   }
 }
 
