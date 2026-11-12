@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Activity, BookOpen, Bot, Command, Cpu, Focus, FolderKanban, FolderOpen, MemoryStick, Plug, Search, Sparkles, X } from "lucide-react";
+import { Activity, BookOpen, Bot, Command, Cpu, Focus, FolderKanban, FolderOpen, MemoryStick, MessageSquarePlus, Plug, Search, Sparkles, X } from "lucide-react";
 
-export type NexusCommandId = "chat" | "agents" | "memory" | "knowledge" | "projects" | "files" | "tools" | "models" | "focus";
+export type NexusCommandId = "chat" | "new-chat" | "search" | "agents" | "memory" | "knowledge" | "projects" | "files" | "tools" | "models" | "focus";
 
 const commands: Array<{ id: NexusCommandId; title: string; description: string; keywords: string; icon: typeof Command }> = [
-  { id: "chat", title: "Open chat", description: "Return to the main conversation", keywords: "conversation workspace assistant", icon: Sparkles },
+  { id: "chat", title: "Open chat", description: "Return to the main conversation", keywords: "conversation workspace assistant", icon: Sparkles },\n  { id: "new-chat", title: "New conversation", description: "Start a fresh chat in this workspace", keywords: "create chat message", icon: MessageSquarePlus },\n  { id: "search", title: "Global search", description: "Search conversations, projects and knowledge", keywords: "find search history documents", icon: Search },
   { id: "agents", title: "Agent center", description: "Manage agents and task runs", keywords: "automation tasks", icon: Bot },
   { id: "memory", title: "Memory", description: "Review saved personal context", keywords: "saved context", icon: MemoryStick },
   { id: "knowledge", title: "Knowledge base", description: "Search project documents", keywords: "documents sources", icon: BookOpen },
