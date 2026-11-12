@@ -55,6 +55,7 @@ export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; p
     }
   }
   useEffect(() => { void refresh(); }, [repository]);
+  useEffect(() => () => { liveTestAbort.current?.abort(); }, [liveTestAbort]);
 
   function runManualEvaluation() {
     const phrases = splitIds(requiredPhrases);
