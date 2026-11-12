@@ -524,7 +524,7 @@ export default function App() {
 
     <main className="main-panel">
       <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><button type="button" className="model-pill" onClick={() => setSettingsOpen(true)} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot verify OmniRoute backend locality. Verify the selected model's actual provider route before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => setFocusMode(value => !value)} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
-      <section className="chat-area">
+      <section className="chat-area" data-home={active ? "false" : "true"}>
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><div className="nexus-hero-core" aria-label={`NEXUS system core: ${busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"}`}><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">NEXUS CORE <b>{busy ? "PROCESSING" : modelTestState === "passed" ? "CONNECTED" : "STANDBY"}</b></div><div className="core-label core-label-bottom">NEXUS AU <span>·</span> SYSTEM INTERFACE</div></div><h1>{active?.title ?? "Your intelligence. Connected."}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <div className="nexus-system-grid" aria-label="System overview">
             <article className="nexus-system-card"><span className="nexus-card-label">MODEL ROUTE</span><strong>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"}</strong><small>{provider.model || "No model selected"}</small><i className="nexus-card-indicator"/></article>
@@ -532,7 +532,7 @@ export default function App() {
             <article className="nexus-system-card"><span className="nexus-card-label">WORKSPACE</span><strong>{workspaceProjects.length} PROJECTS</strong><small>{conversations.length} conversations</small><i className="nexus-card-indicator"/></article>
             <article className="nexus-system-card"><span className="nexus-card-label">CURRENT ACTIVITY</span><strong>{busy ? "PROCESSING" : "STANDBY"}</strong><small>{busy ? "Generating a response" : "Waiting for input"}</small><i className={`nexus-card-indicator ${busy ? "active" : ""}`}/></article>
           </div>
-          <CommandCenter
+          {!active && <CommandCenter
             projectCount={workspaceProjects.length}
             conversationCount={conversations.length}
             model={provider.model}
@@ -548,7 +548,7 @@ export default function App() {
             onOpenTools={() => { setToolsOpen(true); closeMobileNavigation(); }}
             onOpenSettings={() => { setSettingsOpen(true); closeMobileNavigation(); }}
             onStartPlanning={() => { setDraft("Help me plan and break down my next task into clear steps."); setError(""); }}
-          />
+          />}
           <label className="chat-project-context">Project context
             <select value={selectedProjectId} onChange={e => { setSelectedProjectId(e.target.value); setActiveId(null); setError(""); }}>
               <option value="">No project context</option>
