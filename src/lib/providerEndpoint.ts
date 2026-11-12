@@ -44,7 +44,7 @@ export interface NormalizedProviderFailure {
 /** Converts native gateway failures into stable application-level categories. */
 export function normalizeProviderFailure(cause: unknown): NormalizedProviderFailure {
   const message = cause instanceof Error ? cause.message : String(cause);
-  const status = message.match(/HTTP\\s+(\\d{3})/i)?.[1];
+  const status = message.match(/HTTP\s+(\d{3})/i)?.[1];
   if (/cancelled|canceled|aborted/i.test(message)) {
     return { code: "cancelled", message: "The provider request was cancelled.", retryable: false };
   }
