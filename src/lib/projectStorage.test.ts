@@ -1,0 +1,65 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { invokeMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>()
+}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+
+import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "./projectStorage";
+import type { WorkspaceProject } from "../core/projects";
+
+const project: WorkspaceProject = {
+  id: "legacy-project" as WorkspaceProject["id"],
+  name: "Legacy project",
+  description: "Imported from the browser workspace",
+  createdAt: 1,
+  updatedAt: 1,
+  archived: false,
+  schemaVersion: 1
+};
+
+describe("WorkspaceProjectRepository migration", () => {
+  const originalTauriInternals = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
+  let nativeProjects: WorkspaceProject[];
+
+  beforeEach(() => {
+    localStorage.clear();
+    nativeProjects = [];
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_projects") return [...nativeProjects];
+      if (command === "save_project") {
+        const item = args?.project as WorkspaceProject;
+        nativeProjects = [...nativeProjects.filter(existing => existing.id !== item.id), item];
+        return undefined;
+      }
+      if (command === "delete_project") {
+        nativeProjects = nativeProjects.filter(item => item.id !== args?.id);
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+  });
+
+  afterEach(() => {
+    if (originalTauriInternals) Object.defineProperty(window, "__TAURI_INTERNALS__", originalTauriInternals);
+    else delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  it("does not recreate a native project deleted after legacy migration", async () => {
+    const legacy = new LocalStorageProjectRepository(window.localStorage);
+    expect((await legacy.save(project)).ok).toBe(true);
+
+    const firstInstance = new WorkspaceProjectRepository(window.localStorage);
+    const migrated = await firstInstance.list(true);
+    expect(migrated.ok && migrated.value.map(item => item.id)).toEqual([project.id]);
+    expect(nativeProjects).toEqual([project]);
+
+    expect((await firstInstance.delete(project.id)).ok).toBe(true);
+    const reopened = new WorkspaceProjectRepository(window.localStorage);
+    const afterDelete = await reopened.list(true);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+    expect(nativeProjects).toEqual([]);
+  });
+});
