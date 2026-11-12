@@ -947,3 +947,9 @@
   .command-core-meta span b { max-width:90px; }
 }
 @media(prefers-reduced-motion:reduce) { .command-core-orbit.orbit-three,.command-core.is-processing .command-core-sphere { animation:none; } }
+
+.command-activity ol { grid-template-columns:1fr; gap:6px; }
+.command-activity li { position:relative; padding:9px 11px 9px 14px; border-left:1px solid rgba(145,122,230,.3); border-radius:0 9px 9px 0; background:linear-gradient(90deg,rgba(37,32,77,.32),rgba(15,18,39,.2)); }
+.command-activity li:not(:last-child):after { position:absolute; bottom:-7px; left:-1px; width:1px; height:7px; background:rgba(145,122,230,.22); content:""; }
+.command-activity-dot { position:absolute; left:-4px; top:14px; width:7px; height:7px; border:1px solid #17152e; }
+.command-activity li div { padding-left:4px; }
