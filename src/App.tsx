@@ -65,9 +65,15 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
+  const providerCheckGeneration = useRef(0);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    providerCheckGeneration.current += 1;
+    setModelsLoading(false);
+  }, [provider.baseUrl, provider.model, provider.inferenceLocation, provider.credentialHandle]);
+
   useEffect(() => {
     const breakpoint = window.matchMedia("(max-width: 640px)");
     const syncNavigation = () => setSidebarOpen(!breakpoint.matches);
@@ -290,6 +296,7 @@ export default function App() {
       setError("Save an API key in the OS credential vault first, or select a loopback local runtime.");
       return;
     }
+    const checkId = ++providerCheckGeneration.current;
     setModelsLoading(true);
     setProviderConnectionState("checking");
     setProviderConnectionMessage("Requesting the model catalog from the configured endpoint…");
@@ -298,6 +305,7 @@ export default function App() {
       if (!router) throw new Error("The native model runtime is unavailable.");
       const registry = new ModelRegistry(router);
       const refreshed = await registry.refresh();
+      if (checkId !== providerCheckGeneration.current) return;
       if (!refreshed.ok) throw new Error(refreshed.error.message);
       const selected = registry.setActiveModel(NATIVE_MODEL_PROVIDER_ID, provider.model);
       if (!selected.ok) throw new Error(selected.error.message);
@@ -309,6 +317,7 @@ export default function App() {
       setModelTestMessage("Model generation has not been tested in this session.");
       setError("");
     } catch (cause) {
+      if (checkId !== providerCheckGeneration.current) return;
       const message = cause instanceof Error ? cause.message : String(cause);
       setProviderConnectionState("failed");
       setProviderConnectionMessage(message);
@@ -316,7 +325,7 @@ export default function App() {
       setModelTestMessage("Model test is unavailable until the endpoint and model catalog are reachable.");
       setError(message);
     } finally {
-      setModelsLoading(false);
+      if (checkId === providerCheckGeneration.current) setModelsLoading(false);
     }
   }
 
@@ -337,6 +346,7 @@ export default function App() {
       return;
     }
 
+    const testId = ++providerCheckGeneration.current;
     const controller = new AbortController();
     let timedOut = false;
     setModelTestState("testing");
@@ -347,6 +357,7 @@ export default function App() {
     }, 45_000);
     try {
       const result = await testProviderGeneration(provider, controller.signal);
+      if (testId !== providerCheckGeneration.current) return;
       setModelTestState("passed");
       const usage = result.usage
         ? " Token usage: " + (result.usage.inputTokens ?? "?") + " input / " + (result.usage.outputTokens ?? "?") + " output."
@@ -354,6 +365,7 @@ export default function App() {
       setModelTestMessage("Generation succeeded. The selected model returned a non-empty response." + usage);
       setError("");
     } catch (cause) {
+      if (testId !== providerCheckGeneration.current) return;
       const message = timedOut
         ? "The model did not finish within 45 seconds. Check the provider and try again."
         : cause instanceof Error ? cause.message : "The model generation test failed.";
