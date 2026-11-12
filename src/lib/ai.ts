@@ -9,7 +9,8 @@ export async function sendMessage(
   knowledgeContext = "",
   onDelta?: (text: string) => void,
   signal?: AbortSignal,
-  onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void,
+  generation?: { temperature?: number; maxOutputTokens?: number }
 ): Promise<string> {
   if (!isTauri()) {
     return "Browser preview mode is active. The NEXUS AU interface and local conversation history work here, but AI requests need the native Tauri backend. Open the desktop app to connect your provider securely. No API key was sent or stored by this preview.";
@@ -34,6 +35,8 @@ export async function sendMessage(
   for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
     model: settings.model,
     messages: requestMessages,
+    ...(generation?.temperature !== undefined ? { temperature: generation.temperature } : {}),
+    ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {}),
     signal
   })) {
     if (event.type === "text_delta") {
@@ -75,7 +78,8 @@ export async function testProviderGeneration(
     "",
     undefined,
     signal,
-    value => { usage.value = value; }
+    value => { usage.value = value; },
+    { temperature: 0, maxOutputTokens: 16 }
   );
   return { response, usage: usage.value };
 }
