@@ -3,10 +3,12 @@ import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
 import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
+import { sendMessage } from "../lib/ai";
+import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
 
-export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
+export function TrainingLabPanel({ onClose, provider }: { onClose: () => void; provider: ProviderSettings }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
   const [datasets, setDatasets] = useState<DatasetManifest[]>([]);
   const [selectedDatasetKey, setSelectedDatasetKey] = useState("");
@@ -34,6 +36,8 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [working, setWorking] = useState(false);
+  const [liveTestRunning, setLiveTestRunning] = useState(false);
+  const liveTestAbort = useMemo(() => ({ current: null as AbortController | null }), []);
 
   async function refresh() {
     try {
@@ -67,6 +71,46 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
     setMetrics(JSON.stringify(summary, null, 2));
     setError("");
     setStatus("Manual phrase evaluation complete. This is a deterministic regression signal, not a semantic quality score.");
+  }
+
+  async function runLiveModelTest() {
+    if (!isTauri()) {
+      setError("Live model testing is available in the native desktop app. Browser preview cannot access the local provider runtime.");
+      return;
+    }
+    if (!provider.baseUrl.trim() || !provider.model.trim() || !evaluationPrompt.trim()) {
+      setError("Configure a provider URL, model, and evaluation prompt first.");
+      return;
+    }
+    liveTestAbort.current?.abort();
+    const controller = new AbortController();
+    liveTestAbort.current = controller;
+    setLiveTestRunning(true);
+    setWorking(true);
+    setError("");
+    setStatus("Sending the evaluation prompt to the currently selected provider...");
+    const startedAt = performance.now();
+    try {
+      const response = await sendMessage(provider, [{
+        id: crypto.randomUUID(),
+        role: "user",
+        content: evaluationPrompt.trim(),
+        createdAt: Date.now()
+      }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      setCandidateOutput(response);
+      setModelId(provider.model);
+      setMetrics(JSON.stringify({ latencyMs: elapsedMs, responseCharacters: response.length }, null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation }, null, 2));
+      setStatus(`Live generation completed in ${elapsedMs} ms via ${provider.model}. Review the response, then score it with the evaluation bench.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Live model test failed.");
+      setStatus("");
+    } finally {
+      if (liveTestAbort.current === controller) liveTestAbort.current = null;
+      setLiveTestRunning(false);
+      setWorking(false);
+    }
   }
 
   async function saveDataset() {
@@ -134,11 +178,11 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
-        <div><div className="eyebrow">MODEL DEVELOPMENT</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>Dataset governance, evaluation baselines, and reproducible experiment metadata.</p></div>
+        <div><div className="eyebrow">MODEL DEVELOPMENT</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.</p></div>
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
       <div className="training-notice">
-        {isTauri() ? "Metadata is stored in the local SQLite database. Training jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage. Native SQLite persistence is available in the desktop app."}
+        {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage. Native SQLite persistence is available in the desktop app."}
         <br/>Private conversations, memories, and raw sample text are not imported automatically.
       </div>
       {error && <div className="error-banner">{error}</div>}
@@ -169,8 +213,9 @@ export function TrainingLabPanel({ onClose }: { onClose: () => void }) {
         <div className="training-section-title"><FlaskConical size={16}/> Manual evaluation bench</div>
         <label>Evaluation prompt<input value={evaluationPrompt} onChange={event => setEvaluationPrompt(event.target.value)} maxLength={8000}/></label>
         <label>Required phrases<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
-        <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="Paste the candidate response to evaluate"/></label>
-        <button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button>
+        <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="A live model response appears here, or paste one manually"/></label>
+        <div className="training-two-col"><button className="primary-btn" onClick={() => void runLiveModelTest()} disabled={working || !isTauri()}>Run live model test</button><button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button></div>
+        {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
       <div className="training-section">
