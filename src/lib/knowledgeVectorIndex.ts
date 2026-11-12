@@ -26,7 +26,7 @@ export function planVectorReconciliation(rows: VectorRow[], chunks: KnowledgeChu
     const chunkId = row.chunkId ?? row.id;
     const key = vectorStorageKey(row.projectId, chunkId);
     const chunk = expected.get(key);
-    if (!chunk || row.id !== key || row.documentId !== chunk.documentId) {
+    if (!Array.isArray(row.vector) || row.vector.length === 0 || !row.vector.every(Number.isFinite) || !chunk || row.id !== key || row.documentId !== chunk.documentId) {
       staleIds.push(row.id);
       continue;
     }
@@ -39,7 +39,7 @@ export function planVectorReconciliation(rows: VectorRow[], chunks: KnowledgeChu
 }
 
 export function cosineSimilarity(left: number[], right: number[]): number {
-  if (!left.length || left.length !== right.length) return 0;
+  if (!left.length || left.length !== right.length || left.some(value => !Number.isFinite(value)) || right.some(value => !Number.isFinite(value))) return 0;
   let dot = 0, leftNorm = 0, rightNorm = 0;
   for (let index = 0; index < left.length; index += 1) {
     dot += left[index] * right[index];
@@ -117,15 +117,24 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
 
   private open(): Promise<IDBDatabase> {
     if (typeof indexedDB === "undefined") return Promise.reject(new Error("IndexedDB is unavailable in this runtime."));
-    return this.database ??= new Promise((resolve, reject) => {
-      const request = indexedDB.open(DATABASE, 1);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error("Could not open vector database."));
-    });
+    if (!this.database) {
+      const pending = new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(DATABASE, 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+        };
+        request.onsuccess = () => {
+          const db = request.result;
+          db.onversionchange = () => { db.close(); this.database = undefined; };
+          resolve(db);
+        };
+        request.onerror = () => reject(request.error ?? new Error("Could not open vector database."));
+        request.onblocked = () => reject(new Error("Vector database upgrade is blocked by another open tab."));
+      });
+      this.database = pending.catch(error => { this.database = undefined; throw error; });
+    }
+    return this.database;
   }
 
   private readAll(db: IDBDatabase): Promise<VectorRow[]> {
