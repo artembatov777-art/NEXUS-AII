@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Plus, Search, Trash2, X, Pencil, Check } from "lucide-react";
+import { Brain, Plus, Search, Trash2, X, Pencil, Check, Download } from "lucide-react";
 import { MemoryService, type MemoryCategory, type MemoryRecord, type MemoryScope, type MemoryId } from "../core/memory";
 import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
@@ -58,6 +58,22 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
 
   useEffect(() => { void refresh(""); void projects.list().then(result => { if (result.ok) setProjectOptions(result.value); }); }, [projects]);
 
+  async function exportMemories() {
+    const result = await service.exportAll();
+    if (!result.ok) { setError(result.error.message); return; }
+    const payload = JSON.stringify({ format: "nexus-au-memory-export", schemaVersion: 1, exportedAt: new Date().toISOString(), memories: result.value }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `nexus-au-memories-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setError("");
+  }
+
   async function saveMemory() {
     if (!content.trim() || saving) return;
     if (scope === "project" && !projectId) { setError("Select a project for this memory."); return; }
@@ -101,7 +117,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
     <section className="memory-modal" role="dialog" aria-modal="true" aria-labelledby="memory-title">
       <header className="memory-header">
         <div><div className="eyebrow">PERSONAL CONTEXT</div><h2 id="memory-title"><Brain size={21}/> Memory</h2><p>Information NEXUS can retrieve in future conversations.</p></div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close memory"><X size={18}/></button>
+        <div className="memory-header-actions"><button className="secondary-btn" onClick={() => void exportMemories()}><Download size={14}/> Export</button><button className="icon-btn" onClick={onClose} aria-label="Close memory"><X size={18}/></button></div>
       </header>
 
       <div className="memory-search"><Search size={16}/><input aria-label="Search saved memories" value={query} onChange={event => {
