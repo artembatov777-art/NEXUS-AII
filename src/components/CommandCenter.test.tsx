@@ -48,6 +48,9 @@ describe("NEXUS Command Center", () => {
     expect(container.textContent).toContain("Model generation");
     expect(container.textContent).toContain("NEXUS AI CORE");
     expect(container.textContent).toContain("Awaiting a verified model connection");
+    expect(container.querySelector(".deck-core")).not.toBeNull();
+    expect(container.querySelector(".deck-tool-grid")?.children.length).toBe(7);
+    expect(container.querySelector(".deck-bottom")).not.toBeNull();
   });
 
   it("does not present browser preview credential storage as available", () => {
