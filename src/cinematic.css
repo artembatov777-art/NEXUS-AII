@@ -811,3 +811,13 @@
   .command-palette-list { max-height:60vh; }
 }
 @media (prefers-reduced-motion:reduce) { .command-palette { animation:none; } }
+
+.command-activity { margin-top:13px; padding:14px; border:1px solid rgba(125,133,207,.16); border-radius:14px; background:rgba(7,12,28,.48); }
+.command-activity ol { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; margin:0; padding:0; list-style:none; }
+.command-activity li { display:flex; align-items:flex-start; gap:9px; min-width:0; padding:8px 9px; border-radius:9px; background:rgba(25,25,58,.32); }
+.command-activity-dot { width:7px; height:7px; flex-shrink:0; margin-top:4px; border-radius:50%; background:#9b83f4; box-shadow:0 0 10px rgba(155,131,244,.45); }
+.command-activity li div { display:flex; flex:1; min-width:0; flex-direction:column; gap:4px; }
+.command-activity li strong { overflow:hidden; color:#e1def4; font-size:9px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.command-activity li small { color:#777d9d; font-size:8px; }
+.command-activity>p { margin:4px 0 2px; color:#8185a3; font-size:9px; }
+@media(max-width:640px) { .command-activity ol { grid-template-columns:1fr; } }
