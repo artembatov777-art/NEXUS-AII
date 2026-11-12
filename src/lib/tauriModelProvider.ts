@@ -10,7 +10,7 @@ export const NATIVE_MODEL_PROVIDER_ID = "nexus.native-provider";
 function isValidModelId(model: string): boolean {
   return model.trim().length > 0
     && new TextEncoder().encode(model).byteLength <= 128
-    && !/[\\u0000-\\u001f\\u007f]/.test(model);
+    && !/[\u0000-\u001f\u007f]/.test(model);
 }
 
 /** Model discovery is an idempotent GET, so retry one transient failure. Chat POSTs are never auto-retried to avoid duplicate generation or billing. */
