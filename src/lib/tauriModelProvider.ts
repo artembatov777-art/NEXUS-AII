@@ -69,6 +69,8 @@ class TauriModelProvider implements ModelProvider {
         credentialHandle: this.settings.credentialHandle ?? "default",
         model: request.model,
         messages: request.messages.map(message => ({ role: message.role, content: message.content })),
+        temperature: request.temperature ?? null,
+        maxOutputTokens: request.maxOutputTokens ?? null,
         streamId,
         onEvent: channel
       });
