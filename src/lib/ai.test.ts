@@ -85,6 +85,8 @@ describe("sendMessage AI Core integration", () => {
     expect(stream).toHaveBeenCalledWith(NATIVE_MODEL_PROVIDER_ID, expect.objectContaining({
       model: "model-a",
       messages: [{ role: "user", content: "Reply with exactly NEXUS_OK and nothing else." }],
+      temperature: 0,
+      maxOutputTokens: 16,
       signal: controller.signal
     }));
   });
