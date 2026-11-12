@@ -12,6 +12,9 @@ describe("knowledge vector index similarity", () => {
   it("clamps negative similarity to zero", () => {
     expect(cosineSimilarity([1, 0], [-1, 0])).toBe(0);
   });
+  it("rejects non-finite vectors", () => {
+    expect(cosineSimilarity([1, Number.NaN], [1, 0])).toBe(0);
+  });
 });
 
 describe("knowledge vector reconciliation", () => {
@@ -24,6 +27,17 @@ describe("knowledge vector reconciliation", () => {
     const chunks = [chunk("same", "p1", "d1"), chunk("same", "p2", "d2")];
     const plan = planVectorReconciliation([], chunks);
     expect(plan.missingChunks).toHaveLength(2);
+  });
+
+  it("treats empty or non-finite vectors as stale and schedules re-indexing", () => {
+    const chunks = [chunk("empty", "p1", "doc-empty"), chunk("nan", "p1", "doc-nan")];
+    const rows = [
+      { id: vectorStorageKey("p1", "empty"), chunkId: "empty", projectId: "p1", documentId: "doc-empty", vector: [], updatedAt: 1 },
+      { id: vectorStorageKey("p1", "nan"), chunkId: "nan", projectId: "p1", documentId: "doc-nan", vector: [Number.NaN], updatedAt: 1 }
+    ];
+    const plan = planVectorReconciliation(rows, chunks);
+    expect(plan.staleIds).toHaveLength(2);
+    expect(plan.missingChunks.map(item => item.id)).toEqual(["empty", "nan"]);
   });
 
   it("removes stale and legacy-keyed vectors and returns missing chunks for re-indexing", () => {
