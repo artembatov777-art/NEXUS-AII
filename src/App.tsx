@@ -115,10 +115,11 @@ export default function App() {
   }
   useEffect(() => { void refreshProjects(); }, [projectService]);
   useEffect(() => {
+    if (!knowledgeOpen) return;
     let active = true;
     void reconcileSemanticIndex(() => active).catch(() => undefined);
     return () => { active = false; };
-  }, [knowledgeRepository, embeddings, vectors]);
+  }, [knowledgeOpen, knowledgeRepository, embeddings, vectors]);
 
 
   useEffect(() => {
