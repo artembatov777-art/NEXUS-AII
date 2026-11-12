@@ -114,6 +114,30 @@ describe("MemoryService", () => {
     }
   });
 
+  it("removes stale project ownership when a project memory becomes profile memory", async () => {
+    const { service } = setup();
+    const saved = await service.remember({
+      ...input,
+      scope: "project",
+      projectId: "project-1"
+    }, { confirmedByUser: true });
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+
+    const revised = await service.revise(saved.value.id, { scope: "profile" });
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.scope).toBe("profile");
+      expect(revised.value.projectId).toBeUndefined();
+    }
+  });
+
+  it("does not attach project identifiers to profile memories", async () => {
+    const { service } = setup();
+    const saved = await service.remember({ ...input, projectId: "stale-project" }, { confirmedByUser: true });
+    expect(saved.ok && saved.value.projectId).toBeUndefined();
+  });
+
   it("revises records beyond the first 200 without truncating lookup", async () => {
     const { service, repository } = setup();
     for (let index = 0; index < 250; index += 1) {
