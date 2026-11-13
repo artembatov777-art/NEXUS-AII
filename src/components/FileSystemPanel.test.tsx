@@ -15,8 +15,8 @@ let root: Root;
 const onClose = vi.fn();
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-async function renderPanel() {
-  await act(async () => { root.render(<FileSystemPanel onClose={onClose} />); });
+async function renderPanel(onAnalyze?: (file: { name: string; path: string; content: string }) => void) {
+  await act(async () => { root.render(<FileSystemPanel onClose={onClose} onAnalyze={onAnalyze} />); });
 }
 describe("FileSystemPanel native workspace access", () => {
   beforeEach(() => {
