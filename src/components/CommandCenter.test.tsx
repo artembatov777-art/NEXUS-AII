@@ -53,6 +53,17 @@ describe("NEXUS Command Center", () => {
     expect(container.querySelector(".deck-bottom")).not.toBeNull();
   });
 
+  it("treats the local no-key profile as a valid vault state", () => {
+    act(() => root.render(<CommandCenter
+      projectCount={0} conversationCount={0} model="qwen2.5:7b" route="local"
+      providerReady={false} providerConnection="unchecked" credentialVault="not_required"
+      workspaceReady={true} busy={false} recentActivity={[]} {...actions}
+    />));
+    const vault = container.querySelector('[aria-label="System monitor"] article:nth-child(3)');
+    expect(vault?.getAttribute("data-health")).toBe("good");
+    expect(vault?.textContent).toContain("NOT REQUIRED");
+    expect(vault?.textContent).toContain("No key required for loopback profile");
+  });
   it("does not present browser preview credential storage as available", () => {
     act(() => root.render(<CommandCenter
       projectCount={0} conversationCount={0} model="auto" route="remote"

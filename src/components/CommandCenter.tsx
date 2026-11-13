@@ -15,7 +15,7 @@ type CommandCenterProps = {
   route: "remote" | "local";
   providerReady: boolean;
   providerConnection: "unchecked" | "checking" | "reachable" | "failed";
-  credentialVault: "loading" | "available" | "missing" | "unavailable" | "browser";
+  credentialVault: "loading" | "available" | "not_required" | "missing" | "unavailable" | "browser";
   workspaceReady: boolean;
   busy: boolean;
   recentActivity: Array<{ id: string; title: string; updatedAt: number; messageCount: number }>;
@@ -73,7 +73,7 @@ export function CommandCenter(props: CommandCenterProps) {
         <div className="command-monitor-grid">
           <article data-health={workspaceReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Workspace storage</strong><small>{workspaceReady ? "Conversation data loaded" : "Loading workspace data"}</small></div><b>{workspaceReady ? "READY" : "LOADING"}</b></article>
           <article data-health={providerConnection === "reachable" ? "good" : providerConnection === "failed" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Provider endpoint</strong><small>{providerConnection === "reachable" ? "Endpoint responded" : providerConnection === "failed" ? "Last endpoint check failed" : providerConnection === "checking" ? "Checking endpoint" : "Not checked this session"}</small></div><b>{providerConnection.toUpperCase()}</b></article>
-          <article data-health={credentialVault === "available" ? "good" : credentialVault === "unavailable" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Credential vault</strong><small>{credentialVault === "available" ? "OS vault available" : credentialVault === "browser" ? "Native vault unavailable in browser preview" : credentialVault === "missing" ? "No provider key saved" : credentialVault === "unavailable" ? "OS vault unavailable" : "Checking vault"}</small></div><b>{credentialVault.toUpperCase()}</b></article>
+          <article data-health={credentialVault === "available" || credentialVault === "not_required" ? "good" : credentialVault === "unavailable" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>Credential vault</strong><small>{credentialVault === "available" ? "OS vault available" : credentialVault === "not_required" ? "No key required for loopback profile" : credentialVault === "browser" ? "Native vault unavailable in browser preview" : credentialVault === "missing" ? "No provider key saved" : credentialVault === "unavailable" ? "OS vault unavailable" : "Checking vault"}</small></div><b>{credentialVault.toUpperCase()}</b></article>
           <article data-health={providerReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Model generation</strong><small>{providerReady ? "Generation test passed" : "Generation not verified"}</small></div><b>{providerReady ? "VERIFIED" : "UNTESTED"}</b></article>
         </div>
       </section>

@@ -27,7 +27,7 @@ import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
-type ProviderVaultStatus = "loading" | "available" | "missing" | "unavailable" | "browser";
+type ProviderVaultStatus = "loading" | "available" | "not_required" | "missing" | "unavailable" | "browser";
 type ProviderConnectionState = "unchecked" | "checking" | "reachable" | "failed";
 type ModelTestState = "unchecked" | "testing" | "passed" | "failed";
 
@@ -139,7 +139,7 @@ export default function App() {
     setProviderVaultStatus("loading");
     setHasProviderKey(false);
     if (!isTauri()) { setProviderVaultStatus("browser"); return; }
-    if (credentialHandle === "none") { setProviderVaultStatus("missing"); return; }
+    if (credentialHandle === "none") { setProviderVaultStatus("not_required"); return; }
     void invoke<ProviderVaultStatus>("provider_vault_status", { credentialHandle }).then(status => {
       const safeStatus: ProviderVaultStatus = ["available", "missing", "unavailable"].includes(status) ? status : "unavailable";
       setProviderVaultStatus(safeStatus);
