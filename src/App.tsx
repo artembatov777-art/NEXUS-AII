@@ -499,7 +499,7 @@ export default function App() {
       const backupVersion = (backup as { schemaVersion?: unknown }).schemaVersion;
       const importWarning = "Importing a backup replaces projects, conversations, memories, knowledge, agent checkpoints, Training Lab records, and audit/trace history. Provider API keys and approved Windows folder permissions are never included. Export the current workspace first if you need to keep it. Continue?";
       const legacyWarning = backupVersion === 1
-        ? "\\n\\nThis is a legacy version 1 backup. It does not contain agent checkpoints, Training Lab records, or audit/trace history, so those records will be cleared."
+        ? "\n\nThis is a legacy version 1 backup. It does not contain agent checkpoints, Training Lab records, or audit/trace history, so those records will be cleared."
         : "";
       if (!window.confirm(importWarning + legacyWarning)) return;
       await invoke("import_workspace", { backup });
