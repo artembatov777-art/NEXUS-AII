@@ -22,7 +22,7 @@ describe("TauriModelProvider", () => {
     });
     const router = createTauriModelRouterForProfiles([
       { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "", inferenceLocation: "local", credentialHandle: "none" } },
-      { id: "nexus.omniroute", settings: { baseUrl: "https://ollama-gateway.example/v1", model: "", inferenceLocation: "remote", credentialHandle: "default" } }
+      { id: "nexus.omniroute", settings: { baseUrl: "https://gateway.example/v1", model: "", inferenceLocation: "remote", credentialHandle: "default" } }
     ]);
     if (!router) throw new Error("Expected native model router.");
     const result = await router.listModels();
