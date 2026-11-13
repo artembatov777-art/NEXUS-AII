@@ -133,6 +133,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Select a saved dataset version that contains imported test-split samples.");
       return;
     }
+    if (dataset.privacyClass === "owner_approved" && provider.inferenceLocation === "remote" &&
+        !window.confirm("This dataset is marked owner-approved private. Its test inputs will be sent to the configured remote provider. Expected outputs stay local. Continue?")) return;
     if (testSamples.length > 1_000) {
       setError("A single evaluation run is limited to 1,000 test cases. Split the dataset into smaller versions to evaluate it in batches.");
       return;
