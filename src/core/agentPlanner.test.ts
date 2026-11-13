@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { AgentPlanner } from "./agentPlanner";
 import { ok } from "./result";
 const tools = [{ id: "notes.search", version: "1", description: "Search", requiredPermissions: ["memory:read" as const], risk: "low" as const, timeoutMs: 1000, source: "builtin" as const, tags: [] }];
@@ -17,7 +17,7 @@ describe("AgentPlanner", () => {
   });
 
   it("rejects oversized reference context before calling the model", async () => {
-    const createPlan = vi.fn();
+    const createPlan = vi.fn(async ({ goal }: { goal: string }) => ok({ goal, steps: [] }));
     const planner = new AgentPlanner({ createPlan });
     expect(await planner.plan("Find notes", tools, new AbortController().signal, "x".repeat(12_001))).toMatchObject({ ok: false, error: { code: "validation" } });
     expect(createPlan).not.toHaveBeenCalled();
