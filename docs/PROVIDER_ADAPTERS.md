@@ -30,4 +30,4 @@ The multi-profile factory performs no network request. A provider is contacted o
 - URL credentials, query parameters, and fragments are rejected.
 - `inferenceLocation` is an owner disclosure, not proof of where an upstream gateway executes inference.
 - This adapter supports the bounded OpenAI-compatible chat-completions and model-catalog contract. Provider-specific features must be declared and tested before use.
-- The Settings screen still selects one active endpoint. Multi-profile registration is a core capability for the next provider-management UI; this document does not claim that profile management UI is complete.
+- Settings now stores, updates, deletes, and selects up to 16 local provider profiles without connecting when a profile is selected. Chat and the current agent panel still use one active endpoint at a time; the multi-profile router factory is available for host-level composition but is not yet the default chat router.
