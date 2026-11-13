@@ -5,6 +5,8 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 ## Unreleased
 
 ### Changed
+- File editing now checks the opened content snapshot before saving, rejects external changes, preserves the user's draft, and offers an explicit reload of the latest version.
+- File System navigation and close requests now guard unsaved edits instead of silently discarding them.
 - Replaced the legacy `@xenova/transformers` v2 dependency with `@huggingface/transformers` v4.3.2 and the maintained ONNX Community MiniLM export; retained mean pooling and normalized embeddings while switching to the v4 q8 dtype option.
 - Raised the Vite and Vitest minimum dependency ranges to patched releases after the latest Quality CI exposed dependency advisories.
 - Added an injectable embedding extractor boundary so validation and vector conversion can be tested without downloading model weights.
@@ -13,7 +15,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 ### Verification
 - Commit `ae4276e`: frontend Quality passed with 52 test files / 311 tests; `npm audit --audit-level=high` reported 0 vulnerabilities.
 - Commit `ae4276e`: Mobile Interface Preview build and deployment passed.
-- Native Windows/macOS/Linux matrix is still running; do not treat the current Rust edits as cross-platform verified until it completes.
+- Commit `ae4276e`: Native Windows/macOS/Linux matrix passed, including Rust tests and native executable builds. Subsequent conflict-snapshot and draft-recovery changes are not covered by that run and require fresh CI.
 
 ### Added
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.

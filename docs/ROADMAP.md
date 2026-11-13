@@ -28,7 +28,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
 - [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
 - [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
-- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `ae4276e`; native Windows/macOS/Linux quality matrix is still running and must pass before Phase I can close.
+- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `ae4276e`; native Windows/macOS/Linux quality matrix passed on `ae4276e`; the follow-on filesystem changes still require their own CI run before Phase I can close.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -63,7 +63,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Implement the bounded agent runtime and model-driven planning through AI Core; full phase acceptance still requires integration and native smoke tests.
 - [x] Implement approval, pause/resume, cancellation, durable SQLite checkpoints, and audit-led duplicate-step replay protection; automatic result replay and manual reconciliation for ambiguous external outcomes remain open.
 - [x] Implement the Tool Gateway, MCP server configuration, session-aware HTTP transport, tool discovery/import, and per-call approval with input preview; broader OAuth/authentication and adversarial integration tests remain open.
-- [x] Add audit-led replay protection that blocks duplicate execution of a previously started or terminal run/step.\n- [ ] Add automatic idempotent result replay and manual reconciliation for ambiguous external side effects.
+- [x] Add audit-led replay protection that blocks duplicate execution of a previously started or terminal run/step.
+- [ ] Add automatic idempotent result replay and manual reconciliation for ambiguous external side effects.
 - [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
 - [ ] Add integration tests for safe and denied tool execution.
 
@@ -76,7 +77,9 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Read UTF-8 text/code files through the native host and hand selected file content to a guarded AI analysis draft (75 KB source cap and a 90 KB serialized chat-message cap; owner confirms before content enters the chat draft).
 - [x] Create and edit regular files inside one approved root; rename/move require explicit UI confirmation and are implemented for individual entries.
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
-- [ ] Add bulk organization and file previews.\n- [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.\n- [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
+- [ ] Add bulk organization and file previews.
+- [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
+- [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
 **Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.
@@ -118,7 +121,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
-- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `ae4276e`; the native desktop quality matrix is still running. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
+- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `ae4276e`; the native desktop quality matrix passed on `ae4276e`; follow-on filesystem changes require fresh CI. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.

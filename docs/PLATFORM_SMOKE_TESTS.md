@@ -19,7 +19,8 @@ Record the OS version, NEXUS AU commit SHA, app build identifier, and result for
 4. Restart the app and confirm the records remain.
 5. Grant one dedicated test folder. Confirm NEXUS cannot browse outside approved roots.
 6. Open a text file, perform a content search, and create/edit/rename/move a test file inside the approved root.
-7. Open a test file, edit it in NEXUS, change the same file externally, then save. Confirm NEXUS reports a conflict, preserves the unsaved draft, and offers an explicit reload of the latest version.\n8. Confirm the agent write-approval dialog displays the target path and a bounded, escaped content preview, including a truncation marker for long content.
+7. Open a test file, edit it in NEXUS, change the same file externally, then save. Confirm NEXUS reports a conflict, preserves the unsaved draft, and offers an explicit reload of the latest version.
+8. Confirm the agent write-approval dialog displays the target path and a bounded, escaped content preview, including a truncation marker for long content.
 9. Open Agent Control Center and verify the recent tool audit shows filesystem action types without exposing full private paths or file contents.
 10. Delete the test project and confirm project-scoped knowledge and semantic vectors are no longer returned in search.
 
