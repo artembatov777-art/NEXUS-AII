@@ -152,3 +152,173 @@ button:disabled { cursor: not-allowed; }
   .deck-core-tags { justify-content: center; }
   .deck-core-readout { justify-self: stretch; max-width: none; gap: 12px; }
 }
+
+
+/* Complete the restrained command-deck palette across every workspace modal. */
+.settings-modal,
+.memory-modal,
+.project-modal,
+.knowledge-modal,
+.training-modal,
+.global-search-modal,
+.file-workspace,
+.tools-workspace,
+.agent-workspace,
+.agent-control-center,
+.command-palette {
+  color: var(--nx-text);
+  border-color: var(--nx-line-strong);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(39, 105, 122, .12), transparent 44%),
+    linear-gradient(145deg, #0d1a24, #08111a 76%);
+  box-shadow: 0 35px 110px rgba(0, 0, 0, .68), inset 0 1px rgba(220, 248, 252, .035);
+}
+.settings-modal label,
+.memory-add label,
+.memory-edit-form label,
+.knowledge-modal label,
+.training-modal label,
+.project-modal label {
+  color: #a9c0c8;
+}
+.settings-modal input,
+.settings-modal select,
+.memory-modal input,
+.memory-modal select,
+.memory-modal textarea,
+.project-modal input,
+.project-modal textarea,
+.knowledge-modal input,
+.knowledge-modal select,
+.knowledge-modal textarea,
+.training-modal input,
+.training-modal select,
+.training-modal textarea,
+.global-search-modal input {
+  border-color: rgba(126, 190, 207, .2);
+  background: rgba(4, 13, 20, .82);
+  color: #e3f0f3;
+}
+.settings-modal input:focus,
+.settings-modal select:focus,
+.memory-modal input:focus,
+.memory-modal textarea:focus,
+.project-modal input:focus,
+.project-modal textarea:focus,
+.knowledge-modal input:focus,
+.knowledge-modal textarea:focus,
+.training-modal input:focus,
+.training-modal textarea:focus,
+.global-search-modal input:focus {
+  border-color: rgba(139, 217, 232, .58);
+  box-shadow: 0 0 0 3px rgba(96, 180, 199, .1);
+}
+.eyebrow,
+.training-section-title,
+.memory-record-top,
+.file-pane-label,
+.file-pane-heading {
+  color: #83c4d1;
+}
+.secondary-btn {
+  border-color: rgba(126, 190, 207, .2);
+  background: rgba(17, 43, 54, .58);
+  color: #c3dce2;
+}
+.secondary-btn:hover {
+  border-color: rgba(139, 217, 232, .44);
+  background: rgba(28, 76, 89, .38);
+  color: #effbfc;
+}
+.memory-record,
+.project-item,
+.knowledge-document,
+.training-record,
+.global-search-result {
+  border-color: rgba(126, 190, 207, .15);
+  background: rgba(8, 22, 31, .72);
+}
+.memory-record p,
+.project-item p,
+.knowledge-results,
+.global-search-results {
+  color: #c5d9de;
+}
+.memory-record-top,
+.training-section-title {
+  color: #91d2df;
+}
+.knowledge-status,
+.file-tree-security,
+.file-preview-state {
+  border-color: rgba(126, 190, 207, .2);
+  background: rgba(19, 58, 70, .28);
+  color: #b9d9e0;
+}
+.agent-runtime-strip article,
+.agent-profile-card,
+.agent-run-card,
+.agent-feed-item,
+.agent-approval-card {
+  border-color: rgba(126, 190, 207, .16);
+  background: linear-gradient(145deg, rgba(12, 29, 39, .82), rgba(7, 17, 25, .9));
+}
+.agent-runtime-mark,
+.command-activity-dot {
+  background: #82cbd9;
+  box-shadow: 0 0 9px rgba(130, 203, 217, .42);
+}
+.agent-runtime-strip strong,
+.agent-profile-card strong,
+.agent-run-card strong {
+  color: #e0eff2;
+}
+.agent-runtime-strip small,
+.agent-profile-card small,
+.agent-run-card small {
+  color: #86a5af;
+}
+.agent-runtime-strip article[data-state="running"] .agent-runtime-mark {
+  background: #80cbd9;
+  box-shadow: 0 0 10px rgba(128, 203, 217, .48);
+}
+.agent-runtime-strip article[data-state="approval"] .agent-runtime-mark {
+  background: #e2bd79;
+}
+.agent-runtime-strip article[data-state="completed"] .agent-runtime-mark {
+  background: #69c9a5;
+}
+.agent-runtime-strip article[data-state="failed"] .agent-runtime-mark {
+  background: #df8292;
+}
+.error-banner {
+  border-color: rgba(222, 111, 145, .25);
+  background: rgba(67, 25, 46, .42);
+}
+.security-note,
+.training-notice,
+.file-notice {
+  border-color: rgba(104, 194, 164, .2);
+  background: rgba(20, 62, 55, .24);
+  color: #b1d9ca;
+}
+.mcp-manager-heading > div > span,
+.command-kicker,
+.deck-section-heading > div > span {
+  color: #83cbd9;
+}
+.mcp-add-grid input:focus,
+.file-entry-actions input:focus,
+.file-grant-input input:focus,
+.file-create-row input:focus {
+  border-color: rgba(139, 217, 232, .55);
+  box-shadow: 0 0 0 3px rgba(96, 180, 199, .09);
+}
+.command-palette [aria-selected="true"],
+.global-search-result:hover,
+.memory-record:hover,
+.project-item:hover,
+.knowledge-document:hover {
+  border-color: rgba(139, 217, 232, .3);
+  background: rgba(24, 68, 81, .32);
+}
