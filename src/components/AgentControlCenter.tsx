@@ -81,7 +81,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
-  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned") ?? null, [runtime, providerSettings.model]);
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
@@ -111,6 +111,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
         if (controller.signal.aborted) break;
         const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, controller.signal);
         if (!connected.ok) { addFeed(`MCP ${server.name}: ${connected.error.message}`, "warning"); continue; }
+        if (controller.signal.aborted) { await runtime.mcpClient.disconnect(server.id); break; }
         const imported = await runtime.discoverAndImportMcpTools(server.id, controller.signal, {
           permissions: ["mcp:execute"], risk: "high", timeoutMs: 30_000
         });

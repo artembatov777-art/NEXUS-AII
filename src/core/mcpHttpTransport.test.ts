@@ -11,6 +11,28 @@ describe("McpHttpTransport", () => {
     expect(fetcher).toHaveBeenCalledWith("https://mcp.example/tools", expect.objectContaining({ credentials: "omit", redirect: "error" }));
   });
 
+  it("retains MCP session and protocol headers and closes the server session", async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const method = String(init?.method);
+      if (method === "DELETE") return new Response(null, { status: 204 });
+      if (method === "POST" && JSON.parse(String(init?.body)).method === "initialize") {
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {}, serverInfo: { name: "test", version: "1" } } }),
+          { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "session-123" } });
+      }
+      if (method === "POST" && JSON.parse(String(init?.body)).method === "notifications/initialized") return new Response(null, { status: 202 });
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
+    const signal = new AbortController().signal;
+    await transport.request({ jsonrpc: "2.0", id: 1, method: "initialize" }, signal);
+    await transport.notify("notifications/initialized", {}, signal);
+    await transport.request({ jsonrpc: "2.0", id: 2, method: "ping" }, signal);
+    expect(fetcher.mock.calls[1][1]?.headers).toMatchObject({ "MCP-Session-Id": "session-123", "MCP-Protocol-Version": "2024-11-05" });
+    expect(fetcher.mock.calls[2][1]?.headers).toMatchObject({ "MCP-Session-Id": "session-123", "MCP-Protocol-Version": "2024-11-05" });
+    await transport.close();
+    expect(fetcher.mock.calls[3][1]).toMatchObject({ method: "DELETE", headers: { "MCP-Session-Id": "session-123" } });
+  });
+
   it("sends JSON-RPC notifications without an id and requires HTTP 202", async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });

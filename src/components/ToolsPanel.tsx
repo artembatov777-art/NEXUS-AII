@@ -37,7 +37,10 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
         await connectSavedServer(server, controller.signal);
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
+    };
   }, []);
 
   async function connectSavedServer(server: McpServerConfigRecord, signal: AbortSignal) {
@@ -47,6 +50,7 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
       setConnectionStates(current => ({ ...current, [server.id]: { status: "failed", tools: 0, detail: connected.error.message } }));
       return;
     }
+    if (signal.aborted) { await runtime.mcpClient.disconnect(server.id); return; }
     const listed = await runtime.mcpClient.listTools(server.id, signal);
     if (!listed.ok) {
       setConnectionStates(current => ({ ...current, [server.id]: { status: "connected", tools: 0, detail: listed.error.message } }));
@@ -96,8 +100,8 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
           </article>;
         })}</div>}
       </section>
-      <div className="tools-summary"><div><span>AVAILABLE IN CATALOG</span><strong>{String(catalog.length).padStart(2, "0")}</strong></div><div><span>CONNECTED</span><strong>NOT CONNECTED</strong></div><div><span>SECURITY MODEL</span><strong>APPROVAL GATED</strong></div></div>
-      <div className="tools-toolbar"><div className="file-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search tools and integrations..." aria-label="Search tools"/></div><span><Activity size={14}/> Connection status requires native runtime</span></div>
+      <div className="tools-summary"><div><span>AVAILABLE IN CATALOG</span><strong>{String(catalog.length).padStart(2, "0")}</strong></div><div><span>CONNECTED</span><strong>{String(Object.values(connectionStates).filter(state => state.status === "connected").length).padStart(2, "0")} / {String(servers.length).padStart(2, "0")}</strong></div><div><span>SECURITY MODEL</span><strong>APPROVAL GATED</strong></div></div>
+      <div className="tools-toolbar"><div className="file-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search tools and integrations..." aria-label="Search tools"/></div><span><Activity size={14}/> {Object.values(connectionStates).some(state => state.status === "connecting") ? "Connecting to MCP servers" : "MCP connection status"}</span></div>
       <div className="tools-catalog">{filtered.map(item => { const Icon = item.icon; const open = expanded === item.id; return <article className={open ? "tool-card expanded" : "tool-card"} key={item.id}><button className="tool-card-main" onClick={() => setExpanded(open ? "" : item.id)} aria-expanded={open} aria-controls={`tool-details-${item.id}`}><div className="tool-icon"><Icon size={19}/></div><div className="tool-card-copy"><span>{item.group}</span><strong>{item.name}</strong><small>{item.description}</small></div><span className="tool-preview-badge"><CircleDot size={11}/> PREVIEW</span><ChevronDown className={open ? "rotated" : ""} size={16}/></button>{open && <div className="tool-card-details" id={`tool-details-${item.id}`}><div><span>EXECUTION MODE</span><strong>{item.mode}</strong></div><div><span>REQUIRED PERMISSION</span><strong>{item.permission}</strong></div><p><LockKeyhole size={14}/> This catalog entry is a design placeholder. This is a reference catalog. Configure a real MCP server above to connect external tools.</p><button className="secondary-btn" onClick={() => setNotice(item.name + ": connection controls will appear after the tool gateway is integrated.")}>View connection requirements <ArrowUpRight size={13}/></button></div>}</article>; })}{!filtered.length && <div className="file-empty">No tools match this search.</div>}</div>
       <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Tools must be explicitly connected and permission-scoped</span><button className="secondary-btn" onClick={onClose}>Close</button></footer>
       {notice && <div className="file-notice" role="status" aria-live="polite"><span>{notice}</span><button type="button" className="file-notice-dismiss" aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}

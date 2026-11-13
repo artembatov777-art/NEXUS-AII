@@ -75,6 +75,8 @@ export class McpHttpTransport implements McpTransport {
   private readonly endpoint: URL;
   private readonly fetcher: typeof fetch;
   private readonly headers: Record<string, string>;
+  private sessionId: string | null = null;
+  private protocolVersion: string | null = null;
 
   constructor(options: McpHttpTransportOptions) {
     const url = new URL(options.endpoint);
@@ -95,11 +97,32 @@ export class McpHttpTransport implements McpTransport {
     }
   }
 
+  private sessionHeaders(): Record<string, string> {
+    return {
+      ...(this.sessionId ? { "MCP-Session-Id": this.sessionId } : {}),
+      ...(this.protocolVersion ? { "MCP-Protocol-Version": this.protocolVersion } : {})
+    };
+  }
+
+  async close(): Promise<void> {
+    const sessionId = this.sessionId;
+    this.sessionId = null;
+    if (!sessionId) return;
+    const response = await this.fetcher(this.endpoint.toString(), {
+      method: "DELETE",
+      headers: { ...this.headers, "MCP-Session-Id": sessionId, ...(this.protocolVersion ? { "MCP-Protocol-Version": this.protocolVersion } : {}) },
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store"
+    });
+    if (![200, 202, 204, 405].includes(response.status)) throw new Error(`MCP session close failed with status ${response.status}.`);
+  }
+
   async notify(method: string, params: unknown, signal: AbortSignal): Promise<void> {
     if (!method.trim() || method.length > 160) throw new Error("MCP notification method is invalid.");
     const response = await this.fetcher(this.endpoint.toString(), {
       method: "POST",
-      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers },
+      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers, ...this.sessionHeaders() },
       body: JSON.stringify({ jsonrpc: "2.0", method, params }),
       signal,
       credentials: "omit",
@@ -118,7 +141,7 @@ export class McpHttpTransport implements McpTransport {
   async request(request: McpRequest, signal: AbortSignal): Promise<McpResponse> {
     const response = await this.fetcher(this.endpoint.toString(), {
       method: "POST",
-      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers },
+      headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers, ...this.sessionHeaders() },
       body: JSON.stringify(request),
       signal,
       credentials: "omit",
@@ -130,8 +153,23 @@ export class McpHttpTransport implements McpTransport {
     if (declaredLength > MAX_RESPONSE_BYTES) throw new Error("MCP response exceeded the 2 MB limit.");
     const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const body = await readBoundedText(response);
-    if (type === "application/json") return JSON.parse(body) as McpResponse;
-    if (type === "text/event-stream") return parseMcpSseResponse(body, request.id);
-    throw new Error("MCP server returned an unsupported content type.");
+    let message: McpResponse;
+    if (type === "application/json") message = JSON.parse(body) as McpResponse;
+    else if (type === "text/event-stream") message = parseMcpSseResponse(body, request.id);
+    else throw new Error("MCP server returned an unsupported content type.");
+
+    if (request.method === "initialize") {
+      const result = message.result as { protocolVersion?: unknown } | undefined;
+      if (typeof result?.protocolVersion !== "string" || result.protocolVersion.length > 40) {
+        throw new Error("MCP initialize response did not include a valid protocol version.");
+      }
+      const sessionId = response.headers.get("mcp-session-id");
+      if (sessionId && (sessionId.length > 1024 || /[\\u0000-\\u001f\\u007f]/.test(sessionId))) {
+        throw new Error("MCP server returned an invalid session identifier.");
+      }
+      this.sessionId = sessionId;
+      this.protocolVersion = result.protocolVersion;
+    }
+    return message;
   }
 }

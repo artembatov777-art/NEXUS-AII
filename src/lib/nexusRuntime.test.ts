@@ -117,6 +117,17 @@ describe("createNexusRuntime", () => {
     const workflow = runtime.createAgentWorkflow("test-provider", "test-model", "planned-thread");
     expect(workflow).not.toBeNull();
     if (!workflow) throw new Error("Workflow should be available when a model router is configured.");
+    const mcpScoped = runtime.createAgentWorkflow("test-provider", "test-model", "mcp-thread", ["notes.search", "mcp.*"]);
+    expect(mcpScoped).not.toBeNull();
+    if (!mcpScoped) throw new Error("MCP-scoped workflow should be available.");
+    expect(runtime.toolRegistry.register({
+      id: "mcp.remote.lookup", version: "mcp-1", description: "Remote lookup",
+      requiredPermissions: ["mcp:execute"], risk: "high", timeoutMs: 1_000,
+      validateInput: input => ok(input), execute: vi.fn(async () => ok({}))
+    }).ok).toBe(true);
+    const mcpPlan = await mcpScoped.plan("Find a note", new AbortController().signal);
+    expect(mcpPlan.ok).toBe(true);
+
     const restricted = runtime.createAgentWorkflow("test-provider", "test-model", "restricted-thread", ["not-registered"]);
     expect(restricted).not.toBeNull();
     if (!restricted) throw new Error("Restricted workflow should be available.");

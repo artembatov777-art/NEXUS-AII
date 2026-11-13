@@ -169,7 +169,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
           const available = toolRegistry.search("", 100);
           if (!available.ok) return available;
           const allowed = allowedToolIds ? new Set(allowedToolIds) : null;
-          const tools = allowed ? available.value.filter(tool => allowed.has(tool.id)) : available.value;
+          const tools = allowed ? available.value.filter(tool => allowed.has(tool.id) || (allowed.has("mcp.*") && tool.id.startsWith("mcp."))) : available.value;
           if (allowed && tools.length === 0) return err("validation", "No tools allowed for this workflow are registered.");
           return planner.plan(goal, tools, signal);
         },
