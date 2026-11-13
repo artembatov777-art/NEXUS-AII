@@ -27,6 +27,19 @@ describe("LocalStorageToolAuditSink", () => {
     expect(listed).toMatchObject({ ok: true, value: [{ status: "started" }, { status: "completed" }] });
   });
 
+
+  it("persists a manual reconciliation as a terminal audit state", async () => {
+    const sink = new LocalStorageToolAuditSink(new MemoryStorage());
+    expect((await sink.record(event())).ok).toBe(true);
+    expect((await sink.record(event({
+      status: "reconciled", timestamp: 200,
+      detail: "Owner reviewed the external outcome. No tool retry was executed."
+    }))).ok).toBe(true);
+    expect(await sink.list({ runId: "run-1" })).toMatchObject({
+      ok: true, value: [{ status: "started" }, { status: "reconciled" }]
+    });
+  });
+
   it("filters by run and returns only the requested newest events", async () => {
     const sink = new LocalStorageToolAuditSink(new MemoryStorage());
     await sink.record(event());

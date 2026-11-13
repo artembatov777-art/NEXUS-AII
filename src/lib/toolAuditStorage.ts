@@ -12,7 +12,7 @@ function isToolAuditEvent(value: unknown): value is ToolAuditEvent {
   return typeof event.toolId === "string" && event.toolId.length > 0 && event.toolId.length <= 160 &&
     typeof event.runId === "string" && event.runId.length > 0 && event.runId.length <= 160 &&
     typeof event.traceId === "string" && event.traceId.length > 0 && event.traceId.length <= 160 &&
-    ["started", "completed", "failed", "denied"].includes(String(event.status)) &&
+    ["started", "completed", "failed", "denied", "reconciled"].includes(String(event.status)) &&
     typeof event.timestamp === "number" && Number.isFinite(event.timestamp) &&
     (event.detail === undefined || (typeof event.detail === "string" && event.detail.length <= MAX_DETAIL_LENGTH));
 }

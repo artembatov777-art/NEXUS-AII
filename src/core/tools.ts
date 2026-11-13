@@ -49,7 +49,7 @@ export interface ToolAuditEvent {
   toolId: string;
   runId: string;
   traceId: string;
-  status: "started" | "completed" | "failed" | "denied";
+  status: "started" | "completed" | "failed" | "denied" | "reconciled";
   timestamp: number;
   detail?: string;
 }
