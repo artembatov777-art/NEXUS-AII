@@ -190,6 +190,67 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps an unsaved draft when another file is selected and discard is declined", async () => {
+    const rootPath = "/home/test/Documents";
+    const firstPath = rootPath + "/notes.txt";
+    const secondPath = rootPath + "/other.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "notes.txt", path: firstPath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 },
+        { name: "other.txt", path: secondPath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }
+      ];
+      if (command === "read_workspace_file") return args?.path === firstPath ? "original" : "other";
+      return undefined;
+    });
+    await renderPanel();
+    const firstButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { firstButton!.click(); });
+    const editButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Edit file"));
+    await act(async () => { editButton!.click(); });
+    const editor = container.querySelector<HTMLTextAreaElement>("textarea.file-editor")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, "unsaved draft");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    const secondButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("other.txt"));
+    await act(async () => { secondButton!.click(); });
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
+    expect(invokeMock).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+  });
+
+  it("asks before closing the workspace while file edits are unsaved, including Escape requests", async () => {
+    const rootPath = "/home/test/Documents";
+    const filePath = rootPath + "/notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "original";
+      return undefined;
+    });
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { fileButton!.click(); });
+    const editButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Edit file"));
+    await act(async () => { editButton!.click(); });
+    const editor = container.querySelector<HTMLTextAreaElement>("textarea.file-editor")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, "unsaved draft");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    await act(async () => { window.dispatchEvent(new Event("nexus-file-system-close-request")); });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
+    vi.unstubAllGlobals();
+  });
+
   it("records file reads in the native tool audit history without storing the path", async () => {
     const rootPath = "/home/test/Documents";
     const filePath = rootPath + "/notes.txt";

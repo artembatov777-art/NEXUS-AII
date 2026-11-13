@@ -63,6 +63,21 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [conflictDetected, setConflictDetected] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  function confirmDiscardDraft(action: string): boolean {
+    if (!editing || draft === preview) return true;
+    return window.confirm(`You have unsaved file edits. Discard them and ${action}?`);
+  }
+
+  function closeWorkspace() {
+    if (confirmDiscardDraft("close the File System")) onClose();
+  }
+
+  useEffect(() => {
+    const requestClose = () => closeWorkspace();
+    window.addEventListener("nexus-file-system-close-request", requestClose);
+    return () => window.removeEventListener("nexus-file-system-close-request", requestClose);
+  }, [editing, draft, preview, onClose]);
+
   async function refresh(path = currentPath) {
     if (!path || !isTauri()) return;
     setBusy(true);
@@ -167,6 +182,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function openEntry(entry: WorkspaceEntry) {
+    if (!confirmDiscardDraft("open another file or folder")) return;
     if (entry.kind === "directory") {
       setSelectedPath("");
       setPreview("");
@@ -238,7 +254,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function renameSelected() {
-    if (!selectedPath || !renameName.trim()) return;
+    if (!selectedPath || !renameName.trim() || !confirmDiscardDraft("rename this file")) return;
     if (!window.confirm(`Rename this file to "${renameName.trim()}"? The file contents will not change.`)) return;
     setBusy(true);
     setError("");
@@ -271,7 +287,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function moveSelected() {
-    if (!selectedPath || !moveDestination.trim()) return;
+    if (!selectedPath || !moveDestination.trim() || !confirmDiscardDraft("move this file")) return;
     if (!window.confirm(`Move this file to the selected folder?\\n\\n${moveDestination.trim()}`)) return;
     setBusy(true);
     setError("");
@@ -315,7 +331,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function revokeDirectory(path: string) {
-    if (!window.confirm(`Remove NEXUS access to this directory? Existing files will not be changed.\n\n${path}`)) return;
+    if (!confirmDiscardDraft("revoke this directory") || !window.confirm(`Remove NEXUS access to this directory? Existing files will not be changed.\n\n${path}`)) return;
     setBusy(true);
     try {
       const allowed = await invoke<string[]>("revoke_workspace_directory", { path });
@@ -339,11 +355,11 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const SelectedIcon = selectedPath ? fileIcon(selectedPath) : File;
   const isAllowedCurrent = roots.some(root => currentPath === root || currentPath.startsWith(root.replace(/[\\/]+$/, "") + (root.includes("\\") ? "\\" : "/")));
 
-  return <div className="modal-backdrop file-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="modal-backdrop file-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeWorkspace(); }}>
     <section className="file-workspace" role="dialog" aria-modal="true" aria-labelledby="file-workspace-title">
       <header className="file-workspace-header">
         <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">NATIVE WORKSPACE MODULE</div><h2 id="file-workspace-title">File system</h2><p>Browse, search, create, edit, rename, and move files in approved folders</p></div></div>
-        <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={onClose} aria-label="Close file system"><X size={18}/></button></div>
+        <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={closeWorkspace} aria-label="Close file system"><X size={18}/></button></div>
       </header>
       {!isTauri() ? <div className="file-workspace-empty"><LockKeyhole size={28}/><h3>Native desktop access required</h3><p>Windows folders are accessed by the Tauri desktop app, not the browser preview.</p></div> : <>
         <div className="file-workspace-toolbar">
@@ -393,7 +409,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
             </div><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
         </div>
-        <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={onClose}>Close workspace</button></footer>
+        <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={closeWorkspace}>Close workspace</button></footer>
       </>}
     </section>
   </div>;

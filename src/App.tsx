@@ -222,7 +222,7 @@ export default function App() {
         if (commandPaletteOpen) setCommandPaletteOpen(false);
         else if (globalSearchOpen) setGlobalSearchOpen(false);
         else if (agentsOpen) setAgentsOpen(false);
-        else if (fileSystemOpen) setFileSystemOpen(false);
+        else if (fileSystemOpen) window.dispatchEvent(new Event("nexus-file-system-close-request"));
         else if (toolsOpen) setToolsOpen(false);
         else if (trainingLabOpen) setTrainingLabOpen(false);
         else if (knowledgeOpen) setKnowledgeOpen(false);
