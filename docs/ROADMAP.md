@@ -71,10 +71,10 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Phase V — NEXUS File System
 
-- [ ] Implement native Windows folder selection and scoped filesystem permissions.
-- [ ] Browse and search only owner-approved folders.
+- [x] Implement native Windows folder selection and scoped filesystem permissions (Tauri dialog + Rust permission roots; cross-platform CI passed).
+- [x] Browse and recursively search by name only inside owner-approved folders, with bounded depth, visited-entry, and result limits.
 - [ ] Read and analyze supported files and code.
-- [ ] Create, edit, rename, move, and organize files with explicit confirmation for consequential changes.
+- [ ] Create, edit, rename, and move regular files inside one approved root; rename/move require explicit UI confirmation. Bulk organization and recovery are still pending.
 - [ ] Add previews, conflict handling, recovery, and audit history.
 - [ ] Keep browser preview disconnected from the host filesystem.
 

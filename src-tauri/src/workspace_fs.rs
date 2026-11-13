@@ -71,7 +71,7 @@ impl WorkspaceAccess {
         }
     }
 
-    fn allowed_root_for(&self, path: &Path) -> Result<PathBuf, String> {
+    pub(crate) fn allowed_root_for(&self, path: &Path) -> Result<PathBuf, String> {
         let canonical = fs::canonicalize(path).map_err(|e| format!("Could not resolve the requested path: {e}"))?;
         let roots = self.roots.lock().map_err(|_| "Workspace permission lock is unavailable.")?;
         roots.iter().find(|root| canonical.starts_with(root)).cloned()

@@ -39,6 +39,8 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [newName, setNewName] = useState("");
+  const [renameName, setRenameName] = useState("");
+  const [moveDestination, setMoveDestination] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -148,6 +150,8 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
     try {
       const content = await invoke<string>("read_workspace_file", { path: entry.path });
       setSelectedPath(entry.path);
+      setRenameName(entry.name);
+      setMoveDestination(currentPath);
       setPreview(content);
       setDraft(content);
       setEditing(false);
@@ -167,6 +171,57 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       setPreview(draft);
       setEditing(false);
       setNotice("File saved.");
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function renameSelected() {
+    if (!selectedPath || !renameName.trim()) return;
+    if (!window.confirm(`Rename this file to "${renameName.trim()}"? The file contents will not change.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const nextPath = await invoke<string>("rename_workspace_entry", { path: selectedPath, newName: renameName.trim() });
+      setSelectedPath(nextPath);
+      setRenameName(nextPath.split(/[\\\\/]/).pop() ?? renameName.trim());
+      const content = await invoke<string>("read_workspace_file", { path: nextPath });
+      setPreview(content);
+      setDraft(content);
+      setNotice("File renamed.");
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function chooseMoveDestination() {
+    setError("");
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Choose a destination inside the same approved folder" });
+      if (typeof selected === "string") setMoveDestination(selected);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not choose a destination folder.");
+    }
+  }
+
+  async function moveSelected() {
+    if (!selectedPath || !moveDestination.trim()) return;
+    if (!window.confirm(`Move this file to the selected folder?\\n\\n${moveDestination.trim()}`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await invoke<string>("move_workspace_entry", { path: selectedPath, destinationDirectory: moveDestination.trim() });
+      setSelectedPath("");
+      setPreview("");
+      setDraft("");
+      setEditing(false);
+      setNotice("File moved.");
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -258,7 +313,12 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
           </div>
           <aside className="file-preview-pane">
             <div className="file-pane-label">INSPECTOR</div>
-            {selectedPath ? <><div className="file-preview-icon"><SelectedIcon size={24}/></div><h3>{selectedPath.split(/[\\/]/).pop()}</h3><p>{selectedPath}</p><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
+            {selectedPath ? <><div className="file-preview-icon"><SelectedIcon size={24}/></div><h3>{selectedPath.split(/[\\/]/).pop()}</h3><p>{selectedPath}</p><div className="file-entry-actions">
+              <label>Rename file<input aria-label="New file name" value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
+              <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || !renameName.trim()}>Rename</button>
+              <label>Move to approved folder<div className="file-move-input"><input aria-label="Move destination folder" value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder="Destination folder path"/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
+              <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || !moveDestination.trim()}>Move file</button>
+            </div><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
         </div>
         <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={onClose}>Close workspace</button></footer>

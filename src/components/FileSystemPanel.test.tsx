@@ -110,6 +110,60 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.textContent).toContain("meeting-notes.md");
   });
 
+  it("renames a selected file only after explicit confirmation", async () => {
+    const rootPath = "C:\\\\Users\\\\Owner\\\\Documents";
+    const oldPath = rootPath + "\\\\draft.txt";
+    const newPath = rootPath + "\\\\final.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "draft.txt", path: oldPath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "hello";
+      if (command === "rename_workspace_entry") return newPath;
+      return undefined;
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("draft.txt"));
+    await act(async () => { fileButton!.click(); });
+    const renameInput = container.querySelector<HTMLInputElement>('input[aria-label="New file name"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(renameInput, "final.txt");
+      renameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const renameButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Rename");
+    await act(async () => { renameButton!.click(); });
+    expect(confirm).toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("rename_workspace_entry", { path: oldPath, newName: "final.txt" });
+    expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: newPath });
+    expect(container.querySelector(".file-preview-pane h3")?.textContent).toBe("final.txt");
+    confirm.mockRestore();
+  });
+
+  it("moves a selected file only after explicit confirmation", async () => {
+    const rootPath = "C:\\\\Users\\\\Owner\\\\Documents";
+    const oldPath = rootPath + "\\\\draft.txt";
+    const destination = rootPath + "\\\\Archive";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "draft.txt", path: oldPath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "hello";
+      if (command === "move_workspace_entry") return destination + "\\\\draft.txt";
+      return undefined;
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("draft.txt"));
+    await act(async () => { fileButton!.click(); });
+    const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Move file");
+    await act(async () => { moveButton!.click(); });
+    expect(confirm).toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("move_workspace_entry", { path: oldPath, destinationDirectory: rootPath });
+    confirm.mockRestore();
+  });
+
   it("closes from the header and backdrop", async () => {
     await renderPanel();
     const headerClose = container.querySelector<HTMLButtonElement>('button[aria-label="Close file system"]');
