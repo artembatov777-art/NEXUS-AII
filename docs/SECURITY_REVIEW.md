@@ -20,7 +20,7 @@
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
 - Provider keys are redacted from provider error excerpts.
-- Two fixed credential profiles are supported. Arbitrary multi-account profiles, automated key rotation, and recovery UX are not implemented.
+- Two fixed credential-vault slots (`default` and `ollama`) are supported. Up to 16 endpoint profiles can reference those slots, but arbitrary per-provider credentials, automated key rotation, and credential recovery UX are not implemented.
 
 ### Agent and tool execution
 
