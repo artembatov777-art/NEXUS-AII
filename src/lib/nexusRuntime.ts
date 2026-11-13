@@ -28,7 +28,8 @@ import { MemoryService, type MemoryId } from "../core/memory";
 import { HybridMemoryRetriever, KnowledgeRetrievalService } from "../core/knowledge";
 import { ProjectService, type ProjectId } from "../core/projects";
 import { LocalStorageMemoryRepository } from "./memoryStorage";
-import { LocalStorageProjectRepository } from "./projectStorage";
+import { WorkspaceMemoryRepository, WorkspaceKnowledgeRepository } from "./nativeRepositories";
+import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "./projectStorage";
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 import { DocumentIngestionService } from "../core/documentIngestion";
 import { createToolInvocationAgent, TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
@@ -103,12 +104,20 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const toolRegistry = new ToolRegistry(toolGateway);
   const mcpClient = new McpClient(toolRegistry, toolGateway);
   const traceSink = options.traceSink ?? new LocalStorageTraceSink(options.storage);
-  const memoryRepository = new LocalStorageMemoryRepository(options.storage);
+  // The desktop agent runtime must share the same SQLite-backed records as the UI.
+  // Browser preview keeps its isolated localStorage adapters.
+  const memoryRepository = isTauri()
+    ? new WorkspaceMemoryRepository(options.storage)
+    : new LocalStorageMemoryRepository(options.storage);
   const memoryService = new MemoryService(memoryRepository, { memoryId: () => ids.runId().replace("run_", "memory_") as MemoryId }, clock);
   const memoryRetriever = new HybridMemoryRetriever(memoryRepository);
-  const projectRepository = new LocalStorageProjectRepository(options.storage);
+  const projectRepository = isTauri()
+    ? new WorkspaceProjectRepository(options.storage)
+    : new LocalStorageProjectRepository(options.storage);
   const projectService = new ProjectService(projectRepository, () => ids.runId().replace("run_", "project_") as ProjectId, clock.now);
-  const knowledgeRepository = new LocalStorageKnowledgeRepository(options.storage);
+  const knowledgeRepository = isTauri()
+    ? new WorkspaceKnowledgeRepository(options.storage)
+    : new LocalStorageKnowledgeRepository(options.storage);
   const knowledgeService = new KnowledgeRetrievalService(knowledgeRepository);
   const documentIngestionService = new DocumentIngestionService(knowledgeRepository);
   const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
