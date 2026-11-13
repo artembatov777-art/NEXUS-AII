@@ -54,11 +54,12 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 ## Direct provider boundary and deferred gateway integration
 
-- During core development, cloud and local model requests use directly configured compatible `/v1` provider endpoints. OmniRoute is not installed, configured, or required at this stage.
+- Cloud and local model requests use directly configured compatible `/v1` provider endpoints. OmniRoute is not installed, configured, or connected, and is not required by the AI Core.
+- Non-connecting profile builders now prepare stable `nexus.ollama` and `nexus.omniroute` identities on the same native adapter contract. The multi-profile factory only registers adapters; it performs no network request until explicit model discovery or inference is invoked. The Settings UI still selects one active endpoint and does not yet manage a persistent multi-profile catalog.
 - Provider API keys are stored only in the OS credential vault. The webview sends a credential-profile handle, never the saved secret.
 - Loopback endpoints may use HTTP. Any non-loopback endpoint must use HTTPS. Redirects remain disabled and URL user-info/query/fragment components are rejected by the native provider transport.
-- Model IDs are selected only from the configured provider's actual discovery response; model/provider capabilities are not assumed to be uniform.
-- During final integration, OmniRoute will be added as an optional adapter implementing the same provider contract. Direct local and cloud providers must continue working without it.
+- Model IDs are selected only from the configured provider's actual discovery response; a prepared profile with no model ID must complete discovery before streaming. Model/provider capabilities are not assumed to be uniform.
+- OmniRoute remains an optional future gateway profile. Direct local and cloud providers must continue working without it.
 
 ## Platform credential behavior
 
