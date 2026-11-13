@@ -203,7 +203,7 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
           return ok({ path, created: true });
         } catch (cause) { return failure(cause, "Could not create the approved workspace directory."); }
       }
-    }
+    },
     {
       id: "workspace.rename",
       version: "1.0.0",
