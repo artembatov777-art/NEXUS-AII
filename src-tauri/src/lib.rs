@@ -1248,6 +1248,20 @@ struct ParsedSseChunk {
     output_tokens: Option<u64>,
 }
 
+fn retryable_provider_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 429 | 502 | 503 | 504)
+}
+
+fn provider_retry_delay(retry_after: Option<&str>, retry_number: usize) -> std::time::Duration {
+    if let Some(seconds) = retry_after.and_then(|value| value.trim().parse::<u64>().ok()) {
+        return std::time::Duration::from_secs(seconds.min(10));
+    }
+    match retry_number {
+        1 => std::time::Duration::from_millis(250),
+        _ => std::time::Duration::from_millis(750),
+    }
+}
+
 fn completion_reason_for_eof(finish_reason: Option<&str>) -> Result<&str, String> {
     finish_reason
         .filter(|reason| !reason.trim().is_empty())
@@ -1373,14 +1387,33 @@ async fn send_chat_stream(
         .timeout(std::time::Duration::from_secs(180))
         .redirect(reqwest::redirect::Policy::none())
         .build().map_err(|e| format!("Could not configure provider client: {e}"))?;
-    let mut request = client.post(endpoint).json(&payload);
-    if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
-    let send_result = tokio::select! {
-        result = request.send() => result,
-        _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
-    };
-    let mut response = send_result
-        .map_err(|e| format!("Provider streaming request failed: {e}"))?;
+    // Retry only explicit transient HTTP responses, and only before SSE bytes
+    // are consumed. Ambiguous transport failures are never replayed.
+    let mut response = None;
+    for attempt in 0..=2 {
+        let mut request = client.post(endpoint.clone()).json(&payload);
+        if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
+        let send_result = tokio::select! {
+            result = request.send() => result,
+            _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
+        };
+        let current = send_result
+            .map_err(|e| format!("Provider streaming request failed: {e}"))?;
+        if retryable_provider_status(current.status()) && attempt < 2 {
+            let retry_after = current.headers().get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok()).map(str::to_owned);
+            drop(current);
+            let delay = provider_retry_delay(retry_after.as_deref(), attempt + 1);
+            tokio::select! {
+                _ = tokio::time::sleep(delay) => {},
+                _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
+            }
+            continue;
+        }
+        response = Some(current);
+        break;
+    }
+    let mut response = response.ok_or_else(|| "Provider request did not produce a response.".to_string())?;
     let status = response.status();
     if response.content_length().map_or(false, |length| length > MAX_PROVIDER_RESPONSE_BYTES as u64) {
         return Err("Provider stream exceeded the 2 MB limit.".into());
@@ -1954,6 +1987,25 @@ mod database_tests {
         assert!(!valid_stream_id("bad/id"));
         assert!(!valid_stream_id("bad id"));
         assert!(!valid_stream_id(&"x".repeat(129)));
+    }
+
+    #[test]
+    fn provider_retries_only_transient_http_statuses() {
+        assert!(retryable_provider_status(reqwest::StatusCode::TOO_MANY_REQUESTS));
+        assert!(retryable_provider_status(reqwest::StatusCode::BAD_GATEWAY));
+        assert!(retryable_provider_status(reqwest::StatusCode::SERVICE_UNAVAILABLE));
+        assert!(retryable_provider_status(reqwest::StatusCode::GATEWAY_TIMEOUT));
+        assert!(!retryable_provider_status(reqwest::StatusCode::UNAUTHORIZED));
+        assert!(!retryable_provider_status(reqwest::StatusCode::BAD_REQUEST));
+        assert!(!retryable_provider_status(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
+    }
+
+    #[test]
+    fn provider_retry_delay_respects_numeric_retry_after_and_caps_wait() {
+        assert_eq!(provider_retry_delay(Some("3"), 1), std::time::Duration::from_secs(3));
+        assert_eq!(provider_retry_delay(Some("999"), 2), std::time::Duration::from_secs(10));
+        assert_eq!(provider_retry_delay(Some("invalid"), 1), std::time::Duration::from_millis(250));
+        assert_eq!(provider_retry_delay(None, 2), std::time::Duration::from_millis(750));
     }
 
     #[test]
