@@ -42,6 +42,20 @@ describe("ToolReconciliationService", () => {
     });
   });
 
+
+  it("surfaces failed steps with uncertain external outcomes but excludes pre-execution cancellation", async () => {
+    const audit = new FakeAudit();
+    audit.events = [
+      { ...started, status: "failed", detail: "timeout", timestamp: 20 },
+      { ...started, toolId: "workspace.read", traceId: "run-1:3", status: "failed", detail: "Cancelled before execution.", timestamp: 30 }
+    ];
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("cancelled")));
+    expect(await service.listAmbiguous("run-1")).toMatchObject({
+      ok: true,
+      value: [{ toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 20 }]
+    });
+  });
+
   it("does not expose live or successful runs for reconciliation", async () => {
     const audit = new FakeAudit();
     audit.events = [started];

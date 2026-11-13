@@ -72,6 +72,15 @@ function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
         toolId: event.toolId, runId: event.runId,
         traceId: event.traceId, startedAt: event.timestamp
       });
+    } else if (event.status === "failed" && event.detail !== "Cancelled before execution.") {
+      // A timeout, cancellation, or tool error can happen after an external
+      // side effect. Keep it visible for owner review rather than assuming
+      // that a failed return means nothing happened.
+      const prior = pending.get(key);
+      pending.set(key, {
+        toolId: event.toolId, runId: event.runId,
+        traceId: event.traceId, startedAt: prior?.startedAt ?? event.timestamp
+      });
     } else {
       pending.delete(key);
     }
