@@ -490,13 +490,13 @@ export default function App() {
 
   async function importWorkspaceBackup(file?: File) {
     if (!file) return;
-    if (file.size > 60 * 1024 * 1024) { setError("Backup file exceeds the 60 MB limit."); return; }
+    if (file.size > 60 * 1024 * 1024) { setError("Backup file exceeds the 50 MB limit."); return; }
     try {
       const backup: unknown = JSON.parse(await file.text());
       if (!backup || typeof backup !== "object" || (backup as { format?: unknown }).format !== "nexus-au-backup") {
         throw new Error("This file is not a NEXUS AU workspace backup.");
       }
-      if (!window.confirm("Importing a backup replaces the current projects, conversations, memories, and knowledge. Export a backup of the current workspace first if you need to keep it. Continue?")) return;
+      if (!window.confirm("Importing a backup replaces projects, conversations, memories, knowledge, agent checkpoints, Training Lab records, and audit/trace history. Provider API keys are never included. Export the current workspace first if you need to keep it. Continue?")) return;
       await invoke("import_workspace", { backup });
       // Database restore is authoritative. Vector maintenance is recoverable and
       // must not make a successful transactional restore appear to have failed.

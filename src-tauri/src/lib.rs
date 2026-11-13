@@ -658,6 +658,8 @@ mod payload_validation_tests {
 }
 
 
+const MAX_WORKSPACE_BACKUP_BYTES: usize = 50 * 1024 * 1024;
+
 fn export_workspace_record(connection: &Connection) -> Result<serde_json::Value, String> {
     let projects: Vec<StoredProject> = {
         let mut stmt=connection.prepare("SELECT id,name,description,created_at,updated_at,archived,schema_version FROM projects ORDER BY created_at").map_err(|e|e.to_string())?;
@@ -682,8 +684,37 @@ fn export_workspace_record(connection: &Connection) -> Result<serde_json::Value,
         let rows=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
         rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect()
     };
+    let tool_audit_events: Vec<serde_json::Value> = {
+        let mut stmt=connection.prepare("SELECT tool_id,run_id,trace_id,status,timestamp FROM tool_audit_events ORDER BY id").map_err(|e|e.to_string())?;
+        let rows=stmt.query_map([],|r|Ok(serde_json::json!({
+            "toolId":r.get::<_,String>(0)?,
+            "runId":r.get::<_,String>(1)?,
+            "traceId":r.get::<_,String>(2)?,
+            "status":r.get::<_,String>(3)?,
+            "timestamp":r.get::<_,f64>(4)?
+        }))).map_err(|e|e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?
+    };
     let exported_at=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_secs() as i64).unwrap_or(0);
-    Ok(serde_json::json!({"format":"nexus-au-backup","schemaVersion":1,"exportedAt":exported_at,"projects":projects,"conversations":conversations,"memories":read_payloads("SELECT payload FROM memory_records")?,"knowledgeChunks":read_payloads("SELECT payload FROM knowledge_chunks")?}))
+    let backup=serde_json::json!({
+        "format":"nexus-au-backup",
+        "schemaVersion":2,
+        "exportedAt":exported_at,
+        "projects":projects,
+        "conversations":conversations,
+        "memories":read_payloads("SELECT payload FROM memory_records ORDER BY updated_at,id")?,
+        "knowledgeChunks":read_payloads("SELECT payload FROM knowledge_chunks ORDER BY project_id,document_id,id")?,
+        "agentCheckpoints":read_payloads("SELECT payload FROM agent_checkpoints ORDER BY updated_at,run_id")?,
+        "toolAuditEvents":tool_audit_events,
+        "traceEvents":read_payloads("SELECT payload FROM trace_events ORDER BY id")?,
+        "trainingDatasets":read_payloads("SELECT payload FROM training_datasets ORDER BY created_at,id,version")?,
+        "trainingExperiments":read_payloads("SELECT payload FROM training_experiments ORDER BY created_at,id")?
+    });
+    let encoded=serde_json::to_vec(&backup).map_err(|e|e.to_string())?;
+    if encoded.len()>MAX_WORKSPACE_BACKUP_BYTES {
+        return Err("Workspace backup exceeds the 50 MB export limit. Reduce retained history or split the backup before exporting.".into());
+    }
+    Ok(backup)
 }
 
 #[tauri::command]
@@ -692,41 +723,192 @@ fn export_workspace(database: State<'_, AppDatabase>) -> Result<serde_json::Valu
     export_workspace_record(&connection)
 }
 
+fn normalize_tool_audit_event_record(event: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let tool_id=event_string(event,"toolId",160)?;
+    let run_id=event_string(event,"runId",160)?;
+    let trace_id=event_string(event,"traceId",160)?;
+    let status=event_string(event,"status",20)?;
+    if !["started","completed","failed","denied"].contains(&status.as_str()) {
+        return Err("Invalid audit status in workspace backup.".into());
+    }
+    let timestamp=event.get("timestamp").and_then(|value|value.as_f64()).filter(|value|value.is_finite())
+        .ok_or("Invalid audit timestamp in workspace backup.")?;
+    Ok(serde_json::json!({"toolId":tool_id,"runId":run_id,"traceId":trace_id,"status":status,"timestamp":timestamp}))
+}
+
+fn normalize_trace_event_record(event: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let trace_id=event_string(event,"traceId",160)?;
+    let run_id=event_string(event,"runId",160)?;
+    let name=event_string(event,"name",160)?;
+    let status=event_string(event,"status",32)?;
+    if !["started","progress","waiting_for_approval","completed","failed","cancelled"].contains(&status.as_str()) {
+        return Err("Invalid trace status in workspace backup.".into());
+    }
+    let timestamp=event.get("timestamp").and_then(|value|value.as_f64()).filter(|value|value.is_finite())
+        .ok_or("Invalid trace timestamp in workspace backup.")?;
+    let parent=event.get("parentTraceId").and_then(|value|value.as_str());
+    if parent.map_or(false,|value|value.trim().is_empty()||value.len()>160) {
+        return Err("Invalid parent trace id in workspace backup.".into());
+    }
+    let duration=event.get("durationMs").and_then(|value|value.as_f64());
+    if duration.map_or(false,|value|!value.is_finite()||value<0.0) {
+        return Err("Invalid trace duration in workspace backup.".into());
+    }
+    let attributes=trace_attributes(event.get("attributes"))?;
+    let mut safe=serde_json::json!({"traceId":trace_id,"runId":run_id,"name":name,"status":status,"timestamp":timestamp});
+    if let Some(parent)=parent { safe["parentTraceId"]=serde_json::json!(parent); }
+    if let Some(duration)=duration { safe["durationMs"]=serde_json::json!(duration); }
+    if let Some(attributes)=attributes { safe["attributes"]=attributes; }
+    if serde_json::to_vec(&safe).map_err(|e|e.to_string())?.len()>32_000 {
+        return Err("Trace event in workspace backup exceeds the 32 KB limit.".into());
+    }
+    Ok(safe)
+}
+
 fn import_workspace_record(connection: &mut Connection, backup: serde_json::Value) -> Result<(), String> {
-    if backup.get("format").and_then(|v|v.as_str())!=Some("nexus-au-backup") || backup.get("schemaVersion").and_then(|v|v.as_i64())!=Some(1) { return Err("Unsupported or invalid NEXUS AU backup file.".into()); }
+    let backup_size=serde_json::to_vec(&backup).map_err(|e|e.to_string())?.len();
+    if backup_size>MAX_WORKSPACE_BACKUP_BYTES { return Err("Workspace backup exceeds the 50 MB import limit.".into()); }
+    let schema_version=backup.get("schemaVersion").and_then(|value|value.as_i64()).ok_or("Backup schema version is missing.")?;
+    if backup.get("format").and_then(|value|value.as_str())!=Some("nexus-au-backup") || ![1,2].contains(&schema_version) {
+        return Err("Unsupported or invalid NEXUS AU backup file.".into());
+    }
     let projects:Vec<StoredProject>=serde_json::from_value(backup.get("projects").cloned().ok_or("Backup projects are missing.")?).map_err(|e|e.to_string())?;
     let conversations:Vec<StoredConversation>=serde_json::from_value(backup.get("conversations").cloned().ok_or("Backup conversations are missing.")?).map_err(|e|e.to_string())?;
-    let memories=backup.get("memories").and_then(|v|v.as_array()).ok_or("Backup memories are missing.")?;
-    let chunks=backup.get("knowledgeChunks").and_then(|v|v.as_array()).ok_or("Backup knowledge chunks are missing.")?;
-    if projects.len()>10000 || conversations.len()>10000 || memories.len()>10000 || chunks.len()>50000 { return Err("Backup exceeds import limits.".into()); }
-    let project_ids:HashSet<&str>=projects.iter().map(|p|p.id.as_str()).collect();
-    if project_ids.len()!=projects.len() || projects.iter().any(|p|p.id.is_empty()||p.id.len()>128||p.name.trim().is_empty()||p.name.len()>80||p.description.len()>500||p.schema_version!=1) { return Err("Backup contains invalid or duplicate projects.".into()); }
-    let conversation_ids:HashSet<&str>=conversations.iter().map(|c|c.id.as_str()).collect();
-    if conversation_ids.len()!=conversations.len() || conversations.iter().any(|c|c.id.is_empty()||c.id.len()>128||c.title.len()>120||c.messages.len()>20000||c.project_id.as_deref().map_or(false,|id|!project_ids.contains(id))) { return Err("Backup contains invalid or duplicate conversations.".into()); }
-    for c in &conversations { for m in &c.messages { if m.id.is_empty()||m.id.len()>128||m.content.len()>100000||!["user","assistant"].contains(&m.role.as_str()) { return Err("Backup contains invalid messages.".into()); } } }
-    for m in memories {
-        if !valid_memory_record(m) { return Err("Backup contains invalid memories.".into()); }
-        let scope=m["scope"].as_str().unwrap();
-        let pid=m.get("projectId").and_then(|v|v.as_str());
-        if scope=="project"&&pid.map_or(true,|p|!project_ids.contains(p)) { return Err("Backup memory references an unknown project.".into()); }
+    let memories=backup.get("memories").and_then(|value|value.as_array()).cloned().ok_or("Backup memories are missing.")?;
+    let chunks=backup.get("knowledgeChunks").and_then(|value|value.as_array()).cloned().ok_or("Backup knowledge chunks are missing.")?;
+    let read_v2_array=|key:&str| -> Result<Vec<serde_json::Value>,String> {
+        if schema_version==1 { return Ok(Vec::new()); }
+        backup.get(key).and_then(|value|value.as_array()).cloned().ok_or_else(||format!("Backup {key} are missing or invalid."))
+    };
+    let agent_checkpoints=read_v2_array("agentCheckpoints")?;
+    let tool_audit_events=read_v2_array("toolAuditEvents")?;
+    let trace_events=read_v2_array("traceEvents")?;
+    let training_datasets=read_v2_array("trainingDatasets")?;
+    let training_experiments=read_v2_array("trainingExperiments")?;
+    if projects.len()>10000 || conversations.len()>10000 || memories.len()>10000 || chunks.len()>50000
+        || agent_checkpoints.len()>10000 || tool_audit_events.len()>MAX_PERSISTED_EVENTS as usize
+        || trace_events.len()>MAX_PERSISTED_EVENTS as usize || training_datasets.len()>10000 || training_experiments.len()>10000 {
+        return Err("Backup exceeds import record limits.".into());
+    }
+
+    let project_ids:HashSet<&str>=projects.iter().map(|project|project.id.as_str()).collect();
+    if project_ids.len()!=projects.len() || projects.iter().any(|project|project.id.is_empty()||project.id.len()>128||project.name.trim().is_empty()||project.name.len()>80||project.description.len()>500||project.schema_version!=1) {
+        return Err("Backup contains invalid or duplicate projects.".into());
+    }
+    let conversation_ids:HashSet<&str>=conversations.iter().map(|conversation|conversation.id.as_str()).collect();
+    if conversation_ids.len()!=conversations.len() || conversations.iter().any(|conversation|conversation.id.is_empty()||conversation.id.len()>128||conversation.title.len()>120||conversation.messages.len()>20000||conversation.project_id.as_deref().map_or(false,|id|!project_ids.contains(id))) {
+        return Err("Backup contains invalid or duplicate conversations.".into());
+    }
+    for conversation in &conversations {
+        for message in &conversation.messages {
+            if message.id.is_empty()||message.id.len()>128||message.content.len()>100000||!["user","assistant"].contains(&message.role.as_str()) {
+                return Err("Backup contains invalid messages.".into());
+            }
+        }
+    }
+    for memory in &memories {
+        if !valid_memory_record(memory) { return Err("Backup contains invalid memories.".into()); }
+        let scope=memory["scope"].as_str().unwrap();
+        let project_id=memory.get("projectId").and_then(|value|value.as_str());
+        if scope=="project"&&project_id.map_or(true,|id|!project_ids.contains(id)) {
+            return Err("Backup memory references an unknown project.".into());
+        }
     }
     let mut backup_chunk_bytes:usize=0;
-    for c in chunks {
-        if !valid_knowledge_chunk(c) { return Err("Backup contains invalid knowledge chunks.".into()); }
-        backup_chunk_bytes=backup_chunk_bytes.saturating_add(c["text"].as_str().unwrap().len());
+    for chunk in &chunks {
+        if !valid_knowledge_chunk(chunk) { return Err("Backup contains invalid knowledge chunks.".into()); }
+        backup_chunk_bytes=backup_chunk_bytes.saturating_add(chunk["text"].as_str().unwrap().len());
         if backup_chunk_bytes>50_000_000 { return Err("Backup knowledge exceeds the 50 MB text limit.".into()); }
-        let pid=c["projectId"].as_str().unwrap();
-        if !project_ids.contains(pid) { return Err("Backup knowledge chunk references an unknown project.".into()); }
+        let project_id=chunk["projectId"].as_str().unwrap();
+        if !project_ids.contains(project_id) { return Err("Backup knowledge chunk references an unknown project.".into()); }
     }
+
+    let mut checkpoint_ids=HashSet::new();
+    for checkpoint in &agent_checkpoints {
+        if let Some(reason)=agent_checkpoint_validation_error(checkpoint) {
+            return Err(format!("Backup contains an invalid agent checkpoint: {reason}."));
+        }
+        let run_id=checkpoint["runId"].as_str().unwrap().to_string();
+        if !checkpoint_ids.insert(run_id) { return Err("Backup contains duplicate agent checkpoint run IDs.".into()); }
+        if serde_json::to_vec(checkpoint).map_err(|e|e.to_string())?.len()>MAX_AGENT_CHECKPOINT_BYTES+16_384 {
+            return Err("Backup agent checkpoint exceeds the size limit.".into());
+        }
+    }
+
+    let mut dataset_versions:HashSet<(String,i64)>=HashSet::new();
+    for dataset in &training_datasets {
+        let (id,version,_)=validate_training_dataset_payload(dataset)?;
+        if !dataset_versions.insert((id,version)) { return Err("Backup contains duplicate training dataset versions.".into()); }
+        if serde_json::to_vec(dataset).map_err(|e|e.to_string())?.len()>MAX_TRAINING_RECORD_BYTES {
+            return Err("Backup training dataset exceeds the 1 MB limit.".into());
+        }
+    }
+    let mut experiment_ids=HashSet::new();
+    for experiment in &training_experiments {
+        let (id,dataset_id,dataset_version,_)=validate_training_experiment_payload(experiment)?;
+        if !experiment_ids.insert(id) { return Err("Backup contains duplicate training experiment IDs.".into()); }
+        if !dataset_versions.contains(&(dataset_id,dataset_version)) {
+            return Err("Backup training experiment references a missing dataset version.".into());
+        }
+        if serde_json::to_vec(experiment).map_err(|e|e.to_string())?.len()>MAX_TRAINING_RECORD_BYTES {
+            return Err("Backup training experiment exceeds the 1 MB limit.".into());
+        }
+    }
+    let normalized_audit_events=tool_audit_events.iter().map(normalize_tool_audit_event_record).collect::<Result<Vec<_>,_>>()?;
+    let normalized_trace_events=trace_events.iter().map(normalize_trace_event_record).collect::<Result<Vec<_>,_>>()?;
+
     let tx=connection.transaction().map_err(|e|e.to_string())?;
-    tx.execute_batch("DELETE FROM knowledge_chunks; DELETE FROM memory_records; DELETE FROM conversations; DELETE FROM projects;").map_err(|e|e.to_string())?;
-    for p in projects { tx.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![p.id,p.name,p.description,p.created_at,p.updated_at,p.archived as i64,p.schema_version]).map_err(|e|e.to_string())?; }
-    for c in conversations {
-        tx.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES(?1,?2,?3,?4)",params![c.id,c.title,c.project_id,c.updated_at]).map_err(|e|e.to_string())?;
-        for m in c.messages { let refs=m.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?; tx.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)",params![m.id,c.id,m.role,m.content,m.created_at,refs]).map_err(|e|e.to_string())?; }
+    tx.execute_batch("DELETE FROM training_experiments; DELETE FROM training_datasets; DELETE FROM agent_checkpoints; DELETE FROM tool_audit_events; DELETE FROM trace_events; DELETE FROM knowledge_chunks; DELETE FROM memory_records; DELETE FROM conversations; DELETE FROM projects;").map_err(|e|e.to_string())?;
+    for project in projects {
+        tx.execute("INSERT INTO projects(id,name,description,created_at,updated_at,archived,schema_version) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![project.id,project.name,project.description,project.created_at,project.updated_at,project.archived as i64,project.schema_version]).map_err(|e|e.to_string())?;
     }
-    for m in memories { let id=m["id"].as_str().unwrap();let scope=m["scope"].as_str().unwrap();let pid=m.get("projectId").and_then(|v|v.as_str());let updated=m["updatedAt"].as_i64().unwrap_or(0);tx.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5)",params![id,scope,pid,updated,serde_json::to_string(m).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
-    for c in chunks { tx.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![c["id"].as_str().unwrap(),c["documentId"].as_str().unwrap(),c["projectId"].as_str().unwrap(),serde_json::to_string(c).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?; }
+    for conversation in conversations {
+        tx.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES(?1,?2,?3,?4)",params![conversation.id,conversation.title,conversation.project_id,conversation.updated_at]).map_err(|e|e.to_string())?;
+        for message in conversation.messages {
+            let refs=message.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
+            tx.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)",params![message.id,conversation.id,message.role,message.content,message.created_at,refs]).map_err(|e|e.to_string())?;
+        }
+    }
+    for memory in &memories {
+        let id=memory["id"].as_str().unwrap();
+        let scope=memory["scope"].as_str().unwrap();
+        let project_id=memory.get("projectId").and_then(|value|value.as_str());
+        let updated=memory["updatedAt"].as_i64().unwrap_or(0);
+        tx.execute("INSERT INTO memory_records(id,scope,project_id,updated_at,payload) VALUES(?1,?2,?3,?4,?5)",params![id,scope,project_id,updated,serde_json::to_string(memory).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?;
+    }
+    for chunk in &chunks {
+        tx.execute("INSERT INTO knowledge_chunks(id,document_id,project_id,payload) VALUES(?1,?2,?3,?4)",params![chunk["id"].as_str().unwrap(),chunk["documentId"].as_str().unwrap(),chunk["projectId"].as_str().unwrap(),serde_json::to_string(chunk).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?;
+    }
+    for checkpoint in &agent_checkpoints {
+        tx.execute("INSERT INTO agent_checkpoints(run_id,agent_id,thread_id,sequence,status,updated_at,payload) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![
+            checkpoint["runId"].as_str().unwrap(),checkpoint["agentId"].as_str().unwrap(),checkpoint["threadId"].as_str().unwrap(),
+            checkpoint["sequence"].as_i64().unwrap(),checkpoint["status"].as_str().unwrap(),checkpoint["updatedAt"].as_f64().unwrap(),
+            serde_json::to_string(checkpoint).map_err(|e|e.to_string())?
+        ]).map_err(|e|e.to_string())?;
+    }
+    for dataset in &training_datasets {
+        let (id,version,created_at)=validate_training_dataset_payload(dataset)?;
+        tx.execute("INSERT INTO training_datasets(id,version,created_at,payload) VALUES(?1,?2,?3,?4)",params![id,version,created_at,serde_json::to_string(dataset).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?;
+    }
+    for experiment in &training_experiments {
+        let (id,dataset_id,dataset_version,created_at)=validate_training_experiment_payload(experiment)?;
+        tx.execute("INSERT INTO training_experiments(id,dataset_id,created_at,payload,dataset_version) VALUES(?1,?2,?3,?4,?5)",params![id,dataset_id,created_at,serde_json::to_string(experiment).map_err(|e|e.to_string())?,dataset_version]).map_err(|e|e.to_string())?;
+    }
+    for event in &normalized_audit_events {
+        tx.execute("INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES(?1,?2,?3,?4,?5,NULL)",params![
+            event["toolId"].as_str().unwrap(),event["runId"].as_str().unwrap(),event["traceId"].as_str().unwrap(),
+            event["status"].as_str().unwrap(),event["timestamp"].as_f64().unwrap()
+        ]).map_err(|e|e.to_string())?;
+    }
+    for event in &normalized_trace_events {
+        let attributes=event.get("attributes").map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
+        tx.execute("INSERT INTO trace_events(trace_id,run_id,parent_trace_id,name,status,timestamp,duration_ms,attributes,payload) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![
+            event["traceId"].as_str().unwrap(),event["runId"].as_str().unwrap(),
+            event.get("parentTraceId").and_then(|value|value.as_str()),event["name"].as_str().unwrap(),event["status"].as_str().unwrap(),
+            event["timestamp"].as_f64().unwrap(),event.get("durationMs").and_then(|value|value.as_f64()),attributes,
+            serde_json::to_string(event).map_err(|e|e.to_string())?
+        ]).map_err(|e|e.to_string())?;
+    }
     tx.commit().map_err(|e|e.to_string())
 }
 
