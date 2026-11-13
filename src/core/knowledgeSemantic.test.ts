@@ -93,16 +93,19 @@ describe("semantic index reconciliation", () => {
       search: async () => ok([]), removeDocument: async () => ok(undefined)
     };
     const vectors: KnowledgeVectorIndex = {
-      upsert: async item => { upserts.push(item.id); },
+      upsert: async item => {
+        upserts.push(item.id);
+        if (item.id === "a") active = false;
+      },
       removeDocument: async () => undefined, search: async () => [],
       reconcile: async () => chunks
     };
     const embeddings: EmbeddingProvider = {
-      embed: async texts => { active = false; return ok(texts.map(() => [1, 0])); }
+      embed: async texts => ok(texts.map(() => [1, 0]))
     };
     const result = await reconcileKnowledgeIndex(repository, vectors, embeddings, () => active, 1);
     expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
-    expect(upserts).toEqual([]);
+    expect(upserts).toEqual(["a"]);
   });
 
   it("fails visibly when embeddings or vector persistence fail", async () => {
