@@ -91,8 +91,8 @@ describe("TauriModelProvider", () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
       if (command !== "list_provider_models") return Promise.resolve(true);
-      const baseUrl = (args as { baseUrl: string }).baseUrl;
-      return Promise.resolve(baseUrl.startsWith("http://") ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
+      const credentialHandle = (args as { credentialHandle: string }).credentialHandle;
+      return Promise.resolve(credentialHandle === "none" ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
     });
     const router = createTauriModelRouterForProfiles([
       createOllamaProviderProfile("qwen-local"),
