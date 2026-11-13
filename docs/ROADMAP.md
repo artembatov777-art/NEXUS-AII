@@ -52,7 +52,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 - [x] Implement inspectable memory management with user-controlled create, revise, search, and deletion; memory records are included in versioned workspace export/backup.
 - [x] Implement document ingestion and project-scoped knowledge retrieval with source/page/section provenance.
-- [ ] Add reliable indexing, rebuild, and recovery behavior.
+- [x] Add reliable indexing, rebuild, and recovery behavior: startup reconciliation, bounded batches, corrupt-row cleanup, cancellation, and resumable repair.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
 - [ ] Test privacy boundaries, retrieval quality, citations, and persistence.
 
@@ -66,7 +66,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add audit-led replay protection that blocks duplicate execution of a previously started or terminal run/step.
 - [ ] Add automatic idempotent result replay and manual reconciliation for ambiguous external side effects.
 - [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
-- [ ] Add integration tests for safe and denied tool execution.
+- [x] Add integration tests for safe tool execution and denied high-risk file writes through the model-planned workflow.
 
 **Exit criteria:** an agent can plan, request scoped tools, wait for owner approval, resume, and complete with a verifiable audit trail.
 
