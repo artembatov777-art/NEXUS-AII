@@ -318,8 +318,8 @@ export default function App() {
       truncated ? "Only the first 75 KB of the file is included; the file was truncated for the model request limit." : "",
       "File contents (JSON-escaped):",
       JSON.stringify(safeContent)
-    ].filter(Boolean).join("\\n\\n");
-    setDraft(current => current.trim() ? `${current}\\n\\n${prompt}` : prompt);
+    ].filter(Boolean).join("\n\n");
+    setDraft(current => current.trim() ? `${current}\n\n${prompt}` : prompt);
     setFileSystemOpen(false);
     setError("");
   }
