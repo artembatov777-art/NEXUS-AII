@@ -166,7 +166,7 @@ describe("FileSystemPanel native workspace access", () => {
     const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Move file");
     await act(async () => { moveButton!.click(); });
     expect(confirm).toHaveBeenCalled();
-    expect(invokeMock).toHaveBeenCalledWith("move_workspace_entry", { path: oldPath, destinationDirectory: rootPath });
+    expect(invokeMock).toHaveBeenCalledWith("move_workspace_entry", { path: oldPath, destinationDirectory: destination });
     confirm.mockRestore();
   });
 
