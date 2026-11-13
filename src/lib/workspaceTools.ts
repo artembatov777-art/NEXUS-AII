@@ -129,6 +129,26 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
       }
     },
     {
+      id: "workspace.search_content",
+      version: "1.0.0",
+      description: "Search text content in UTF-8 files inside an explicitly approved directory. Skips binary files and common generated/dependency folders; bounded by file, size, depth and result limits. Input: {path,query}.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "low",
+      timeoutMs: 30_000,
+      validateInput: validSearchInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path, query }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace content search was cancelled.");
+        try {
+          const result = await invoke<{ matches: { path: string; lineNumber: number; preview: string }[]; totalMatches: number; scannedFiles: number; truncated: boolean }>("search_workspace_contents", { path, query });
+          if (context.signal.aborted) return err("cancelled", "Workspace content search was cancelled.");
+          const matches = result.matches.slice(0, 20);
+          return ok({ path, query, matches, totalMatches: result.totalMatches, scannedFiles: result.scannedFiles, truncated: result.truncated || result.matches.length > 20 });
+        } catch (cause) { return failure(cause, "Could not search text content in the approved workspace directory."); }
+      }
+    },
+    {
       id: "workspace.read",
       version: "1.0.0",
       description: "Read a UTF-8 text file inside an explicitly approved directory. Input: {path}. Output is capped at 48 KB.",

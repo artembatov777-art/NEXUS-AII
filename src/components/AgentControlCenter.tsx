@@ -77,7 +77,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
-  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview", "workspace.list", "workspace.search", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"]) ?? null, [runtime, providerSettings.model]);
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview", "workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"]) ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;

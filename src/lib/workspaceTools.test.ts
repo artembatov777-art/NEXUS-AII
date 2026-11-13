@@ -28,7 +28,7 @@ describe("workspace agent tools", () => {
     const search = registry.search("", 20);
     expect(search.ok).toBe(true);
     if (search.ok) expect(search.value.map(tool => tool.id)).toEqual([
-      "workspace.list", "workspace.search", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"
+      "workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"
     ]);
   });
 
@@ -52,6 +52,21 @@ describe("workspace agent tools", () => {
     }, { traceId: "trace", runId: "run", signal: new AbortController().signal }, "local-user");
     expect(result.ok).toBe(true);
     expect(invokeMock).toHaveBeenCalledWith("search_workspace_entries", { path: "C:\\approved", query: "notes" });
+    expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ resource: "C:\\approved" }));
+  });
+
+  it("searches file contents through the bounded native command", async () => {
+    const { registry, gateway, permissions } = setup();
+    registerWorkspaceTools(registry);
+    invokeMock.mockResolvedValue({
+      matches: [{ path: "C:\\approved\\notes.txt", lineNumber: 3, preview: "NEXUS is ready" }],
+      totalMatches: 1, scannedFiles: 2, truncated: false
+    });
+    const result = await gateway.execute("workspace.search_content", {
+      path: "C:\\approved", query: "nexus"
+    }, { traceId: "trace", runId: "run", signal: new AbortController().signal }, "local-user");
+    expect(result.ok).toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith("search_workspace_contents", { path: "C:\\approved", query: "nexus" });
     expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ resource: "C:\\approved" }));
   });
 
