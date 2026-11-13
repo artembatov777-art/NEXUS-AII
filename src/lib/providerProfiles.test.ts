@@ -56,6 +56,13 @@ describe("provider profile persistence", () => {
     expect(JSON.stringify(result)).not.toContain("do-not-persist");
   });
 
+
+  it("enforces the native provider's UTF-8 model ID byte limit", () => {
+    expect(validateProviderProfile({
+      ...ollama, settings: { ...ollama.settings, model: "я".repeat(65) }
+    })).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("rejects duplicate IDs and profile collections over the configured limit", () => {
     const storage = new MemoryStorage();
     expect(saveProviderProfiles([ollama, ollama], storage)).toMatchObject({ ok: false });

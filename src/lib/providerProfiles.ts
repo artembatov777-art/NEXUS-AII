@@ -32,6 +32,7 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   if (typeof settings.baseUrl !== "string" || settings.baseUrl.length > 2048 ||
       providerEndpointError(settings.baseUrl) ||
       typeof settings.model !== "string" || settings.model.length > 128 ||
+      new TextEncoder().encode(settings.model).byteLength > 128 ||
       (settings.model.length > 0 && !boundedText(settings.model, 128)) ||
       !["local", "remote"].includes(String(settings.inferenceLocation))) {
     return err("validation", "Provider profile endpoint, model, or inference location is invalid.");
