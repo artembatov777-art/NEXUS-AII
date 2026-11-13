@@ -3,7 +3,7 @@ import { McpHttpTransport, parseMcpSseResponse } from "./mcpHttpTransport";
 
 describe("McpHttpTransport", () => {
   it("posts JSON-RPC with credentials omitted and parses JSON response", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } }),
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true, protocolVersion: "2024-11-05" } }),
       { status: 200, headers: { "content-type": "application/json" } }));
     const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
     const result = await transport.request({ jsonrpc: "2.0", id: 1, method: "initialize" }, new AbortController().signal);
