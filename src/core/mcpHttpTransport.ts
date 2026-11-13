@@ -164,7 +164,7 @@ export class McpHttpTransport implements McpTransport {
         throw new Error("MCP initialize response did not include a valid protocol version.");
       }
       const sessionId = response.headers.get("mcp-session-id");
-      if (sessionId && (sessionId.length > 1024 || /[\\u0000-\\u001f\\u007f]/.test(sessionId))) {
+      if (sessionId && (sessionId.length > 1024 || /[\u0000-\u001f\u007f]/.test(sessionId))) {
         throw new Error("MCP server returned an invalid session identifier.");
       }
       this.sessionId = sessionId;
