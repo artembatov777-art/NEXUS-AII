@@ -217,12 +217,12 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         ]);
         if (!knowledge.ok) throw new Error("Could not retrieve selected project knowledge: " + knowledge.error.message);
         if (!projectMemories.ok) throw new Error("Could not retrieve selected project memories: " + projectMemories.error.message);
-        if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\\n" + knowledge.value.context);
+        if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
         contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.category}; source: ${item.source.label}] ${item.content}`));
       }
-      const referenceContext = contextParts.join("\\n\\n").slice(0, 12_000);
+      const referenceContext = contextParts.join("\n\n").slice(0, 12_000);
       addFeed("Sending the task and approved reference context to the configured model planner…");
-      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext)
+      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
       if (!planned.ok) {
         addFeed("Planning failed: " + planned.error.message, "error");
         return;
