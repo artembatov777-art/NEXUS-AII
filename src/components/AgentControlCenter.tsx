@@ -45,7 +45,7 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
   return labels[status];
 }
 
-export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean }) {
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string }) {
   const [runtimeState] = useState<RuntimeState>(() => {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
@@ -199,19 +199,30 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   async function startPlannedWorkflow() {
     if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
     const goal = task.trim();
-    if (!window.confirm("Send this task and relevant saved profile memories to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.")) return;
+    if (!window.confirm("Send this task, relevant saved profile memories, and selected project context to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.")) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
     controller.current = nextController;
     setBusy(true);
     try {
-      addFeed("Retrieving relevant saved profile memory…");
+      addFeed("Retrieving relevant saved profile and project context…");
       const memories = await runtime.memoryService.search(goal, "profile", 4);
       if (!memories.ok) throw new Error("Could not retrieve saved memory for planning: " + memories.error.message);
-      const referenceContext = memories.value.map(item => `[${item.category}; source: ${item.source.label}] ${item.content}`).join("\n\n").slice(0, 12_000);
+      const contextParts = memories.value.map(item => `[Profile memory: ${item.category}; source: ${item.source.label}] ${item.content}`);
+      if (projectId) {
+        const [knowledge, projectMemories] = await Promise.all([
+          runtime.knowledgeService.retrieve(goal, projectId, 4),
+          runtime.memoryService.search(goal, "project", 3, projectId)
+        ]);
+        if (!knowledge.ok) throw new Error("Could not retrieve selected project knowledge: " + knowledge.error.message);
+        if (!projectMemories.ok) throw new Error("Could not retrieve selected project memories: " + projectMemories.error.message);
+        if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\\n" + knowledge.value.context);
+        contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.category}; source: ${item.source.label}] ${item.content}`));
+      }
+      const referenceContext = contextParts.join("\\n\\n").slice(0, 12_000);
       addFeed("Sending the task and approved reference context to the configured model planner…");
-      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
+      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext)
       if (!planned.ok) {
         addFeed("Planning failed: " + planned.error.message, "error");
         return;
