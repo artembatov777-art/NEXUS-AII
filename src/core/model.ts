@@ -50,7 +50,7 @@ export class ModelRouter {
   }
 
   register(provider: ModelProvider): Result<void> {
-    if (!provider.id.trim() || provider.id.length > 128 || /[\\u0000-\\u001f\\u007f]/.test(provider.id)) {
+    if (!provider.id.trim() || provider.id.length > 128 || /[\u0000-\u001f\u007f]/.test(provider.id)) {
       return err("validation", "Provider ID must be a non-empty string of at most 128 characters without control characters.");
     }
     if (this.providers.has(provider.id)) {

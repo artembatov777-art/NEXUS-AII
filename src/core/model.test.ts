@@ -83,10 +83,12 @@ describe("ModelRouter", () => {
 
   it("rejects provider IDs with control characters or excessive length", () => {
     const router = new ModelRouter();
-    class InvalidProvider extends FakeProvider {
-      constructor(readonly id: string) { super(); }
+    class InvalidProvider implements ModelProvider {
+      constructor(readonly id: string) {}
+      async listModels() { return ok([]); }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
     }
-    expect(router.register(new InvalidProvider("bad\\nprovider")).ok).toBe(false);
+    expect(router.register(new InvalidProvider("bad\nprovider")).ok).toBe(false);
     expect(router.register(new InvalidProvider("x".repeat(129))).ok).toBe(false);
   });
 
