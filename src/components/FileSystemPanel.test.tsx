@@ -78,7 +78,7 @@ describe("FileSystemPanel native workspace access", () => {
     let moveCalls = 0;
     isTauriMock.mockReturnValue(true);
     openMock.mockResolvedValue(destination);
-    invokeMock.mockImplementation(async (command: string, args?: { path?: string; destinationDirectory?: string }) => {
+    invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_workspace_directories") return [rootPath];
       if (command === "list_workspace_entries") return [
         { name: "one.txt", path: firstPath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 },
