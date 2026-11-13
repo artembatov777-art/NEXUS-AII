@@ -42,14 +42,10 @@ describe("ProviderProfilesPanel", () => {
       id: "nexus.cloud", label: "Cloud", settings: cloudSettings
     }]).ok).toBe(true);
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect}/>); });
-    const select = container.querySelector<HTMLSelectElement>('[aria-label="Saved provider profiles"]')!;
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, "nexus.cloud");
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(select.value).toBe("nexus.cloud");
-    expect(onSelect).toHaveBeenCalledWith(cloudSettings);
-    expect(container.textContent).toContain("No provider connection was started");
+    const option = container.querySelector<HTMLOptionElement>('option[value="nexus.cloud"]');
+    expect(option?.textContent).toBe("Cloud");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Selecting a profile does not connect to it.");
   });
 
   it("saves a named profile without persisting credentials", async () => {
