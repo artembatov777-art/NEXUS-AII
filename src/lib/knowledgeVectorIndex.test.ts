@@ -18,6 +18,7 @@ describe("knowledge vector index similarity", () => {
 });
 
 
+describe("knowledge vector reconciliation", () => {
   it("retains malformed keyed rows for cleanup instead of hiding them", () => {
     const rows = normalizeVectorRows([
       { id: "corrupt-vector", projectId: "p1", documentId: "doc", vector: { invalid: true } },
@@ -30,7 +31,6 @@ describe("knowledge vector index similarity", () => {
     expect(plan.staleIds).toEqual(["corrupt-vector", "nan-vector"]);
   });
 
-describe("knowledge vector reconciliation", () => {
   const chunk = (id: string, projectId: string, documentId: string) => ({
     id, projectId, documentId, text: "source text", sourceLabel: "source.md"
   });
