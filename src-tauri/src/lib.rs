@@ -241,6 +241,11 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 8;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 9 {
+        transaction.execute_batch("CREATE TABLE tool_audit_events_v9 (id INTEGER PRIMARY KEY AUTOINCREMENT,tool_id TEXT NOT NULL,run_id TEXT NOT NULL,trace_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','completed','failed','denied','reconciled')),timestamp REAL NOT NULL,detail TEXT); INSERT INTO tool_audit_events_v9(tool_id,run_id,trace_id,status,timestamp,detail) SELECT tool_id,run_id,trace_id,status,timestamp,detail FROM tool_audit_events ORDER BY id; DROP TABLE tool_audit_events; ALTER TABLE tool_audit_events_v9 RENAME TO tool_audit_events; CREATE INDEX idx_tool_audit_run_id ON tool_audit_events(run_id,id DESC);")?;
+        version = 9;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
@@ -729,7 +734,7 @@ fn normalize_tool_audit_event_record(event: &serde_json::Value) -> Result<serde_
     let run_id=event_string(event,"runId",160)?;
     let trace_id=event_string(event,"traceId",160)?;
     let status=event_string(event,"status",20)?;
-    if !["started","completed","failed","denied"].contains(&status.as_str()) {
+    if !["started","completed","failed","denied","reconciled"].contains(&status.as_str()) {
         return Err("Invalid audit status in workspace backup.".into());
     }
     let timestamp=event.get("timestamp").and_then(|value|value.as_f64()).filter(|value|value.is_finite())
@@ -1101,7 +1106,7 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
     let run_id = event_string(&event, "runId", 160)?;
     let trace_id = event_string(&event, "traceId", 160)?;
     let status = event_string(&event, "status", 20)?;
-    if !["started", "completed", "failed", "denied"].contains(&status.as_str()) { return Err("Invalid audit status.".into()); }
+    if !["started", "completed", "failed", "denied", "reconciled"].contains(&status.as_str()) { return Err("Invalid audit status.".into()); }
     let timestamp = event.get("timestamp").and_then(|v|v.as_f64()).filter(|v|v.is_finite()).ok_or("Invalid audit timestamp.")?;
     let detail = match event.get("detail") {
         None | Some(serde_json::Value::Null) => None,
@@ -1112,12 +1117,37 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
     // A durable started/terminal event means this run step must never execute again.
     if status == "started" {
         let already_claimed: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('started','completed','failed'))",
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('started','completed','failed','reconciled'))",
             params![tool_id,run_id,trace_id],
             |row| row.get(0)
         ).map_err(|error| error.to_string())?;
         if already_claimed {
             return Err("Tool step already has a durable execution claim.".into());
+        }
+    }
+    if status == "reconciled" {
+        let has_started: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status='started')",
+            params![tool_id,run_id,trace_id],
+            |row| row.get(0)
+        ).map_err(|error| error.to_string())?;
+        let already_terminal: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('completed','failed','reconciled'))",
+            params![tool_id,run_id,trace_id],
+            |row| row.get(0)
+        ).map_err(|error| error.to_string())?;
+        if !has_started || already_terminal {
+            return Err("Only an unresolved started tool step can be manually reconciled.".into());
+        }
+    }
+    if status == "completed" || status == "failed" {
+        let reconciled: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status='reconciled')",
+            params![tool_id,run_id,trace_id],
+            |row| row.get(0)
+        ).map_err(|error| error.to_string())?;
+        if reconciled {
+            return Err("A manually reconciled tool step cannot accept a late terminal result.".into());
         }
     }
     tx.execute("INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES(?1,?2,?3,?4,?5,?6)",params![tool_id,run_id,trace_id,status,timestamp,detail]).map_err(|e|e.to_string())?;
@@ -2200,6 +2230,34 @@ mod database_tests {
     }
 
     #[test]
+    fn native_audit_reconciliation_is_atomic_and_blocks_replay() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let started=serde_json::json!({"toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"started","timestamp":1.0});
+        record_tool_audit_event_record(&mut connection,started.clone()).expect("record started event");
+        let reconciled=serde_json::json!({
+            "toolId":"workspace.write","runId":"run-1","traceId":"step-1",
+            "status":"reconciled","timestamp":2.0,"detail":"Owner reviewed the external outcome."
+        });
+        record_tool_audit_event_record(&mut connection,reconciled.clone()).expect("reconcile ambiguous step");
+        assert!(record_tool_audit_event_record(&mut connection,reconciled).is_err(),"reconciliation is terminal");
+        assert!(record_tool_audit_event_record(&mut connection,started).is_err(),"reconciled steps cannot be replayed");
+        let late=serde_json::json!({"toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"completed","timestamp":3.0});
+        assert!(record_tool_audit_event_record(&mut connection,late).is_err(),"late terminal result cannot overwrite owner reconciliation");
+        let listed=list_tool_audit_event_records(&connection,Some("run-1"),10).expect("list audit");
+        assert_eq!(listed.len(),2);
+        assert_eq!(listed[1]["status"],"reconciled");
+    }
+
+    #[test]
+    fn reconciliation_requires_an_unresolved_started_step() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let reconciled=serde_json::json!({"toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"reconciled","timestamp":2.0});
+        assert!(record_tool_audit_event_record(&mut connection,reconciled).is_err());
+    }
+
+    #[test]
     fn audit_listing_omits_absent_optional_detail_fields() {
         let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
         migrate_database(&mut connection).expect("apply migrations");
@@ -2343,7 +2401,7 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_eight() {
+    fn upgrades_schema_version_four_atomically_to_nine() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
@@ -2351,11 +2409,27 @@ mod database_tests {
         connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets;").expect("remove v5 and v6 tables");
         migrate_database(&mut connection).expect("upgrade v4 to v8");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
         assert_eq!(table, 1);
         let audit: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tool_audit_events'", [], |row| row.get(0)).expect("audit table");
         assert_eq!(audit, 1);
+    }
+
+    #[test]
+    fn schema_v8_upgrade_preserves_audit_history_and_adds_reconciled_status() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        connection.execute_batch("CREATE TABLE tool_audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,tool_id TEXT NOT NULL,run_id TEXT NOT NULL,trace_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','completed','failed','denied')),timestamp REAL NOT NULL,detail TEXT); CREATE INDEX idx_tool_audit_run_id ON tool_audit_events(run_id,id DESC); INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES('tool.read','run-legacy','trace-legacy','completed',1.0,'preserve me'); PRAGMA user_version=8;").expect("create v8 schema");
+        migrate_database(&mut connection).expect("upgrade schema to v9");
+        let version:i64=connection.pragma_query_value(None,"user_version",|row|row.get(0)).expect("schema version");
+        assert_eq!(version,9);
+        let events=list_tool_audit_event_records(&connection,Some("run-legacy"),10).expect("load preserved audit history");
+        assert_eq!(events.len(),1);
+        assert_eq!(events[0]["detail"],"preserve me");
+        let started=serde_json::json!({"toolId":"tool.write","runId":"run-new","traceId":"trace-new","status":"started","timestamp":2.0});
+        record_tool_audit_event_record(&mut connection,started).expect("record start after migration");
+        let reconciled=serde_json::json!({"toolId":"tool.write","runId":"run-new","traceId":"trace-new","status":"reconciled","timestamp":3.0});
+        record_tool_audit_event_record(&mut connection,reconciled).expect("new status accepted after migration");
     }
 
     #[test]
