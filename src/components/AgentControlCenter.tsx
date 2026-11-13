@@ -199,7 +199,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   async function startPlannedWorkflow() {
     if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
     const goal = task.trim();
-    if (!window.confirm("Send this task, relevant saved profile memories, and selected project context to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.")) return;
+    const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
+    if (!window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
