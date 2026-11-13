@@ -77,7 +77,7 @@ describe("ToolsPanel preview interactions", () => {
     const dialog = container.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain("LIVE MCP + CATALOG");
     expect(dialog?.textContent).toContain("00 / 00");
-    expect(dialog?.textContent).toContain("Configure a real MCP server above");
+    expect(dialog?.textContent).toContain("Connect a real MCP server above");
     expect(dialog?.textContent).toContain("06");
   });
 
@@ -105,13 +105,11 @@ describe("ToolsPanel preview interactions", () => {
     expect(container.querySelector(`#${detailsId}`)).toBeNull();
   });
 
-  it("announces connection requirements and allows the notice to be dismissed", () => {
-    act(() => buttonContaining("View connection requirements").click());
-    const status = container.querySelector('[role="status"][aria-live="polite"]');
-    expect(status?.textContent).toContain("Browser: connection controls will appear");
-
-    act(() => status?.querySelector<HTMLButtonElement>('[aria-label="Dismiss notice"]')?.click());
-    expect(container.querySelector('[role="status"][aria-live="polite"]')).toBeNull();
+  it("clearly marks catalog entries as reference-only instead of advertising inactive controls", () => {
+    const card = buttonContaining("Browser");
+    act(() => card.click());
+    expect(container.querySelector(".tool-card-details")?.textContent).toContain("not installed or executable");
+    expect(container.textContent).not.toContain("View connection requirements");
   });
 
   it("closes from its close control and from the backdrop", () => {
