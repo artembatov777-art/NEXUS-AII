@@ -37,7 +37,7 @@
 - SSE parsing is correlated to the request ID and limits event size/count.
 - Server protocol version and capabilities are checked; initialization notification, paginated discovery, health checks, disconnect cleanup, and reconnect with a fresh transport are implemented.
 - Remote tool schemas use a bounded JSON-Schema subset. Unsupported keywords, unsafe object keys, malformed metadata, duplicate tool names, and oversized results are rejected.
-- A user must still trust the endpoint they configure. There is no provider-domain allowlist or certificate pinning.
+- MCP authentication and OAuth/bearer-token configuration are not implemented in this build; configured endpoints must be usable without authentication. A user must still trust the endpoint they configure. There is no provider-domain allowlist or certificate pinning.
 
 ### Storage and backups
 

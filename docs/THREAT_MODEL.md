@@ -42,7 +42,7 @@ Last reviewed: 2026-11-10.
 | Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway validation, bounds, timeout, cancellation, and audit lifecycle are implemented; broader adversarial testing remains open. |
 | Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Native transactional SQLite audit/trace persistence and retention caps are implemented; uncertain outcomes are surfaced, while operation-level idempotency and reconciliation remain pending. |
 | State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Versioned checkpoints use native SQLite persistence with transactional compare-and-swap; approval grants remain ephemeral by design and must be re-issued after restart. |
-| Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Not implemented |
+| Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Session-aware HTTP transport, bounded metadata/schema/output, HTTPS-or-loopback-only endpoints, and per-call approval with input preview are implemented. OAuth/bearer authentication, domain allowlists, and adversarial live-server tests remain open. |
 | Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Partial; dependency audit currently reports 6 advisories |
 | Web content abuse | Browser agent visits untrusted URL | Domain policy, navigation restrictions, isolated browser context | Not implemented |
 | Local data theft | Device/browser profile is compromised | Minimize secrets, OS keychain, encrypted backup, explicit export | Not implemented |
@@ -63,7 +63,7 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 | GitHub read | Deny | Per repository |
 | GitHub write/merge/release | Deny | Explicit action-level approval |
 | Shell/process execution | Deny | Not exposed in current runtime; future sandbox only |
-| MCP server connection | Deny | Per server, then per tool |
+| MCP server connection | Deny | Owner explicitly configures and connects a trusted unauthenticated endpoint; each tool call requires separate approval |
 | OS notifications | Deny | User-configured opt-in |
 | Microphone/audio capture | Deny | Visible push-to-talk / active capture indicator |
 
