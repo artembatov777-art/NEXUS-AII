@@ -2098,12 +2098,89 @@ mod database_tests {
         import_workspace_record(&mut connection, sample_backup()).expect("import backup");
         let exported = export_workspace_record(&connection).expect("export backup");
         assert_eq!(exported["format"], "nexus-au-backup");
-        assert_eq!(exported["schemaVersion"], 1);
+        assert_eq!(exported["schemaVersion"], 2);
+        assert_eq!(exported["agentCheckpoints"], serde_json::json!([]));
+        assert_eq!(exported["toolAuditEvents"], serde_json::json!([]));
+        assert_eq!(exported["traceEvents"], serde_json::json!([]));
+        assert_eq!(exported["trainingDatasets"], serde_json::json!([]));
+        assert_eq!(exported["trainingExperiments"], serde_json::json!([]));
         assert_eq!(exported["projects"][0]["id"], "project-1");
         assert_eq!(exported["conversations"][0]["messages"][0]["content"], "Hello");
         assert_eq!(exported["memories"][0]["content"], "A saved fact");
         assert_eq!(exported["knowledgeChunks"][0]["text"], "A source passage");
         assert!(exported.get("providerKeys").is_none(), "provider credentials must never be exported");
+    }
+
+    #[test]
+    fn workspace_backup_v2_round_trips_agent_training_and_observability_records() {
+        let mut source = Connection::open_in_memory().expect("source SQLite");
+        source.execute_batch("PRAGMA foreign_keys = ON;").expect("enable source foreign keys");
+        migrate_database(&mut source).expect("create source schema");
+        import_workspace_record(&mut source, sample_backup()).expect("seed core workspace");
+
+        let dataset = serde_json::json!({
+            "schemaVersion":1,"id":"dataset-backup","version":1,"name":"Backup dataset",
+            "license":"CC0-1.0","privacyClass":"synthetic","consentStatus":"not_required",
+            "sourceReferences":["generated:backup-test"],"createdAt":100,
+            "splits":{"train":["a"],"validation":["b"],"test":["c"]}
+        });
+        save_training_dataset_record(&source, &dataset).expect("save training dataset");
+        let experiment = serde_json::json!({
+            "schemaVersion":1,"id":"experiment-backup","name":"Backup experiment","modelId":"gateway/model",
+            "method":"baseline","datasetManifestId":"dataset-backup","datasetManifestVersion":1,
+            "codeRevision":"abc1234","hardware":"CI runner","configuration":{"temperature":0.0},
+            "metrics":{"passRate":0.75},"createdAt":200
+        });
+        save_training_experiment_record(&source, &experiment).expect("save training experiment");
+        let saved_checkpoint = checkpoint(1, "running");
+        save_agent_checkpoint_record(&mut source, saved_checkpoint.clone(), None).expect("save agent checkpoint");
+        record_tool_audit_event_record(&mut source, serde_json::json!({
+            "toolId":"workspace.read","runId":"run-1","traceId":"trace-1","status":"completed",
+            "timestamp":300.0,"detail":"this detail must not be included in a backup"
+        })).expect("save audit event");
+        append_trace_event_record(&mut source, serde_json::json!({
+            "traceId":"trace-1","runId":"run-1","name":"agent.step","status":"completed","timestamp":301.0,
+            "durationMs":5.0,"attributes":{"step":1,"label":"safe","apiKey":"must-not-export","prompt":"must-not-export"},
+            "apiKey":"must-not-export","prompt":"must-not-export"
+        })).expect("save trace event");
+
+        let backup = export_workspace_record(&source).expect("export v2 backup");
+        assert_eq!(backup["schemaVersion"], 2);
+        assert_eq!(backup["agentCheckpoints"].as_array().unwrap().len(), 1);
+        assert_eq!(backup["toolAuditEvents"].as_array().unwrap().len(), 1);
+        assert_eq!(backup["traceEvents"].as_array().unwrap().len(), 1);
+        assert_eq!(backup["trainingDatasets"].as_array().unwrap().len(), 1);
+        assert_eq!(backup["trainingExperiments"].as_array().unwrap().len(), 1);
+        assert!(backup["toolAuditEvents"][0].get("detail").is_none());
+        assert!(backup["traceEvents"][0].get("apiKey").is_none());
+        assert!(backup["traceEvents"][0].get("attributes").unwrap().get("apiKey").is_none());
+        assert!(backup.get("providerKeys").is_none());
+
+        let mut restored = Connection::open_in_memory().expect("restored SQLite");
+        restored.execute_batch("PRAGMA foreign_keys = ON;").expect("enable restored foreign keys");
+        migrate_database(&mut restored).expect("create restored schema");
+        import_workspace_record(&mut restored, backup.clone()).expect("restore v2 backup");
+        assert_eq!(load_agent_checkpoint_record(&restored, "run-1").expect("load checkpoint"), Some(saved_checkpoint));
+        assert_eq!(list_training_dataset_records(&restored).expect("list datasets"), vec![dataset]);
+        assert_eq!(list_training_experiment_records(&restored).expect("list experiments"), vec![experiment]);
+        let audit = list_tool_audit_event_records(&restored, Some("run-1"), 10).expect("list audit");
+        assert_eq!(audit.len(), 1);
+        assert!(audit[0].get("detail").is_none());
+        let traces = list_trace_event_records(&restored, Some("run-1"), Some("trace-1"), 10).expect("list traces");
+        assert_eq!(traces.len(), 1);
+        assert_eq!(traces[0]["attributes"]["label"], "safe");
+        assert!(traces[0]["attributes"].get("apiKey").is_none());
+
+        let before_invalid_import = export_workspace_record(&restored).expect("export before invalid import");
+        let mut invalid = backup;
+        invalid["trainingExperiments"][0]["datasetManifestVersion"] = serde_json::json!(99);
+        assert!(import_workspace_record(&mut restored, invalid).is_err());
+        let after_invalid_import = export_workspace_record(&restored).expect("export after invalid import");
+        assert_eq!(before_invalid_import["agentCheckpoints"], after_invalid_import["agentCheckpoints"]);
+        assert_eq!(before_invalid_import["trainingDatasets"], after_invalid_import["trainingDatasets"]);
+        assert_eq!(before_invalid_import["trainingExperiments"], after_invalid_import["trainingExperiments"]);
+        assert_eq!(before_invalid_import["toolAuditEvents"], after_invalid_import["toolAuditEvents"]);
+        assert_eq!(before_invalid_import["traceEvents"], after_invalid_import["traceEvents"]);
     }
 
     #[test]
