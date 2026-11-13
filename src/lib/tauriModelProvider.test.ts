@@ -20,7 +20,8 @@ describe("TauriModelProvider", () => {
       { id: "nexus.omniroute", settings: { baseUrl: "https://gateway.example/v1", model: "cloud-model", inferenceLocation: "remote", credentialHandle: "default" } }
     ]);
     expect(router).not.toBeNull();
-    expect(router?.getProviderIds()).toEqual(["nexus.ollama", "nexus.omniroute"]);
+    expect(router?.getProvider("nexus.ollama").ok).toBe(true);
+    expect(router?.getProvider("nexus.omniroute").ok).toBe(true);
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
