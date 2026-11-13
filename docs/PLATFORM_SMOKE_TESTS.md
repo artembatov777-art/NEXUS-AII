@@ -31,7 +31,7 @@ Expected: local workspace data persists in the native SQLite database. The brows
 1. Open Settings with the default local Ollama-compatible endpoint, no model selected, and the no-key profile. Expected status: no key is required; model catalog remains unverified until checked.
 2. Save a disposable direct-cloud provider key in the `default` profile and a separate provider key in the `ollama` profile. Expected status: both entries are available independently; the UI must not display either saved secret after saving.
 3. Switch between the two profiles and confirm each status remains isolated. Restart the app and verify both entries persist.
-4. Make a provider request to a trusted HTTPS OpenAI-compatible cloud endpoint and a loopback Ollama `/v1` endpoint. Confirm that model discovery shows only IDs returned by each endpoint. OmniRoute checks are deferred until its final optional adapter is integrated.
+4. Save and switch between an Ollama profile and a cloud/OmniRoute profile. Confirm saving or selecting a profile makes no network request. For the final owner-authorized provider test, explicitly check a trusted HTTPS cloud/OmniRoute endpoint and a loopback Ollama `/v1` endpoint; confirm discovery shows only IDs returned by each endpoint. Do not activate either service during core development.
 5. Delete each key independently. Expected status: only the selected profile becomes missing; the other remains available.
 6. Select the no-key profile. Expected status: NOT REQUIRED, and only a localhost/loopback endpoint is accepted.
 7. Lock/disable the OS keyring if practical, then reopen Settings. Expected status: unavailable; the app must not fall back to localStorage, SQLite, or plaintext files.
@@ -89,7 +89,7 @@ Treat exported JSON backups as sensitive plaintext files.
 
 ## 7. Release scope exclusions
 
-- Voice capture, speech recognition, and voice output are out of scope for this release; no microphone permission should be requested.
+- Always-on listening, background microphone access, and native offline speech engines are out of scope. Optional browser/WebView push-to-talk recognition and speech playback are available; microphone permission may be requested only after the user explicitly activates voice input.
 - General shell execution, unrestricted desktop automation, filesystem access outside approved roots, and arbitrary host APIs are not implemented.
 - MCP endpoints requiring authentication are not supported in this build.
 
@@ -105,6 +105,7 @@ For each OS, record:
 - [ ] Agent context disclosure, per-call approvals, and replay protection are enforced.
 - [ ] MCP connection, discovery, timeout/cancellation, approval, and disconnect succeed.
 - [ ] Training Lab provider disclosure is visible and live evaluation succeeds with disposable test data.
+- [ ] Optional voice input/output work only after explicit user action and clean up on stop, error, and component unmount.
 - [ ] Backup export/import and malformed-backup recovery succeed.
 
 A release is not cross-platform verified until a human tester has completed this matrix on all three OS families. CI build/test results must be recorded separately.
