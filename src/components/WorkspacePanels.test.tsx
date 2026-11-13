@@ -106,8 +106,7 @@ describe("ToolsPanel preview interactions", () => {
   });
 
   it("clearly marks catalog entries as reference-only instead of advertising inactive controls", () => {
-    const card = buttonContaining("Browser");
-    act(() => card.click());
+    buttonContaining("Browser");
     expect(container.querySelector(".tool-card-details")?.textContent).toContain("not installed or executable");
     expect(container.textContent).not.toContain("View connection requirements");
   });
