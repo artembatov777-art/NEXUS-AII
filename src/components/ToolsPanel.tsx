@@ -74,12 +74,23 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
     } finally { setMcpBusy(false); }
   }
 
+  async function reconnectServer(server: McpServerConfigRecord) {
+    if (mcpBusy) return;
+    setMcpBusy(true);
+    try { await connectSavedServer(server, new AbortController().signal); }
+    finally { setMcpBusy(false); }
+  }
+
   async function removeServer(server: McpServerConfigRecord) {
-    await runtime.mcpClient.disconnect(server.id);
-    const removed = removeMcpServerConfig(window.localStorage, server.id);
-    if (!removed.ok) { setNotice(removed.error.message); return; }
-    setServers(removed.value);
-    setConnectionStates(current => { const next = { ...current }; delete next[server.id]; return next; });
+    if (mcpBusy || connectionStates[server.id]?.status === "connecting") return;
+    setMcpBusy(true);
+    try {
+      await runtime.mcpClient.disconnect(server.id);
+      const removed = removeMcpServerConfig(window.localStorage, server.id);
+      if (!removed.ok) { setNotice(removed.error.message); return; }
+      setServers(removed.value);
+      setConnectionStates(current => { const next = { ...current }; delete next[server.id]; return next; });
+    } finally { setMcpBusy(false); }
   }
   return <div className="modal-backdrop tools-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="tools-workspace" role="dialog" aria-modal="true" aria-labelledby="tools-workspace-title">
@@ -97,7 +108,7 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
           const state = connectionStates[server.id] ?? { status: "saved", tools: 0, toolNames: [], detail: "Saved endpoint. Connection has not been checked yet." };
           return <article className="mcp-server-row" key={server.id}>
             <div><strong>{server.name}</strong><small>{server.endpoint}</small><span className={"mcp-state " + state.status}>{state.status.toUpperCase()} · {state.tools} TOOLS</span><small>{state.detail}</small><small>TOOLS: {state.toolNames.join(", ") || "none discovered"}</small></div>
-            <div><button className="icon-btn" title="Reconnect MCP server" aria-label={"Reconnect " + server.name} disabled={mcpBusy} onClick={() => void connectSavedServer(server, new AbortController().signal)}><RefreshCw size={14}/></button><button className="icon-btn" title="Remove MCP server" aria-label={"Remove " + server.name} onClick={() => void removeServer(server)}><Trash2 size={14}/></button></div>
+            <div><button className="icon-btn" title="Reconnect MCP server" aria-label={"Reconnect " + server.name} disabled={mcpBusy || state.status === "connecting"} onClick={() => void reconnectServer(server)}><RefreshCw size={14}/></button><button className="icon-btn" title="Remove MCP server" aria-label={"Remove " + server.name} disabled={mcpBusy || state.status === "connecting"} onClick={() => void removeServer(server)}><Trash2 size={14}/></button></div>
           </article>;
         })}</div>}
       </section>
