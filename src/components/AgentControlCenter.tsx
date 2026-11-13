@@ -59,7 +59,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           }
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
             const action = scope === "filesystem:read:selected" ? "read" : "create or edit";
-            return window.confirm(`Allow the NEXUS agent to ${action} this workspace path?\n\n${resource}\n\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
+            const reviewNote = scope === "filesystem:write:selected" ? "Review the content preview before approving the write." : "The agent will only read this file."; 
+            return window.confirm(`Allow the NEXUS agent to ${action} this workspace path?\n\n${resource}\n\n${reviewNote}\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
           }
           return "deny";
         }
