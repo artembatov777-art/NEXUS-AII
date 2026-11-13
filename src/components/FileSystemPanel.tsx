@@ -224,7 +224,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setEditing(false);
       setConflictDetected(false);
       setNotice(audited ? "File saved." : "File saved, but the audit entry could not be saved.");
-      await refresh();
+      await refresh(currentPath, true);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
@@ -309,6 +309,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function createEntry(kind: "file" | "directory") {
+    if (!confirmDiscardDraft("create a new entry and refresh the file list")) return;
     const name = newName.trim();
     if (!name || !currentPath || name === "." || name === ".." || /[\\/]/.test(name)) {
       setError("Enter a valid name without path separators.");
@@ -323,7 +324,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       const audited = await recordFilesystemAudit(kind === "directory" ? "create_directory" : "create_file");
       setNewName("");
       setNotice(audited ? (kind === "directory" ? "Folder created." : "File created.") : (kind === "directory" ? "Folder created, but the audit entry could not be saved." : "File created, but the audit entry could not be saved."));
-      await refresh();
+      await refresh(currentPath, true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -366,7 +367,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         <div className="file-workspace-toolbar">
           <div className="file-search"><HardDrive size={15}/><span>{currentPath || "No folder selected"}</span></div>
           <button className="secondary-btn" onClick={() => void refresh()} disabled={!currentPath || busy}><RefreshCw size={14}/> Refresh</button>
-          <button className="secondary-btn" onClick={() => void refresh(parentPath(currentPath), true)} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
+          <button className="secondary-btn" onClick={() => { if (confirmDiscardDraft("navigate to the parent folder")) void refresh(parentPath(currentPath), true); }} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
         </div>
         <div className="file-search-toolbar">
           <div className="file-search-mode" role="group" aria-label="Search mode">
@@ -380,7 +381,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         <div className="file-access-grant">
           <div className="file-pane-label">APPROVED DIRECTORIES</div>
           <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
-          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => void refresh(root, true)}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
+          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
