@@ -153,6 +153,9 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length }, null, 2));
       setStatus(`Comparison completed: ${results.length} models tested with the same prompt. Review outputs and score them separately.`);
     } catch (cause) {
+      // Promise.all rejects as soon as one model fails; stop the remaining
+      // requests so a partial comparison cannot continue consuming resources.
+      controller.abort();
       setError(cause instanceof Error ? cause.message : "Model comparison failed.");
       setStatus("");
     } finally {
