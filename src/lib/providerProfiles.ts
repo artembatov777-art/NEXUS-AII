@@ -18,7 +18,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function boundedText(value: unknown, max: number): value is string {
   return typeof value === "string" && value.trim().length > 0 &&
-    value.length <= max && !/[\\u0000-\\u001f\\u007f]/.test(value);
+    value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 export function validateProviderProfile(value: unknown): Result<ProviderProfileRecord> {
@@ -32,7 +32,7 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   if (typeof settings.baseUrl !== "string" || settings.baseUrl.length > 2048 ||
       providerEndpointError(settings.baseUrl) ||
       typeof settings.model !== "string" || settings.model.length > 128 ||
-      /[\\u0000-\\u001f\\u007f]/.test(settings.model) ||
+      (settings.model.length > 0 && !boundedText(settings.model, 128)) ||
       !["local", "remote"].includes(String(settings.inferenceLocation))) {
     return err("validation", "Provider profile endpoint, model, or inference location is invalid.");
   }

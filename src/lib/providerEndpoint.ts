@@ -73,11 +73,11 @@ export function normalizeProviderFailure(cause: unknown): NormalizedProviderFail
 /** True only when the configured endpoint resolves to a loopback host. */
 export function isLoopbackProviderEndpoint(baseUrl: string): boolean {
   try {
-    const hostname = new URL(baseUrl.trim()).hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+    const hostname = new URL(baseUrl.trim()).hostname.toLowerCase().replace(/^\[|\]$/g, "");
     if (hostname === "localhost" || hostname === "::1") return true;
     const parts = hostname.split(".");
     return parts.length === 4 &&
-      parts.every(part => /^\\d{1,3}$/.test(part) && Number(part) <= 255) &&
+      parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) &&
       Number(parts[0]) === 127;
   } catch {
     return false;
