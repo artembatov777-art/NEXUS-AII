@@ -43,7 +43,9 @@ interface StoredConversationRead {
 }
 
 function readConversationKey(storage: StorageAdapter, key: string): StoredConversationRead {
-  const raw = storage.getItem(key);
+  let raw: string | null;
+  try { raw = storage.getItem(key); }
+  catch { return { items: [], present: true, valid: false }; }
   if (raw === null) return { items: [], present: false, valid: true };
   try {
     const parsed: unknown = JSON.parse(raw);

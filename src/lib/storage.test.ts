@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConversations, saveConversations, loadProvider, saveProvider, type StorageAdapter } from "./storage";
 import type { Conversation } from "../types";
 
-const { isTauriMock, invokeMock } = vi.hoisted(() => ({ isTauriMock: vi.fn(() => false), invokeMock: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ isTauri: isTauriMock, invoke: invokeMock }));
+const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 class MemoryStorage implements StorageAdapter {
   values = new Map<string, string>();
@@ -16,8 +16,8 @@ const base: Conversation = {
 };
 
 beforeEach(() => {
-  isTauriMock.mockReturnValue(false);
   invokeMock.mockReset();
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
 describe("conversation workspace storage", () => {
@@ -78,7 +78,7 @@ describe("conversation workspace storage", () => {
     const duplicate = { ...base, title: "Stale browser duplicate", updatedAt: 5 };
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([browser, duplicate]));
     storage.setItem("nexus-au:conversations:v1", JSON.stringify([legacy]));
-    isTauriMock.mockReturnValue(true);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     invokeMock.mockImplementation(async (command: string) => command === "load_conversations" ? [native, nativeDuplicate] : undefined);
 
     const loaded = await loadConversations(storage);
@@ -93,7 +93,7 @@ describe("conversation workspace storage", () => {
   it("retains browser recovery data when native migration persistence fails", async () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([base]));
-    isTauriMock.mockReturnValue(true);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "load_conversations") return [{ ...base, id: "native-chat" }];
       throw new Error("SQLite unavailable");
