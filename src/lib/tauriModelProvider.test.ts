@@ -95,9 +95,7 @@ describe("TauriModelProvider", () => {
       return Promise.resolve(baseUrl.startsWith("http://") ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
     });
     const router = createTauriModelRouterForProfiles([
-      createOllamaProviderProfile("qwen-local").id
-        ? createOllamaProviderProfile("qwen-local")
-        : (() => { throw new Error("Ollama profile unavailable"); })(),
+      createOllamaProviderProfile("qwen-local"),
       createOmniRouteProviderProfile("https://gateway.example/v1", "cloud-a")
     ]);
     if (!router) throw new Error("Expected native profile router.");
