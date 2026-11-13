@@ -19,10 +19,11 @@ const cloudSettings: ProviderSettings = {
   baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote", credentialHandle: "default"
 };
 
-function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
+function setValue(element: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
-    element.value = value;
-    element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    setter?.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
@@ -37,7 +38,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 describe("ProviderProfilesPanel", () => {
-  it("loads a saved profile and switches configuration without connecting", async () => {
+  it("loads saved profiles without starting a provider connection", async () => {
     expect(saveProviderProfiles([{
       id: "nexus.cloud", label: "Cloud", settings: cloudSettings
     }]).ok).toBe(true);
