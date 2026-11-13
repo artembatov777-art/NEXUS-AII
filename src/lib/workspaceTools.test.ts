@@ -28,7 +28,7 @@ describe("workspace agent tools", () => {
     const search = registry.search("", 20);
     expect(search.ok).toBe(true);
     if (search.ok) expect(search.value.map(tool => tool.id)).toEqual([
-      "workspace.list", "workspace.search", "workspace.read", "workspace.write", "workspace.mkdir"
+      "workspace.list", "workspace.search", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"
     ]);
   });
 
@@ -93,6 +93,31 @@ describe("workspace agent tools", () => {
       traceId: "trace", runId: "run", signal: new AbortController().signal
     }, "local-user");
     expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("routes rename and move through native commands under high-risk write approval", async () => {
+    const { registry, gateway, permissions } = setup();
+    registerWorkspaceTools(registry);
+    const context = { traceId: "trace", runId: "run", signal: new AbortController().signal };
+    invokeMock.mockResolvedValueOnce("C:\\approved\\final.txt").mockResolvedValueOnce("C:\\approved\\Archive\\final.txt");
+    const rename = await gateway.execute("workspace.rename", { path: "C:\\approved\\draft.txt", newName: "final.txt" }, context, "local-user");
+    const move = await gateway.execute("workspace.move", { path: "C:\\approved\\final.txt", destinationDirectory: "C:\\approved\\Archive" }, context, "local-user");
+    expect(rename.ok).toBe(true);
+    expect(move.ok).toBe(true);
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "rename_workspace_entry", { path: "C:\\approved\\draft.txt", newName: "final.txt" });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "move_workspace_entry", { path: "C:\\approved\\final.txt", destinationDirectory: "C:\\approved\\Archive" });
+    expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ scope: "filesystem:write:selected", risk: "high" }));
+  });
+
+  it("rejects invalid rename names and oversized move permission resources", async () => {
+    const { registry, gateway } = setup();
+    registerWorkspaceTools(registry);
+    const context = { traceId: "trace", runId: "run", signal: new AbortController().signal };
+    const badRename = await gateway.execute("workspace.rename", { path: "C:\\approved\\draft.txt", newName: "../outside" }, context, "local-user");
+    const badMove = await gateway.execute("workspace.move", { path: "a".repeat(3000), destinationDirectory: "b".repeat(1100) }, context, "local-user");
+    expect(badRename).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(badMove).toMatchObject({ ok: false, error: { code: "validation" } });
     expect(invokeMock).not.toHaveBeenCalled();
   });
 

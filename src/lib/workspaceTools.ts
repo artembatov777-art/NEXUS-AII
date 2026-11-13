@@ -14,6 +14,8 @@ type WorkspaceEntry = {
 type PathInput = { path: string };
 type WriteInput = { path: string; content: string };
 type SearchInput = { path: string; query: string };
+type RenameInput = { path: string; newName: string };
+type MoveInput = { path: string; destinationDirectory: string };
 
 const MAX_PATH_LENGTH = 4096;
 const MAX_TOOL_TEXT_BYTES = 48_000;
@@ -38,6 +40,28 @@ function validSearchInput(input: unknown): Result<SearchInput> {
     return err("validation", "Workspace path or search query is invalid.");
   }
   return ok({ path: record.path, query: record.query.trim() });
+}
+
+function validRenameInput(input: unknown): Result<RenameInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A file path and new name are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
+      typeof record.newName !== "string" || !record.newName.trim() || new TextEncoder().encode(record.newName).byteLength > 255 ||
+      record.newName === "." || record.newName === ".." || /[\\/:*?"<>|]/.test(record.newName) ||
+      /[\\u0000-\\u001f\\u007f]/.test(record.newName) || /[. ]$/.test(record.newName)) {
+    return err("validation", "File path or new name is invalid.");
+  }
+  return ok({ path: record.path, newName: record.newName });
+}
+
+function validMoveInput(input: unknown): Result<MoveInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A source path and destination directory are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || typeof record.destinationDirectory !== "string" ||
+      !record.destinationDirectory.trim() || record.path.length + record.destinationDirectory.length + 4 > MAX_PATH_LENGTH) {
+    return err("validation", "Source and destination paths are invalid or exceed the combined path limit.");
+  }
+  return ok({ path: record.path, destinationDirectory: record.destinationDirectory });
 }
 
 function validWriteInput(input: unknown): Result<WriteInput> {
@@ -180,6 +204,40 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
         } catch (cause) { return failure(cause, "Could not create the approved workspace directory."); }
       }
     }
+    {
+      id: "workspace.rename",
+      version: "1.0.0",
+      description: "Rename a regular file or directory inside an owner-approved workspace root. Input: {path,newName}. Never overwrites an existing destination.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "high",
+      timeoutMs: 15_000,
+      validateInput: validRenameInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path, newName }) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        try {
+          const renamedPath = await invoke<string>("rename_workspace_entry", { path, newName });
+          return ok({ previousPath: path, path: renamedPath, renamed: true });
+        } catch (cause) { return failure(cause, "Could not rename the approved workspace entry."); }
+      }
+    },
+    {
+      id: "workspace.move",
+      version: "1.0.0",
+      description: "Move a regular file or directory to another folder inside the same owner-approved root. Input: {path,destinationDirectory}. Never overwrites an existing destination.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "high",
+      timeoutMs: 15_000,
+      validateInput: validMoveInput,
+      resourceForInput: input => `${input.path} -> ${input.destinationDirectory}`,
+      execute: async ({ path, destinationDirectory }) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        try {
+          const movedPath = await invoke<string>("move_workspace_entry", { path, destinationDirectory });
+          return ok({ previousPath: path, path: movedPath, moved: true });
+        } catch (cause) { return failure(cause, "Could not move the approved workspace entry."); }
+      }
+    },
   ];
 
   for (const definition of definitions) {
