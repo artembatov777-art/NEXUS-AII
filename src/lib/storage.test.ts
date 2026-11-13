@@ -93,7 +93,7 @@ describe("conversation workspace storage", () => {
   it("retains browser recovery data when native migration persistence fails", async () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([base]));
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    isTauriMock.mockReturnValue(true);
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "load_conversations") return [{ ...base, id: "native-chat" }];
       throw new Error("SQLite unavailable");
