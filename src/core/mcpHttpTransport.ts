@@ -78,9 +78,9 @@ export class McpHttpTransport implements McpTransport {
 
   constructor(options: McpHttpTransportOptions) {
     const url = new URL(options.endpoint);
-    const hostname = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
     const ipv4 = hostname.split(".");
-    const loopbackIpv4 = ipv4.length === 4 && ipv4.every(part => /^\\d{1,3}$/.test(part) && Number(part) <= 255) && Number(ipv4[0]) === 127;
+    const loopbackIpv4 = ipv4.length === 4 && ipv4.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) && Number(ipv4[0]) === 127;
     const loopback = hostname === "localhost" || hostname === "::1" || loopbackIpv4;
     if (!["http:", "https:"].includes(url.protocol) ||
         (url.protocol === "http:" && !loopback) ||
