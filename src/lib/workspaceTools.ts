@@ -48,7 +48,7 @@ function validRenameInput(input: unknown): Result<RenameInput> {
   if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
       typeof record.newName !== "string" || !record.newName.trim() || new TextEncoder().encode(record.newName).byteLength > 255 ||
       record.newName === "." || record.newName === ".." || /[\\/:*?"<>|]/.test(record.newName) ||
-      /[\\u0000-\\u001f\\u007f]/.test(record.newName) || /[. ]$/.test(record.newName)) {
+      /[\u0000-\u001f\u007f]/.test(record.newName) || /[. ]$/.test(record.newName)) {
     return err("validation", "File path or new name is invalid.");
   }
   return ok({ path: record.path, newName: record.newName });
