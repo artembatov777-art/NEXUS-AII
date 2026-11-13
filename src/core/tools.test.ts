@@ -46,6 +46,16 @@ describe("ToolGateway", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("allows a retry after a prior denied attempt because no side effect started", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const denied = { toolId: "sample", runId: "run-1", traceId: "trace-1", status: "denied" as const, timestamp: 100 };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([denied])) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
+  });
   it("fails closed when durable audit history cannot be checked", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(err("storage_failed", "offline")) };
