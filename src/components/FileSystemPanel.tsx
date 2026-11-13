@@ -12,6 +12,9 @@ type WorkspaceEntry = {
   modifiedAtMs: number | null;
 };
 
+type WorkspaceContentMatch = { path: string; lineNumber: number; preview: string };
+type WorkspaceContentSearch = { matches: WorkspaceContentMatch[]; totalMatches: number; scannedFiles: number; truncated: boolean };
+
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B`
   : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB`
   : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -38,6 +41,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [grantPath, setGrantPath] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
+  const [contentSearchMode, setContentSearchMode] = useState(false);
+  const [contentMatches, setContentMatches] = useState<WorkspaceContentMatch[]>([]);
+  const [contentSearchSummary, setContentSearchSummary] = useState("");
   const [newName, setNewName] = useState("");
   const [renameName, setRenameName] = useState("");
   const [moveDestination, setMoveDestination] = useState("");
@@ -53,6 +59,8 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setEntries(result);
       setCurrentPath(path);
       setSearchActive(false);
+      setContentMatches([]);
+      setContentSearchSummary("");
       setError("");
       if (selectedPath && !result.some(entry => entry.path === selectedPath)) {
         setSelectedPath("");
@@ -94,8 +102,17 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setDraft("");
     setEditing(false);
     try {
-      const result = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path: currentPath, query });
-      setEntries(result);
+      if (contentSearchMode) {
+        const result = await invoke<WorkspaceContentSearch>("search_workspace_contents", { path: currentPath, query });
+        setContentMatches(result.matches);
+        setContentSearchSummary(`${result.totalMatches} matches in ${result.scannedFiles} files${result.truncated ? " · search limit reached" : ""}`);
+        setEntries([]);
+      } else {
+        const result = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path: currentPath, query });
+        setEntries(result);
+        setContentMatches([]);
+        setContentSearchSummary("");
+      }
       setSearchActive(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -290,7 +307,11 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <button className="secondary-btn" onClick={() => void refresh(parentPath(currentPath))} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
         </div>
         <div className="file-search-toolbar">
-          <label className="file-search-input"><Search size={14}/><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchFiles(); }} placeholder="Search names in this folder and subfolders" aria-label="Search approved folders"/></label>
+          <div className="file-search-mode" role="group" aria-label="Search mode">
+            <button className="secondary-btn" aria-pressed={!contentSearchMode} onClick={() => { setContentSearchMode(false); setContentMatches([]); setContentSearchSummary(""); }} disabled={busy}>Names</button>
+            <button className="secondary-btn" aria-pressed={contentSearchMode} onClick={() => { setContentSearchMode(true); setEntries([]); }} disabled={busy}>Text content</button>
+          </div>
+          <label className="file-search-input"><Search size={14}/><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchFiles(); }} placeholder={contentSearchMode ? "Find text inside files (max 500 files)" : "Search names in this folder and subfolders"} aria-label="Search approved folders"/></label>
           <button className="secondary-btn" onClick={() => void searchFiles()} disabled={busy || !currentPath || !searchQuery.trim()}><Search size={13}/> Search</button>
           {searchActive && <button className="secondary-btn" onClick={() => { setSearchQuery(""); void refresh(); }} disabled={busy}>Clear</button>}
         </div>
@@ -304,11 +325,16 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
-            <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong></div><span>{entries.length} items</span></div>
+            <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
             <div className="file-list" role="list" aria-label="Workspace files">
-              {entries.map(entry => { const EntryIcon = entry.kind === "directory" ? Folder : fileIcon(entry.name); return <button key={entry.path} className={selectedPath === entry.path ? "selected" : ""} aria-pressed={selectedPath === entry.path} onClick={() => void openEntry(entry)}><span className="file-name"><EntryIcon size={16}/><span><strong>{entry.name}</strong><small>{entry.kind}</small></span></span><span>{entry.kind === "file" ? formatSize(entry.sizeBytes) : "—"}</span><span>{entry.modifiedAtMs ? new Date(Number(entry.modifiedAtMs)).toLocaleDateString() : "—"}</span></button>; })}
-              {!entries.length && <div className="file-empty">{busy ? "Loading..." : searchActive ? "No matching file or folder names were found." : "This folder is empty or not selected."}</div>}
+              {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
+                const name = match.path.split(/[\\/]/).pop() ?? match.path;
+                return <button key={`${match.path}:${match.lineNumber}:${index}`} className={selectedPath === match.path ? "selected" : ""} onClick={() => void openEntry({ name, path: match.path, kind: "file", sizeBytes: 0, modifiedAtMs: null })}>
+                  <span className="file-name"><FileText size={16}/><span><strong>{name}</strong><small>{match.path} · line {match.lineNumber}</small><small className="file-content-match-preview">{match.preview}</small></span></span><span>Line {match.lineNumber}</span><span>—</span>
+                </button>;
+              }) : entries.map(entry => { const EntryIcon = entry.kind === "directory" ? Folder : fileIcon(entry.name); return <button key={entry.path} className={selectedPath === entry.path ? "selected" : ""} aria-pressed={selectedPath === entry.path} onClick={() => void openEntry(entry)}><span className="file-name"><EntryIcon size={16}/><span><strong>{entry.name}</strong><small>{entry.kind}</small></span></span><span>{entry.kind === "file" ? formatSize(entry.sizeBytes) : "—"}</span><span>{entry.modifiedAtMs ? new Date(Number(entry.modifiedAtMs)).toLocaleDateString() : "—"}</span></button>; })}
+              {!(contentSearchMode && searchActive ? contentMatches.length : entries.length) && <div className="file-empty">{busy ? "Loading..." : searchActive ? contentSearchMode ? "No matching text was found in the scanned files." : "No matching file or folder names were found." : "This folder is empty or not selected."}</div>}
             </div>
             {currentPath && <div className="file-create-row"><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="New file or folder name"/><button className="secondary-btn" onClick={() => void createEntry("file")} disabled={busy || !newName.trim()}><File size={14}/> New file</button><button className="secondary-btn" onClick={() => void createEntry("directory")} disabled={busy || !newName.trim()}><FolderPlus size={14}/> New folder</button></div>}
           </div>
