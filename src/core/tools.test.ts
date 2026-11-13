@@ -35,6 +35,16 @@ describe("ToolGateway", () => {
     expect(gateway.register(mcpTool).ok).toBe(true);
   });
 
+  it("does not confuse an audit record from another run with the current step", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const prior = { toolId: "sample", runId: "another-run", traceId: "trace-1", status: "started" as const, timestamp: 100 };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([prior])) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
+  });
   it("blocks replay when a durable audit record already exists for the same run and step", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const prior = { toolId: "sample", runId: "run-1", traceId: "trace-1", status: "started" as const, timestamp: 100 };
