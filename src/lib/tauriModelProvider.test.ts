@@ -56,7 +56,11 @@ describe("TauriModelProvider", () => {
         inferenceLocation: "remote", credentialHandle: "default"
       }
     });
-    expect(() => createOmniRouteProviderProfile("http://gateway.example/v1", "cloud-model")).toThrow(/HTTPS/i);
+    expect(createOmniRouteProviderProfile("http://127.0.0.1:20128/v1", "local-gateway-model")).toMatchObject({
+      id: "nexus.omniroute",
+      settings: { baseUrl: "http://127.0.0.1:20128/v1", inferenceLocation: "remote" }
+    });
+    expect(() => createOmniRouteProviderProfile("http://gateway.example/v1", "cloud-model")).toThrow(/HTTPS|loopback/i);
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 

@@ -18,14 +18,14 @@ Credentials are passed to the native Rust host as a vault handle. They are never
 | Profile ID | Intended endpoint | Credential mode | State |
 |---|---|---|---|
 | `nexus.ollama` | `http://127.0.0.1:11434/v1` | `none` | Adapter-compatible; not installed or started |
-| `nexus.omniroute` | User-configured HTTPS gateway URL | OS credential vault | Adapter-compatible; not configured or connected |
+| `nexus.omniroute` | User-configured HTTPS gateway URL, or HTTP loopback endpoint | OS credential vault | Adapter-compatible; not configured or connected |
 | `nexus.native-provider` | Current active endpoint from Settings | Existing vault profile | Current single-endpoint UI |
 
 The multi-profile factory performs no network request. A provider is contacted only when the caller explicitly runs model discovery or inference. No background connection, installation, process launch, or gateway dependency is introduced.
 
 ## Security and limitations
 
-- Remote endpoints require HTTPS. Plain HTTP is accepted only for localhost/loopback.
+- Remote endpoints require HTTPS. Plain HTTP is accepted only for localhost/loopback, including a locally hosted OmniRoute instance.
 - Redirects are disabled in the native HTTP client.
 - URL credentials, query parameters, and fragments are rejected.
 - `inferenceLocation` is an owner disclosure, not proof of where an upstream gateway executes inference.

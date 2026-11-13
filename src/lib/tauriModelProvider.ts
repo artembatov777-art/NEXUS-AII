@@ -199,10 +199,8 @@ export function createOmniRouteProviderProfile(
   credentialHandle: "default" | "ollama" = "default"
 ): TauriProviderProfile {
   const endpointError = providerEndpointError(baseUrl);
-  let protocol = "";
-  try { protocol = new URL(baseUrl.trim()).protocol; } catch { /* validated below */ }
-  if (endpointError || protocol !== "https:") {
-    throw new Error("OmniRoute must be configured with a valid HTTPS endpoint.");
+  if (endpointError) {
+    throw new Error("OmniRoute must use HTTPS, or HTTP on a localhost/loopback endpoint.");
   }
   return {
     id: "nexus.omniroute",
