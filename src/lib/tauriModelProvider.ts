@@ -68,10 +68,11 @@ class TauriModelProvider implements ModelProvider {
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
     if (!isValidModelId(request.model)) throw new Error("Requested model ID is invalid.");
-    if (this.settings.model.trim() && request.model !== this.settings.model) {
-      throw new Error("Requested model does not match the configured model.");
+    const configuredModel = this.settings.model.trim();
+    if (configuredModel && request.model !== configuredModel && !this.discoveredModels.has(request.model)) {
+      throw new Error("Requested model is neither the configured model nor a discovered model for this provider.");
     }
-    if (!this.settings.model.trim() && !this.discoveredModels.has(request.model)) {
+    if (!configuredModel && !this.discoveredModels.has(request.model)) {
       throw new Error("Discover the provider model catalog before selecting a model for this profile.");
     }
     if (request.messages.some(message => message.role === "tool")) {

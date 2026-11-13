@@ -159,6 +159,35 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+
+  it("streams another discovered model from a profile that had an initial model selection", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a", "model-b"]);
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        channel.onmessage({ type: "text_delta", text: "Switched model" });
+        channel.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriModelRouterForProfiles([{
+      id: "nexus.omniroute",
+      settings: { baseUrl: "https://gateway.example/v1", model: "model-a", inferenceLocation: "remote", credentialHandle: "default" }
+    }]);
+    if (!router) throw new Error("Expected native profile router.");
+    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ id: "model-a" }, { id: "model-b" }] });
+    const events = [];
+    for await (const event of router.stream("nexus.omniroute", {
+      model: "model-b", messages: [{ role: "user", content: "switch" }]
+    })) events.push(event);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
+      baseUrl: "https://gateway.example/v1", model: "model-b", credentialHandle: "default"
+    }));
+  });
+
   it("keeps browser preview disconnected from provider credentials", () => {
     mockedIsTauri.mockReturnValue(false);
     expect(createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" })).toBeNull();
