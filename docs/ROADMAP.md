@@ -28,7 +28,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
 - [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
 - [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
-- [ ] Pass fresh frontend Quality, Mobile Interface Preview, and Native desktop quality workflows on the final Phase I commit. Historical baseline `38d23706260adf037885158bae3dbfb03284210c` passed all three workflows; the current visual refresh still requires a fresh green run.
+- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `0e41f2e`; native Windows/macOS/Linux quality matrix is still running and must pass before Phase I can close.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -36,11 +36,11 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 **Status: active.**
 
-- [ ] Complete the provider-neutral model runtime and model registry lifecycle.
-- [ ] Connect OmniRoute through its OpenAI-compatible API.
-- [ ] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
-- [ ] Prepare the Ollama adapter as a separate local inference path.
-- [ ] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
+- [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
+- [x] Connect OmniRoute through its OpenAI-compatible API; the real account connection has not been tested without the owner key.
+- [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
+- [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
+- [x] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
 - [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for existing OmniRoute installations and `ollama` for Ollama API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
 - [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior; confirm final native CI on the latest commit.
 
@@ -50,8 +50,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 **Status: groundwork active in parallel with Phase II runtime validation; Phase II remains formally active until its exit criteria pass.**
 
-- [ ] Complete inspectable long-term memory with user-controlled create, revise, search, export, and deletion.
-- [ ] Complete document ingestion and project-scoped knowledge retrieval with provenance.
+- [x] Implement inspectable memory management with user-controlled create, revise, search, and deletion; memory records are included in versioned workspace export/backup.
+- [x] Implement document ingestion and project-scoped knowledge retrieval with source/page/section provenance.
 - [ ] Add reliable indexing, rebuild, and recovery behavior.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
 - [ ] Test privacy boundaries, retrieval quality, citations, and persistence.
@@ -63,7 +63,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Implement the bounded agent runtime and model-driven planning through AI Core; full phase acceptance still requires integration and native smoke tests.
 - [x] Implement approval, pause/resume, cancellation, durable SQLite checkpoints, and audit-led duplicate-step replay protection; automatic result replay and manual reconciliation for ambiguous external outcomes remain open.
 - [x] Implement the Tool Gateway, MCP server configuration, session-aware HTTP transport, tool discovery/import, and per-call approval with input preview; broader OAuth/authentication and adversarial integration tests remain open.
-- [ ] Add operation-level idempotency and recovery for external side effects.
+- [x] Add audit-led replay protection that blocks duplicate execution of a previously started or terminal run/step.\n- [ ] Add automatic idempotent result replay and manual reconciliation for ambiguous external side effects.
 - [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
 - [ ] Add integration tests for safe and denied tool execution.
 
@@ -77,7 +77,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Create and edit regular files inside one approved root; rename/move require explicit UI confirmation and are implemented for individual entries.
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
 - [ ] Add bulk organization, previews, conflict handling, and recovery.
-- [ ] Keep browser preview disconnected from the host filesystem.
+- [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
 **Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.
 
@@ -118,9 +118,9 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
-- The mobile preview has five jsdom interaction tests. The earlier Phase I baseline passed Quality, mobile preview build/deploy, and native desktop CI; the current visual refresh is undergoing a new verification pass.
+- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `0e41f2e`; the native desktop quality matrix is still running. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
 - Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
-- A frontend test previously failed because the model-catalog expectation omitted the configured model; the test now covers both the configured model and the discovered catalog. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. Final Phase I CI passed: frontend Quality, mobile preview build/deploy, and native desktop quality on Windows, macOS, and Linux. The owner confirmed the hosted interface works on iPhone Safari.
+- A frontend test previously failed because the model-catalog expectation omitted the configured model; the test now covers both the configured model and the discovered catalog. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. The hosted preview remains a static interface demo and is not connected to Rust, OmniRoute, Ollama, or the owner filesystem. Real Windows folder permissions and provider-key verification remain owner-side release gates.
