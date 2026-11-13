@@ -45,7 +45,7 @@ describe("FileSystemPanel native workspace access", () => {
 
   it("loads approved directories and opens text files through native commands", async () => {
     const rootPath = "C:\\Users\\Owner\\Documents";
-    const filePath = rootPath + "\notes.txt";
+    const filePath = rootPath + "\\notes.txt";
     isTauriMock.mockReturnValue(true);
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_workspace_directories") return [rootPath];
@@ -113,7 +113,7 @@ describe("FileSystemPanel native workspace access", () => {
 
   it("searches inside approved text files and opens a matching file", async () => {
     const rootPath = "C:\\Users\\Owner\\Documents";
-    const filePath = rootPath + "\notes.txt";
+    const filePath = rootPath + "\\notes.txt";
     isTauriMock.mockReturnValue(true);
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_workspace_directories") return [rootPath];
@@ -272,7 +272,7 @@ describe("FileSystemPanel native workspace access", () => {
   });
   it("hands the selected text file to the AI analysis draft callback", async () => {
     const rootPath = "C:\\Users\\Owner\\Documents";
-    const filePath = rootPath + "\notes.txt";
+    const filePath = rootPath + "\\notes.txt";
     const onAnalyze = vi.fn();
     isTauriMock.mockReturnValue(true);
     invokeMock.mockImplementation(async (command: string) => {
