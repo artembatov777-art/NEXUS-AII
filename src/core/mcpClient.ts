@@ -199,7 +199,10 @@ export class McpClient {
       version: "mcp-1",
       description: (tool.description || `MCP tool ${tool.name}`).slice(0, 500),
       requiredPermissions: [...options.permissions],
-      resourceForInput: () => `${serverId}/${tool.name}`,
+      resourceForInput: input => {
+        const preview = JSON.stringify(input) ?? "[unavailable]";
+        return `${serverId}/${tool.name}\nInput preview: ${preview.slice(0, 1200)}${preview.length > 1200 ? "… [truncated]" : ""}`;
+      },
       risk: options.risk,
       timeoutMs: options.timeoutMs,
       validateInput: input => adapter.validate(serverId, tool, input),

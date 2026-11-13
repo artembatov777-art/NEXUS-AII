@@ -54,7 +54,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource }) => {
           if (scope === "mcp:execute") {
-            return window.confirm(`Allow execution of this MCP tool?\\n\\n${resource}\\n\\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
+            return window.confirm(`Allow execution of this MCP tool?\n\n${resource}\n\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
           }
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
             const action = scope === "filesystem:read:selected" ? "read" : "create or edit";

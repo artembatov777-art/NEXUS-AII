@@ -22,7 +22,8 @@ const transportWith = (respond: (request: McpRequest) => McpResponse): McpTransp
 
 describe("McpClient", () => {
   it("initializes, negotiates capabilities, sends initialized notification and imports tools through the gateway", async () => {
-    const tools = gateway();
+    const authorize = vi.fn(async () => "allow" as const);
+    const tools = new ToolGateway({ authorize }, { record: async () => ok(undefined) }, { now: () => 1 });
     const registry = new ToolRegistry(tools);
     const transport: McpTransport = {
       request: vi.fn(async (request: McpRequest): Promise<McpResponse> => request.method === "initialize"
@@ -40,13 +41,14 @@ describe("McpClient", () => {
     const discovered = await client.listTools("local", signal);
     expect(discovered.ok && discovered.value[0].name).toBe("lookup");
     const imported = client.importTool("local", { name: "lookup" }, {
-      permissions: ["memory:read"], risk: "low", timeoutMs: 1000,
+      permissions: ["mcp:execute"], risk: "high", timeoutMs: 1000,
       adapter: { validate: (_server, _tool, input) => ok(input) }
     });
     expect(imported.ok).toBe(true);
     const result = await tools.execute("mcp.local.lookup", { q: "x" },
       { traceId: "t", runId: "r", signal } as ToolExecutionContext, "actor");
     expect(result.ok).toBe(true);
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ scope: "mcp:execute", resource: expect.stringContaining('"q":"x"') }));
     expect(transport.request).toHaveBeenCalledTimes(3);
     expect(vi.mocked(transport.request).mock.calls[2][0]).toMatchObject({ method: "tools/call", params: { name: "lookup" } });
     await client.disconnect("local");
