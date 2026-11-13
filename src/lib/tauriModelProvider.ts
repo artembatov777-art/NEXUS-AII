@@ -30,8 +30,7 @@ async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string)
 }
 
 class TauriModelProvider implements ModelProvider {
-  readonly id = NATIVE_MODEL_PROVIDER_ID;
-  constructor(private readonly settings: ProviderSettings) {}
+  constructor(readonly id: string, private readonly settings: ProviderSettings) {}
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
     if (this.settings.model && !isValidModelId(this.settings.model)) {
@@ -161,11 +160,31 @@ class TauriModelProvider implements ModelProvider {
   }
 }
 
-/** Provider adapter keeps credentials in the native OS keyring and never exposes them to the webview. */
-export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
-  if (!isTauri() || !settings.baseUrl.trim()) return null;
+export interface TauriProviderProfile {
+  /** Stable router identity, for example nexus.ollama or nexus.omniroute. */
+  id: string;
+  settings: ProviderSettings;
+}
+
+/**
+ * Registers multiple independent OpenAI-compatible endpoints in one router.
+ * This is adapter preparation only: it never installs, launches, or connects
+ * to a provider until a caller explicitly invokes listModels or stream.
+ */
+export function createTauriModelRouterForProfiles(profiles: TauriProviderProfile[]): ModelRouter | null {
+  if (!isTauri() || profiles.length === 0) return null;
   const router = new ModelRouter();
-  const registered = router.register(new TauriModelProvider({ ...settings }));
-  if (!registered.ok) throw new Error(registered.error.message);
+  for (const profile of profiles) {
+    if (!profile.id.trim() || profile.id.length > 128 || !profile.settings.baseUrl.trim()) {
+      throw new Error("Provider profile ID and endpoint are required.");
+    }
+    const registered = router.register(new TauriModelProvider(profile.id, { ...profile.settings }));
+    if (!registered.ok) throw new Error(registered.error.message);
+  }
   return router;
+}
+
+/** Default single-endpoint adapter retained for the current settings UI. */
+export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
+  return createTauriModelRouterForProfiles([{ id: NATIVE_MODEL_PROVIDER_ID, settings }]);
 }

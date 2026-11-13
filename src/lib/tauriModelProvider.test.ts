@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
+import { createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -13,6 +13,29 @@ const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
 describe("TauriModelProvider", () => {
+  it("registers independent compatible provider profiles without connecting them", () => {
+    mockedIsTauri.mockReturnValue(true);
+    const router = createTauriModelRouterForProfiles([
+      { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen", inferenceLocation: "local", credentialHandle: "none" } },
+      { id: "nexus.omniroute", settings: { baseUrl: "https://gateway.example/v1", model: "cloud-model", inferenceLocation: "remote", credentialHandle: "default" } }
+    ]);
+    expect(router).not.toBeNull();
+    expect(router?.getProviderIds()).toEqual(["nexus.ollama", "nexus.omniroute"]);
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate or invalid provider profile identities before any network request", () => {
+    mockedIsTauri.mockReturnValue(true);
+    expect(() => createTauriModelRouterForProfiles([
+      { id: "nexus.same", settings: { baseUrl: "https://one.example/v1", model: "a", inferenceLocation: "remote" } },
+      { id: "nexus.same", settings: { baseUrl: "https://two.example/v1", model: "b", inferenceLocation: "remote" } }
+    ])).toThrow(/already registered/i);
+    expect(() => createTauriModelRouterForProfiles([
+      { id: " ", settings: { baseUrl: "https://one.example/v1", model: "a", inferenceLocation: "remote" } }
+    ])).toThrow(/profile ID/i);
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => { mockedInvoke.mockReset(); mockedIsTauri.mockReset(); });
 
   it("keeps browser preview disconnected from provider credentials", () => {
