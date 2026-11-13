@@ -97,6 +97,19 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     expect(afterDelete.ok && afterDelete.value.map(record => record.id)).not.toContain("shared-native");
   });
 
+  it("loads selected memory IDs from the current native snapshot", async () => {
+    isTauriMock.mockReturnValue(true);
+    const records = [memory("one", "First memory"), memory("two", "Second memory")];
+    invokeMock.mockImplementation(async command => {
+      if (command === "load_memories") return records;
+      throw new Error("Unexpected native command: " + command);
+    });
+    const repository = new WorkspaceMemoryRepository(new FakeStorage());
+    const selected = await repository.getByIds(["two"]);
+    expect(selected).toMatchObject({ ok: true, value: [{ id: "two", content: "Second memory" }] });
+    expect(await repository.getByIds(["missing"])).toMatchObject({ ok: true, value: [] });
+  });
+
   it("does not resurrect a native memory deleted after legacy migration", async () => {
     isTauriMock.mockReturnValue(true);
     const nativeRecords = new Map<string, MemoryRecord>();

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { MemoryRecord, MemoryRepository, MemoryScope } from "../core/memory";
-import type { KnowledgeChunk, KnowledgeRepository } from "../core/knowledge";
+import type { KnowledgeChunk, KnowledgeRepository, MemorySearchRepository } from "../core/knowledge";
 import { err, ok, type Result } from "../core/result";
 import { LocalStorageMemoryRepository, rankMemories, type StorageLike } from "./memoryStorage";
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
@@ -14,7 +14,7 @@ function failure(error: unknown, fallback: string): Result<never> {
 }
 
 
-export class WorkspaceMemoryRepository implements MemoryRepository {
+export class WorkspaceMemoryRepository implements MemoryRepository, MemorySearchRepository {
   private readonly local: LocalStorageMemoryRepository;
   private migration?: Promise<void>;
 
@@ -70,6 +70,18 @@ export class WorkspaceMemoryRepository implements MemoryRepository {
       return ok((await this.all()).find(record => record.id === id) ?? null);
     } catch (error) {
       return failure(error, "Could not load memory.");
+    }
+  }
+
+  async getByIds(ids: string[]): Promise<Result<MemoryRecord[]>> {
+    if (!Array.isArray(ids) || ids.length > 500 || ids.some(id => typeof id !== "string" || !id.trim() || id.length > 128)) {
+      return err("validation", "Memory IDs are invalid or exceed the lookup limit.");
+    }
+    try {
+      const selected = new Set(ids);
+      return ok((await this.all()).filter(record => selected.has(record.id)));
+    } catch (error) {
+      return failure(error, "Could not load selected memories.");
     }
   }
 
