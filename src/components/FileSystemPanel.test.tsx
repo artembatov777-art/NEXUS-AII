@@ -34,6 +34,78 @@ describe("FileSystemPanel native workspace access", () => {
     container.remove();
   });
 
+  it("moves selected files as a batch and records each move", async () => {
+    const rootPath = "/home/test/Documents";
+    const destination = rootPath + "/Archive";
+    const paths = [rootPath + "/one.txt", rootPath + "/two.txt"];
+    const moved = new Set<string>();
+    isTauriMock.mockReturnValue(true);
+    openMock.mockResolvedValue(destination);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string; destinationDirectory?: string }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "one.txt", path: paths[0], kind: "file", sizeBytes: 10, modifiedAtMs: 0 },
+        { name: "two.txt", path: paths[1], kind: "file", sizeBytes: 10, modifiedAtMs: 0 }
+      ].filter(entry => !moved.has(entry.path));
+      if (command === "move_workspace_entry") {
+        const source = args?.path ?? "";
+        const target = (args?.destinationDirectory ?? "") + "/" + source.split("/").pop();
+        moved.add(source);
+        return target;
+      }
+      return undefined;
+    });
+    await renderPanel();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    for (const name of ["one.txt", "two.txt"]) {
+      const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Select ' + name + ' for bulk move"]')!;
+      await act(async () => { checkbox.click(); });
+    }
+    const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Move selected"));
+    await act(async () => { moveButton!.click(); });
+    expect(openMock).toHaveBeenCalledWith({ directory: true, multiple: false, title: "Choose destination folder" });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "move_workspace_entry")).toHaveLength(2);
+    expect(container.textContent).toContain("Moved 2 files.");
+    expect(container.querySelector('input[aria-label="Select one.txt for bulk move"]')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("rolls back earlier batch moves when a later file conflicts", async () => {
+    const rootPath = "/home/test/Documents";
+    const destination = rootPath + "/Archive";
+    const firstPath = rootPath + "/one.txt";
+    const secondPath = rootPath + "/two.txt";
+    let moveCalls = 0;
+    isTauriMock.mockReturnValue(true);
+    openMock.mockResolvedValue(destination);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string; destinationDirectory?: string }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "one.txt", path: firstPath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 },
+        { name: "two.txt", path: secondPath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 }
+      ];
+      if (command === "move_workspace_entry") {
+        moveCalls += 1;
+        if (moveCalls === 2) throw new Error("Destination already exists");
+        if (moveCalls === 1) return destination + "/one.txt";
+        return firstPath;
+      }
+      return undefined;
+    });
+    await renderPanel();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    for (const name of ["one.txt", "two.txt"]) {
+      const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Select ' + name + ' for bulk move"]')!;
+      await act(async () => { checkbox.click(); });
+    }
+    const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Move selected"));
+    await act(async () => { moveButton!.click(); });
+    expect(moveCalls).toBe(3);
+    expect(container.textContent).toContain("Bulk move failed; previously moved files were restored.");
+    expect(container.textContent).not.toContain("rollback was incomplete");
+    vi.unstubAllGlobals();
+  });
+
   it("does not pretend browser preview can access local folders", async () => {
     await renderPanel();
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();

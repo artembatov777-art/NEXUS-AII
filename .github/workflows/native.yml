@@ -32,26 +32,9 @@ jobs:
           sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libdbus-1-dev
       - name: Pin npm to stable Arborist release
         run: npm install --global npm@10.8.2
-      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
       - run: npm run build
       - run: cargo check --manifest-path src-tauri/Cargo.toml
-      - name: Check whether Rust lockfile is already tracked
-        if: runner.os == 'Linux'
-        id: rust-lock
-        run: |
-          if git ls-files --error-unmatch src-tauri/Cargo.lock >/dev/null 2>&1; then
-            echo "tracked=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tracked=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Preserve generated Rust lockfile for repository review
-        if: runner.os == 'Linux' && steps.rust-lock.outputs.tracked == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexus-rust-lock-${{ github.sha }}
-          path: src-tauri/Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - name: Build native application without packaging installers
         run: npm run tauri build -- --no-bundle
@@ -63,33 +46,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  commit-lockfiles:
+  rust-security-audit:
     needs: native
-    if: github.ref == 'refs/heads/feat/nexus-core-architecture' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      ONNXRUNTIME_NODE_INSTALL: skip
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Pin npm to stable Arborist release
-        run: npm install --global npm@10.8.2
-      - run: npm install --legacy-peer-deps --no-audit --no-fund
       - uses: dtolnay/rust-toolchain@stable
-      - name: Generate Rust dependency lockfile
-        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-      - name: Commit dependency lockfiles on the protected working branch
-        run: |
-          git add package-lock.json src-tauri/Cargo.lock
-          if git diff --cached --quiet; then
-            echo "Dependency lockfiles are already tracked and unchanged."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Add dependency lockfiles for reproducible builds"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Rust dependency advisories
+        run: cargo audit --file src-tauri/Cargo.lock

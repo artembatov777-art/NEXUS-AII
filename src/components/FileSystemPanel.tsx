@@ -46,6 +46,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [currentPath, setCurrentPath] = useState("");
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState("");
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [preview, setPreview] = useState("");
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
@@ -85,6 +86,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     try {
       const result = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
       setEntries(result);
+      setSelectedPaths(previous => previous.filter(selected => result.some(entry => entry.path === selected && entry.kind === "file")));
       setCurrentPath(path);
       setSearchActive(false);
       setContentMatches([]);
@@ -308,6 +310,54 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     }
   }
 
+  async function bulkMoveSelected() {
+    if (!selectedPaths.length || !confirmDiscardDraft("move the selected files")) return;
+    let destination: string | string[] | null;
+    try {
+      destination = await open({ directory: true, multiple: false, title: "Choose destination folder" });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    if (typeof destination !== "string") return;
+    if (!window.confirm("Move " + selectedPaths.length + " selected files to this approved folder? Existing files will not be overwritten. If a move fails, NEXUS will try to restore files already moved.\n\n" + destination)) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const moved: Array<{ destination: string; originalDirectory: string }> = [];
+    let auditFailures = 0;
+    try {
+      for (const source of selectedPaths) {
+        const movedPath = await invoke<string>("move_workspace_entry", { path: source, destinationDirectory: destination });
+        moved.push({ destination: movedPath, originalDirectory: parentPath(source) });
+        if (!(await recordFilesystemAudit("move"))) auditFailures += 1;
+      }
+      setSelectedPaths([]);
+      setNotice("Moved " + moved.length + " files." + (auditFailures ? " " + auditFailures + " audit entr" + (auditFailures === 1 ? "y could" : "ies could") + " not be saved." : ""));
+      await refresh(currentPath, true);
+    } catch (cause) {
+      const rollbackFailures: string[] = [];
+      for (const item of [...moved].reverse()) {
+        try {
+          await invoke<string>("move_workspace_entry", { path: item.destination, destinationDirectory: item.originalDirectory });
+          if (!(await recordFilesystemAudit("move"))) auditFailures += 1;
+        } catch {
+          rollbackFailures.push(item.destination);
+        }
+      }
+      if (rollbackFailures.length) {
+        setSelectedPaths([]);
+        setError("Bulk move stopped and rollback was incomplete. " + rollbackFailures.length + " file(s) need manual review: " + rollbackFailures.slice(0, 4).join(", "));
+      } else {
+        setError("Bulk move failed; previously moved files were restored. " + (cause instanceof Error ? cause.message : String(cause)));
+      }
+      await refresh(currentPath, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createEntry(kind: "file" | "directory") {
     if (!confirmDiscardDraft("create a new entry and refresh the file list")) return;
     const name = newName.trim();
@@ -390,13 +440,14 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
+            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
             <div className="file-list" role="list" aria-label="Workspace files">
               {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
                 const name = match.path.split(/[\\/]/).pop() ?? match.path;
                 return <button key={`${match.path}:${match.lineNumber}:${index}`} className={selectedPath === match.path ? "selected" : ""} onClick={() => void openEntry({ name, path: match.path, kind: "file", sizeBytes: 0, modifiedAtMs: null })}>
                   <span className="file-name"><FileText size={16}/><span><strong>{name}</strong><small>{match.path} · line {match.lineNumber}</small><small className="file-content-match-preview">{match.preview}</small></span></span><span>Line {match.lineNumber}</span><span>—</span>
                 </button>;
-              }) : entries.map(entry => { const EntryIcon = entry.kind === "directory" ? Folder : fileIcon(entry.name); return <button key={entry.path} className={selectedPath === entry.path ? "selected" : ""} aria-pressed={selectedPath === entry.path} onClick={() => void openEntry(entry)}><span className="file-name"><EntryIcon size={16}/><span><strong>{entry.name}</strong><small>{entry.kind}</small></span></span><span>{entry.kind === "file" ? formatSize(entry.sizeBytes) : "—"}</span><span>{entry.modifiedAtMs ? new Date(Number(entry.modifiedAtMs)).toLocaleDateString() : "—"}</span></button>; })}
+              }) : entries.map(entry => { const EntryIcon = entry.kind === "directory" ? Folder : fileIcon(entry.name); return <div key={entry.path} className="file-list-row" role="listitem"><button className={selectedPath === entry.path ? "selected" : ""} aria-pressed={selectedPath === entry.path} onClick={() => void openEntry(entry)}><span className="file-name"><EntryIcon size={16}/><span><strong>{entry.name}</strong><small>{entry.kind}</small></span></span><span>{entry.kind === "file" ? formatSize(entry.sizeBytes) : "—"}</span><span>{entry.modifiedAtMs ? new Date(Number(entry.modifiedAtMs)).toLocaleDateString() : "—"}</span></button>{entry.kind === "file" && <input type="checkbox" aria-label={"Select " + entry.name + " for bulk move"} checked={selectedPaths.includes(entry.path)} disabled={busy || (selectedPaths.length >= 100 && !selectedPaths.includes(entry.path))} onChange={event => setSelectedPaths(current => event.currentTarget.checked ? [...current, entry.path] : current.filter(path => path !== entry.path))}/>}</div>; })}
               {!(contentSearchMode && searchActive ? contentMatches.length : entries.length) && <div className="file-empty">{busy ? "Loading..." : searchActive ? contentSearchMode ? "No matching text was found in the scanned files." : "No matching file or folder names were found." : "This folder is empty or not selected."}</div>}
             </div>
             {currentPath && <div className="file-create-row"><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="New file or folder name"/><button className="secondary-btn" onClick={() => void createEntry("file")} disabled={busy || !newName.trim()}><File size={14}/> New file</button><button className="secondary-btn" onClick={() => void createEntry("directory")} disabled={busy || !newName.trim()}><FolderPlus size={14}/> New folder</button></div>}

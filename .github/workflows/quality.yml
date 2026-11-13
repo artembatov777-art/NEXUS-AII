@@ -22,23 +22,7 @@ jobs:
           node-version: 22
       - name: Pin npm to stable Arborist release
         run: npm install --global npm@10.8.2
-      - run: npm install --legacy-peer-deps --no-audit --no-fund
-      - name: Check whether npm lockfile is already tracked
-        id: npm-lock
-        run: |
-          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
-            echo "tracked=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tracked=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Preserve generated npm lockfile for repository review
-        if: steps.npm-lock.outputs.tracked == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexus-npm-lock-${{ github.sha }}
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
       - name: Audit npm dependency advisories
         run: npm audit --audit-level=high
       - run: npm run test
