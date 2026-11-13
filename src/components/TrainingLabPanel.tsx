@@ -228,7 +228,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError(failed.length ? failed.map(result => `${result.model}: ${result.error}`).join(" | ") : "");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Model comparison failed.";
-      setStatus(controller.signal.aborted ? "Model comparison cancelled. Completed model results were not discarded from the provider, but this run was not recorded as complete." : "");
+      setStatus(controller.signal.aborted ? "Model comparison was cancelled. No complete result set was recorded." : "");
       setError(message);
     } finally {
       if (liveTestAbort.current === controller) liveTestAbort.current = null;
