@@ -22,6 +22,7 @@ import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
 import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
+import { resolveConversationProjectId } from "./lib/conversationProjectContext";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -276,10 +277,14 @@ export default function App() {
       if (!remembered.ok) contextWarnings.push(`Saved profile memory unavailable: ${remembered.error.message}`);
       else if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
       let sourceReferences: import("./types").ChatSourceReference[] = [];
-      if (selectedProjectId) {
+      // Project context must follow the conversation's persisted ownership.
+      // The global project selector may have changed while an older chat is open;
+      // using it here could mix another project's private memories and documents.
+      const conversationProjectId = resolveConversationProjectId(target);
+      if (conversationProjectId) {
         const [retrieved, projectMemories] = await Promise.all([
-          knowledgeService.retrieve(text, selectedProjectId, 6),
-          memoryService.search(text, "project", 5, selectedProjectId)
+          knowledgeService.retrieve(text, conversationProjectId, 6),
+          memoryService.search(text, "project", 5, conversationProjectId)
         ]);
         if (!retrieved.ok) contextWarnings.push(`Project knowledge unavailable: ${retrieved.error.message}`);
         else {
