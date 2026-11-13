@@ -2422,7 +2422,7 @@ mod database_tests {
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
         connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets;").expect("remove v5 and v6 tables");
-        migrate_database(&mut connection).expect("upgrade v4 to v8");
+        migrate_database(&mut connection).expect("upgrade v4 to v9");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
         assert_eq!(version, 9);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");

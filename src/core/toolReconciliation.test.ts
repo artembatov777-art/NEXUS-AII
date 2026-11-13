@@ -46,13 +46,15 @@ describe("ToolReconciliationService", () => {
   it("surfaces failed steps with uncertain external outcomes but excludes pre-execution cancellation", async () => {
     const audit = new FakeAudit();
     audit.events = [
+      started,
       { ...started, status: "failed", detail: "timeout", timestamp: 20 },
+      { ...started, toolId: "workspace.read", traceId: "run-1:3", status: "started", timestamp: 25 },
       { ...started, toolId: "workspace.read", traceId: "run-1:3", status: "failed", detail: "Cancelled before execution.", timestamp: 30 }
     ];
     const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("cancelled")));
     expect(await service.listAmbiguous("run-1")).toMatchObject({
       ok: true,
-      value: [{ toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 20 }]
+      value: [{ toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 10 }]
     });
   });
 
@@ -72,7 +74,7 @@ describe("ToolReconciliationService", () => {
     expect(await service.reconcile("run-1", "workspace.write", "run-1:2", false))
       .toMatchObject({ ok: false, error: { code: "permission_denied" } });
     expect(await service.reconcile("run-1", "workspace.write", "run-1:2", true)).toEqual({ ok: true, value: undefined });
-    expect(audit.events.at(-1)).toMatchObject({
+    expect(audit.events[audit.events.length - 1]).toMatchObject({
       status: "reconciled", timestamp: 50,
       detail: "Owner reviewed the external outcome. No tool retry was executed."
     });

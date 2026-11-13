@@ -77,10 +77,7 @@ function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
       // side effect. Keep it visible for owner review rather than assuming
       // that a failed return means nothing happened.
       const prior = pending.get(key);
-      pending.set(key, {
-        toolId: event.toolId, runId: event.runId,
-        traceId: event.traceId, startedAt: prior?.startedAt ?? event.timestamp
-      });
+      if (prior) pending.set(key, { ...prior });
     } else {
       pending.delete(key);
     }
