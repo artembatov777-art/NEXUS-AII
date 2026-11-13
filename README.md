@@ -2,7 +2,7 @@
 
 **A personal AI ecosystem built for one owner.**
 
-NEXUS AU is a hybrid local-and-cloud desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, voice interface, and automation.
+NEXUS AU is a hybrid local-and-cloud desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, and automation. Voice is deferred until after Release 1.0.
 
 The strategic goal is not to publish a multi-user AI service or remain a thin client for model aggregators. The goal is to develop **NEXUS Model** as the primary intelligence of a private AI environment, while using OmniRoute as the standard gateway for cloud model routing and keeping direct local inference adapters available.
 

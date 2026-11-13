@@ -74,7 +74,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Implement native Windows folder selection and scoped filesystem permissions (Tauri dialog + Rust permission roots; cross-platform CI passed).
 - [x] Browse and recursively search by name only inside owner-approved folders, with bounded depth, visited-entry, and result limits.
 - [x] Read UTF-8 text/code files through the native host and hand selected file content to a guarded AI analysis draft (75 KB source cap and a 90 KB serialized chat-message cap; owner confirms before content enters the chat draft).
-- [ ] Create, edit, rename, and move regular files inside one approved root; rename/move require explicit UI confirmation. Bulk organization and recovery are still pending.
+- [x] Create and edit regular files inside one approved root; rename/move require explicit UI confirmation and are implemented for individual entries.
+- [ ] Add bulk organization, conflict recovery, and audit history.
 - [ ] Add previews, conflict handling, recovery, and audit history.
 - [ ] Keep browser preview disconnected from the host filesystem.
 
