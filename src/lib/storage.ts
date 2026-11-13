@@ -120,7 +120,7 @@ export async function saveConversations(items: Conversation[], storage: StorageA
 export function loadProvider(storage: StorageAdapter = localStorage): ProviderSettings {
   try {
     const value = JSON.parse(storage.getItem(PROVIDER_KEY) ?? "null") as Partial<ProviderSettings> | null;
-    return value?.baseUrl && value?.model ? {
+    return typeof value?.baseUrl === "string" && value.baseUrl.trim().length > 0 && typeof value.model === "string" ? {
       baseUrl: value.baseUrl,
       model: value.model,
       inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote",

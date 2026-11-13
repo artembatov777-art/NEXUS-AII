@@ -59,7 +59,7 @@ Coordinates model selection and inference, context assembly, memory retrieval, t
 ### Model Registry and Runtime
 The registry stores model identity, version, format, capabilities, context limits, quantization, license metadata, hardware requirements, and artifact location. The runtime loads, unloads, health-checks, and invokes models through a stable interface.
 
-Local inference engines are connected through local adapters. Cloud models are routed through the selected OmniRoute gateway using its OpenAI-compatible `/v1` API. The Model Runtime owns the gateway base URL, model ID, health checks, streaming, cancellation, and error normalization. Vendor-specific provider details remain inside OmniRoute. OmniRoute is required for the selected cloud-routing path, but local-only operation must remain available without it. Credentials are stored in the OS vault; remote processing is disclosed to the owner.
+Local inference engines and cloud services are connected through provider adapters that implement the same model contract. The initial runtime supports compatible `/v1` endpoints directly; the Model Runtime owns endpoint configuration, model discovery, health checks, streaming, cancellation, and error normalization. No gateway is required during core development. OmniRoute is deferred until final integration and must be added as an optional adapter without changing the AI Core. Credentials are stored in the OS vault; remote processing is disclosed to the owner.
 
 ### NEXUS Model lifecycle
 NEXUS Model is the intended primary model. Its lifecycle includes base checkpoint selection and license review, tokenizer/config/weight metadata, dataset manifests, training experiments, evaluation suites, versioned artifacts, and rollback.

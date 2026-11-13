@@ -1,7 +1,7 @@
 # NEXUS AU — Personal AI Product Vision
 
 ## Purpose
-NEXUS AU is a private personal AI ecosystem built for one primary owner. It combines a desktop workspace with a modular AI Core, local inference, and cloud models routed through OmniRoute. NEXUS Model adaptation is a later development goal.
+NEXUS AU is a private personal AI ecosystem built for one primary owner. It combines a desktop workspace with a modular AI Core, local inference, and direct cloud-provider adapters. OmniRoute is deferred until final integration. NEXUS Model adaptation is a later development goal.
 
 This is not a public multi-user SaaS product and must not remain a thin client for model aggregators. Its purpose is personal control, continuity across projects, integration with the owner's workflows, and the ability to evolve the model and the surrounding system together.
 
@@ -14,7 +14,7 @@ This is not a public multi-user SaaS product and must not remain a thin client f
 
 ## Principles
 1. Personal-first, not public-SaaS-first. Multi-tenant accounts, billing, and public quotas are not requirements.
-2. Hybrid model strategy: local inference where practical and OmniRoute as the selected gateway for cloud model routing. NEXUS Model remains the long-term model-adaptation goal.
+2. Hybrid model strategy: local inference where practical and direct, configurable cloud-provider adapters during core development, with optional OmniRoute integration at the end. NEXUS Model remains the long-term model-adaptation goal.
 3. Own the complete system: model runtime, context, memory, agents, tools, data, and evaluation.
 4. Local-first with honest trade-offs. Prefer local processing when practical; allow remote compute when hardware requires it.
 5. Owner-configurable behavior, tools, integrations, memory rules, and workflows.
@@ -46,7 +46,7 @@ An open-weight starting checkpoint is a bootstrap strategy, not a claim that NEX
 
 ## Non-goals unless explicitly reconsidered
 - Public multi-user SaaS, subscriptions, or tenant management.
-- Direct coupling to individual cloud vendors; cloud model access is routed through OmniRoute, while local-only operation remains possible.
+- Direct coupling to individual cloud vendors; vendor details stay inside provider adapters, while local-only operation remains possible.
 - Frontier-scale from-scratch pretraining as the first milestone.
 - Unbounded background agents or invisible computer control.
 - Automatic ingestion of all personal data into training.

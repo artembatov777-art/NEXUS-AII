@@ -34,7 +34,7 @@ class TauriModelProvider implements ModelProvider {
   constructor(private readonly settings: ProviderSettings) {}
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
-    if (!isValidModelId(this.settings.model)) {
+    if (this.settings.model && !isValidModelId(this.settings.model)) {
       return err("validation", "Configured model name is invalid.");
     }
     const endpointError = providerEndpointError(this.settings.baseUrl);
@@ -45,7 +45,6 @@ class TauriModelProvider implements ModelProvider {
         this.settings.credentialHandle ?? "default"
       );
       const uniqueIds = normalizeProviderModelIds(ids);
-      if (!uniqueIds.includes(this.settings.model)) uniqueIds.unshift(this.settings.model);
       return ok(uniqueIds.map(id => ({
         id,
         providerId: this.id,
@@ -65,7 +64,7 @@ class TauriModelProvider implements ModelProvider {
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
-    if (request.model !== this.settings.model || !request.model.trim()) throw new Error("Requested model does not match the configured model.");
+    if (!isValidModelId(request.model) || request.model !== this.settings.model) throw new Error("Requested model does not match the configured model.");
     if (request.messages.some(message => message.role === "tool")) {
       throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
     }
@@ -164,7 +163,7 @@ class TauriModelProvider implements ModelProvider {
 
 /** Provider adapter keeps credentials in the native OS keyring and never exposes them to the webview. */
 export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
-  if (!isTauri() || !settings.baseUrl.trim() || !settings.model.trim()) return null;
+  if (!isTauri() || !settings.baseUrl.trim()) return null;
   const router = new ModelRouter();
   const registered = router.register(new TauriModelProvider({ ...settings }));
   if (!registered.ok) throw new Error(registered.error.message);

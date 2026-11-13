@@ -126,6 +126,22 @@ describe("TauriModelProvider", () => {
     expect(JSON.stringify(events)).not.toContain("api_key");
   });
 
+  it("discovers only provider-returned model IDs before any model is selected", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(["model-a", "model-b", "model-a", "", "bad\\nmodel"]);
+    const router = createTauriModelRouter({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "",
+      inferenceLocation: "local",
+      credentialHandle: "none"
+    });
+    if (!router) throw new Error("Expected native model router.");
+    await expect(router.listModels()).resolves.toMatchObject({
+      ok: true,
+      value: [{ id: "model-a" }, { id: "model-b" }]
+    });
+  });
+
   it("reports the owner-declared inference location rather than the gateway host", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockResolvedValue(["model-a"]);

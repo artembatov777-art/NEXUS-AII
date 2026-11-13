@@ -8,7 +8,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 - **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
 - **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted violet and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
-- **Model strategy:** hybrid local and cloud. OmniRoute is the selected gateway for cloud models; Ollama is the planned local runtime.
+- **Model strategy:** hybrid local and cloud through provider-neutral adapters. Ollama is the initial local runtime; OmniRoute is deferred until final integration.
 - **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
 - **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
 
@@ -37,14 +37,14 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 **Status: active.**
 
 - [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
-- [x] Connect OmniRoute through its OpenAI-compatible API; the real account connection has not been tested without the owner key.
+- [ ] Add OmniRoute as an optional adapter during final integration and verify the real account connection with owner-provided credentials.
 - [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
 - [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
 - [x] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
 - [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for existing OmniRoute installations and `ollama` for Ollama API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
 - [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior; confirm final native CI on the latest commit.
 
-**Exit criteria:** a selected cloud model works through OmniRoute; the local adapter works when a local runtime is available; model identity, route, errors, usage, streaming, and cancellation are observable and tested.
+**Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. OmniRoute is integrated only in the final phase.
 
 ## Phase III — Memory & Knowledge
 
@@ -124,6 +124,6 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `ae4276e`; the native desktop quality matrix passed on `ae4276e`; follow-on filesystem changes require fresh CI. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
-- OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.
+- An endpoint address does not prove that inference is local. OmniRoute is not configured during core development and will be tested as an optional adapter at final integration.
 - Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
-- A frontend test previously failed because the model-catalog expectation omitted the configured model; the test now covers both the configured model and the discovered catalog. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. The hosted preview remains a static interface demo and is not connected to Rust, OmniRoute, Ollama, or the owner filesystem. Real Windows folder permissions and provider-key verification remain owner-side release gates.
+- Model catalog entries must originate from the provider's discovery response; configured model IDs must never be injected as if they were available. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. The hosted preview remains a static interface demo and is not connected to Rust, OmniRoute, Ollama, or the owner filesystem. Real Windows folder permissions and provider-key verification remain owner-side release gates.

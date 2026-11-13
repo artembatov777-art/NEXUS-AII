@@ -24,13 +24,14 @@ export interface Conversation {
 export interface ProviderSettings {
   baseUrl: string;
   model: string;
-  /** Owner-declared model location; OmniRoute backend locality is not independently verified. */
+  /** Owner-declared processing location; upstream routing is not independently verifiable. */
   inferenceLocation: "local" | "remote";
   /** "none" is accepted only by the native host for loopback runtimes such as Ollama. */
   credentialHandle?: "default" | "ollama" | "none";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
-  baseUrl: "http://127.0.0.1:20128/v1",
-  model: "auto",
-  inferenceLocation: "remote"
+  baseUrl: "http://127.0.0.1:11434/v1",
+  model: "",
+  inferenceLocation: "local",
+  credentialHandle: "none"
 };

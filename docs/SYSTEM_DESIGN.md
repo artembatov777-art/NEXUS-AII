@@ -4,7 +4,7 @@
 **Scope:** One primary owner; hybrid local-and-cloud desktop with owner-controlled remote compute.
 
 ## 1. Product boundary
-NEXUS AU is a personal AI environment with a hybrid local-and-cloud model strategy. Local inference is supported directly; cloud models are routed through OmniRoute. NEXUS Model adaptation is a later goal. It is not a public multi-user SaaS product.
+NEXUS AU is a personal AI environment with a hybrid local-and-cloud model strategy. Local inference and direct cloud endpoints use provider-neutral adapters. OmniRoute is deferred until final integration as an optional adapter. NEXUS Model adaptation is a later goal. It is not a public multi-user SaaS product.
 
 Two responsibilities must remain distinct:
 - NEXUS Model supplies learned language and multimodal capabilities through model weights and inference.
@@ -13,8 +13,8 @@ Two responsibilities must remain distinct:
 ## 2. Principles
 1. Personal-first, not multi-tenant-first.
 2. Modular monolith first.
-3. Provider-neutral interfaces; local inference plus OmniRoute for cloud model routing.
-4. Hybrid by design: local inference where practical; cloud inference through OmniRoute with visible remote-processing disclosure.
+3. Provider-neutral interfaces; direct local inference and direct cloud-provider connections during core development.
+4. Hybrid by design: local inference where practical; direct cloud-provider inference with visible remote-processing disclosure.
 5. Ports and adapters for models, storage, tools, and inference engines.
 6. Inspectable memory, provenance, backup, correction, and deletion.
 7. Bounded and observable agent execution.
@@ -51,7 +51,7 @@ Storage: SQLite + managed files + OS credential vault
 A model descriptor identifies stable ID, display name, version, source and license, architecture/tokenizer metadata, artifact format, quantization, context and modality capabilities, estimated hardware requirements, artifact location, and lifecycle state.
 
 ### Model Runtime
-Owns discover, validate, import/download, load, unload, health-check, infer, stream, cancel, and resource reporting. Multiple inference backends are supported through adapters. Cloud providers are reached through OmniRoute's OpenAI-compatible `/v1` API; local inference uses a separate adapter and does not require the gateway. Cloud providers are reached through OmniRoute's OpenAI-compatible `/v1` API; local inference uses a separate adapter and does not require the gateway.
+Owns discover, validate, import/download, load, unload, health-check, infer, stream, cancel, and resource reporting. Multiple inference backends are supported through adapters. Cloud providers and local runtimes are reached through adapters that implement the same provider-neutral model contract. OmniRoute may be added at final integration as another adapter, without changing the AI Core.
 
 The runtime must not assume all models support identical tool calling, structured output, context length, or modalities. Capabilities are declared and validated.
 
@@ -92,7 +92,7 @@ Backups include versioned structured workspace data and optional selected artifa
 1. Validate input and create a trace.
 2. Persist the user message.
 3. Assemble bounded context from conversation and selected memory/knowledge.
-4. Resolve an explicitly selected local model or an OmniRoute-routed cloud model.
+4. Resolve an explicitly selected model from a configured local runtime or direct cloud-provider endpoint.
 5. Stream normalized inference events.
 6. Validate proposed tool calls.
 7. Execute through Tool Gateway and append structured observations.

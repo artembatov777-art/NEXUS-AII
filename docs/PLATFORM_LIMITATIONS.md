@@ -40,7 +40,7 @@ This is native build and backend integration coverage, **not GUI end-to-end auto
 ## Runtime constraints shared by platforms
 
 - Provider calls support one-shot responses and bounded SSE token streaming through the native Rust command. Streamed chat supports native cancellation during connection and response reads, including early consumer exit. One-shot requests do not expose cancellation, and usage metadata normalization remains open.
-- The configured OpenAI-compatible endpoint defaults to the local OmniRoute `/v1` gateway. A native `/v1/models` discovery command and settings model picker are implemented. The selected local/remote label is owner-declared metadata; NEXUS cannot independently verify whether OmniRoute forwards a selected model to a remote provider. Remote is the safe default.
+- The configured compatible endpoint defaults to an Ollama-compatible local endpoint at `127.0.0.1:11434/v1`, with no model preselected. A native `/v1/models` discovery command and settings model picker are implemented. Only IDs returned by the endpoint are shown as available. The selected local/remote label is owner-declared metadata; NEXUS cannot independently verify upstream routing. OmniRoute is deferred until final integration.
 - Semantic embeddings and vector search run in the webview using IndexedDB; the native SQLite database remains authoritative for text knowledge.
 - Speech recognition and speech synthesis use browser/WebView APIs, not a guaranteed offline native engine.
 - Clipboard integration is limited to the implemented native clipboard commands.

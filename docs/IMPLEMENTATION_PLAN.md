@@ -1,16 +1,16 @@
 # NEXUS AU — Implementation Plan
 
-> **Strategic direction update (2026-11-11):** NEXUS AU is a private, single-owner hybrid local-and-cloud AI ecosystem. Local inference remains available; OmniRoute is the selected gateway for cloud model routing. NEXUS Model adaptation is a later development goal, while from-scratch foundation-model research is deferred outside the active roadmap. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
+> **Strategic direction update (2026-11-14):** NEXUS AU is a private, single-owner hybrid local-and-cloud AI ecosystem. Core development uses a provider-neutral router and direct compatible local/cloud endpoints. OmniRoute is deliberately deferred until final integration as an optional adapter; no core module may depend on it. NEXUS Model adaptation is a later development goal, while from-scratch foundation-model research is deferred outside the active roadmap. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
 
 ## Current verified baseline
 
-The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The native provider command supports one-shot and bounded SSE OpenAI-compatible chat requests through OmniRoute, bounded `/v1/models` discovery, incremental chat rendering, local/remote route disclosure, and native stream cancellation with early-consumer cleanup. The selected inference location is now an explicit owner-declared setting rather than being inferred from a localhost gateway URL; it is persisted with provider settings but is not independently verified by the gateway. An in-memory provider-neutral Model Registry now tracks the discovered catalog, explicit active-model selection, and catalog discovery state; it does not claim verified inference health. Capability metadata and the actual runtime lifecycle remain open. Training Lab now includes dataset-governance validation, deterministic phrase-based evaluation, SQLite persistence for versioned dataset manifests and immutable experiment metadata, and a workspace UI. Artifact tracking, real model evaluation, and model training are not claimed.
+The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The native provider command supports bounded SSE OpenAI-compatible chat requests through a directly configured compatible endpoint, bounded `/v1/models` discovery, incremental chat rendering, local/remote route disclosure, and native stream cancellation with early-consumer cleanup. The selected inference location is now an explicit owner-declared setting rather than being inferred from a localhost gateway URL; it is persisted with provider settings but is not independently verified by the gateway. An in-memory provider-neutral Model Registry now tracks the discovered catalog, explicit active-model selection, and catalog discovery state; it does not claim verified inference health. Capability metadata and the actual runtime lifecycle remain open. Training Lab now includes dataset-governance validation, deterministic phrase-based evaluation, SQLite persistence for versioned dataset manifests and immutable experiment metadata, and a workspace UI. Artifact tracking, real model evaluation, and model training are not claimed.
 
 Commit `ae4276e` passed frontend Quality (52 test files / 311 tests; npm audit reported 0 vulnerabilities) and the Mobile Interface Preview workflow. The Windows/macOS/Linux native matrix is still running. Real interactive desktop and credential-vault smoke tests remain separate manual acceptance items.
 
 ## Parallel delivery — Mobile interface preview
 
-The preview is isolated behind the `?demo=1` query parameter. The standard desktop entry point continues to render the existing Tauri-oriented application. The preview uses local in-memory sample content only; it does not invoke Tauri commands, call OmniRoute, read provider credentials, or persist personal workspace data. Chat input is intentionally demo-only and displays a notice instead of calling a model.
+The preview is isolated behind the `?demo=1` query parameter. The standard desktop entry point continues to render the existing Tauri-oriented application. The preview uses local in-memory sample content only; it does not invoke Tauri commands, call AI providers, read provider credentials, or persist personal workspace data. Chat input is intentionally demo-only and displays a notice instead of calling a model.
 
 The first preview slice includes Chat, Projects, Memory, and Settings layouts with an iPhone-safe viewport, bottom navigation, and demo-only interactions. The production build and Quality workflow passed on the active branch. The first GitHub Pages deployment is now successful. The initial `github-pages` deployment environment caused the deploy job to fail before a runner was assigned; switching the preview workflow to a dedicated `nexus-mobile-preview` environment allowed the deployment action to run and report success. Hosted preview URL: `https://artembatov777-art.github.io/NEXUS-AII/`; open it with `?demo=1` to enter the isolated mobile demo. The remaining acceptance work is to verify the hosted page in iPhone Safari and refine the layout from real-device feedback. The demo remains disconnected from AI providers and credentials.
 
@@ -260,7 +260,7 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 - [ ] Execute and record credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions; CI cannot validate an unlocked interactive keyring.
 - [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
-**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is tracked in active Phase V, after the remaining manual desktop acceptance checks.
+**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is deferred until final integration after the provider-neutral AI Core and all core modules are complete.
 
 
 ## Active phase map — authoritative (2026-11-12)
@@ -268,7 +268,7 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 The owner-approved seven-phase sequence is interface-first. Historical milestones above document implementation history only; they do not override this sequence.
 
 1. **Phase I — Complete interface:** full desktop and mobile workspace, all module surfaces, design system, responsive behavior, accessibility, UI contracts, and honest mock/empty/error states.
-2. **Phase II — AI Core:** OmniRoute cloud routing, model registry/runtime, local Ollama adapter, model discovery, health, streaming, cancellation, usage, and route disclosure.
+2. **Phase II — AI Core:** provider-neutral router, direct cloud adapters, local Ollama adapter, model registry/runtime, model discovery, health, streaming, cancellation, usage, and route disclosure.
 3. **Phase III — Memory & Knowledge:** durable inspectable memory, document ingestion, project knowledge, semantic retrieval, citations, and AI Core context integration.
 4. **Phase IV — Agents & Tools:** model-driven planning, bounded agent runtime, approvals, checkpoints, MCP, Tool Gateway, and auditable execution.
 5. **Phase V — NEXUS File System:** native Windows folder permissions, browsing/search, file reading and analysis, controlled writes, previews, and recovery.
@@ -295,8 +295,8 @@ The owner-approved seven-phase sequence is interface-first. Historical milestone
 ## Model strategy
 
 - Local inference remains supported when a suitable local runtime is available.
-- OmniRoute is the selected cloud gateway and is accessed through its OpenAI-compatible `/v1` API.
-- The OmniRoute gateway address does not prove that inference is local; route disclosure must use an explicit configured setting and remain honest about its verification limits.
+- Compatible local and cloud endpoints connect directly through the provider-neutral router; OmniRoute is deferred until final integration.
+- An endpoint address does not prove that inference is local; route disclosure must use an explicit configured setting and remain honest about its verification limits.
 - Ollama runs on a computer or server with suitable resources. It cannot run locally on the owner's iPhone.
 - Provider credentials stay in the OS credential vault. Browser preview must never store or transmit provider secrets.
 - Training a foundation model from scratch is deferred to future research and is not a Release 1.0 requirement.

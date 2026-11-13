@@ -21,6 +21,21 @@ beforeEach(() => {
 });
 
 describe("conversation workspace storage", () => {
+  it("defaults to a local-compatible endpoint without selecting an unverified model", () => {
+    const storage = new MemoryStorage();
+    expect(loadProvider(storage)).toEqual({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "",
+      inferenceLocation: "local",
+      credentialHandle: "none"
+    });
+  });
+  it("persists a provider endpoint before a model has been discovered", () => {
+    const storage = new MemoryStorage();
+    const settings = { baseUrl: "https://api.example/v1", model: "", inferenceLocation: "remote" as const };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
   it("defaults legacy provider settings to remote instead of inferring locality from localhost", () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:provider:v1", JSON.stringify({ baseUrl: "http://127.0.0.1:20128/v1", model: "local-model" }));
