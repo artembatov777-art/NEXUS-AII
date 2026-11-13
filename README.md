@@ -33,7 +33,7 @@ NEXUS AU desktop
                  └─ long-term independent model research
 ~~~
 
-NEXUS AU connects directly to compatible local runtimes and cloud provider endpoints through a provider-neutral router. OmniRoute is intentionally deferred until final integration, when it will be added as an optional adapter without changing the AI Core.
+NEXUS AU connects directly to compatible local runtimes and cloud provider endpoints through a provider-neutral router. The non-connecting OmniRoute profile builder and adapter path are prepared; live gateway connection remains an optional final-integration step without changing the AI Core.
 
 ## Practical model strategy
 1. Establish a provider-neutral model runtime with direct cloud-provider adapters and local inference adapters.

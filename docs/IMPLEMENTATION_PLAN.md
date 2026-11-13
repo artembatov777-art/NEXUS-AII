@@ -1,6 +1,6 @@
 # NEXUS AU — Implementation Plan
 
-> **Strategic direction update (2026-11-14):** NEXUS AU is a private, single-owner hybrid local-and-cloud AI ecosystem. Core development uses a provider-neutral router and direct compatible local/cloud endpoints. OmniRoute is deliberately deferred until final integration as an optional adapter; no core module may depend on it. NEXUS Model adaptation is a later development goal, while from-scratch foundation-model research is deferred outside the active roadmap. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
+> **Strategic direction update (2026-11-14):** NEXUS AU is a private, single-owner hybrid local-and-cloud AI ecosystem. Core development uses a provider-neutral router and direct compatible local/cloud endpoints. The non-connecting OmniRoute profile builder and adapter path are prepared; live gateway connection remains deferred until final integration, and no core module may depend on it. NEXUS Model adaptation is a later development goal, while from-scratch foundation-model research is deferred outside the active roadmap. The phase history below records implementation work and must be read together with VISION.md, ARCHITECTURE.md, SYSTEM_DESIGN.md, and ROADMAP.md. This update does not mark planned model work as implemented.
 
 ## Current verified baseline
 
@@ -260,7 +260,7 @@ Exit criteria: voice and native integration are reliable, optional, and permissi
 - [ ] Execute and record credential-vault smoke tests on real Windows, macOS, and Linux desktop sessions; CI cannot validate an unlocked interactive keyring.
 - [ ] Execute and record full GUI end-to-end smoke tests on real Tauri desktop builds for all supported OS families; current CI compiles the app and runs native integration tests but does not launch an interactive GUI.
 
-**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. OmniRoute integration is deferred until final integration after the provider-neutral AI Core and all core modules are complete.
+**Phase VI status:** active. The checklist is not complete until every remaining acceptance item is implemented, tested, and verified in CI. The OmniRoute profile builder and multi-profile adapter path are prepared without a live connection. Verify the real gateway only during final integration after the provider-neutral AI Core and all core modules are complete.
 
 
 ## Active phase map — authoritative (2026-11-12)
@@ -295,7 +295,7 @@ The owner-approved seven-phase sequence is interface-first. Historical milestone
 ## Model strategy
 
 - Local inference remains supported when a suitable local runtime is available.
-- Compatible local and cloud endpoints connect directly through the provider-neutral router; OmniRoute is deferred until final integration.
+- Compatible local and cloud endpoints connect directly through the provider-neutral router; OmniRoute profile preparation is implemented; live gateway connection is deferred until final integration.
 - An endpoint address does not prove that inference is local; route disclosure must use an explicit configured setting and remain honest about its verification limits.
 - Ollama runs on a computer or server with suitable resources. It cannot run locally on the owner's iPhone.
 - Provider credentials stay in the OS credential vault. Browser preview must never store or transmit provider secrets.
