@@ -78,8 +78,14 @@ export class McpHttpTransport implements McpTransport {
 
   constructor(options: McpHttpTransportOptions) {
     const url = new URL(options.endpoint);
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) {
-      throw new Error("MCP endpoint must be an HTTP(S) URL without embedded credentials or fragments.");
+    const hostname = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+    const ipv4 = hostname.split(".");
+    const loopbackIpv4 = ipv4.length === 4 && ipv4.every(part => /^\\d{1,3}$/.test(part) && Number(part) <= 255) && Number(ipv4[0]) === 127;
+    const loopback = hostname === "localhost" || hostname === "::1" || loopbackIpv4;
+    if (!["http:", "https:"].includes(url.protocol) ||
+        (url.protocol === "http:" && !loopback) ||
+        url.username || url.password || url.search || url.hash) {
+      throw new Error("MCP endpoint must use HTTPS (HTTP is loopback-only) and cannot contain credentials, query parameters, or fragments.");
     }
     this.endpoint = url;
     this.fetcher = options.fetcher ?? fetch;

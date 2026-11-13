@@ -22,8 +22,13 @@ describe("McpHttpTransport", () => {
     await expect(transport.notify("notifications/initialized", {}, new AbortController().signal)).rejects.toThrow(/HTTP 202/);
   });
 
-  it("rejects URLs with embedded credentials", () => {
+  it("allows HTTP only for loopback and rejects unsafe endpoint URL components", () => {
+    expect(() => new McpHttpTransport({ endpoint: "http://mcp.example/tools" })).toThrow(/HTTPS/);
+    expect(() => new McpHttpTransport({ endpoint: "http://127.0.0.1:9000/tools" })).not.toThrow();
+    expect(() => new McpHttpTransport({ endpoint: "http://[::1]:9000/tools" })).not.toThrow();
     expect(() => new McpHttpTransport({ endpoint: "https://user:pass@example.com" })).toThrow();
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools?token=secret" })).toThrow();
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools#fragment" })).toThrow();
   });
 
   it("rejects an oversized declared response before reading its body", async () => {
