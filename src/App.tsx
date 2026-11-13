@@ -72,11 +72,16 @@ export default function App() {
   const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const providerCheckGeneration = useRef(0);
+  const applyingDiscoveredModel = useRef(false);
   const providerTestAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("0.2.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
+    if (applyingDiscoveredModel.current) {
+      applyingDiscoveredModel.current = false;
+      return;
+    }
     providerCheckGeneration.current += 1;
     providerTestAbortController.current?.abort();
     providerTestAbortController.current = null;
@@ -394,7 +399,10 @@ export default function App() {
       const selected = registry.setActiveModel(NATIVE_MODEL_PROVIDER_ID, selectedModel);
       if (!selected.ok) throw new Error(selected.error.message);
       setAvailableModels(safeModels);
-      setProvider(current => ({ ...current, model: selectedModel }));
+      if (selectedModel !== provider.model) {
+        applyingDiscoveredModel.current = true;
+        setProvider(current => ({ ...current, model: selectedModel }));
+      }
       setProviderConnectionState("reachable");
       setProviderConnectionMessage("Model catalog loaded with " + safeModels.length + " verified model ID(s). Selected: \"" + selectedModel + "\". Run the generation test to verify that it actually responds.");
       setModelTestState("unchecked");
