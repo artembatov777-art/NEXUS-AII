@@ -16,8 +16,8 @@ Record the OS version, NEXUS AU commit SHA, app build identifier, and result for
 1. Install or launch the native Tauri build.
 2. Confirm the app opens without a blank webview, CSP errors, or missing native commands.
 3. Create a conversation, a project, a memory, and a knowledge document.
-4. Restart the app and confirm the records remain.
-5. Delete the test project and confirm project-scoped knowledge and semantic vectors are no longer returned in search.
+4. Restart the app and confirm the records remain.\n5. Open a file, perform a content search, and create/edit/rename/move a test file inside the approved root.\n6. Open Agent Control Center and verify the recent tool audit shows the filesystem action types without exposing full private paths.
+7. Delete the test project and confirm project-scoped knowledge and semantic vectors are no longer returned in search.
 
 Expected: local workspace data persists in the native SQLite database. The browser preview is a separate localStorage/IndexedDB environment.
 

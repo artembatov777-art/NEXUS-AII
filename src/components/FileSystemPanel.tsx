@@ -125,6 +125,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         setContentSearchSummary("");
       }
       setSearchActive(true);
+      if (contentSearchMode) await recordFilesystemAudit("search_content");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
