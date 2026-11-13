@@ -164,4 +164,59 @@ describe("createNexusRuntime", () => {
   it("rejects invalid host identity before constructing a runtime", () => {
     expect(() => createNexusRuntime({ storage: new MemoryStorage(), actorId: " " })).toThrow("A valid host actor identity is required.");
   });
+
+  it("blocks a model-planned high-risk tool when the owner denies its permission", async () => {
+    const model = new ModelRouter();
+    const provider: ModelProvider = {
+      id: "denial-test-provider",
+      listModels: async () => ok([]),
+      async *stream() {
+        yield { type: "text_delta", text: JSON.stringify({
+          goal: "Modify a protected workspace file",
+          steps: [{
+            id: "write-step", toolId: "workspace.write",
+            purpose: "Write a protected file",
+            input: { path: "C:\\approved\\important.txt", content: "change" },
+            dependsOn: []
+          }]
+        }) };
+        yield { type: "completed" };
+      }
+    };
+    expect(model.register(provider).ok).toBe(true);
+    const policy: NexusPermissionPolicy = {
+      authorizeAgent: vi.fn(async () => "allow" as const),
+      authorizeTool: vi.fn(async request => request.scope === "filesystem:write:selected" ? "deny" : "allow")
+    };
+    const runtime = createNexusRuntime({
+      storage: new MemoryStorage(), actorId: "host-user", permissions: policy, models: model,
+      ids: { runId: () => "denied-run" as AgentRunId, approvalId: () => "unused-approval" },
+      clock: { now: () => 30_000 }
+    });
+    const execute = vi.fn(async () => ok("must never execute"));
+    expect(runtime.toolRegistry.register({
+      id: "workspace.write", version: "1", description: "Write an approved workspace file",
+      requiredPermissions: ["filesystem:write:selected"], risk: "high", timeoutMs: 1_000,
+      validateInput: input => input && typeof input === "object" && "path" in input && "content" in input
+        ? ok(input as { path: string; content: string })
+        : { ok: false as const, error: { code: "validation" as const, message: "Invalid file write", retryable: false } },
+      execute
+    }).ok).toBe(true);
+    const workflow = runtime.createAgentWorkflow("denial-test-provider", "test-model", "denied-thread", ["workspace.write"]);
+    expect(workflow).not.toBeNull();
+    if (!workflow) throw new Error("Expected a model-backed workflow.");
+    const planned = await workflow.plan("Modify a protected workspace file", new AbortController().signal);
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+    const events = await collect(workflow.run(planned.value, "denied-run" as AgentRunId, new AbortController().signal));
+    expect(events.at(-1)?.type).toBe("failed");
+    expect(execute).not.toHaveBeenCalled();
+    expect(policy.authorizeTool).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "filesystem:write:selected", risk: "high", resource: expect.stringContaining("C:\\approved\\important.txt")
+    }));
+    expect(await runtime.auditSink.list()).toMatchObject({
+      ok: true, value: [expect.objectContaining({ toolId: "workspace.write", status: "denied" })]
+    });
+  });
+
 });
