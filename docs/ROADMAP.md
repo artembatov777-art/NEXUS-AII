@@ -28,7 +28,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
 - [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
 - [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
-- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `ae4276e`; native Windows/macOS/Linux quality matrix passed on `ae4276e`; the follow-on filesystem changes still require their own CI run before Phase I can close.
+- [x] Historical baseline `ae4276e` passed frontend Quality, Mobile Interface Preview, and the native Windows/macOS/Linux matrix.
+- [ ] Re-run frontend Quality, Mobile Interface Preview, and the native matrix on the current branch head after the latest provider-profile and interface changes.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -43,7 +44,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
 - [x] Make local versus remote processing explicit and avoid inferring locality from a loopback provider URL.
 - [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for generic cloud-provider endpoints and `ollama` for additional provider API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
-- [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior; confirm final native CI on the latest commit.
+- [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior.
+- [ ] Confirm the native Windows/macOS/Linux CI matrix on the latest branch head.
 
 **Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. OmniRoute is integrated only in the final phase.
 
