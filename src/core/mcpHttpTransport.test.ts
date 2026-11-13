@@ -44,6 +44,21 @@ describe("McpHttpTransport", () => {
     await expect(transport.notify("notifications/initialized", {}, new AbortController().signal)).rejects.toThrow(/HTTP 202/);
   });
 
+  it("aborts stalled HTTP requests at the configured transport timeout", async () => {
+    let observedSignal: AbortSignal | undefined;
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      observedSignal = init?.signal as AbortSignal;
+      observedSignal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    }));
+    const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher, timeoutMs: 10 });
+    await expect(transport.request({ jsonrpc: "2.0", id: 1, method: "ping" }, new AbortController().signal)).rejects.toThrow("aborted");
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it("rejects out-of-range transport timeout configuration", () => {
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", timeoutMs: 0 })).toThrow(/timeout/);
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", timeoutMs: 120_001 })).toThrow(/timeout/);
+  });
   it("allows HTTP only for loopback and rejects unsafe endpoint URL components", () => {
     expect(() => new McpHttpTransport({ endpoint: "http://mcp.example/tools" })).toThrow(/HTTPS/);
     expect(() => new McpHttpTransport({ endpoint: "http://127.0.0.1:9000/tools" })).not.toThrow();

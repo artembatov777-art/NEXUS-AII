@@ -1,6 +1,6 @@
 import type { McpRequest, McpResponse, McpTransport } from "./mcpClient";
 
-export interface McpHttpTransportOptions { endpoint: string; fetcher?: typeof fetch; headers?: Record<string, string>; }
+export interface McpHttpTransportOptions { endpoint: string; fetcher?: typeof fetch; headers?: Record<string, string>; timeoutMs?: number; }
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_SSE_EVENT_BYTES = 256_000;
 const MAX_SSE_EVENTS = 1_000;
@@ -75,6 +75,7 @@ export class McpHttpTransport implements McpTransport {
   private readonly endpoint: URL;
   private readonly fetcher: typeof fetch;
   private readonly headers: Record<string, string>;
+  private readonly timeoutMs: number;
   private sessionId: string | null = null;
   private protocolVersion: string | null = null;
 
@@ -90,7 +91,14 @@ export class McpHttpTransport implements McpTransport {
       throw new Error("MCP endpoint must use HTTPS (HTTP is loopback-only) and cannot contain credentials, query parameters, or fragments.");
     }
     this.endpoint = url;
-    this.fetcher = options.fetcher ?? fetch;
+    const rawFetcher = options.fetcher ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? 30_000;
+    if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 10 || this.timeoutMs > 120_000) throw new Error("MCP request timeout must be between 10 and 120,000 milliseconds.");
+    this.fetcher = (input, init = {}) => {
+      const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
+      const signal = init.signal ? AbortSignal.any([init.signal as AbortSignal, timeoutSignal]) : timeoutSignal;
+      return rawFetcher(input, { ...init, signal });
+    };
     this.headers = { ...(options.headers ?? {}) };
     for (const key of Object.keys(this.headers)) {
       if (/^(host|content-length|cookie|origin)$/i.test(key)) throw new Error(`Header "${key}" cannot be overridden.`);
