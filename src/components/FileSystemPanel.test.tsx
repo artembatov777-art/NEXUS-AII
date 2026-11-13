@@ -110,6 +110,43 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.textContent).toContain("meeting-notes.md");
   });
 
+
+  it("searches inside approved text files and opens a matching file", async () => {
+    const rootPath = "C:\\Users\\Owner\\Documents";
+    const filePath = rootPath + "\\notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      if (command === "search_workspace_contents") return {
+        matches: [{ path: filePath, lineNumber: 3, preview: "The NEXUS workspace is ready" }],
+        totalMatches: 1, scannedFiles: 4, truncated: false
+      };
+      if (command === "read_workspace_file") return "line one\\nline two\\nThe NEXUS workspace is ready";
+      return undefined;
+    });
+    await renderPanel();
+    const modeButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Text content");
+    expect(modeButton).toBeDefined();
+    await act(async () => { modeButton!.click(); });
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search approved folders"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(searchInput, "nexus");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const searchButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Search"));
+    await act(async () => { searchButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("search_workspace_contents", { path: rootPath, query: "nexus" });
+    expect(container.textContent).toContain("1 matches in 4 files");
+    expect(container.textContent).toContain("The NEXUS workspace is ready");
+    const matchButton = Array.from(container.querySelectorAll(".file-list button")).find(button => button.textContent?.includes("The NEXUS workspace is ready"));
+    expect(matchButton).toBeDefined();
+    await act(async () => { matchButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
+    expect(container.querySelector(".file-preview-content pre")?.textContent).toContain("The NEXUS workspace is ready");
+  });
+
   it("hands the selected text file to the AI analysis draft callback", async () => {
     const rootPath = "C:\\Users\\Owner\\Documents";
     const filePath = rootPath + "\\notes.txt";

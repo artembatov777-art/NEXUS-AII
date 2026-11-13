@@ -34,3 +34,10 @@
 @media(max-width:760px){.file-entry-actions{grid-template-columns:minmax(0,1fr)}.file-entry-actions>.secondary-btn{width:100%;justify-content:center}}
 
 .file-editor-actions .primary-btn{min-height:34px;padding:7px 10px;font-size:9px}
+
+.file-search-mode{display:flex;gap:5px;flex-shrink:0}
+.file-search-mode .secondary-btn{min-height:32px;padding:6px 9px;font-size:9px}
+.file-search-mode .secondary-btn[aria-pressed="true"]{border-color:rgba(89,190,224,.55);background:rgba(33,104,135,.22);color:#bdeeff}
+.file-search-summary{display:block;margin-top:4px;color:#8ca8b8;font-size:9px}
+.file-content-match-preview{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9db5c4}
+@media(max-width:760px){.file-search-mode{width:100%}.file-search-mode .secondary-btn{flex:1;justify-content:center}.file-content-match-preview{max-width:240px}}
