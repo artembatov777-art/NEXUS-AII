@@ -4,6 +4,7 @@ import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, t
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
+import { runModelComparison } from "../lib/modelComparison";
 import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
@@ -137,7 +138,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setError("");
     setStatus("Sending the same evaluation prompt to each selected model...");
     try {
-      const results = await Promise.all(models.map(async model => {
+      const results = await runModelComparison(models, async model => {
         const startedAt = performance.now();
         const response = await sendMessage({ ...provider, model }, [{
           id: crypto.randomUUID(),
@@ -145,19 +146,21 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
           content: evaluationPrompt.trim(),
           createdAt: Date.now()
         }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
-        return { model, response, latencyMs: Math.round(performance.now() - startedAt) };
-      }));
-      setCandidateOutput(results.map(result => `MODEL: ${result.model}\nLATENCY: ${result.latencyMs} ms\n\n${result.response}`).join("\n\n════════════════════════════════\n\n"));
+        return { response, latencyMs: Math.round(performance.now() - startedAt) };
+      }, () => controller.signal.aborted);
+      const successful = results.filter(result => result.status === "fulfilled");
+      const failed = results.filter(result => result.status === "rejected");
+      setCandidateOutput(results.map(result => result.status === "fulfilled"
+        ? `MODEL: ${result.model}\nLATENCY: ${result.value.latencyMs} ms\n\n${result.value.response}`
+        : `MODEL: ${result.model}\nSTATUS: FAILED\nERROR: ${result.error}`
+      ).join("\n\n════════════════════════════════\n\n"));
       setModelId(models.join(", "));
-      setMetrics(JSON.stringify(Object.fromEntries(results.map((result, index) => [`model${index + 1}LatencyMs`, result.latencyMs])), null, 2));
-      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length }, null, 2));
-      setStatus(`Comparison completed: ${results.length} models tested with the same prompt. Review outputs and score them separately.`);
-    } catch (cause) {
-      // Promise.all rejects as soon as one model fails; stop the remaining
-      // requests so a partial comparison cannot continue consuming resources.
-      controller.abort();
-      setError(cause instanceof Error ? cause.message : "Model comparison failed.");
-      setStatus("");
+      setMetrics(JSON.stringify(Object.fromEntries(successful.map((result, index) => [`model${index + 1}LatencyMs`, result.value.latencyMs])), null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length, successfulModels: successful.length, failedModels: failed.length }, null, 2));
+      setStatus(failed.length
+        ? `Comparison partially completed: ${successful.length} of ${models.length} models returned results. Failed models are listed above.`
+        : `Comparison completed: all ${successful.length} models returned results using the same prompt.`);
+      setError(failed.length ? failed.map(result => `${result.model}: ${result.error}`).join(" | ") : "");
     } finally {
       if (liveTestAbort.current === controller) liveTestAbort.current = null;
       setLiveTestRunning(false);

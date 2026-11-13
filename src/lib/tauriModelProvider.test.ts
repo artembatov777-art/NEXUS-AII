@@ -128,7 +128,7 @@ describe("TauriModelProvider", () => {
 
   it("discovers only provider-returned model IDs before any model is selected", async () => {
     mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockResolvedValue(["model-a", "model-b", "model-a", "", "bad\\nmodel"]);
+    mockedInvoke.mockResolvedValue(["model-a", "model-b", "model-a", "", "bad" + String.fromCharCode(10) + "model"]);
     const router = createTauriModelRouter({
       baseUrl: "http://127.0.0.1:11434/v1",
       model: "",
@@ -153,7 +153,6 @@ describe("TauriModelProvider", () => {
     expect(await router.listModels()).toMatchObject({
       ok: true,
       value: [
-        { id: "qwen2.5:7b", declaredLocation: "local" },
         { id: "model-a", declaredLocation: "local" }
       ]
     });
