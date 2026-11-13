@@ -503,7 +503,7 @@ export default function App() {
 
   async function importWorkspaceBackup(file?: File) {
     if (!file) return;
-    if (file.size > 60 * 1024 * 1024) { setError("Backup file exceeds the 50 MB limit."); return; }
+    if (file.size > 50 * 1024 * 1024) { setError("Backup file exceeds the 50 MB limit."); return; }
     try {
       const backup: unknown = JSON.parse(await file.text());
       if (!backup || typeof backup !== "object" || (backup as { format?: unknown }).format !== "nexus-au-backup") {
