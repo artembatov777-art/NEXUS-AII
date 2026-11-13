@@ -76,7 +76,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Read UTF-8 text/code files through the native host and hand selected file content to a guarded AI analysis draft (75 KB source cap and a 90 KB serialized chat-message cap; owner confirms before content enters the chat draft).
 - [x] Create and edit regular files inside one approved root; rename/move require explicit UI confirmation and are implemented for individual entries.
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
-- [ ] Add bulk organization, previews, conflict handling, and recovery.
+- [ ] Add bulk organization and file previews.\n- [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.\n- [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
 **Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.

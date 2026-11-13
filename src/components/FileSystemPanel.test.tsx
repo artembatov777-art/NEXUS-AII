@@ -176,6 +176,18 @@ describe("FileSystemPanel native workspace access", () => {
     });
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("File changed outside NEXUS");
     expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("my draft");
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "read_workspace_file") return "external version";
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 16, modifiedAtMs: 0 }];
+      return undefined;
+    });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const reloadButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Reload latest version"));
+    expect(reloadButton).toBeDefined();
+    await act(async () => { reloadButton!.click(); });
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")).toBeNull();
+    expect(container.querySelector(".file-preview-content pre")?.textContent).toBe("external version");
+    vi.unstubAllGlobals();
   });
 
   it("records file reads in the native tool audit history without storing the path", async () => {

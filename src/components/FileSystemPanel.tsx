@@ -60,6 +60,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [moveDestination, setMoveDestination] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [conflictDetected, setConflictDetected] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function refresh(path = currentPath) {
@@ -185,6 +186,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setPreview(content);
       setDraft(content);
       setEditing(false);
+      setConflictDetected(false);
       const audited = await recordFilesystemAudit("read");
       if (!audited) setNotice("File opened, but the audit entry could not be saved.");
     } catch (cause) {
@@ -203,8 +205,31 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       const audited = await recordFilesystemAudit("write");
       setPreview(draft);
       setEditing(false);
+      setConflictDetected(false);
       setNotice(audited ? "File saved." : "File saved, but the audit entry could not be saved.");
       await refresh();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      setConflictDetected(/changed|removed or moved/i.test(message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reloadLatestFile() {
+    if (!selectedPath || !conflictDetected) return;
+    if (!window.confirm("Reload the latest file version? Your unsaved draft will be replaced.")) return;
+    setBusy(true);
+    try {
+      const latest = await invoke<string>("read_workspace_file", { path: selectedPath });
+      setPreview(latest);
+      setDraft(latest);
+      setEditing(false);
+      setConflictDetected(false);
+      setError("");
+      setNotice("Latest file version loaded. Review it before making further edits.");
+      await recordFilesystemAudit("read");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -341,7 +366,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => void refresh(root)}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
-        {error && <div className="error-banner" role="alert">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
