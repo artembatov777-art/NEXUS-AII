@@ -5,6 +5,7 @@ import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
 import type { ToolAuditEvent } from "../core/tools";
+import type { AmbiguousToolStep } from "../core/toolReconciliation";
 import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
@@ -78,6 +79,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
   const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
+  const [ambiguousToolSteps, setAmbiguousToolSteps] = useState<AmbiguousToolStep[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -102,8 +104,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       runtime.checkpointService.listByThread(THREAD_ID, 50),
       runtime.auditSink.list({ limit: 30 })
     ]);
-    if (result.ok) setCheckpoints(result.value);
-    else addFeed(result.error.message, "error");
+    if (result.ok) {
+      setCheckpoints(result.value);
+      const terminalRuns = result.value.filter(item => item.status === "failed" || item.status === "cancelled");
+      const reconciliationResults = await Promise.all(terminalRuns.map(item =>
+        runtime.toolReconciliationService.listAmbiguous(item.runId)
+      ));
+      setAmbiguousToolSteps(reconciliationResults.flatMap(item => item.ok ? item.value : []));
+    } else addFeed(result.error.message, "error");
     if (audit.ok) setAuditEvents(audit.value);
     else addFeed(audit.error.message, "error");
   }, [runtime, addFeed]);
@@ -294,6 +302,20 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     void runAction(() => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, controller.current?.signal));
   }
 
+  async function reconcileToolStep(step: AmbiguousToolStep) {
+    if (!runtime || busy) return;
+    const confirmed = window.confirm(
+      "This tool step started but has no recorded final result. Inspect the external system first. Mark it as manually reconciled? NEXUS will block automatic replay and will not rerun the tool."
+    );
+    if (!confirmed) return;
+    const result = await runtime.toolReconciliationService.reconcile(
+      step.runId, step.toolId, step.traceId, true
+    );
+    if (!result.ok) addFeed(result.error.message, "error");
+    else addFeed(`Manually reconciled ${step.toolId}. No tool was rerun.`, "success");
+    await refresh();
+  }
+
   return <div className="agent-backdrop" role="dialog" aria-modal="true" aria-labelledby="agent-center-title">
     <section className="agent-center">
       <header className="agent-center-header">
@@ -372,6 +394,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           </article>
 
           <article className="agent-card">
+            {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
+              <div className="agent-card-heading"><div><span className="agent-kicker">OWNER REVIEW REQUIRED</span><h3>Ambiguous tool outcomes</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
+              <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
+              {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
+                <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
+                <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>Mark manually reconciled</button>
+              </div>)}
+            </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">TOOL GATEWAY</span><h3>Recent tool audit</h3></div><span className="agent-count">{auditEvents.length}</span></div>
             {auditEvents.length === 0 ? <div className="agent-empty">No tool executions have been recorded.</div> :
               <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
