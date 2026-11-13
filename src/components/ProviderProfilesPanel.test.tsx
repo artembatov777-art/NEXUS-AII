@@ -38,7 +38,7 @@ describe("ProviderProfilesPanel", () => {
   it("loads a saved profile and switches configuration without connecting", async () => {
     expect(saveProviderProfiles([{
       id: "nexus.cloud", label: "Cloud", settings: cloudSettings
-    })).ok).toBe(true);
+    }]).ok).toBe(true);
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect}/>); });
     setValue(container.querySelector<HTMLSelectElement>('[aria-label="Saved provider profiles"]')!, "nexus.cloud");
     expect(onSelect).toHaveBeenCalledWith(cloudSettings);
