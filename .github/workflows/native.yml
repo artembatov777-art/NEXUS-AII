@@ -46,11 +46,36 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  rust-security-audit:
+  update-rust-lockfile:
     needs: native
+    if: github.ref == 'refs/heads/feat/nexus-core-architecture' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve patched rusqlite and SQLite versions
+        run: cargo update --manifest-path src-tauri/Cargo.toml -p rusqlite --precise 0.42.0
+      - name: Commit updated Rust lockfile on the working branch
+        run: |
+          git add src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Rust lockfile is already current."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Update rusqlite to patched SQLite runtime"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+  rust-security-audit:
+    needs: update-rust-lockfile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/nexus-core-architecture
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
