@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cosineSimilarity, planVectorReconciliation, vectorStorageKey } from "./knowledgeVectorIndex";
+import { cosineSimilarity, normalizeVectorRows, planVectorReconciliation, vectorStorageKey } from "./knowledgeVectorIndex";
 
 describe("knowledge vector index similarity", () => {
   it("scores identical normalized vectors at one", () => {
@@ -16,6 +16,19 @@ describe("knowledge vector index similarity", () => {
     expect(cosineSimilarity([1, Number.NaN], [1, 0])).toBe(0);
   });
 });
+
+
+  it("retains malformed keyed rows for cleanup instead of hiding them", () => {
+    const rows = normalizeVectorRows([
+      { id: "corrupt-vector", projectId: "p1", documentId: "doc", vector: { invalid: true } },
+      { id: "nan-vector", projectId: "p1", documentId: "doc-2", vector: [Number.NaN] },
+      { projectId: "p1", documentId: "missing-id", vector: [1] },
+      null
+    ]);
+    expect(rows).toHaveLength(2);
+    const plan = planVectorReconciliation(rows, []);
+    expect(plan.staleIds).toEqual(["corrupt-vector", "nan-vector"]);
+  });
 
 describe("knowledge vector reconciliation", () => {
   const chunk = (id: string, projectId: string, documentId: string) => ({

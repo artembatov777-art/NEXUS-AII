@@ -15,6 +15,22 @@ export function vectorStorageKey(projectId: string, chunkId: string): string {
   return `${projectId}\u0000${chunkId}`;
 }
 
+export function normalizeVectorRows(value: unknown): VectorRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.id !== "string") return [];
+    const row = item as Partial<VectorRow>;
+    return [{
+      id: row.id!,
+      ...(typeof row.chunkId === "string" ? { chunkId: row.chunkId } : {}),
+      projectId: typeof row.projectId === "string" ? row.projectId : "",
+      documentId: typeof row.documentId === "string" ? row.documentId : "",
+      vector: Array.isArray(row.vector) ? row.vector : [],
+      updatedAt: typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) ? row.updatedAt : 0
+    }];
+  });
+}
+
 export function planVectorReconciliation(rows: VectorRow[], chunks: KnowledgeChunk[]): {
   staleIds: string[];
   missingChunks: KnowledgeChunk[];
@@ -140,11 +156,9 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
   private readAll(db: IDBDatabase): Promise<VectorRow[]> {
     return new Promise((resolve, reject) => {
       const request = db.transaction(STORE, "readonly").objectStore(STORE).getAll();
-      request.onsuccess = () => resolve((request.result as VectorRow[]).filter(row =>
-        row && typeof row.id === "string" && typeof row.projectId === "string" &&
-        typeof row.documentId === "string" && Array.isArray(row.vector) &&
-        row.vector.every(Number.isFinite)
-      ));
+      // Keep malformed rows with a usable primary key so reconciliation can
+      // delete and rebuild them instead of silently hiding corrupt records.
+      request.onsuccess = () => resolve(normalizeVectorRows(request.result));
       request.onerror = () => reject(request.error ?? new Error("Could not read vector database."));
     });
   }
