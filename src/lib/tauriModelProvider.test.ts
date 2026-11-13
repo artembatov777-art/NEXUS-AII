@@ -117,6 +117,44 @@ describe("TauriModelProvider", () => {
     });
   });
 
+
+  it("can stream a model selected from discovery when a prepared profile starts without a model ID", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["qwen-local"]);
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        channel.onmessage({ type: "text_delta", text: "Ollama ready" });
+        channel.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriModelRouterForProfiles([createOllamaProviderProfile()]);
+    if (!router) throw new Error("Expected native profile router.");
+    expect(await router.listModels()).toMatchObject({ ok: true, value: [{ id: "qwen-local", providerId: "nexus.ollama" }] });
+    const events = [];
+    for await (const event of router.stream("nexus.ollama", {
+      model: "qwen-local", messages: [{ role: "user", content: "hello" }]
+    })) events.push(event);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
+      baseUrl: "http://127.0.0.1:11434/v1", model: "qwen-local", credentialHandle: "none"
+    }));
+  });
+
+  it("requires catalog discovery before streaming from a model-unspecified provider profile", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    const router = createTauriModelRouterForProfiles([createOllamaProviderProfile()]);
+    if (!router) throw new Error("Expected native profile router.");
+    const stream = router.stream("nexus.ollama", {
+      model: "unverified-model", messages: [{ role: "user", content: "hello" }]
+    });
+    await expect((async () => { for await (const _event of stream) { /* consume */ } })())
+      .rejects.toThrow(/Discover the provider model catalog/i);
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   it("keeps browser preview disconnected from provider credentials", () => {
     mockedIsTauri.mockReturnValue(false);
     expect(createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" })).toBeNull();

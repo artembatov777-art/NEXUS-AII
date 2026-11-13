@@ -30,6 +30,8 @@ async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string)
 }
 
 class TauriModelProvider implements ModelProvider {
+  private discoveredModels = new Set<string>();
+
   constructor(readonly id: string, private readonly settings: ProviderSettings) {}
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
@@ -44,6 +46,7 @@ class TauriModelProvider implements ModelProvider {
         this.settings.credentialHandle ?? "default"
       );
       const uniqueIds = normalizeProviderModelIds(ids);
+      this.discoveredModels = new Set(uniqueIds);
       return ok(uniqueIds.map(id => ({
         id,
         providerId: this.id,
@@ -53,6 +56,7 @@ class TauriModelProvider implements ModelProvider {
         declaredLocation: this.settings.inferenceLocation
       })));
     } catch (cause) {
+      this.discoveredModels.clear();
       const failure = normalizeProviderFailure(cause);
       return err(failure.code, failure.message, failure.retryable);
     }
@@ -63,7 +67,13 @@ class TauriModelProvider implements ModelProvider {
     if (request.signal?.aborted) throw new Error("Model request was cancelled.");
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
-    if (!isValidModelId(request.model) || request.model !== this.settings.model) throw new Error("Requested model does not match the configured model.");
+    if (!isValidModelId(request.model)) throw new Error("Requested model ID is invalid.");
+    if (this.settings.model.trim() && request.model !== this.settings.model) {
+      throw new Error("Requested model does not match the configured model.");
+    }
+    if (!this.settings.model.trim() && !this.discoveredModels.has(request.model)) {
+      throw new Error("Discover the provider model catalog before selecting a model for this profile.");
+    }
     if (request.messages.some(message => message.role === "tool")) {
       throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
     }
