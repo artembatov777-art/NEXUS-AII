@@ -28,10 +28,10 @@ Expected: local workspace data persists in the native SQLite database. The brows
 
 ## 2. Credential vault lifecycle
 
-1. Open Settings with the default OmniRoute profile and no key configured. Expected status: missing.
-2. Save a disposable OmniRoute key in the `default` profile and a separate disposable Ollama key in the `ollama` profile. Expected status: both entries are available independently; the UI must not display either saved secret after saving.
+1. Open Settings with the default local Ollama-compatible endpoint, no model selected, and the no-key profile. Expected status: no key is required; model catalog remains unverified until checked.
+2. Save a disposable direct-cloud provider key in the `default` profile and a separate provider key in the `ollama` profile. Expected status: both entries are available independently; the UI must not display either saved secret after saving.
 3. Switch between the two profiles and confirm each status remains isolated. Restart the app and verify both entries persist.
-4. Make a provider request to a trusted HTTPS OmniRoute endpoint and a loopback Ollama `/v1` endpoint.
+4. Make a provider request to a trusted HTTPS OpenAI-compatible cloud endpoint and a loopback Ollama `/v1` endpoint. Confirm that model discovery shows only IDs returned by each endpoint. OmniRoute checks are deferred until its final optional adapter is integrated.
 5. Delete each key independently. Expected status: only the selected profile becomes missing; the other remains available.
 6. Select the no-key profile. Expected status: NOT REQUIRED, and only a localhost/loopback endpoint is accepted.
 7. Lock/disable the OS keyring if practical, then reopen Settings. Expected status: unavailable; the app must not fall back to localStorage, SQLite, or plaintext files.

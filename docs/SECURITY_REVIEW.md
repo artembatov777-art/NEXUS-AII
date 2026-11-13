@@ -15,7 +15,7 @@
 
 ### Credentials and provider requests
 
-- The supported credential handles are `default` (backward-compatible OmniRoute profile) and `ollama` (separate Ollama API-key profile); the no-key profile is reported as `not_required` and is restricted to loopback endpoints. The webview never receives a previously stored secret.
+- The supported credential handles are `default` (generic cloud-provider profile) and `ollama` (additional provider profile); the no-key profile is reported as `not_required` and is restricted to loopback endpoints. The webview never receives a previously stored secret.
 - Provider keys are written to the OS credential vault, not SQLite, localStorage, workspace backups, or agent checkpoints.
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
@@ -52,13 +52,13 @@
 
 The Tauri CSP sets default-src self, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI.
 
-## OmniRoute cloud gateway boundary
+## Direct provider boundary and deferred gateway integration
 
-- Cloud model requests use the configured OmniRoute `/v1` endpoint; provider-specific cloud credentials are held by OmniRoute, while the NEXUS-to-OmniRoute endpoint key is stored only in the OS credential vault.
-- A local OmniRoute endpoint may use loopback HTTP. Any non-loopback endpoint must use HTTPS. Redirects remain disabled and URL user-info/query/fragment components are rejected by the native provider transport.
-- Model IDs are selected from the gateway's model catalog; model/provider capabilities are not assumed to be uniform.
-- Conversation and selected context content leave the device when a cloud model is selected. The UI must disclose the active remote route and never silently switch a local request to a cloud provider.
-- NEXUS uses only the public inference surface needed by the app. Administrative dashboard and provider-management endpoints are not exposed to agents or tools.
+- During core development, cloud and local model requests use directly configured compatible `/v1` provider endpoints. OmniRoute is not installed, configured, or required at this stage.
+- Provider API keys are stored only in the OS credential vault. The webview sends a credential-profile handle, never the saved secret.
+- Loopback endpoints may use HTTP. Any non-loopback endpoint must use HTTPS. Redirects remain disabled and URL user-info/query/fragment components are rejected by the native provider transport.
+- Model IDs are selected only from the configured provider's actual discovery response; model/provider capabilities are not assumed to be uniform.
+- During final integration, OmniRoute will be added as an optional adapter implementing the same provider contract. Direct local and cloud providers must continue working without it.
 
 ## Platform credential behavior
 
@@ -90,6 +90,6 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 ## Model route disclosure
 
-- Provider settings default to a remote route. The selected location is explicitly owner-declared and is not inferred from the OmniRoute gateway hostname.
-- A loopback OmniRoute endpoint may still forward requests to a cloud provider. NEXUS cannot currently verify the gateway's downstream route or enforce local execution from the model ID alone.
-- The UI marks a local declaration as unverified and warns the owner to verify OmniRoute routing before sending private context. Ollama can be used through its OpenAI-compatible loopback `/v1` endpoint when the Ollama service is installed and running. NEXUS does not install Ollama, download model weights, or manage its model lifecycle.
+- Provider settings default to an unselected local loopback endpoint with no credential requirement. A cloud endpoint must be configured explicitly. The selected location is owner-declared and is not inferred from a provider hostname.
+- A loopback provider endpoint may still forward requests to a cloud service. NEXUS cannot currently verify upstream routing or enforce local execution from the model ID alone.
+- The UI marks a local declaration as unverified and warns the owner to verify provider routing before sending private context. Ollama can be used through its OpenAI-compatible loopback `/v1` endpoint when the Ollama service is installed and running. NEXUS does not install Ollama, download model weights, or manage its model lifecycle.

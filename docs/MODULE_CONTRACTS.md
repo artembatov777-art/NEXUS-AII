@@ -346,9 +346,9 @@ A model descriptor identifies model ID, display name, version, runtime kind (loc
 
 Model capabilities explicitly declare streaming, tool calling, structured output, vision, audio input, and audio output. Callers must check capabilities rather than assuming every model supports every feature.
 
-The model runtime exposes list/discover, status, load, unload, health-check, inference, streaming, cancellation, and resource-reporting operations. The OmniRoute adapter uses the OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints; the local adapter targets the selected local inference backend. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
+The model runtime currently exposes model discovery, catalog status, health checks, inference, streaming, and cancellation through a provider-neutral contract. The native adapter connects directly to configured OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints; the initial local target is an Ollama-compatible endpoint. Process lifecycle management, model downloads, unload controls, and resource reporting are not yet claimed as implemented. During final integration, OmniRoute will be added as an optional adapter behind the same contract. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
 
-The model policy selects an explicitly configured local model or an OmniRoute-routed cloud model. Every response records the active model ID, runtime adapter, and whether inference is local or remote. OmniRoute is the selected cloud gateway; local-only operation must remain possible without it.
+The model policy selects an explicitly configured model from a local runtime or direct cloud-provider endpoint. Every response records the active model ID, runtime adapter, and owner-declared processing location. OmniRoute is deferred until final integration as an optional provider adapter; local and direct-cloud operation must remain possible without it.
 
 ## 21. Model artifacts and experiment records — target
 
