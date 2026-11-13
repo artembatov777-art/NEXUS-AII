@@ -78,8 +78,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     return () => window.removeEventListener("nexus-file-system-close-request", requestClose);
   }, [editing, draft, preview, onClose]);
 
-  async function refresh(path = currentPath) {
+  async function refresh(path = currentPath, discardConfirmed = false) {
     if (!path || !isTauri()) return;
+    if (!discardConfirmed && !confirmDiscardDraft("refresh or navigate the file list")) return;
     setBusy(true);
     try {
       const result = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
@@ -188,7 +189,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setPreview("");
       setDraft("");
       setEditing(false);
-      await refresh(entry.path);
+      await refresh(entry.path, true);
       return;
     }
     if (entry.kind !== "file") return;
@@ -262,7 +263,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       const nextPath = await invoke<string>("rename_workspace_entry", { path: selectedPath, newName: renameName.trim() });
       const audited = await recordFilesystemAudit("rename");
       const content = await invoke<string>("read_workspace_file", { path: nextPath });
-      await refresh();
+      await refresh(currentPath, true);
       setSelectedPath(nextPath);
       setRenameName(nextPath.split(/[\\\\/]/).pop() ?? renameName.trim());
       setPreview(content);
@@ -299,7 +300,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setDraft("");
       setEditing(false);
       setNotice(audited ? "File moved." : "File moved, but the audit entry could not be saved.");
-      await refresh();
+      await refresh(currentPath, true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -343,7 +344,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setPreview("");
       setDraft("");
       setEditing(false);
-      if (allowed[0]) await refresh(allowed[0]);
+      if (allowed[0]) await refresh(allowed[0], true);
       setNotice(audited ? "Directory access revoked." : "Directory access was revoked, but the audit entry could not be saved.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -365,7 +366,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         <div className="file-workspace-toolbar">
           <div className="file-search"><HardDrive size={15}/><span>{currentPath || "No folder selected"}</span></div>
           <button className="secondary-btn" onClick={() => void refresh()} disabled={!currentPath || busy}><RefreshCw size={14}/> Refresh</button>
-          <button className="secondary-btn" onClick={() => void refresh(parentPath(currentPath))} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
+          <button className="secondary-btn" onClick={() => void refresh(parentPath(currentPath), true)} disabled={!isAllowedCurrent || currentPath === roots.find(root => root === currentPath) || busy}><ArrowLeft size={14}/> Up</button>
         </div>
         <div className="file-search-toolbar">
           <div className="file-search-mode" role="group" aria-label="Search mode">
@@ -379,7 +380,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         <div className="file-access-grant">
           <div className="file-pane-label">APPROVED DIRECTORIES</div>
           <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
-          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => void refresh(root)}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
+          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => void refresh(root, true)}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
