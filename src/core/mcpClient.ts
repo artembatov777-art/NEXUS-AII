@@ -199,6 +199,7 @@ export class McpClient {
       version: "mcp-1",
       description: (tool.description || `MCP tool ${tool.name}`).slice(0, 500),
       requiredPermissions: [...options.permissions],
+      resourceForInput: () => `${serverId}/${tool.name}`,
       risk: options.risk,
       timeoutMs: options.timeoutMs,
       validateInput: input => adapter.validate(serverId, tool, input),

@@ -10,7 +10,8 @@ export type PermissionScope =
   | "browser:interact"
   | "github:read"
   | "github:write"
-  | "shell:execute";
+  | "shell:execute"
+  | "mcp:execute";
 
 export type ToolRisk = "low" | "medium" | "high";
 
@@ -87,7 +88,7 @@ export class ToolGateway {
     if (!/^[a-zA-Z0-9._-]{1,120}$/.test(definition.id) || !definition.version.trim() || !definition.description.trim() || definition.description.length > 500) {
       return err("validation", "Tool id, version, and description are invalid or exceed their limits.");
     }
-    const scopes: PermissionScope[] = ["conversation:read", "memory:read", "memory:write", "filesystem:read:selected", "filesystem:write:selected", "browser:read", "browser:interact", "github:read", "github:write", "shell:execute"];
+    const scopes: PermissionScope[] = ["conversation:read", "memory:read", "memory:write", "filesystem:read:selected", "filesystem:write:selected", "browser:read", "browser:interact", "github:read", "github:write", "shell:execute", "mcp:execute"];
     if (!Array.isArray(definition.requiredPermissions) || definition.requiredPermissions.some(scope => !scopes.includes(scope))) {
       return err("validation", "Tool permissions contain an unsupported scope.");
     }

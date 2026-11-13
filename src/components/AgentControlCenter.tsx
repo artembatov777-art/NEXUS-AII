@@ -11,6 +11,7 @@ import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
 import { registerWorkspaceTools } from "../lib/workspaceTools";
 import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
 import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
+import { loadMcpServerConfigs } from "../lib/mcpServerStorage";
 
 const THREAD_ID = "nexus-agent-control-center";
 
@@ -52,6 +53,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
       const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource }) => {
+          if (scope === "mcp:execute") {
+            return window.confirm(`Allow execution of this MCP tool?\\n\\n${resource}\\n\\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
+          }
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
             const action = scope === "filesystem:read:selected" ? "read" : "create or edit";
             return window.confirm(`Allow the NEXUS agent to ${action} this workspace path?\n\n${resource}\n\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
@@ -77,7 +81,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
-  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.preview", "workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move"]) ?? null, [runtime, providerSettings.model]);
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned") ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
@@ -97,6 +101,28 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   }, [runtime, addFeed]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!runtime) return;
+    const controller = new AbortController();
+    void (async () => {
+      const saved = loadMcpServerConfigs(window.localStorage);
+      if (!saved.ok) { addFeed(saved.error.message, "error"); return; }
+      for (const server of saved.value) {
+        if (controller.signal.aborted) break;
+        const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, controller.signal);
+        if (!connected.ok) { addFeed(`MCP ${server.name}: ${connected.error.message}`, "warning"); continue; }
+        const imported = await runtime.discoverAndImportMcpTools(server.id, controller.signal, {
+          permissions: ["mcp:execute"], risk: "high", timeoutMs: 30_000
+        });
+        if (!imported.ok) addFeed(`MCP ${server.name}: ${imported.error.message}`, "warning");
+        else addFeed(`MCP ${server.name}: discovered ${imported.value.discovered}, imported ${imported.value.imported.length}, rejected ${imported.value.rejected.length} tool(s).`, "success");
+      }
+    })();
+    return () => {
+      controller.abort();
+      void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
+    };
+  }, [runtime, addFeed]);
   useEffect(() => () => { controller.current?.abort(); }, []);
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>) {

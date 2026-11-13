@@ -472,3 +472,13 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 
 /* Token usage is surfaced as compact operational telemetry, not mixed into chat text. */
 .usage-indicator{color:var(--nx-muted,#829aaa);font-size:9px;white-space:nowrap;align-self:center;font-variant-numeric:tabular-nums}
+
+/* Live MCP server manager */
+.mcp-manager{margin:18px 0 20px;padding:16px;border:1px solid #2b3040;border-radius:12px;background:linear-gradient(145deg,rgba(24,28,40,.82),rgba(12,15,22,.9))}
+.mcp-manager-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+.mcp-manager-heading>div{display:grid;gap:4px}.mcp-manager-heading>div>span{font-size:9px;letter-spacing:1.4px;color:#9a8bd0}.mcp-manager-heading strong{font:600 16px 'Space Grotesk';color:#e8eaf0}.mcp-manager-heading small,.mcp-server-row small{font-size:11px;color:#828b9d}.mcp-manager-heading>span{font-size:9px;color:#9ba4b7;letter-spacing:1px}
+.mcp-add-grid{display:grid;grid-template-columns:1fr 1.6fr 1fr auto;gap:9px;align-items:end}
+.mcp-add-grid label{display:grid;gap:6px;font-size:10px;color:#9da5b6}.mcp-add-grid input{width:100%;min-width:0;height:36px;padding:0 10px;border:1px solid #303748;border-radius:7px;background:#0b0e15;color:#e8eaf0;outline:none}.mcp-add-grid input:focus{border-color:#8d7bc7}
+.mcp-security-note{display:flex;gap:7px;align-items:flex-start;color:#8c96a8;font-size:10px;line-height:1.5;margin:12px 0}.mcp-empty{padding:16px;text-align:center;color:#777f91;border:1px dashed #303748;border-radius:8px;font-size:11px}
+.mcp-server-list{display:grid;gap:8px}.mcp-server-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:11px;border:1px solid #282e3b;border-radius:8px;background:#0d1119}.mcp-server-row>div:first-child{min-width:0;display:grid;gap:4px}.mcp-server-row strong{font-size:12px}.mcp-server-row small{overflow-wrap:anywhere}.mcp-server-row>div:last-child{display:flex;flex-shrink:0}.mcp-state{font-size:9px;letter-spacing:1px;color:#c4a77a}.mcp-state.connected{color:#81c9a8}.mcp-state.failed{color:#e58c93}
+@media(max-width:760px){.mcp-add-grid{grid-template-columns:1fr 1fr}.mcp-add-grid .primary-btn{min-height:36px}.mcp-server-row{align-items:flex-start}}
