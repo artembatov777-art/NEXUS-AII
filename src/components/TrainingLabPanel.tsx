@@ -4,7 +4,7 @@ import { scoreDatasetEvaluation, scoreEvaluation, validateDatasetManifest, valid
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
-import { runModelComparison as executeModelComparison } from "../lib/modelComparison";
+import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
 import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
 
@@ -220,12 +220,16 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         : `MODEL: ${result.model}\nSTATUS: FAILED\nERROR: ${result.error}`
       ).join("\n\n════════════════════════════════\n\n"));
       setModelId(models.join(", "));
-      setMetrics(JSON.stringify(Object.fromEntries(successful.map((result, index) => [`model${index + 1}LatencyMs`, result.value.latencyMs])), null, 2));
+      setMetrics(JSON.stringify(summarizeModelComparison(results), null, 2));
       setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length, successfulModels: successful.length, failedModels: failed.length }, null, 2));
       setStatus(failed.length
         ? `Comparison partially completed: ${successful.length} of ${models.length} models returned results. Failed models are listed above.`
         : `Comparison completed: all ${successful.length} models returned results using the same prompt.`);
       setError(failed.length ? failed.map(result => `${result.model}: ${result.error}`).join(" | ") : "");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Model comparison failed.";
+      setStatus(controller.signal.aborted ? "Model comparison cancelled. Completed model results were not discarded from the provider, but this run was not recorded as complete." : "");
+      setError(message);
     } finally {
       if (liveTestAbort.current === controller) liveTestAbort.current = null;
       setLiveTestRunning(false);

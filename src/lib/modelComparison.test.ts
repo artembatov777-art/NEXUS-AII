@@ -32,3 +32,16 @@ describe("runModelComparison", () => {
     expect(results.map(result => result.model)).toEqual(["slow", "fast"]);
   });
 });
+
+  it("keeps comparison metrics keyed by model and excludes response content", async () => {
+    const results = await runModelComparison(["model-a", "model-b"], async model => {
+      if (model === "model-b") throw new Error("Unavailable");
+      return { latencyMs: 42, response: "private generated response" };
+    });
+    const { summarizeModelComparison } = await import("./modelComparison");
+    expect(summarizeModelComparison(results)).toEqual({
+      "model-a": { status: "fulfilled", latencyMs: 42, responseCharacters: 25 },
+      "model-b": { status: "rejected", error: "Unavailable" }
+    });
+    expect(JSON.stringify(summarizeModelComparison(results))).not.toContain("private generated response");
+  });

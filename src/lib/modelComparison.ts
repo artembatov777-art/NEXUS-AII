@@ -25,3 +25,26 @@ export async function runModelComparison<T>(
     }
   }));
 }
+
+export interface ModelComparisonMetric {
+  status: "fulfilled" | "rejected";
+  latencyMs?: number;
+  responseCharacters?: number;
+  error?: string;
+}
+
+/** Keeps metrics attributable to model IDs without persisting model responses. */
+export function summarizeModelComparison(
+  results: ModelComparisonOutcome<{ latencyMs: number; response: string }>[]
+): Record<string, ModelComparisonMetric> {
+  return Object.fromEntries(results.map(result => [
+    result.model,
+    result.status === "fulfilled"
+      ? {
+          status: "fulfilled" as const,
+          latencyMs: result.value.latencyMs,
+          responseCharacters: result.value.response.length
+        }
+      : { status: "rejected" as const, error: result.error }
+  ]));
+}
