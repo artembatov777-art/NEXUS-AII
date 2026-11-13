@@ -80,6 +80,22 @@ describe("ToolGateway", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+
+  it("blocks automatic replay after an owner manually reconciles an ambiguous step", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const reconciled: ToolAuditEvent = {
+      toolId: "sample", runId: "run-1", traceId: "trace-1",
+      status: "reconciled", timestamp: 200,
+      detail: "Owner reviewed the external outcome. No tool retry was executed."
+    };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([reconciled])) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 300 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "tool_failed", message: expect.stringContaining("will not be replayed automatically") } });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the audit history reader throws", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockRejectedValue(new Error("database offline")) };

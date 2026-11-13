@@ -64,10 +64,11 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 ## Phase IV — Agents & Tools
 
 - [x] Implement the bounded agent runtime and model-driven planning through AI Core; full phase acceptance still requires integration and native smoke tests.
-- [x] Implement approval, pause/resume, cancellation, durable SQLite checkpoints, and audit-led duplicate-step replay protection; automatic result replay and manual reconciliation for ambiguous external outcomes remain open.
+- [x] Implement approval, pause/resume, cancellation, durable SQLite checkpoints, and audit-led duplicate-step replay protection.
+- [x] Add owner-confirmed manual reconciliation for ambiguous external outcomes; reconciliation records a terminal audit state and never reruns the tool.
 - [x] Implement the Tool Gateway, MCP server configuration, session-aware HTTP transport, tool discovery/import, and per-call approval with input preview; broader OAuth/authentication and adversarial integration tests remain open.
 - [x] Add audit-led replay protection that blocks duplicate execution of a previously started or terminal run/step.
-- [ ] Add automatic idempotent result replay and manual reconciliation for ambiguous external side effects.
+- [ ] Add automatic idempotent result replay with persisted, input-bound results; external side effects remain blocked from automatic replay.
 - [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
 - [x] Add integration tests for safe tool execution and denied high-risk file writes through the model-planned workflow.
 
