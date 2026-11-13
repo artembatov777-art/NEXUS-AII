@@ -40,8 +40,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Add OmniRoute as an optional adapter during final integration and verify the real account connection with owner-provided credentials.
 - [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
 - [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
-- [x] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
-- [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for existing OmniRoute installations and `ollama` for Ollama API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
+- [x] Make local versus remote processing explicit and avoid inferring locality from a loopback provider URL.
+- [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for generic cloud-provider endpoints and `ollama` for additional provider API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
 - [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior; confirm final native CI on the latest commit.
 
 **Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. OmniRoute is integrated only in the final phase.
