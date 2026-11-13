@@ -36,7 +36,7 @@ Last reviewed: 2026-11-10.
 
 | Threat | Example | Required control | Current status |
 |---|---|---|---|
-| Prompt injection | A document tells an agent to reveal secrets | Treat retrieved content as untrusted; separate policy from data; tool allowlists | Design requirement; end-to-end tests pending |
+| Prompt injection | A document tells an agent to reveal secrets | Treat retrieved content as untrusted; separate policy from data; tool allowlists | Chat context and agent-planner reference context are separately marked untrusted; planner tools are allowlisted and permission-gated. Adversarial end-to-end prompt-injection tests remain open. |
 | Credential exposure | API key stored in localStorage or logged | OS credential vault / server-side proxy; redact logs; no secrets in frontend | Native OS credential vault is implemented for desktop provider keys; hosted web still requires a server-side proxy. Trace persistence now drops unknown top-level fields and filters sensitive attribute names; callers must still keep secret values out of telemetry. |
 | Privilege escalation | Agent requests shell or filesystem access | Default-deny permission service; per-action approval; no raw host APIs in agents | Core gateway foundation exists |
 | Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway validation, bounds, timeout, cancellation, and audit lifecycle are implemented; broader adversarial testing remains open. |

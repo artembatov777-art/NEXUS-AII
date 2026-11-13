@@ -27,7 +27,7 @@
 - The runtime defaults to deny when no host permission policy is configured.
 - Agent permissions and tool permissions are checked separately.
 - The Tool Gateway validates tool inputs, applies timeouts/cancellation, bounds output, and records audit events.
-- The model-planned workflow is restricted to the approved workspace tool set and discovered MCP tools. Workspace reads/writes remain scoped to owner-approved roots. Every MCP tool call is high-risk and requires a separate native confirmation that displays the server/tool identity and a bounded input preview; external servers may process that input. Shell execution and arbitrary host APIs remain unavailable.
+- The model-planned workflow receives relevant profile memory and selected project knowledge as a separate, bounded reference field explicitly marked untrusted by the planner system prompt. The workflow is restricted to the approved workspace tool set and discovered MCP tools. Workspace reads/writes remain scoped to owner-approved roots. Every MCP tool call is high-risk and requires a separate native confirmation that displays the server/tool identity and a bounded input preview; external servers may process that input. Shell execution and arbitrary host APIs remain unavailable.
 - Coordinator plans, delegated JSON outputs, step counts, dependencies, and serialized payload sizes are bounded.
 - Approval grants are one-time and in-memory; they must be re-issued after restart.
 

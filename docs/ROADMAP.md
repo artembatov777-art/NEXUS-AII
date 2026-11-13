@@ -53,7 +53,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Complete inspectable long-term memory with user-controlled create, revise, search, export, and deletion.
 - [ ] Complete document ingestion and project-scoped knowledge retrieval with provenance.
 - [ ] Add reliable indexing, rebuild, and recovery behavior.
-- [ ] Integrate relevant approved memory and project knowledge into AI Core context assembly.
+- [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
 - [ ] Test privacy boundaries, retrieval quality, citations, and persistence.
 
 **Exit criteria:** NEXUS can retrieve the right approved context across sessions and projects, cite source material, and let the owner inspect and control stored information.
