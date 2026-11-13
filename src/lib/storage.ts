@@ -74,16 +74,20 @@ export async function loadConversations(storage: StorageAdapter = localStorage):
     for (const item of current.items) if (!mergedById.has(item.id)) mergedById.set(item.id, item);
     for (const item of legacy.items) if (!mergedById.has(item.id)) mergedById.set(item.id, item);
     const merged = [...mergedById.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-    const hasValidBrowserData = current.present && current.valid || legacy.present && legacy.valid;
-    const needsPersistence = merged.length !== nativeItems.length || nativeItems.length !== (Array.isArray(nativeRaw) ? nativeRaw.length : 0);
+    const nativeIds = new Set(nativeItems.map(item => item.id));
+    const hasUnpersistedBrowserRecords = [...current.items, ...legacy.items].some(item => !nativeIds.has(item.id));
+    const needsPersistence = hasUnpersistedBrowserRecords ||
+      nativeItems.length !== (Array.isArray(nativeRaw) ? nativeRaw.length : 0);
 
-    if (hasValidBrowserData || needsPersistence) {
+    if (needsPersistence) {
       // Do not clear either browser copy unless the full native replacement succeeds.
       await invoke("save_conversations", { conversations: merged });
-      for (const [key, source] of [[CHAT_KEY, current], [LEGACY_CHAT_KEY, legacy]] as const) {
-        if (source.present && source.valid) {
-          try { storage.setItem(key, "[]"); } catch { /* Native copy is safe; stale data will be deduplicated next launch. */ }
-        }
+    }
+    // Duplicate browser records are safe to clear because SQLite already owns
+    // their IDs and wins conflicts. Empty migration markers need no DB rewrite.
+    for (const [key, source] of [[CHAT_KEY, current], [LEGACY_CHAT_KEY, legacy]] as const) {
+      if (source.present && source.valid) {
+        try { storage.setItem(key, "[]"); } catch { /* Native copy is safe; stale data will be deduplicated next launch. */ }
       }
     }
     return merged;

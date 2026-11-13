@@ -72,18 +72,19 @@ describe("conversation workspace storage", () => {
   it("merges browser conversations into a populated native database before clearing legacy copies", async () => {
     const storage = new MemoryStorage();
     const native = { ...base, id: "native-chat", title: "Native", updatedAt: 30 };
+    const nativeDuplicate = { ...base, title: "Native version", updatedAt: 25 };
     const browser = { ...base, id: "browser-chat", title: "Browser", updatedAt: 20 };
     const legacy = { ...base, id: "legacy-chat", title: "Legacy", updatedAt: 10 };
     const duplicate = { ...base, title: "Stale browser duplicate", updatedAt: 5 };
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([browser, duplicate]));
     storage.setItem("nexus-au:conversations:v1", JSON.stringify([legacy]));
     isTauriMock.mockReturnValue(true);
-    invokeMock.mockImplementation(async (command: string) => command === "load_conversations" ? [native] : undefined);
+    invokeMock.mockImplementation(async (command: string) => command === "load_conversations" ? [native, nativeDuplicate] : undefined);
 
     const loaded = await loadConversations(storage);
 
-    expect(loaded.map(item => item.id)).toEqual(["native-chat", "browser-chat", "legacy-chat"]);
-    expect(loaded.find(item => item.id === "chat-1")?.title).toBe("Test");
+    expect(loaded.map(item => item.id)).toEqual(["native-chat", "chat-1", "browser-chat", "legacy-chat"]);
+    expect(loaded.find(item => item.id === "chat-1")?.title).toBe("Native version");
     expect(invokeMock).toHaveBeenCalledWith("save_conversations", { conversations: loaded });
     expect(storage.getItem("nexus-au:conversations:v2")).toBe("[]");
     expect(storage.getItem("nexus-au:conversations:v1")).toBe("[]");
