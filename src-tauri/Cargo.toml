@@ -1,6 +1,6 @@
 [package]
 name = "nexus-au"
-version = "0.1.0"
+version = "0.2.0"
 description = "NEXUS AU personal AI workspace"
 authors = ["NEXUS AU contributors"]
 edition = "2021"

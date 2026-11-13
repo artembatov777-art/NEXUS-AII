@@ -72,7 +72,7 @@ export default function App() {
   const providerCheckGeneration = useRef(0);
   const providerTestAbortController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
-  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [appVersion, setAppVersion] = useState("0.2.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
     providerCheckGeneration.current += 1;
