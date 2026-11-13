@@ -184,7 +184,7 @@ export function scoreDatasetEvaluation(
     if (!output || typeof output.response !== "string" || !Number.isFinite(output.latencyMs) || output.latencyMs < 0) {
       return { sampleId: sample.id, exactMatch: false, expectedContained: false, latencyMs: null };
     }
-    const normalize = (value: string) => value.trim().replace(/\\s+/g, " ").toLocaleLowerCase();
+    const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
     const actual = normalize(output.response);
     const expected = normalize(sample.expectedOutput);
     return {
