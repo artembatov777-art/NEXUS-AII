@@ -33,6 +33,7 @@ import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "./pro
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 import { DocumentIngestionService } from "../core/documentIngestion";
 import { createToolInvocationAgent, TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
+import { ToolReconciliationService } from "../core/toolReconciliation";
 
 export interface NexusPermissionPolicy {
   authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
@@ -100,6 +101,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const checkpointRepository = options.checkpointRepository ?? new LocalStorageAgentCheckpointRepository(options.storage);
   const checkpointService = new AgentCheckpointService(checkpointRepository);
   const auditSink = options.auditSink ?? new LocalStorageToolAuditSink(options.storage);
+  const toolReconciliationService = new ToolReconciliationService(auditSink, checkpointRepository);
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
   const toolRegistry = new ToolRegistry(toolGateway);
   const mcpClient = new McpClient(toolRegistry, toolGateway);
@@ -182,6 +184,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     },
     checkpointService,
     checkpointRepository,
+    toolReconciliationService,
     auditSink,
     approvalAuthority,
     /** Call only in response to an explicit user approval action in the UI. */
