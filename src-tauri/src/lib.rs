@@ -1132,7 +1132,7 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
             |row| row.get(0)
         ).map_err(|error| error.to_string())?;
         let already_terminal: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('completed','failed','reconciled'))",
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('completed','reconciled'))",
             params![tool_id,run_id,trace_id],
             |row| row.get(0)
         ).map_err(|error| error.to_string())?;
@@ -2250,6 +2250,21 @@ mod database_tests {
     }
 
     #[test]
+    fn failed_tool_steps_can_be_manually_reconciled_after_owner_review() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        record_tool_audit_event_record(&mut connection,serde_json::json!({
+            "toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"started","timestamp":1.0
+        })).expect("start tool");
+        record_tool_audit_event_record(&mut connection,serde_json::json!({
+            "toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"failed","timestamp":2.0,"detail":"timeout"
+        })).expect("record uncertain failure");
+        record_tool_audit_event_record(&mut connection,serde_json::json!({
+            "toolId":"workspace.write","runId":"run-1","traceId":"step-1","status":"reconciled","timestamp":3.0
+        })).expect("owner reconciles uncertain result");
+    }
+
+    #[test]
     fn reconciliation_requires_an_unresolved_started_step() {
         let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
         migrate_database(&mut connection).expect("apply migrations");
@@ -2483,7 +2498,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
