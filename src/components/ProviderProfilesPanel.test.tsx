@@ -60,7 +60,7 @@ describe("ProviderProfilesPanel", () => {
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect}/>); });
     const updatedSettings = { ...cloudSettings, model: "model-b" };
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={updatedSettings} onSelect={onSelect}/>); });
-    await act(async () => { container.querySelector<HTMLButtonElement>("button:nth-of-type(2)")?.click(); });
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Update selected")!.click(); });
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toContain("model-b");
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
     expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles).toEqual([]);
