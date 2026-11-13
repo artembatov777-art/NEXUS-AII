@@ -2,7 +2,7 @@
 
 Status: initial design baseline, not a completed security audit.
 Scope: current React/Vite + Tauri/Rust desktop foundation and planned local-first AI modules.
-Last reviewed: 2026-11-10.
+Last reviewed: 2026-11-13.
 
 ## 1. Security objectives
 
@@ -40,7 +40,7 @@ Last reviewed: 2026-11-10.
 | Credential exposure | API key stored in localStorage or logged | OS credential vault / server-side proxy; redact logs; no secrets in frontend | Native OS credential vault is implemented for desktop provider keys; hosted web still requires a server-side proxy. Trace persistence now drops unknown top-level fields and filters sensitive attribute names; callers must still keep secret values out of telemetry. |
 | Privilege escalation | Agent requests shell or filesystem access | Default-deny permission service; per-action approval; no raw host APIs in agents | Core gateway foundation exists |
 | Tool abuse | Malformed or oversized tool arguments | Schema validation, 64 KB bounds, timeout, cancellation | Gateway validation, bounds, timeout, cancellation, and audit lifecycle are implemented; broader adversarial testing remains open. |
-| Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Native transactional SQLite audit/trace persistence and retention caps are implemented; uncertain outcomes are surfaced, while operation-level idempotency and reconciliation remain pending. |
+| Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Native transactional SQLite audit/trace persistence and retention caps are implemented. The gateway checks prior audit records for the same run/step and blocks replay after a started or terminal event; automatic result replay and manual reconciliation remain pending. |
 | State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Versioned checkpoints use native SQLite persistence with transactional compare-and-swap; approval grants remain ephemeral by design and must be re-issued after restart. |
 | Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Session-aware HTTP transport, bounded metadata/schema/output, HTTPS-or-loopback-only endpoints, and per-call approval with input preview are implemented. OAuth/bearer authentication, domain allowlists, and adversarial live-server tests remain open. |
 | Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Partial; dependency audit currently reports 6 advisories |
@@ -54,7 +54,7 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 | Capability | Default | Approval policy |
 |---|---|---|
 | Read current conversation context | Deny until granted to agent | Per agent/run |
-| Read approved memory | Deny until granted | Per agent/run |
+| Read approved memory | Deny until granted | Bounded profile/project context is retrieved only after the owner confirms AI planning; retrieved text remains untrusted data. |
 | Write or delete memory | Deny | Explicit user confirmation |
 | Read user-selected file | Deny | Per selected file/session |
 | Write or delete file | Deny | Explicit action-level approval |
