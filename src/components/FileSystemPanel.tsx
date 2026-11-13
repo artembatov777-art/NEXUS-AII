@@ -199,7 +199,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     try {
-      await invoke("write_workspace_file", { path: selectedPath, content: draft });
+      await invoke("write_workspace_file_checked", { path: selectedPath, content: draft, expectedContent: preview });
       const audited = await recordFilesystemAudit("write");
       setPreview(draft);
       setEditing(false);

@@ -260,25 +260,62 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
     String::from_utf8(bytes).map_err(|_| "This file is not UTF-8 text and cannot be previewed.".into())
 }
 
-#[tauri::command]
-pub fn write_workspace_file(path: String, content: String, access: State<'_, WorkspaceAccess>) -> Result<(), String> {
+fn write_workspace_file_inner(
+    path: &str,
+    content: &str,
+    expected_content: Option<&str>,
+    access: &WorkspaceAccess,
+) -> Result<(), String> {
     if path.trim().is_empty() || path.len() > 4096 || content.len() as u64 > MAX_TEXT_FILE_BYTES {
         return Err("The file path or content exceeds the allowed size.".into());
     }
-    let target = PathBuf::from(&path);
+    let target = PathBuf::from(path);
     let parent = target.parent().ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
     let root = access.ensure_new_path_allowed(parent)?;
-    if let Ok(metadata) = fs::symlink_metadata(&target) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
+            }
+            let existing = fs::canonicalize(&target).map_err(|e| format!("Could not resolve existing file: {e}"))?;
+            if !existing.starts_with(&root) { return Err("The target file is outside the allowed directory.".into()); }
+            if let Some(expected) = expected_content {
+                if metadata.len() > MAX_TEXT_FILE_BYTES {
+                    return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+                }
+                let current = fs::read_to_string(&target)
+                    .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                if current != expected {
+                    return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
+                }
+            }
         }
-        let existing = fs::canonicalize(&target).map_err(|e| format!("Could not resolve existing file: {e}"))?;
-        if !existing.starts_with(&root) { return Err("The target file is outside the allowed directory.".into()); }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if expected_content.is_some() {
+                return Err("File was removed or moved outside NEXUS since it was opened. Your draft is preserved.".into());
+            }
+        }
+        Err(error) => return Err(format!("Could not inspect the target file: {error}")),
     }
     let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&target)
         .map_err(|e| format!("Could not write file: {e}"))?;
     file.write_all(content.as_bytes()).map_err(|e| format!("Could not save file: {e}"))?;
     file.sync_all().map_err(|e| format!("Could not flush file: {e}"))
+}
+
+#[tauri::command]
+pub fn write_workspace_file(path: String, content: String, access: State<'_, WorkspaceAccess>) -> Result<(), String> {
+    write_workspace_file_inner(&path, &content, None, &access)
+}
+
+#[tauri::command]
+pub fn write_workspace_file_checked(
+    path: String,
+    content: String,
+    expected_content: String,
+    access: State<'_, WorkspaceAccess>,
+) -> Result<(), String> {
+    write_workspace_file_inner(&path, &content, Some(&expected_content), &access)
 }
 
 #[tauri::command]
@@ -295,6 +332,50 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checked_write_rejects_external_changes_without_overwriting_them() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-checked-write-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("notes.txt");
+        fs::write(&target, "original").expect("create file");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        write_workspace_file_inner(target.to_str().unwrap(), "updated", Some("original"), &access)
+            .expect("write unchanged file");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "updated");
+
+        fs::write(&target, "external edit").expect("simulate external edit");
+        let result = write_workspace_file_inner(target.to_str().unwrap(), "stale draft", Some("updated"), &access);
+        assert!(result.unwrap_err().contains("File changed outside NEXUS"));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "external edit");
+
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn checked_write_rejects_files_removed_since_they_were_opened() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-checked-missing-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("removed.txt");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+        let result = write_workspace_file_inner(target.to_str().unwrap(), "stale draft", Some("original"), &access);
+        assert!(result.unwrap_err().contains("removed or moved"));
+        assert!(!target.exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
 
     #[test]
     fn path_containment_uses_path_components_not_string_prefixes() {

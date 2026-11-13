@@ -147,6 +147,37 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.querySelector(".file-preview-content pre")?.textContent).toContain("The NEXUS workspace is ready");
   });
 
+  it("preserves the edit draft and reports an external file conflict instead of overwriting", async () => {
+    const rootPath = "/home/test/Documents";
+    const filePath = rootPath + "/notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "original";
+      if (command === "write_workspace_file_checked") throw new Error("File changed outside NEXUS since it was opened.");
+      return undefined;
+    });
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { fileButton!.click(); });
+    const editButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Edit file"));
+    await act(async () => { editButton!.click(); });
+    const editor = container.querySelector<HTMLTextAreaElement>("textarea.file-editor")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, "my draft");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const saveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Save changes"));
+    await act(async () => { saveButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("write_workspace_file_checked", {
+      path: filePath, content: "my draft", expectedContent: "original"
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("File changed outside NEXUS");
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("my draft");
+  });
+
   it("records file reads in the native tool audit history without storing the path", async () => {
     const rootPath = "/home/test/Documents";
     const filePath = rootPath + "/notes.txt";
