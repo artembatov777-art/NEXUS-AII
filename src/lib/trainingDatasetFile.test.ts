@@ -14,6 +14,11 @@ describe("training dataset file format", () => {
     expect(parseTrainingDatasetFile(serializeTrainingDatasetSamples(samples))).toEqual(samples);
   });
 
+  it("normalizes surrounding whitespace in sample IDs before split matching", () => {
+    const input = rows.map(row => JSON.stringify({ ...row, id: ` ${row.id} ` })).join("\\n");
+    expect(parseTrainingDatasetFile(input).map(sample => sample.id)).toEqual(["a", "b", "c"]);
+  });
+
   it("accepts a JSON array export", () => {
     expect(parseTrainingDatasetFile(JSON.stringify(rows))).toEqual(rows);
   });

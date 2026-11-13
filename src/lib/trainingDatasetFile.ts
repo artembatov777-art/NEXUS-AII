@@ -33,11 +33,12 @@ export function parseTrainingDatasetFile(text: string): DatasetSample[] {
         !["train", "validation", "test"].includes(String(item.split))) {
       throw new Error("Each row requires id, input, expectedOutput, and split (train, validation, or test).");
     }
-    if (ids.has(item.id)) throw new Error(`Duplicate dataset sample ID: ${item.id}`);
-    ids.add(item.id);
-    contentBytes += new TextEncoder().encode(item.id + item.input + item.expectedOutput).byteLength;
+    const id = item.id.trim();
+    if (ids.has(id)) throw new Error(`Duplicate dataset sample ID: ${id}`);
+    ids.add(id);
+    contentBytes += new TextEncoder().encode(id + item.input + item.expectedOutput).byteLength;
     if (contentBytes > 900_000) throw new Error("Dataset sample content exceeds the 900 KB limit.");
-    samples.push({ id: item.id, input: item.input, expectedOutput: item.expectedOutput, split: item.split as DatasetSample["split"] });
+    samples.push({ id, input: item.input, expectedOutput: item.expectedOutput, split: item.split as DatasetSample["split"] });
   }
   const counts = { train: 0, validation: 0, test: 0 };
   for (const sample of samples) counts[sample.split] += 1;
