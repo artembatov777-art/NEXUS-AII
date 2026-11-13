@@ -172,9 +172,13 @@ describe("Training Lab governance", () => {
   it("extracts only finite numeric summary metrics for experiment metadata", () => {
     expect(extractNumericExperimentMetrics({
       passRate: 0.75, completedCases: 3, modelId: "model-a",
+      "model-a": { latencyMs: 42, responseCharacters: 26, error: "not persisted" },
       results: [{ sampleId: "private-case", output: "not persisted" }],
       invalid: Number.NaN
-    })).toEqual({ passRate: 0.75, completedCases: 3 });
+    })).toEqual({
+      passRate: 0.75, completedCases: 3,
+      "model-a.latencyMs": 42, "model-a.responseCharacters": 26
+    });
   });
 
   it("rejects experiment metadata without numeric evaluation metrics", () => {

@@ -242,15 +242,26 @@ export function extractNumericExperimentMetrics(value: unknown): Record<string, 
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Experiment metrics must be a JSON object.");
   }
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, metric]) => typeof metric === "number" && Number.isFinite(metric));
+  const entries: Array<[string, number]> = [];
+  const visit = (record: Record<string, unknown>, prefix = "", depth = 0) => {
+    if (depth > 3) return;
+    for (const [key, metric] of Object.entries(record)) {
+      const path = prefix ? prefix + "." + key : key;
+      if (!boundedText(path, 80) || /(api.?key|password|secret|credential|authorization|prompt|messages|conversation|raw.?data|sample.?text)/i.test(path)) continue;
+      if (typeof metric === "number" && Number.isFinite(metric)) entries.push([path, metric]);
+      else if (metric && typeof metric === "object" && !Array.isArray(metric)) {
+        visit(metric as Record<string, unknown>, path, depth + 1);
+      }
+    }
+  };
+  visit(value as Record<string, unknown>);
   if (entries.length === 0) {
     throw new Error("Run an evaluation that produces numeric metrics before saving an experiment.");
   }
-  if (entries.length > 100 || entries.some(([key]) => !boundedText(key, 80))) {
+  if (entries.length > 100 || new Set(entries.map(([key]) => key)).size !== entries.length) {
     throw new Error("Experiment metrics exceed the supported metadata limits.");
   }
-  return Object.fromEntries(entries) as Record<string, number>;
+  return Object.fromEntries(entries);
 }
 
 export interface TrainingLabRepository {
