@@ -322,3 +322,107 @@ button:disabled { cursor: not-allowed; }
   border-color: rgba(139, 217, 232, .3);
   background: rgba(24, 68, 81, .32);
 }
+
+
+/* Match the actual agent control-plane structure, not obsolete prototype names. */
+.agent-center {
+  color: var(--nx-text);
+  border: 1px solid rgba(126, 190, 207, .2);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(39, 105, 122, .13), transparent 45%),
+    linear-gradient(145deg, #0d1a24, #08111a 76%);
+  box-shadow: 0 35px 110px rgba(0, 0, 0, .68), inset 0 1px rgba(220, 248, 252, .035);
+}
+.agent-center-header { border-bottom-color: rgba(126, 190, 207, .16); }
+.agent-center-icon {
+  color: #a9dce5;
+  border-color: rgba(129, 202, 218, .24);
+  background: linear-gradient(145deg, rgba(29, 83, 99, .42), rgba(10, 28, 39, .82));
+}
+.agent-card,
+.agent-approval-card,
+.agent-history-item {
+  border-color: rgba(126, 190, 207, .16);
+  background: linear-gradient(145deg, rgba(12, 29, 39, .82), rgba(7, 17, 25, .9));
+}
+.agent-card-heading h3,
+.agent-history-item strong,
+.agent-approval-item strong { color: #e0eff2; }
+.agent-kicker,
+.agent-metadata,
+.agent-history-top,
+.agent-center-footer { color: #86aab4; }
+.agent-local-tag {
+  color: #a8dce5;
+  border-color: rgba(126, 190, 207, .22);
+  background: rgba(19, 58, 70, .28);
+}
+.agent-profile-input,
+.agent-profile-fields input,
+.agent-profile-fields textarea,
+.agent-profile-fields select,
+.agent-card input,
+.agent-card textarea {
+  border-color: rgba(126, 190, 207, .2);
+  background: rgba(4, 13, 20, .82);
+  color: #e3f0f3;
+}
+.agent-profile-input:focus,
+.agent-profile-fields input:focus,
+.agent-profile-fields textarea:focus,
+.agent-profile-fields select:focus,
+.agent-card input:focus,
+.agent-card textarea:focus {
+  border-color: rgba(139, 217, 232, .58);
+  box-shadow: 0 0 0 3px rgba(96, 180, 199, .1);
+}
+.agent-primary-button {
+  color: #effbfc;
+  border-color: rgba(113, 196, 215, .27);
+  background: linear-gradient(110deg, #26758a, #245b70);
+}
+.agent-primary-button:hover { background: linear-gradient(110deg, #328ba0, #2b6c82); }
+.agent-small-button {
+  color: #c3dce2;
+  border-color: rgba(126, 190, 207, .2);
+  background: rgba(17, 43, 54, .58);
+}
+.agent-small-button:hover { border-color: rgba(139, 217, 232, .44); background: rgba(28, 76, 89, .38); }
+.agent-feed { border-color: rgba(126, 190, 207, .14); }
+.agent-feed-item { color: #c4d8dd; border-bottom-color: rgba(126, 190, 207, .1); }
+.agent-approval-card { border-color: rgba(226, 189, 121, .26); }
+.agent-danger-button { border-color: rgba(222, 111, 145, .28); }
+.agent-error { border-color: rgba(222, 111, 145, .25); background: rgba(67, 25, 46, .42); }
+.agent-backdrop { background: rgba(1, 6, 10, .82); backdrop-filter: blur(12px); }
+
+.mcp-server-row {
+  border-color: rgba(126, 190, 207, .15);
+  background: rgba(8, 22, 31, .72);
+}
+.mcp-server-row > div:first-child > strong { color: #e0eff2; }
+.mcp-server-row small { color: #86a5af; }
+.mcp-state.connected { color: #80d2ae; }
+.mcp-state.failed { color: #e18a9a; }
+.mcp-state.connecting { color: #e2bd79; }
+.mcp-security-note {
+  border-color: rgba(226, 189, 121, .18);
+  background: rgba(70, 53, 27, .18);
+  color: #d6c39e;
+}
+.tool-preview-badge {
+  color: #91b9c3;
+  border-color: rgba(126, 190, 207, .18);
+  background: rgba(19, 58, 70, .2);
+}
+.tool-card-details { border-top-color: rgba(126, 190, 207, .12); }
+.tool-card-details p { color: #a9c0c8; }
+.tools-summary > div {
+  border-color: rgba(126, 190, 207, .14);
+  background: rgba(8, 22, 31, .58);
+}
+@media (max-width: 760px) {
+  .agent-center { max-height: calc(100dvh - 20px); overflow-y: auto; }
+  .agent-center-grid { grid-template-columns: minmax(0, 1fr); }
+  .agent-runtime-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tools-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
