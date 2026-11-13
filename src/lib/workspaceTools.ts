@@ -196,7 +196,10 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
       risk: "high",
       timeoutMs: 15_000,
       validateInput: validWriteInput,
-      resourceForInput: input => input.path,
+      resourceForInput: input => {
+        const preview = JSON.stringify(input.content.slice(0, 1200));
+        return `${input.path}\nContent preview: ${preview}${input.content.length > 1200 ? " … [truncated]" : ""}`;
+      },
       execute: async ({ path, content }, context) => {
         if (!nativeCheck.ok) return nativeCheck;
         if (context.signal.aborted) return err("cancelled", "Workspace write was cancelled.");

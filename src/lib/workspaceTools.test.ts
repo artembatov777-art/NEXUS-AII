@@ -101,6 +101,28 @@ describe("workspace agent tools", () => {
     }
   });
 
+  it("shows a bounded content preview before an agent writes a file", async () => {
+    const { registry, gateway, permissions } = setup();
+    registerWorkspaceTools(registry);
+    const content = "# Approved change\\nThis is the content NEXUS will write.";
+    const result = await gateway.execute("workspace.write", { path: "C:\\approved\\README.md", content }, {
+      traceId: "trace", runId: "run", signal: new AbortController().signal
+    }, "local-user");
+    expect(result.ok).toBe(true);
+    expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ resource: expect.stringContaining(JSON.stringify(content)) }));
+  });
+
+  it("marks long write previews as truncated before approval", async () => {
+    const { registry, gateway, permissions } = setup();
+    registerWorkspaceTools(registry);
+    const content = "x".repeat(4_000);
+    await gateway.execute("workspace.write", { path: "C:\\approved\\large.txt", content }, {
+      traceId: "trace", runId: "run", signal: new AbortController().signal
+    }, "local-user");
+    const request = permissions.authorize.mock.calls[0][0];
+    expect(request.resource).toContain("[truncated]");
+    expect(request.resource).not.toContain(content);
+  });
   it("rejects oversized writes before native execution", async () => {
     const { registry, gateway } = setup();
     registerWorkspaceTools(registry);
