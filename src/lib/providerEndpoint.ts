@@ -27,11 +27,18 @@ export function providerEndpointError(baseUrl: string): string | null {
 
 export function normalizeProviderModelIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  const ids = value.filter((id): id is string =>
-    typeof id === "string" && id.trim().length > 0 && id.length <= 128 &&
-    !/[\u0000-\u001f\u007f]/.test(id)
-  ).map(id => id.trim());
-  return [...new Set(ids)];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== "string") continue;
+    const id = candidate.trim();
+    if (!id || new TextEncoder().encode(id).byteLength > 128 ||
+        /[\u0000-\u001f\u007f]/.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= 500) break;
+  }
+  return ids;
 }
 
 

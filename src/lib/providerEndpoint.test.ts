@@ -35,6 +35,12 @@ describe("provider model catalog normalization", () => {
     ])).toEqual(["model-a", "model-b"]);
   });
 
+
+  it("enforces the native UTF-8 model ID byte limit and caps oversized catalogs", () => {
+    expect(normalizeProviderModelIds(["я".repeat(65), "valid-model"])).toEqual(["valid-model"]);
+    expect(normalizeProviderModelIds(Array.from({ length: 600 }, (_, index) => "model-" + index))).toHaveLength(500);
+  });
+
   it("returns an empty list for non-array payloads", () => {
     expect(normalizeProviderModelIds({ data: [] })).toEqual([]);
   });
