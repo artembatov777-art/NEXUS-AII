@@ -68,14 +68,14 @@ Exit criteria: the system can explain which memory records influenced a response
 - [x] Add tool registry and input validation port
 - [x] Add audit events, timeout, cancellation, and input/output limits
 - [x] Add LocalStorage preview audit adapter and explicit non-retryable outcome when completion audit fails
-- [ ] Replace preview audit storage with transactional native persistence and reconciliation
+- [x] Add transactional SQLite-backed native audit persistence, duplicate-claim guards, and owner-confirmed reconciliation for ambiguous tool outcomes; browser preview audit remains localStorage-only.
 - [x] Add core one-time, run/agent/permission-bound approval grants and resume validation
-- [x] Add user-facing approval queue with explicit one-time approve/reject actions (browser preview; native durable state remains pending)
+- [x] Add user-facing approval queue with explicit one-time approve/reject actions backed by versioned checkpoints (localStorage in browser preview, SQLite in desktop).
 - [x] Add serializable step-based runtime with checkpointed state transitions and resume/approval entry points
 - [x] Add a host-identity-bound adapter from resumable agent steps to the permission-enforcing Tool Gateway
-- [x] Compose checkpoint, audit, gateway, bridge, approval authority, and resumable runtime in a fail-closed browser-preview composition root
+- [x] Compose checkpoint, audit, gateway, bridge, approval authority, and resumable runtime in fail-closed browser and native composition roots.
 - [x] Wire resumable runtime into the Agent Control Center with start, cancel, resume, checkpoint history, and approval handoff
-- [ ] Add operation-level idempotency for side effects and replace browser preview persistence with transactional native storage
+- [ ] Add operation-level idempotency with persisted, input-bound results; automatic result replay remains deferred, and ambiguous external side effects are manually reconciled without rerunning tools.
 
 Exit criteria: no tool can execute outside the gateway; high-risk actions require explicit approval.
 

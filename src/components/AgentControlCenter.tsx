@@ -305,7 +305,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   async function reconcileToolStep(step: AmbiguousToolStep) {
     if (!runtime || busy) return;
     const confirmed = window.confirm(
-      "This tool step started but has no recorded final result. Inspect the external system first. Mark it as manually reconciled? NEXUS will block automatic replay and will not rerun the tool."
+      "This tool step may have timed out or been cancelled after its external operation began. Verify in the external system whether it completed or is still running. Marking it reconciled only blocks retries; it does not stop an operation already in progress. Continue?"
     );
     if (!confirmed) return;
     const result = await runtime.toolReconciliationService.reconcile(
