@@ -18,7 +18,7 @@ describe("TauriModelProvider", () => {
     mockedInvoke.mockImplementation((command, args) => {
       if (command !== "list_provider_models") return Promise.resolve(true);
       const baseUrl = (args as { baseUrl: string }).baseUrl;
-      return Promise.resolve(baseUrl.includes("ollama") ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
+      return Promise.resolve(baseUrl.includes(":11434") ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
     });
     const router = createTauriModelRouterForProfiles([
       { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "", inferenceLocation: "local", credentialHandle: "none" } },
