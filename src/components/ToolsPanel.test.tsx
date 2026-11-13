@@ -9,6 +9,7 @@ const { runtime, createRuntime } = vi.hoisted(() => {
     connectMcpHttp: vi.fn(async () => ({ ok: true as const, value: { serverId: "demo", protocolVersion: "2024-11-05" } })),
     mcpClient: {
       listTools: vi.fn(async () => ({ ok: true as const, value: [{ name: "lookup" }] })),
+      listServers: vi.fn(() => []),
       disconnect: vi.fn(async () => undefined)
     }
   };
