@@ -165,13 +165,13 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
       const planner = new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model));
       const coordinator = createCoordinator(threadId);
       return {
-        plan: async (goal: string, signal: AbortSignal): Promise<Result<ValidatedPlan>> => {
+        plan: async (goal: string, signal: AbortSignal, referenceContext?: string): Promise<Result<ValidatedPlan>> => {
           const available = toolRegistry.search("", 100);
           if (!available.ok) return available;
           const allowed = allowedToolIds ? new Set(allowedToolIds) : null;
           const tools = allowed ? available.value.filter(tool => allowed.has(tool.id) || (allowed.has("mcp.*") && tool.id.startsWith("mcp."))) : available.value;
           if (allowed && tools.length === 0) return err("validation", "No tools allowed for this workflow are registered.");
-          return planner.plan(goal, tools, signal);
+          return planner.plan(goal, tools, signal, referenceContext);
         },
         run: (plan: ValidatedPlan, runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => {
           const assignments = Object.fromEntries(plan.steps.map(step => [step.id, TOOL_INVOCATION_AGENT_ID])) as Record<string, AgentId>;

@@ -199,15 +199,19 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   async function startPlannedWorkflow() {
     if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
     const goal = task.trim();
-    if (!window.confirm("Send this task to your configured AI provider? The planner may use the built-in preview and workspace tools. File access remains limited to directories you explicitly approved, and each read or write requires confirmation. No external tool or system action is permitted.")) return;
+    if (!window.confirm("Send this task and relevant saved profile memories to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.")) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
     controller.current = nextController;
     setBusy(true);
     try {
-      addFeed("Sending the task to the configured model planner…");
-      const planned = await plannedWorkflow.plan(goal, nextController.signal);
+      addFeed("Retrieving relevant saved profile memory…");
+      const memories = await runtime.memoryService.search(goal, "profile", 4);
+      if (!memories.ok) throw new Error("Could not retrieve saved memory for planning: " + memories.error.message);
+      const referenceContext = memories.value.map(item => `[${item.category}; source: ${item.source.label}] ${item.content}`).join("\n\n").slice(0, 12_000);
+      addFeed("Sending the task and approved reference context to the configured model planner…");
+      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
       if (!planned.ok) {
         addFeed("Planning failed: " + planned.error.message, "error");
         return;

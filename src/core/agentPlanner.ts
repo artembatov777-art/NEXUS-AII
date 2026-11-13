@@ -3,15 +3,16 @@ import type { ToolDescriptor } from "./toolRegistry";
 
 export interface AgentPlanStep { id:string; toolId:string; purpose:string; input:unknown; dependsOn:string[]; }
 export interface AgentPlan { goal:string; steps:AgentPlanStep[]; }
-export interface PlannerModel { createPlan(input:{goal:string;tools:ToolDescriptor[];signal:AbortSignal}):Promise<Result<AgentPlan>>; }
+export interface PlannerModel { createPlan(input:{goal:string;tools:ToolDescriptor[];signal:AbortSignal;referenceContext?:string}):Promise<Result<AgentPlan>>; }
 export interface ValidatedPlan { goal:string; steps:AgentPlanStep[]; }
 export class AgentPlanner {
   constructor(private readonly model:PlannerModel,private readonly maxSteps=12) {}
-  async plan(goal:string,tools:ToolDescriptor[],signal:AbortSignal):Promise<Result<ValidatedPlan>> {
+  async plan(goal:string,tools:ToolDescriptor[],signal:AbortSignal,referenceContext?:string):Promise<Result<ValidatedPlan>> {
     if(!goal.trim()||goal.length>4000)return err("validation","Planner goal must contain 1 to 4,000 characters.");
     if(!Number.isInteger(this.maxSteps)||this.maxSteps<1||this.maxSteps>50)return err("validation","Planner step budget is invalid.");
     if(signal.aborted)return err("cancelled","Planning was cancelled.");
-    const response=await this.model.createPlan({goal:goal.trim(),tools:tools.map(t=>({...t,requiredPermissions:[...t.requiredPermissions],tags:[...t.tags]})),signal});
+    if(referenceContext!==undefined&&(typeof referenceContext!=="string"||referenceContext.length>12_000))return err("validation","Planner reference context exceeds 12,000 characters.");
+    const response=await this.model.createPlan({goal:goal.trim(),tools:tools.map(t=>({...t,requiredPermissions:[...t.requiredPermissions],tags:[...t.tags]})),signal,...(referenceContext?.trim()?{referenceContext:referenceContext.trim()}:{})});
     if(!response.ok)return response;
     const plan=response.value;
     if(!plan||plan.goal!==goal.trim()||!Array.isArray(plan.steps)||plan.steps.length>this.maxSteps)return err("validation","Planner returned an invalid plan or exceeded its step budget.");
