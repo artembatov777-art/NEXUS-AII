@@ -70,7 +70,8 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 ## 6. Operational invariants
 
 - Permission service errors fail closed.
-- Tool execution cannot begin until its audit-start event is persisted.\n- If execution succeeds but completion-audit persistence fails, callers receive a non-retryable uncertain-outcome error and must not replay the side effect automatically.
+- Tool execution cannot begin until its audit-start event is persisted.
+- If execution succeeds but completion-audit persistence fails, callers receive a non-retryable uncertain-outcome error and must not replay the side effect automatically.
 - Tool and agent inputs/outputs are size-limited and validated.
 - Cancellation and timeout must stop waiting callers even if a worker does not cooperate; the underlying worker may still need isolation to guarantee termination.
 - Never replay a generator or model request after restart unless its state transition is explicitly serializable and idempotent.
