@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConversations, saveConversations, loadProvider, saveProvider, type StorageAdapter } from "./storage";
 import type { Conversation } from "../types";
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), isTauriMock: vi.fn(() => false) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, isTauri: isTauriMock }));
 
 class MemoryStorage implements StorageAdapter {
   values = new Map<string, string>();
@@ -17,7 +17,7 @@ const base: Conversation = {
 
 beforeEach(() => {
   invokeMock.mockReset();
-  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  isTauriMock.mockReturnValue(false);
 });
 
 describe("conversation workspace storage", () => {
@@ -78,7 +78,7 @@ describe("conversation workspace storage", () => {
     const duplicate = { ...base, title: "Stale browser duplicate", updatedAt: 5 };
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([browser, duplicate]));
     storage.setItem("nexus-au:conversations:v1", JSON.stringify([legacy]));
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    isTauriMock.mockReturnValue(true);
     invokeMock.mockImplementation(async (command: string) => command === "load_conversations" ? [native, nativeDuplicate] : undefined);
 
     const loaded = await loadConversations(storage);

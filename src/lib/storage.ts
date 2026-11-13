@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Conversation, ProviderSettings } from "../types";
 import { DEFAULT_PROVIDER } from "../types";
 
@@ -61,7 +61,7 @@ function readConversationKey(storage: StorageAdapter, key: string): StoredConver
 }
 
 export async function loadConversations(storage: StorageAdapter = localStorage): Promise<Conversation[]> {
-  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+  if (isTauri()) {
     const nativeRaw = await invoke<unknown[]>("load_conversations");
     const nativeItems = Array.isArray(nativeRaw)
       ? nativeRaw.map(normalizeConversation).filter((item): item is Conversation => item !== null)
