@@ -26,7 +26,7 @@ Each experiment records the model ID, method, dataset manifest version, code rev
 
 ## Evaluation
 
-Evaluation suites contain stable case IDs, prompts, and required phrases. The baseline scorer reports per-case results, pass rate, and matched phrase counts. This deterministic scorer is a starting point, not a complete quality benchmark: semantic grading, human review, latency distributions, cost, robustness, and regression comparisons remain future work.
+Evaluation suites contain stable case IDs, prompts, and expected outputs. The live dataset evaluator sends only held-out test-split inputs to the selected provider, keeps expected outputs local, records per-case latency, and reports exact-match and expected-output containment rates. One run is bounded to 1,000 test cases and can be cancelled. The manual phrase scorer remains a deterministic regression signal, not a semantic quality benchmark. Semantic grading, human review, cost, robustness, and regression comparisons remain future work.
 
 ## Deferred
 

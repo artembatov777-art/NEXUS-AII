@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  scoreDatasetEvaluation,
   scoreEvaluation,
   validateDatasetManifest,
   validateTrainingExperiment,
@@ -143,6 +144,24 @@ describe("Training Lab governance", () => {
     expect(result).toMatchObject({ totalCases: 2, passedCases: 1, passRate: 0.5 });
     expect(result.results[0].matchedPhrases).toBe(2);
     expect(cases[0].requiredPhrases).toEqual(["alpha", "beta"]);
+  });
+
+  it("scores only held-out test samples and reports latency and failed cases", () => {
+    const samples = [
+      { id: "train-1", split: "train" as const, input: "training", expectedOutput: "ignored" },
+      { id: "test-1", split: "test" as const, input: "question", expectedOutput: "The answer" },
+      { id: "test-2", split: "test" as const, input: "another", expectedOutput: "missing" }
+    ];
+    const result = scoreDatasetEvaluation(samples, {
+      "test-1": { response: "  The   answer  ", latencyMs: 120 },
+    });
+    expect(result).toMatchObject({
+      totalCases: 2, completedCases: 1, failedCases: 1,
+      exactMatches: 1, exactMatchRate: 0.5,
+      expectedContained: 1, expectedContainedRate: 0.5,
+      averageLatencyMs: 120
+    });
+    expect(result.results.map(item => item.sampleId)).toEqual(["test-1", "test-2"]);
   });
 
   it("returns a zero score for an empty evaluation suite", () => {

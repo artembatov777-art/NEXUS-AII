@@ -67,6 +67,25 @@ export interface EvaluationSummary {
   results: EvaluationCaseResult[];
 }
 
+export interface DatasetEvaluationCaseResult {
+  sampleId: string;
+  exactMatch: boolean;
+  expectedContained: boolean;
+  latencyMs: number | null;
+}
+
+export interface DatasetEvaluationSummary {
+  totalCases: number;
+  completedCases: number;
+  failedCases: number;
+  exactMatches: number;
+  exactMatchRate: number;
+  expectedContained: number;
+  expectedContainedRate: number;
+  averageLatencyMs: number;
+  results: DatasetEvaluationCaseResult[];
+}
+
 const MAX_SPLIT_ITEMS = 100_000;
 const MAX_SOURCE_REFERENCES = 500;
 const MAX_CONFIG_DEPTH = 8;
@@ -153,6 +172,42 @@ export function validateTrainingExperiment(value: unknown): value is TrainingExp
   if (metricEntries.length > 100) return false;
   if (metricEntries.some(([key, metric]) => !boundedText(key, 80) || typeof metric !== "number" || !Number.isFinite(metric))) return false;
   return true;
+}
+
+export function scoreDatasetEvaluation(
+  samples: DatasetSample[],
+  outputs: Record<string, { response: string; latencyMs: number }>
+): DatasetEvaluationSummary {
+  const testSamples = samples.filter(sample => sample.split === "test");
+  const results = testSamples.map(sample => {
+    const output = outputs[sample.id];
+    if (!output || typeof output.response !== "string" || !Number.isFinite(output.latencyMs) || output.latencyMs < 0) {
+      return { sampleId: sample.id, exactMatch: false, expectedContained: false, latencyMs: null };
+    }
+    const normalize = (value: string) => value.trim().replace(/\\s+/g, " ").toLocaleLowerCase();
+    const actual = normalize(output.response);
+    const expected = normalize(sample.expectedOutput);
+    return {
+      sampleId: sample.id,
+      exactMatch: actual === expected,
+      expectedContained: expected.length > 0 && actual.includes(expected),
+      latencyMs: Math.round(output.latencyMs)
+    };
+  });
+  const completed = results.filter(result => result.latencyMs !== null);
+  const exactMatches = results.filter(result => result.exactMatch).length;
+  const expectedContained = results.filter(result => result.expectedContained).length;
+  return {
+    totalCases: results.length,
+    completedCases: completed.length,
+    failedCases: results.length - completed.length,
+    exactMatches,
+    exactMatchRate: results.length === 0 ? 0 : exactMatches / results.length,
+    expectedContained,
+    expectedContainedRate: results.length === 0 ? 0 : expectedContained / results.length,
+    averageLatencyMs: completed.length === 0 ? 0 : Math.round(completed.reduce((total, result) => total + (result.latencyMs ?? 0), 0) / completed.length),
+    results
+  };
 }
 
 export function scoreEvaluation(cases: EvaluationCase[], outputs: Record<string, string>): EvaluationSummary {

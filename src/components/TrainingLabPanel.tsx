@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
-import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
+import { scoreDatasetEvaluation, scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
@@ -118,6 +118,67 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     }
   }
 
+  async function runDatasetEvaluation() {
+    if (!isTauri()) {
+      setError("Dataset model evaluation requires the native desktop app.");
+      return;
+    }
+    if (!provider.model.trim()) {
+      setError("Select and verify a provider model before running dataset evaluation.");
+      return;
+    }
+    const dataset = selectedDatasetRecord;
+    const testSamples = dataset?.samples?.filter(sample => sample.split === "test") ?? [];
+    if (!dataset || testSamples.length === 0) {
+      setError("Select a saved dataset version that contains imported test-split samples.");
+      return;
+    }
+    if (testSamples.length > 1_000) {
+      setError("A single evaluation run is limited to 1,000 test cases. Split the dataset into smaller versions to evaluate it in batches.");
+      return;
+    }
+    liveTestAbort.current?.abort();
+    const controller = new AbortController();
+    liveTestAbort.current = controller;
+    setLiveTestRunning(true);
+    setWorking(true);
+    setError("");
+    setStatus(`Evaluating ${testSamples.length} held-out test samples with ${provider.model}. Expected outputs remain local.`);
+    const outputs: Record<string, { response: string; latencyMs: number }> = {};
+    const failures: string[] = [];
+    try {
+      for (const sample of testSamples) {
+        if (controller.signal.aborted) throw new Error("Dataset evaluation was cancelled.");
+        const startedAt = performance.now();
+        try {
+          const response = await sendMessage(provider, [{
+            id: crypto.randomUUID(),
+            role: "user",
+            content: sample.input,
+            createdAt: Date.now()
+          }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
+          outputs[sample.id] = { response, latencyMs: performance.now() - startedAt };
+        } catch (cause) {
+          if (controller.signal.aborted) throw cause;
+          failures.push(`${sample.id}: ${cause instanceof Error ? cause.message : "Provider request failed"}`);
+        }
+      }
+      const summary = scoreDatasetEvaluation(dataset.samples ?? [], outputs);
+      setModelId(provider.model);
+      setMetrics(JSON.stringify({ datasetId: dataset.id, datasetVersion: dataset.version, modelId: provider.model, ...summary }, null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, evaluationSplit: "test", expectedOutputsSentToProvider: false }, null, 2));
+      setStatus(`Dataset evaluation finished: ${summary.completedCases}/${summary.totalCases} cases completed, ${summary.exactMatches} exact matches, ${summary.expectedContained} expected outputs contained. Average latency: ${summary.averageLatencyMs} ms.`);
+      setError(failures.length ? failures.join(" | ") : "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Dataset evaluation failed.");
+      setStatus("");
+    } finally {
+      if (liveTestAbort.current === controller) liveTestAbort.current = null;
+      setLiveTestRunning(false);
+      setWorking(false);
+    }
+  }
+
   async function runModelComparison() {
     if (!isTauri()) {
       setError("Live model comparison is available only in the native desktop app.");
@@ -174,6 +235,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     if (!file || working) return;
     setWorking(true); setError(""); setStatus("Validating explicitly selected dataset samples…");
     try {
+      if (file.size > 1_000_000) throw new Error("Dataset file exceeds the 1 MB import limit.");
       const samples = parseTrainingDatasetFile(await file.text());
       setImportedSamples(samples);
       setTrainIds(samples.filter(sample => sample.split === "train").map(sample => sample.id).join("\\n"));
@@ -275,7 +337,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
       <div className="training-notice">
-        {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider; use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage and disables live inference. In the desktop app, running a test or model comparison sends the evaluation prompt to the configured provider; use only data you are comfortable sending."}
+        {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider. Dataset evaluation sends only held-out test inputs; expected outputs stay local for scoring. Use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage and disables live inference. In the desktop app, running a test, comparison, or dataset evaluation sends evaluation inputs to the configured provider; expected outputs stay local for scoring. Use only data you are comfortable sending."}
         <br/>Private conversations, memories, and raw sample text are not imported automatically.
       </div>
       {error && <div className="error-banner">{error}</div>}
@@ -309,6 +371,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <label>Required phrases<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
         <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="A live model response appears here, or paste one manually"/></label>
         <div className="training-two-col"><button className="primary-btn" onClick={() => void runLiveModelTest()} disabled={working || !isTauri()}>Run live model test</button><button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button></div>
+        <button className="secondary-btn" onClick={() => void runDatasetEvaluation()} disabled={working || !isTauri() || !selectedDatasetRecord?.samples?.some(sample => sample.split === "test")}>Evaluate saved dataset test split ({selectedDatasetRecord?.samples?.filter(sample => sample.split === "test").length ?? 0})</button>
         <label>Model comparison IDs<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
         <small id="training-model-hint">{availableModels.length ? `Discovered models: ${availableModels.length}. Enter 2 to 4 IDs from the provider catalog.` : "Load the provider model catalog in Settings, then enter 2 to 4 model IDs."}</small>
         <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>Compare selected models</button>
