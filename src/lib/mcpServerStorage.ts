@@ -17,7 +17,8 @@ export function validateMcpServerConfig(value: unknown): value is McpServerConfi
   try {
     const url = new URL(item.endpoint);
     const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    const loopbackIpv4 = host === "127.0.0.1";
+    const ipv4 = host.split(".");
+    const loopbackIpv4 = ipv4.length === 4 && ipv4.every(part => /^\\d{1,3}$/.test(part) && Number(part) <= 255) && Number(ipv4[0]) === 127;
     const loopback = host === "localhost" || host === "::1" || loopbackIpv4;
     return (url.protocol === "https:" || (url.protocol === "http:" && loopback)) &&
       !url.username && !url.password && !url.search && !url.hash;

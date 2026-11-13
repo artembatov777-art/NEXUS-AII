@@ -14,7 +14,10 @@ describe("MCP server configuration storage", () => {
     expect(validateMcpServerConfig(server)).toBe(true);
     expect(validateMcpServerConfig({ ...server, endpoint: "https://mcp.example.com/api" })).toBe(true);
     expect(validateMcpServerConfig({ ...server, endpoint: "http://mcp.example.com/api" })).toBe(false);
-    expect(validateMcpServerConfig({ ...server, endpoint: "http://127.0.0.2:3000/api" })).toBe(false);
+    expect(validateMcpServerConfig({ ...server, endpoint: "http://127.0.0.2:3000/api" })).toBe(true);
+    expect(validateMcpServerConfig({ ...server, endpoint: "http://127.255.255.254:3000/api" })).toBe(true);
+    expect(validateMcpServerConfig({ ...server, endpoint: "http://128.0.0.1:3000/api" })).toBe(false);
+    expect(validateMcpServerConfig({ ...server, endpoint: "http://127.999.0.1:3000/api" })).toBe(false);
     expect(validateMcpServerConfig({ ...server, endpoint: "https://user:pass@mcp.example.com/api" })).toBe(false);
     expect(validateMcpServerConfig({ ...server, endpoint: "https://mcp.example.com/api?token=x" })).toBe(false);
   });
