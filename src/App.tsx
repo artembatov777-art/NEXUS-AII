@@ -496,7 +496,12 @@ export default function App() {
       if (!backup || typeof backup !== "object" || (backup as { format?: unknown }).format !== "nexus-au-backup") {
         throw new Error("This file is not a NEXUS AU workspace backup.");
       }
-      if (!window.confirm("Importing a backup replaces projects, conversations, memories, knowledge, agent checkpoints, Training Lab records, and audit/trace history. Provider API keys are never included. Export the current workspace first if you need to keep it. Continue?")) return;
+      const backupVersion = (backup as { schemaVersion?: unknown }).schemaVersion;
+      const importWarning = "Importing a backup replaces projects, conversations, memories, knowledge, agent checkpoints, Training Lab records, and audit/trace history. Provider API keys and approved Windows folder permissions are never included. Export the current workspace first if you need to keep it. Continue?";
+      const legacyWarning = backupVersion === 1
+        ? "\\n\\nThis is a legacy version 1 backup. It does not contain agent checkpoints, Training Lab records, or audit/trace history, so those records will be cleared."
+        : "";
+      if (!window.confirm(importWarning + legacyWarning)) return;
       await invoke("import_workspace", { backup });
       // Database restore is authoritative. Vector maintenance is recoverable and
       // must not make a successful transactional restore appear to have failed.

@@ -85,7 +85,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Integrate UI, AI Core, memory, agents, tools, and filesystem through stable application contracts.
 - [ ] Complete permission enforcement and approval policy across all modules.
 - [ ] Complete credential-vault, secret-redaction, and data-routing reviews.
-- [ ] Add backup/restore coverage for all persisted workspace data.
+- [x] Add versioned backup/restore coverage for projects, conversations, memories, knowledge, agent checkpoints, Training Lab datasets/experiments, and sanitized audit/trace history. Provider keys and approved folder permissions are excluded; v1 backups remain importable with an explicit warning.
 - [ ] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries.
 - [ ] Complete error handling, cancellation, observability, and recovery paths.
 - [ ] Run a focused threat-model review against the integrated product.
