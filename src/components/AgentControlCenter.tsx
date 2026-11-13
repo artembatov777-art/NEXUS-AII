@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, S
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
+import type { ToolAuditEvent } from "../core/tools";
 import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
@@ -75,6 +76,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
   const [task, setTask] = useState("");
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
+  const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -95,9 +97,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
-    const result = await runtime.checkpointService.listByThread(THREAD_ID, 50);
+    const [result, audit] = await Promise.all([
+      runtime.checkpointService.listByThread(THREAD_ID, 50),
+      runtime.auditSink.list({ limit: 30 })
+    ]);
     if (result.ok) setCheckpoints(result.value);
     else addFeed(result.error.message, "error");
+    if (audit.ok) setAuditEvents(audit.value);
+    else addFeed(audit.error.message, "error");
   }, [runtime, addFeed]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -343,6 +350,16 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey }
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>View saved result</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
                 {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>Continue checkpoint</button>}
               </div>)}</div>}
+          </article>
+
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">TOOL GATEWAY</span><h3>Recent tool audit</h3></div><span className="agent-count">{auditEvents.length}</span></div>
+            {auditEvents.length === 0 ? <div className="agent-empty">No tool executions have been recorded.</div> :
+              <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
+                <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
+                <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
+              </div>)}</div>}
+            <div className="agent-disclaimer">Audit entries show tool identity and execution state. Raw tool inputs and provider credentials are not displayed here.</div>
           </article>
         </aside>
       </div>
