@@ -234,7 +234,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
       <div className="training-notice">
-        {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider; use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage. Native SQLite persistence is available in the desktop app."}
+        {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider; use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage and disables live inference. In the desktop app, running a test or model comparison sends the evaluation prompt to the configured provider; use only data you are comfortable sending."}
         <br/>Private conversations, memories, and raw sample text are not imported automatically.
       </div>
       {error && <div className="error-banner">{error}</div>}
