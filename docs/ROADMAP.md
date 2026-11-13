@@ -42,7 +42,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Prepare the Ollama adapter as a separate local inference path.
 - [ ] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
 - [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for existing OmniRoute installations and `ollama` for Ollama API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
-- [ ] Add reliable timeout, retry, and request cleanup behavior.
+- [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior; confirm final native CI on the latest commit.
 
 **Exit criteria:** a selected cloud model works through OmniRoute; the local adapter works when a local runtime is available; model identity, route, errors, usage, streaming, and cancellation are observable and tested.
 
@@ -60,11 +60,11 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Phase IV — Agents & Tools
 
-- [ ] Complete the agent runtime and model-driven planning through AI Core.
-- [ ] Finish approval, pause/resume, cancellation, and durable checkpoints.
-- [ ] Complete the Tool Gateway and MCP server/tool management UI.
+- [x] Implement the bounded agent runtime and model-driven planning through AI Core; full phase acceptance still requires integration and native smoke tests.
+- [x] Implement approval, pause/resume, cancellation, and durable SQLite checkpoints; operation-level idempotency remains open.
+- [x] Implement the Tool Gateway, MCP server configuration, session-aware HTTP transport, tool discovery/import, and per-call approval with input preview; broader OAuth/authentication and adversarial integration tests remain open.
 - [ ] Add operation-level idempotency and recovery for external side effects.
-- [ ] Make tool scopes, approvals, execution traces, and failures visible.
+- [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
 - [ ] Add integration tests for safe and denied tool execution.
 
 **Exit criteria:** an agent can plan, request scoped tools, wait for owner approval, resume, and complete with a verifiable audit trail.

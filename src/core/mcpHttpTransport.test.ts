@@ -7,7 +7,7 @@ describe("McpHttpTransport", () => {
       { status: 200, headers: { "content-type": "application/json" } }));
     const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
     const result = await transport.request({ jsonrpc: "2.0", id: 1, method: "initialize" }, new AbortController().signal);
-    expect(result.result).toEqual({ ok: true });
+    expect(result.result).toEqual({ ok: true, protocolVersion: "2024-11-05" });
     expect(fetcher).toHaveBeenCalledWith("https://mcp.example/tools", expect.objectContaining({ credentials: "omit", redirect: "error" }));
   });
 

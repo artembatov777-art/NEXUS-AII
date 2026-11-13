@@ -1,6 +1,6 @@
 # NEXUS AU security review
 
-**Review date:** 2026-11-09  
+**Review date:** 2026-11-13  
 **Scope:** source-level review of the native Tauri host, React webview, provider transport, MCP transport, agent execution, SQLite persistence, backup/restore, and browser preview. This is an engineering review, not an independent penetration test or formal security certification.
 
 ## Trust boundaries
@@ -15,25 +15,25 @@
 
 ### Credentials and provider requests
 
-- The only supported credential handle is default; the webview never receives the stored secret.
+- The supported credential handles are `default` (backward-compatible OmniRoute profile) and `ollama` (separate Ollama API-key profile); the no-key profile is restricted to loopback endpoints. The webview never receives a previously stored secret.
 - Provider keys are written to the OS credential vault, not SQLite, localStorage, workspace backups, or agent checkpoints.
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
 - Provider keys are redacted from provider error excerpts.
-- A single credential profile is supported; multi-account key rotation and recovery UX are not implemented.
+- Two fixed credential profiles are supported. Arbitrary multi-account profiles, automated key rotation, and recovery UX are not implemented.
 
 ### Agent and tool execution
 
 - The runtime defaults to deny when no host permission policy is configured.
 - Agent permissions and tool permissions are checked separately.
 - The Tool Gateway validates tool inputs, applies timeouts/cancellation, bounds output, and records audit events.
-- The built-in AI-planned workflow requires an explicit UI confirmation and currently exposes only the local, non-destructive preview tool. External tools remain denied by the Agent Control Center policy.
+- The model-planned workflow is restricted to the approved workspace tool set and discovered MCP tools. Workspace reads/writes remain scoped to owner-approved roots. Every MCP tool call is high-risk and requires a separate native confirmation that displays the server/tool identity and a bounded input preview; external servers may process that input. Shell execution and arbitrary host APIs remain unavailable.
 - Coordinator plans, delegated JSON outputs, step counts, dependencies, and serialized payload sizes are bounded.
 - Approval grants are one-time and in-memory; they must be re-issued after restart.
 
 ### MCP
 
-- HTTP transport omits ambient credentials, rejects redirects and dangerous header overrides, and bounds response streaming to 2 MB.
+- HTTP transport omits ambient credentials, rejects redirects and dangerous header overrides, supports MCP session/protocol headers and best-effort session deletion, and bounds response streaming to 2 MB.
 - SSE parsing is correlated to the request ID and limits event size/count.
 - Server protocol version and capabilities are checked; initialization notification, paginated discovery, health checks, disconnect cleanup, and reconnect with a fresh transport are implemented.
 - Remote tool schemas use a bounded JSON-Schema subset. Unsupported keywords, unsafe object keys, malformed metadata, duplicate tool names, and oversized results are rejected.
@@ -68,15 +68,15 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 ## Known limitations and residual risk
 
-- The native provider command returns a complete response rather than streaming tokens. The webview cannot abort the underlying reqwest request after it has started; the native client has a 120-second timeout.
+- The native provider path supports bounded SSE streaming and cancellation. A provider may still ignore cancellation after a request has reached its own infrastructure; the native host enforces request and stream bounds.
 - The configured provider and MCP endpoints are user-controlled. HTTPS is required for non-loopback provider requests, but there is no host allowlist.
 - SQLite, browser stores, checkpoints, and backup files rely on OS-level account/disk protection rather than app-level encryption.
 - The semantic vector index is stored in IndexedDB. It is reconciled against SQLite knowledge records on startup/restore and rebuilt in bounded batches, but embeddings are not stored in native SQLite.
 - Browser preview intentionally uses localStorage and is not a secure multi-user environment.
 - Voice services depend on the OS/browser WebView and may send audio to a platform speech service; NEXUS AU does not provide a native offline speech engine.
-- Desktop automation, arbitrary filesystem access, shell execution, and notification workflows are not implemented. No such capability is silently granted.
+- Unrestricted desktop automation, filesystem access outside owner-approved roots, general shell execution, and notification workflows are not implemented. The File System module supports bounded read/write/create/search/rename/move operations only within explicitly approved roots.
 - The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session.
-- The frontend Quality workflow now includes `npm audit --audit-level=high`; the current scan result must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
+- The frontend Quality workflow includes `npm audit --audit-level=high`; each latest run must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
 
 ## Release checklist
 
@@ -91,4 +91,4 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 - Provider settings default to a remote route. The selected location is explicitly owner-declared and is not inferred from the OmniRoute gateway hostname.
 - A loopback OmniRoute endpoint may still forward requests to a cloud provider. NEXUS cannot currently verify the gateway's downstream route or enforce local execution from the model ID alone.
-- The UI marks a local declaration as unverified and warns the owner to verify OmniRoute routing before sending private context. Direct local model runtime integration remains incomplete.
+- The UI marks a local declaration as unverified and warns the owner to verify OmniRoute routing before sending private context. Ollama can be used through its OpenAI-compatible loopback `/v1` endpoint when the Ollama service is installed and running. NEXUS does not install Ollama, download model weights, or manage its model lifecycle.

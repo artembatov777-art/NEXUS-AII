@@ -48,7 +48,7 @@ Use a disposable test key. Never use a personal production credential for this c
 6. Cancel a running task and verify it reaches a terminal cancelled state.
 7. Inspect the audit view/storage and confirm no provider key or raw secret appears.
 
-## 4. Backup and restore
+## 4. MCP lifecycle\n\n1. Configure an unauthenticated test MCP server over HTTPS or loopback HTTP.\n2. Save and connect it from Tools & MCP. Confirm initialize, protocol negotiation, session headers, and tools/list discovery.\n3. Open Agent Control Center and confirm discovered tools are imported only into the approved agent tool scope.\n4. Execute a harmless read-only test tool. Confirm the per-call approval shows the tool name and input preview.\n5. Reject a second call and confirm the remote tool is not invoked.\n6. Disconnect or remove the server. Confirm its imported tools are unregistered and the session is closed where supported.\n7. Restart NEXUS and confirm the saved endpoint reconnects without storing any authentication secret in localStorage.\n\n## 5. Backup and restore
 
 1. Export a workspace backup containing a test conversation, project, memory, and knowledge document.
 2. Confirm provider credentials are not present in the exported JSON.
@@ -59,7 +59,7 @@ Use a disposable test key. Never use a personal production credential for this c
 
 Treat exported JSON backups as sensitive plaintext files.
 
-## 5. Voice and permissions
+## 6. Voice and permissions
 
 1. Test microphone permission granted and denied.
 2. Test speech recognition unsupported/unavailable.
@@ -67,14 +67,14 @@ Treat exported JSON backups as sensitive plaintext files.
 4. Confirm listeners and speech activity are cleaned up and the UI returns to a stable state.
 5. Verify speech service privacy and network behavior for the target WebView/OS. Do not assume offline speech.
 
-## 6. Results
+## 7. Results
 
 For each OS, record:
 - [ ] Native app launches.
 - [ ] SQLite workspace survives restart.
 - [ ] Credential save/restart/use/delete succeeds.
 - [ ] Keyring-unavailable state fails closed.
-- [ ] Agent confirmation and local-tool allowlist are enforced.
+- [ ] Agent confirmation, workspace allowlist, and per-call MCP approval are enforced.
 - [ ] Cancellation and audit checks succeed.
 - [ ] Backup export/import and malformed-backup recovery succeed.
 - [ ] Voice permission/error/cleanup checks succeed.
