@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
-import { scoreDatasetEvaluation, scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
+import { extractNumericExperimentMetrics, scoreDatasetEvaluation, scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
@@ -305,7 +305,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setWorking(true); setError(""); setStatus("");
     try {
       const parsedConfiguration = JSON.parse(configuration) as Record<string, unknown>;
-      const parsedMetrics = JSON.parse(metrics) as Record<string, number>;
+      const parsedMetrics = extractNumericExperimentMetrics(JSON.parse(metrics));
       if (!selectedDataset) throw new Error("Save a dataset manifest before recording an experiment.");
       const [datasetManifestId, datasetManifestVersion] = JSON.parse(selectedDataset) as [string, number];
       const experiment: TrainingExperiment = {

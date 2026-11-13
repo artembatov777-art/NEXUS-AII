@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractNumericExperimentMetrics,
   scoreDatasetEvaluation,
   scoreEvaluation,
   validateDatasetManifest,
@@ -167,4 +168,20 @@ describe("Training Lab governance", () => {
   it("returns a zero score for an empty evaluation suite", () => {
     expect(scoreEvaluation([], {})).toMatchObject({ totalCases: 0, passedCases: 0, passRate: 0 });
   });
+
+  it("extracts only finite numeric summary metrics for experiment metadata", () => {
+    expect(extractNumericExperimentMetrics({
+      passRate: 0.75, completedCases: 3, modelId: "model-a",
+      results: [{ sampleId: "private-case", output: "not persisted" }],
+      invalid: Number.NaN
+    })).toEqual({ passRate: 0.75, completedCases: 3 });
+  });
+
+  it("rejects experiment metadata without numeric evaluation metrics", () => {
+    expect(() => extractNumericExperimentMetrics({ modelId: "model-a", results: [] }))
+      .toThrow("Run an evaluation that produces numeric metrics before saving an experiment.");
+    expect(() => extractNumericExperimentMetrics({ score: Number.POSITIVE_INFINITY }))
+      .toThrow("Run an evaluation that produces numeric metrics before saving an experiment.");
+  });
+
 });

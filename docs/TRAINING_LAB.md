@@ -37,3 +37,6 @@ Evaluation suites contain stable case IDs, prompts, and expected outputs. The li
 - Artifact registry and checkpoint recovery.
 - Hardware scheduling and checkpoint recovery.
 - Automatic ingestion of personal data (not planned).
+
+
+Experiment persistence stores only finite numeric summary metrics. Human-readable reports, per-case details, raw model outputs, and prompts are not copied into experiment metadata. When a report contains mixed descriptive and numeric fields, only its numeric top-level summary values are eligible for the experiment record.

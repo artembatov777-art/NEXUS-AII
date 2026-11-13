@@ -232,6 +232,27 @@ export function scoreEvaluation(cases: EvaluationCase[], outputs: Record<string,
 }
 
 
+
+/**
+ * Experiment records intentionally store only finite numeric metrics.
+ * Evaluation detail, raw responses, prompts, and per-case payloads stay in
+ * the visible report rather than being copied into durable experiment metadata.
+ */
+export function extractNumericExperimentMetrics(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Experiment metrics must be a JSON object.");
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, metric]) => typeof metric === "number" && Number.isFinite(metric));
+  if (entries.length === 0) {
+    throw new Error("Run an evaluation that produces numeric metrics before saving an experiment.");
+  }
+  if (entries.length > 100 || entries.some(([key]) => !boundedText(key, 80))) {
+    throw new Error("Experiment metrics exceed the supported metadata limits.");
+  }
+  return Object.fromEntries(entries) as Record<string, number>;
+}
+
 export interface TrainingLabRepository {
   listDatasets(): Promise<Result<DatasetManifest[]>>;
   saveDataset(manifest: DatasetManifest): Promise<Result<void>>;
