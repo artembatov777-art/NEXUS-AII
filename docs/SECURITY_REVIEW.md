@@ -15,7 +15,7 @@
 
 ### Credentials and provider requests
 
-- The supported credential handles are `default` (backward-compatible OmniRoute profile) and `ollama` (separate Ollama API-key profile); the no-key profile is restricted to loopback endpoints. The webview never receives a previously stored secret.
+- The supported credential handles are `default` (backward-compatible OmniRoute profile) and `ollama` (separate Ollama API-key profile); the no-key profile is reported as `not_required` and is restricted to loopback endpoints. The webview never receives a previously stored secret.
 - Provider keys are written to the OS credential vault, not SQLite, localStorage, workspace backups, or agent checkpoints.
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
@@ -27,13 +27,13 @@
 - The runtime defaults to deny when no host permission policy is configured.
 - Agent permissions and tool permissions are checked separately.
 - The Tool Gateway validates tool inputs, applies timeouts/cancellation, bounds output, and records audit events.
-- The model-planned workflow receives relevant profile memory and selected project knowledge as a separate, bounded reference field explicitly marked untrusted by the planner system prompt. The workflow is restricted to the approved workspace tool set and discovered MCP tools. Workspace reads/writes remain scoped to owner-approved roots. Every MCP tool call is high-risk and requires a separate native confirmation that displays the server/tool identity and a bounded input preview; external servers may process that input. The gateway also checks durable audit history and blocks replay of a previously started or terminal run/step rather than risking duplicate external side effects. Shell execution and arbitrary host APIs remain unavailable.
+- Workspace write approvals include a bounded JSON-escaped preview of the content to be written, with an explicit truncation marker for long content.\n- The model-planned workflow receives relevant profile memory and selected project knowledge as a separate, bounded reference field explicitly marked untrusted by the planner system prompt. The workflow is restricted to the approved workspace tool set and discovered MCP tools. Workspace reads/writes remain scoped to owner-approved roots. Every MCP tool call is high-risk and requires a separate native confirmation that displays the server/tool identity and a bounded input preview; external servers may process that input. The gateway also checks durable audit history and blocks replay of a previously started or terminal run/step rather than risking duplicate external side effects. Shell execution and arbitrary host APIs remain unavailable.
 - Coordinator plans, delegated JSON outputs, step counts, dependencies, and serialized payload sizes are bounded.
 - Approval grants are one-time and in-memory; they must be re-issued after restart.
 
 ### MCP
 
-- HTTP transport omits ambient credentials, rejects redirects and dangerous header overrides, supports MCP session/protocol headers and best-effort session deletion, and bounds response streaming to 2 MB.
+- HTTP transport omits ambient credentials, rejects redirects and dangerous header overrides, supports MCP session/protocol headers and best-effort session deletion, bounds response streaming to 2 MB, and applies a caller-cancellable 30-second default request timeout.
 - SSE parsing is correlated to the request ID and limits event size/count.
 - Server protocol version and capabilities are checked; initialization notification, paginated discovery, health checks, disconnect cleanup, and reconnect with a fresh transport are implemented.
 - Remote tool schemas use a bounded JSON-Schema subset. Unsupported keywords, unsafe object keys, malformed metadata, duplicate tool names, and oversized results are rejected.
@@ -73,7 +73,7 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 - SQLite, browser stores, checkpoints, and backup files rely on OS-level account/disk protection rather than app-level encryption.
 - The semantic vector index is stored in IndexedDB. It is reconciled against SQLite knowledge records on startup/restore and rebuilt in bounded batches, but embeddings are not stored in native SQLite.
 - Browser preview intentionally uses localStorage and is not a secure multi-user environment.
-- Voice services depend on the OS/browser WebView and may send audio to a platform speech service; NEXUS AU does not provide a native offline speech engine.
+- Voice capture, speech recognition, and voice output are out of scope for this release; no microphone permission is requested.
 - Unrestricted desktop automation, filesystem access outside owner-approved roots, general shell execution, and notification workflows are not implemented. The File System module supports bounded read/write/create/search/rename/move operations only within explicitly approved roots.
 - The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session.
 - The frontend Quality workflow includes `npm audit --audit-level=high`; each latest run must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
