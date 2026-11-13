@@ -46,7 +46,7 @@ function validRenameInput(input: unknown): Result<RenameInput> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A file path and new name are required.");
   const record = input as Record<string, unknown>;
   if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
-      typeof record.newName !== "string" || !record.newName.trim() || new TextEncoder().encode(record.newName).byteLength > 255 ||
+      typeof record.newName !== "string" || !record.newName.trim() || new TextEncoder().encode(record.newName).byteLength > 255 || record.path.length + record.newName.length + 4 > MAX_PATH_LENGTH ||
       record.newName === "." || record.newName === ".." || /[\\/:*?"<>|]/.test(record.newName) ||
       /[\u0000-\u001f\u007f]/.test(record.newName) || /[. ]$/.test(record.newName)) {
     return err("validation", "File path or new name is invalid.");
@@ -212,7 +212,7 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
       risk: "high",
       timeoutMs: 15_000,
       validateInput: validRenameInput,
-      resourceForInput: input => input.path,
+      resourceForInput: input => `${input.path} -> ${input.newName}`,
       execute: async ({ path, newName }) => {
         if (!nativeCheck.ok) return nativeCheck;
         try {

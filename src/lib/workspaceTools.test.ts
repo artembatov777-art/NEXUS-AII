@@ -108,6 +108,7 @@ describe("workspace agent tools", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(1, "rename_workspace_entry", { path: "C:\\approved\\draft.txt", newName: "final.txt" });
     expect(invokeMock).toHaveBeenNthCalledWith(2, "move_workspace_entry", { path: "C:\\approved\\final.txt", destinationDirectory: "C:\\approved\\Archive" });
     expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ scope: "filesystem:write:selected", risk: "high" }));
+    expect(permissions.authorize).toHaveBeenCalledWith(expect.objectContaining({ resource: "C:\\approved\\draft.txt -> final.txt" }));
   });
 
   it("rejects invalid rename names and oversized move permission resources", async () => {
