@@ -219,7 +219,7 @@ describe("FileSystemPanel native workspace access", () => {
     const secondButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("other.txt"));
     await act(async () => { secondButton!.click(); });
     expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
-    expect(invokeMock).toHaveBeenCalledTimes(3);
+    expect(invokeMock).toHaveBeenCalledTimes(4);
     vi.unstubAllGlobals();
   });
 
