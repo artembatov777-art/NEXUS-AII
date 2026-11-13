@@ -56,6 +56,7 @@ export interface ToolAuditEvent {
 
 export interface ToolAuditSink {
   record(event: ToolAuditEvent): Promise<Result<void>>;
+  list?(options?: { runId?: string; limit?: number }): Promise<Result<ToolAuditEvent[]>>;
 }
 
 export interface ToolClock {
@@ -130,6 +131,15 @@ export class ToolGateway {
 
     const validated = tool.validateInput(input);
     if (!validated.ok) return validated;
+
+    // A durable "started" or terminal record means this exact run/step may already
+    // have crossed an external side-effect boundary. Never replay it blindly.
+    if (this.audit.list) {
+      const history = await this.audit.list({ runId: context.runId, limit: 500 });
+      if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
+      const prior = history.value.find(event => event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
+      if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
+    }
 
     let resource: string;
     try { resource = tool.resourceForInput ? tool.resourceForInput(validated.value) : tool.id; }

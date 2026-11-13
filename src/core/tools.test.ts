@@ -35,6 +35,26 @@ describe("ToolGateway", () => {
     expect(gateway.register(mcpTool).ok).toBe(true);
   });
 
+  it("blocks replay when a durable audit record already exists for the same run and step", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const prior = { toolId: "sample", runId: "run-1", traceId: "trace-1", status: "started" as const, timestamp: 100 };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([prior])) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "tool_failed", message: expect.stringContaining("will not be replayed automatically") } });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when durable audit history cannot be checked", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(err("storage_failed", "offline")) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
+    expect(execute).not.toHaveBeenCalled();
+  });
   it("registers tools and exposes metadata only", () => {
     const { gateway } = setup();
     expect(gateway.register(definition()).ok).toBe(true);
