@@ -51,7 +51,7 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
     'walk: while let Some((directory, depth)) = pending.pop() {
         let iterator = match fs::read_dir(&directory) {
             Ok(value) => value,
-            Err(_) => continue,
+            Err(_) => { truncated = true; continue; },
         };
         let mut entries: Vec<_> = iterator.filter_map(std::result::Result::ok).collect();
         entries.sort_by_key(|entry| entry.file_name());
@@ -75,8 +75,12 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
             };
 
             if metadata.is_dir() {
-                if depth < MAX_SEARCH_DEPTH && !excluded_directory(&name) {
-                    pending.push((canonical, depth + 1));
+                if !excluded_directory(&name) {
+                    if depth < MAX_SEARCH_DEPTH {
+                        pending.push((canonical, depth + 1));
+                    } else {
+                        truncated = true;
+                    }
                 }
                 continue;
             }
@@ -113,8 +117,9 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
                             preview,
                         });
                     } else {
+                        // Keep counting within the bounded file/size/depth budget so
+                        // total_matches remains exact for the scanned search scope.
                         truncated = true;
-                        break 'walk;
                     }
                 }
             }
@@ -169,6 +174,19 @@ mod tests {
         let result = search_contents_in(&root, &root, "needle").expect("search");
         assert_eq!(result.total_matches, 1);
         assert!(result.matches[0].path.ends_with("visible.txt"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+
+    #[test]
+    fn counts_all_matches_while_retaining_only_the_first_hundred() {
+        let root = temporary_root("result-limit");
+        let content = (0..125).map(|index| format!("needle {index}")).collect::<Vec<_>>().join("\n");
+        fs::write(root.join("many.txt"), content).expect("write file");
+        let result = search_contents_in(&root, &root, "needle").expect("search");
+        assert_eq!(result.total_matches, 125);
+        assert_eq!(result.matches.len(), MAX_SEARCH_RESULTS);
+        assert!(result.truncated);
         fs::remove_dir_all(root).expect("cleanup");
     }
 
