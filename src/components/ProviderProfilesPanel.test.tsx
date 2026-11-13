@@ -20,8 +20,10 @@ const cloudSettings: ProviderSettings = {
 };
 
 function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
-  act(() => { setter?.call(element, value); element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true })); });
+  act(() => {
+    element.value = value;
+    element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+  });
 }
 
 beforeEach(() => {
