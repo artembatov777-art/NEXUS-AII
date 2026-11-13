@@ -50,7 +50,9 @@ export class ModelRouter {
   }
 
   register(provider: ModelProvider): Result<void> {
-    if (!provider.id.trim()) return err("validation", "Provider ID cannot be empty.");
+    if (!provider.id.trim() || provider.id.length > 128 || /[\\u0000-\\u001f\\u007f]/.test(provider.id)) {
+      return err("validation", "Provider ID must be a non-empty string of at most 128 characters without control characters.");
+    }
     if (this.providers.has(provider.id)) {
       return err("validation", `Provider "${provider.id}" is already registered.`);
     }
@@ -60,6 +62,7 @@ export class ModelRouter {
 
   unregister(providerId: string): void {
     this.providers.delete(providerId);
+    this.catalogFailures = this.catalogFailures.filter(failure => failure.providerId !== providerId);
   }
 
   getProvider(providerId: string): Result<ModelProvider> {

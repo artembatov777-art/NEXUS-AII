@@ -65,6 +65,31 @@ describe("ModelRouter", () => {
     expect(router.getProviderFailures()).toMatchObject([{ providerId: "offline", message: "Gateway offline" }]);
   });
 
+
+  it("clears a provider's catalog failure when that provider is unregistered", async () => {
+    class OfflineProvider implements ModelProvider {
+      readonly id = "offline";
+      async listModels() { return { ok: false as const, error: { code: "provider_unavailable" as const, message: "Offline", retryable: true } }; }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
+    }
+    const router = new ModelRouter();
+    router.register(new FakeProvider());
+    router.register(new OfflineProvider());
+    await router.listModels();
+    expect(router.getProviderFailures()).toHaveLength(1);
+    router.unregister("offline");
+    expect(router.getProviderFailures()).toEqual([]);
+  });
+
+  it("rejects provider IDs with control characters or excessive length", () => {
+    const router = new ModelRouter();
+    class InvalidProvider extends FakeProvider {
+      constructor(readonly id: string) { super(); }
+    }
+    expect(router.register(new InvalidProvider("bad\\nprovider")).ok).toBe(false);
+    expect(router.register(new InvalidProvider("x".repeat(129))).ok).toBe(false);
+  });
+
   it("rejects duplicate provider IDs", () => {
     const router = new ModelRouter();
     router.register(new FakeProvider());
