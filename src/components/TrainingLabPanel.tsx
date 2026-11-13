@@ -4,7 +4,7 @@ import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, t
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
-import { runModelComparison } from "../lib/modelComparison";
+import { runModelComparison as executeModelComparison } from "../lib/modelComparison";
 import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
@@ -138,7 +138,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setError("");
     setStatus("Sending the same evaluation prompt to each selected model...");
     try {
-      const results = await runModelComparison(models, async model => {
+      const results = await executeModelComparison(models, async model => {
         const startedAt = performance.now();
         const response = await sendMessage({ ...provider, model }, [{
           id: crypto.randomUUID(),
