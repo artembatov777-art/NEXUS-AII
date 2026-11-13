@@ -289,7 +289,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
 
   async function moveSelected() {
     if (!selectedPath || !moveDestination.trim() || !confirmDiscardDraft("move this file")) return;
-    if (!window.confirm(`Move this file to the selected folder?\\n\\n${moveDestination.trim()}`)) return;
+    if (!window.confirm(`Move this file to the selected folder?\n\n${moveDestination.trim()}`)) return;
     setBusy(true);
     setError("");
     try {
