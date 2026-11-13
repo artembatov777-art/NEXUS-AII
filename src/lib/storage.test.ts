@@ -69,6 +69,37 @@ describe("conversation workspace storage", () => {
     saveProvider(settings, storage);
     expect(loadProvider(storage)).toEqual(settings);
   });
+  it("preserves the explicit default credential profile", () => {
+    const storage = new MemoryStorage();
+    const settings = {
+      baseUrl: "https://api.example/v1",
+      model: "model-a",
+      inferenceLocation: "remote" as const,
+      credentialHandle: "default" as const
+    };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
+  it("rejects oversized or control-character provider settings", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("nexus-au:provider:v1", JSON.stringify({
+      baseUrl: "https://api.example/v1",
+      model: "invalid\\nmodel",
+      inferenceLocation: "remote"
+    }));
+    expect(loadProvider(storage)).toEqual({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "",
+      inferenceLocation: "local",
+      credentialHandle: "none"
+    });
+    storage.setItem("nexus-au:provider:v1", JSON.stringify({
+      baseUrl: "https://api.example/v1",
+      model: "x".repeat(129),
+      inferenceLocation: "remote"
+    }));
+    expect(loadProvider(storage).baseUrl).toBe("http://127.0.0.1:11434/v1");
+  });
   it("round-trips project ownership", async () => {
     const storage = new MemoryStorage();
     await saveConversations([base], storage);

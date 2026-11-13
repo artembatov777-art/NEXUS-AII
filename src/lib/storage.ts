@@ -120,12 +120,28 @@ export async function saveConversations(items: Conversation[], storage: StorageA
 export function loadProvider(storage: StorageAdapter = localStorage): ProviderSettings {
   try {
     const value = JSON.parse(storage.getItem(PROVIDER_KEY) ?? "null") as Partial<ProviderSettings> | null;
-    return typeof value?.baseUrl === "string" && value.baseUrl.trim().length > 0 && typeof value.model === "string" ? {
-      baseUrl: value.baseUrl,
-      model: value.model,
+    if (
+      typeof value?.baseUrl !== "string" ||
+      value.baseUrl.trim().length === 0 ||
+      value.baseUrl.length > 2048 ||
+      /[\\u0000-\\u001f\\u007f]/.test(value.baseUrl) ||
+      typeof value.model !== "string" ||
+      value.model.length > 128 ||
+      /[\\u0000-\\u001f\\u007f]/.test(value.model)
+    ) return DEFAULT_PROVIDER;
+
+    const credentialHandle = value.credentialHandle;
+    const safeCredentialHandle =
+      credentialHandle === "default" || credentialHandle === "ollama" || credentialHandle === "none"
+        ? credentialHandle
+        : undefined;
+
+    return {
+      baseUrl: value.baseUrl.trim(),
+      model: value.model.trim(),
       inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote",
-      ...(value.credentialHandle === "none" || value.credentialHandle === "ollama" ? { credentialHandle: value.credentialHandle } : {})
-    } : DEFAULT_PROVIDER;
+      ...(safeCredentialHandle ? { credentialHandle: safeCredentialHandle } : {})
+    };
   } catch { return DEFAULT_PROVIDER; }
 }
 
