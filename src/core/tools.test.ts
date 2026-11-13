@@ -31,7 +31,7 @@ const setup = (decision: "allow" | "deny" | "ask_user" = "allow") => {
 describe("ToolGateway", () => {
   it("accepts the dedicated MCP execution scope", () => {
     const { gateway } = setup();
-    const mcpTool = { ...definition(), id: "mcp.remote.search", requiredPermissions: ["mcp:execute"] as const };
+    const mcpTool = { ...definition(), id: "mcp.remote.search", requiredPermissions: ["mcp:execute"] as ("mcp:execute")[] };
     expect(gateway.register(mcpTool).ok).toBe(true);
   });
 
