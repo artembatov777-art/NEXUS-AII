@@ -31,6 +31,40 @@ describe("ModelRouter", () => {
     if (models.ok) expect(models.value[0]?.id).toBe("fake-model");
   });
 
+
+  it("keeps healthy provider models available when another provider catalog fails", async () => {
+    class OfflineProvider implements ModelProvider {
+      readonly id = "offline";
+      async listModels() { return { ok: false as const, error: { code: "provider_unavailable" as const, message: "Offline", retryable: true } }; }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
+    }
+    const router = new ModelRouter();
+    router.register(new FakeProvider());
+    router.register(new OfflineProvider());
+    const registry = new ModelRegistry(router, () => 100);
+    const result = await registry.refresh();
+    expect(result).toMatchObject({ ok: true, value: [{ id: "fake-model" }] });
+    expect(router.getProviderFailures()).toEqual([{
+      providerId: "offline", code: "provider_unavailable", message: "Offline", retryable: true
+    }]);
+    expect(registry.getSnapshot()).toMatchObject({
+      state: "ready", modelCount: 1, failedProviders: ["offline"]
+    });
+  });
+
+  it("reports all provider failures when no catalog is available", async () => {
+    class OfflineProvider implements ModelProvider {
+      readonly id = "offline";
+      async listModels() { throw new Error("Gateway offline"); }
+      async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
+    }
+    const router = new ModelRouter();
+    router.register(new OfflineProvider());
+    const result = await router.listModels();
+    expect(result).toMatchObject({ ok: false, error: { code: "provider_unavailable", message: "Gateway offline" } });
+    expect(router.getProviderFailures()).toMatchObject([{ providerId: "offline", message: "Gateway offline" }]);
+  });
+
   it("rejects duplicate provider IDs", () => {
     const router = new ModelRouter();
     router.register(new FakeProvider());

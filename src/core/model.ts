@@ -34,8 +34,20 @@ function utf8Length(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
+export interface ProviderCatalogFailure {
+  providerId: string;
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
 export class ModelRouter {
   private readonly providers = new Map<string, ModelProvider>();
+  private catalogFailures: ProviderCatalogFailure[] = [];
+
+  getProviderFailures(): ProviderCatalogFailure[] {
+    return this.catalogFailures.map(failure => ({ ...failure }));
+  }
 
   register(provider: ModelProvider): Result<void> {
     if (!provider.id.trim()) return err("validation", "Provider ID cannot be empty.");
@@ -57,10 +69,25 @@ export class ModelRouter {
   }
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
-    const results = await Promise.all([...this.providers.values()].map(provider => provider.listModels()));
-    const failed = results.find(result => !result.ok);
-    if (failed && !failed.ok) return failed;
-    return ok(results.flatMap(result => result.ok ? result.value : []));
+    const providers = [...this.providers.values()];
+    const results = await Promise.all(providers.map(async provider => ({
+      providerId: provider.id,
+      result: await provider.listModels().catch(cause => err(
+        "provider_unavailable",
+        cause instanceof Error ? cause.message : "Provider model discovery failed.",
+        true
+      ))
+    })));
+    this.catalogFailures = results.flatMap(({ providerId, result }) => result.ok ? [] : [{
+      providerId,
+      code: result.error.code,
+      message: result.error.message,
+      retryable: result.error.retryable
+    }]);
+    const available = results.flatMap(({ result }) => result.ok ? result.value : []);
+    if (available.length > 0 || this.catalogFailures.length === 0) return ok(available);
+    const firstFailure = results.find(entry => !entry.result.ok)?.result;
+    return firstFailure && !firstFailure.ok ? firstFailure : ok([]);
   }
 
   async *stream(providerId: string, request: ModelRequest): AsyncIterable<ModelEvent> {
@@ -101,6 +128,7 @@ export interface ModelRegistrySnapshot {
   checkedAt: number | null;
   modelCount: number;
   error?: string;
+  failedProviders?: string[];
 }
 
 /**
@@ -189,10 +217,12 @@ export class ModelRegistry {
       this.catalog.clear();
       for (const [key, model] of next) this.catalog.set(key, model);
       if (this.activeKey && !this.catalog.has(this.activeKey)) this.activeKey = null;
+      const failedProviders = this.router.getProviderFailures().map(failure => failure.providerId);
       this.snapshot = {
         state: "ready",
         checkedAt: this.now(),
-        modelCount: this.catalog.size
+        modelCount: this.catalog.size,
+        ...(failedProviders.length ? { failedProviders } : {})
       };
       return ok(this.listModels());
     } catch (cause) {
