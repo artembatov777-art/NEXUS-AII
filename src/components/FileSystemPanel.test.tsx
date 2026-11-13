@@ -140,7 +140,7 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("search_workspace_contents", { path: rootPath, query: "nexus" });
     expect(container.textContent).toContain("1 matches in 4 files");
     expect(container.textContent).toContain("The NEXUS workspace is ready");
-    const matchButton = Array.from(container.querySelectorAll(".file-list button")).find(button => button.textContent?.includes("The NEXUS workspace is ready"));
+    const matchButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".file-list button")).find(button => button.textContent?.includes("The NEXUS workspace is ready"));
     expect(matchButton).toBeDefined();
     await act(async () => { matchButton!.click(); });
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
