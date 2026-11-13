@@ -32,3 +32,5 @@
 .file-move-input{display:flex;gap:6px;min-width:0}
 .file-move-input input{flex:1}
 @media(max-width:760px){.file-entry-actions{grid-template-columns:minmax(0,1fr)}.file-entry-actions>.secondary-btn{width:100%;justify-content:center}}
+
+.file-editor-actions .primary-btn{min-height:34px;padding:7px 10px;font-size:9px}

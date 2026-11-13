@@ -27,7 +27,7 @@ const fileIcon = (name: string) => {
   return ["ts", "tsx", "js", "jsx", "rs", "py", "json", "css", "html", "yml", "yaml"].includes(extension ?? "") ? FileCode2 : FileText;
 };
 
-export function FileSystemPanel({ onClose }: { onClose: () => void }) {
+export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; onAnalyze?: (file: { name: string; path: string; content: string }) => void }) {
   const [roots, setRoots] = useState<string[]>([]);
   const [currentPath, setCurrentPath] = useState("");
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
@@ -319,7 +319,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
               <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || !renameName.trim()}>Rename</button>
               <label>Move to approved folder<div className="file-move-input"><input aria-label="Move destination folder" value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder="Destination folder path"/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
               <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || !moveDestination.trim()}>Move file</button>
-            </div><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
+            </div><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
         </div>
         <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={onClose}>Close workspace</button></footer>

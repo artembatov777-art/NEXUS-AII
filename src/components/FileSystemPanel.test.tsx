@@ -110,6 +110,26 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.textContent).toContain("meeting-notes.md");
   });
 
+  it("hands the selected text file to the AI analysis draft callback", async () => {
+    const rootPath = "C:\\Users\\Owner\\Documents";
+    const filePath = rootPath + "\\notes.txt";
+    const onAnalyze = vi.fn();
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "hello from file";
+      return undefined;
+    });
+    await renderPanel(onAnalyze);
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { fileButton!.click(); });
+    const analyzeButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Analyze with AI");
+    expect(analyzeButton).toBeDefined();
+    await act(async () => { analyzeButton!.click(); });
+    expect(onAnalyze).toHaveBeenCalledWith({ name: "notes.txt", path: filePath, content: "hello from file" });
+  });
+
   it("renames a selected file only after explicit confirmation", async () => {
     const rootPath = "C:\\\\Users\\\\Owner\\\\Documents";
     const oldPath = rootPath + "\\\\draft.txt";
