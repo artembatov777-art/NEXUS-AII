@@ -87,6 +87,68 @@ export interface KnowledgeVectorIndex {
   removeProject?(projectId: string): Promise<void>;
   reconcile?(chunks: KnowledgeChunk[]): Promise<KnowledgeChunk[]>;
 }
+
+export interface KnowledgeIndexReconciliationSummary {
+  totalChunks: number;
+  indexedChunks: number;
+  remainingChunks: number;
+}
+
+/** Rebuilds missing semantic vectors in bounded batches; partial work is safe to resume. */
+export async function reconcileKnowledgeIndex(
+  repository: Pick<KnowledgeRepository, "exportAll">,
+  vectors: KnowledgeVectorIndex,
+  embeddings: EmbeddingProvider,
+  isActive: () => boolean = () => true,
+  batchSize = 16
+): Promise<Result<KnowledgeIndexReconciliationSummary>> {
+  if (!repository.exportAll || !vectors.reconcile ||
+      !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 64) {
+    return err("validation", "Semantic index reconciliation is not configured correctly.");
+  }
+  let chunks: KnowledgeChunk[];
+  let missing: KnowledgeChunk[];
+  try {
+    const loaded = await repository.exportAll();
+    if (!loaded.ok) return loaded;
+    chunks = loaded.value;
+    if (!isActive()) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    missing = await vectors.reconcile(chunks);
+  } catch (cause) {
+    return err("storage_failed", cause instanceof Error ? cause.message : "Could not inspect the semantic index.");
+  }
+  let indexedChunks = 0;
+  for (let offset = 0; offset < missing.length; offset += batchSize) {
+    if (!isActive()) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    const batch = missing.slice(offset, offset + batchSize);
+    let embedded: Result<number[][]>;
+    try {
+      embedded = await embeddings.embed(batch.map(chunk => chunk.text));
+    } catch (cause) {
+      return err("provider_unavailable", cause instanceof Error ? cause.message : "Embedding provider failed.", true);
+    }
+    if (!embedded.ok) return embedded;
+    if (!Array.isArray(embedded.value) || embedded.value.length !== batch.length || embedded.value.some(vector =>
+      !Array.isArray(vector) || vector.length === 0 || vector.some(value => !Number.isFinite(value))
+    )) {
+      return err("validation", "Embedding provider returned an invalid vector batch.");
+    }
+    if (!isActive()) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    try {
+      await Promise.all(batch.map((chunk, index) => vectors.upsert(chunk, embedded.value[index])));
+    } catch (cause) {
+      return err("storage_failed", cause instanceof Error ? cause.message : "Could not persist semantic index vectors.");
+    }
+    indexedChunks += batch.length;
+  }
+  if (!isActive()) return err("cancelled", "Semantic index reconciliation was cancelled.");
+  return ok({
+    totalChunks: chunks.length,
+    indexedChunks,
+    remainingChunks: missing.length - indexedChunks
+  });
+}
+
 export interface KnowledgeCitation { documentId: string; sourceLabel: string; page?: number; section?: string; chunkId: string; }
 export interface RetrievedKnowledge { context: string; citations: KnowledgeCitation[]; }
 /** RAG context builder returns explicit provenance; it never treats retrieved text as instructions. */

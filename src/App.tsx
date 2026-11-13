@@ -16,7 +16,7 @@ import { FileSystemPanel } from "./components/FileSystemPanel";
 import { ToolsPanel } from "./components/ToolsPanel";
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
-import { KnowledgeRetrievalService } from "./core/knowledge";
+import { KnowledgeRetrievalService, reconcileKnowledgeIndex } from "./core/knowledge";
 import { WorkspaceProjectRepository } from "./lib/projectStorage";
 import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/nativeRepositories";
 import { MemoryService, type MemoryId } from "./core/memory";
@@ -128,9 +128,12 @@ export default function App() {
   }
   useEffect(() => { void refreshProjects(); }, [projectService]);
   useEffect(() => {
-    if (!knowledgeOpen) return;
     let active = true;
-    void reconcileSemanticIndex(() => active).catch(() => undefined);
+    void reconcileSemanticIndex(() => active).catch(cause => {
+      if (active) setError(cause instanceof Error
+        ? "Semantic index maintenance failed. Lexical knowledge search remains available. " + cause.message
+        : "Semantic index maintenance failed. Lexical knowledge search remains available.");
+    });
     return () => { active = false; };
   }, [knowledgeOpen, knowledgeRepository, embeddings, vectors]);
 
@@ -487,16 +490,8 @@ export default function App() {
 
 
   async function reconcileSemanticIndex(isActive: () => boolean = () => true) {
-    const loaded = await knowledgeRepository.exportAll();
-    if (!loaded.ok || !isActive()) return;
-    const missing = await vectors.reconcile(loaded.value);
-    for (let offset = 0; offset < missing.length; offset += 16) {
-      if (!isActive()) return;
-      const batch = missing.slice(offset, offset + 16);
-      const embedded = await embeddings.embed(batch.map(chunk => chunk.text));
-      if (!embedded.ok || embedded.value.length !== batch.length) return;
-      await Promise.all(batch.map((chunk, index) => vectors.upsert(chunk, embedded.value[index])));
-    }
+    const result = await reconcileKnowledgeIndex(knowledgeRepository, vectors, embeddings, isActive, 16);
+    if (!result.ok && result.error.code !== "cancelled") throw new Error(result.error.message);
   }
   async function exportWorkspaceBackup() {
     try {

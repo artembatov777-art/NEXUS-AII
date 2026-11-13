@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KnowledgeRetrievalService, type EmbeddingProvider, type KnowledgeChunk, type KnowledgeRepository, type KnowledgeVectorIndex } from "./knowledge";
+import { KnowledgeRetrievalService, reconcileKnowledgeIndex, type EmbeddingProvider, type KnowledgeChunk, type KnowledgeRepository, type KnowledgeVectorIndex } from "./knowledge";
 import { ok } from "./result";
 
 const chunks: KnowledgeChunk[] = [
@@ -51,5 +51,76 @@ describe("semantic knowledge retrieval", () => {
     };
     await new KnowledgeRetrievalService(repository, embeddings, vectors).retrieve("query", "empty-project");
     expect(calls).toBe(0);
+  });
+});
+
+describe("semantic index reconciliation", () => {
+  const chunk = (id: string): KnowledgeChunk => ({
+    id, documentId: "doc-" + id, projectId: "project-a", text: "text " + id, sourceLabel: "notes.md"
+  });
+
+  it("rebuilds missing vectors in bounded batches and reports completion", async () => {
+    const chunks = [chunk("a"), chunk("b"), chunk("c")];
+    const batches: string[][] = [];
+    const upserts: string[] = [];
+    const repository: KnowledgeRepository = {
+      add: async () => ok(undefined),
+      exportAll: async () => ok(chunks),
+      search: async () => ok([]),
+      removeDocument: async () => ok(undefined)
+    };
+    const vectors: KnowledgeVectorIndex = {
+      upsert: async item => { upserts.push(item.id); },
+      removeDocument: async () => undefined,
+      search: async () => [],
+      reconcile: async () => chunks
+    };
+    const embeddings: EmbeddingProvider = {
+      embed: async texts => { batches.push(texts); return ok(texts.map((_, index) => [index + 1, 0])); }
+    };
+    const result = await reconcileKnowledgeIndex(repository, vectors, embeddings, () => true, 2);
+    expect(result).toEqual({ ok: true, value: { totalChunks: 3, indexedChunks: 3, remainingChunks: 0 } });
+    expect(batches).toEqual([["text a", "text b"], ["text c"]]);
+    expect(upserts).toEqual(["a", "b", "c"]);
+  });
+
+  it("preserves completed batches and returns cancellation so the next startup can resume", async () => {
+    const chunks = [chunk("a"), chunk("b")];
+    let active = true;
+    const upserts: string[] = [];
+    const repository: KnowledgeRepository = {
+      add: async () => ok(undefined), exportAll: async () => ok(chunks),
+      search: async () => ok([]), removeDocument: async () => ok(undefined)
+    };
+    const vectors: KnowledgeVectorIndex = {
+      upsert: async item => { upserts.push(item.id); },
+      removeDocument: async () => undefined, search: async () => [],
+      reconcile: async () => chunks
+    };
+    const embeddings: EmbeddingProvider = {
+      embed: async texts => { active = false; return ok(texts.map(() => [1, 0])); }
+    };
+    const result = await reconcileKnowledgeIndex(repository, vectors, embeddings, () => active, 1);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(upserts).toEqual([]);
+  });
+
+  it("fails visibly when embeddings or vector persistence fail", async () => {
+    const chunks = [chunk("a")];
+    const repository: KnowledgeRepository = {
+      add: async () => ok(undefined), exportAll: async () => ok(chunks),
+      search: async () => ok([]), removeDocument: async () => ok(undefined)
+    };
+    const vectors: KnowledgeVectorIndex = {
+      upsert: async () => { throw new Error("IndexedDB quota exceeded"); },
+      removeDocument: async () => undefined, search: async () => [],
+      reconcile: async () => chunks
+    };
+    const embeddings: EmbeddingProvider = { embed: async () => ok([[Number.NaN]]) };
+    const invalid = await reconcileKnowledgeIndex(repository, vectors, embeddings);
+    expect(invalid).toMatchObject({ ok: false, error: { code: "validation" } });
+    const validEmbeddings: EmbeddingProvider = { embed: async () => ok([[1, 0]]) };
+    const failedWrite = await reconcileKnowledgeIndex(repository, vectors, validEmbeddings);
+    expect(failedWrite).toMatchObject({ ok: false, error: { code: "storage_failed", message: "IndexedDB quota exceeded" } });
   });
 });
