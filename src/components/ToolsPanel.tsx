@@ -14,6 +14,13 @@ const catalog: ToolItem[] = [
 ];
 
 export function ToolsPanel({ onClose }: { onClose: () => void }) {
+  const runtime = useMemo(() => createWorkspaceNexusRuntime("tools-panel-user"), []);
+  const [servers, setServers] = useState<McpServerConfigRecord[]>([]);
+  const [serverName, setServerName] = useState("");
+  const [endpoint, setEndpoint] = useState("");
+  const [serverId, setServerId] = useState("");
+  const [connectionStates, setConnectionStates] = useState<Record<string, { status: string; tools: number; detail: string }>>({});
+  const [mcpBusy, setMcpBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState("browser");
   const [notice, setNotice] = useState("");

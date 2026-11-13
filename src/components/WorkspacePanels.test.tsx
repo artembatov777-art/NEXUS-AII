@@ -75,9 +75,9 @@ describe("ToolsPanel preview interactions", () => {
 
   it("states that the catalog is a preview and no connectors are connected", () => {
     const dialog = container.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain("CATALOG PREVIEW");
+    expect(dialog?.textContent).toContain("LIVE MCP + CATALOG");
     expect(dialog?.textContent).toContain("NOT CONNECTED");
-    expect(dialog?.textContent).toContain("No connector is installed or authorized");
+    expect(dialog?.textContent).toContain("Configure a real MCP server above");
     expect(dialog?.textContent).toContain("06");
   });
 
