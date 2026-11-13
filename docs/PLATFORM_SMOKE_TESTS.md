@@ -16,7 +16,9 @@ Record the OS version, NEXUS AU commit SHA, app build identifier, and result for
 1. Install or launch the native Tauri build.
 2. Confirm the app opens without a blank webview, CSP errors, or missing native commands.
 3. Create a conversation, a project, a memory, and a knowledge document.
-4. Restart the app and confirm the records remain.\n5. Open a file, perform a content search, and create/edit/rename/move a test file inside the approved root.\n6. Open Agent Control Center and verify the recent tool audit shows the filesystem action types without exposing full private paths.
+4. Restart the app and confirm the records remain.
+5. Open a file, perform a content search, and create/edit/rename/move a test file inside the approved root.
+6. Open Agent Control Center and verify the recent tool audit shows the filesystem action types without exposing full private paths.
 7. Delete the test project and confirm project-scoped knowledge and semantic vectors are no longer returned in search.
 
 Expected: local workspace data persists in the native SQLite database. The browser preview is a separate localStorage/IndexedDB environment.
@@ -24,12 +26,13 @@ Expected: local workspace data persists in the native SQLite database. The brows
 ## 2. Credential vault lifecycle
 
 1. Open Settings with no provider key configured. Expected status: missing.
-2. Save a test provider key. Expected status: available; the UI must not display the saved secret after saving.
-3. Restart the app. Expected status remains available.
-4. Make one provider request to a trusted HTTPS endpoint configured by the tester.
-5. Delete the key. Expected status: missing; provider requests must be disabled.
-6. Lock/disable the OS keyring if practical, then reopen Settings. Expected status: unavailable; the app must not fall back to localStorage, SQLite, or plaintext files.
-7. Restore/unlock the OS keyring and verify status recovers.
+2. Save a disposable OmniRoute key in the `default` profile and a separate disposable Ollama key in the `ollama` profile. Expected status: both entries are available independently; the UI must not display either saved secret after saving.
+3. Switch between the two profiles and confirm each status remains isolated. Restart the app and verify both entries persist.
+4. Make a provider request to a trusted HTTPS OmniRoute endpoint and a loopback Ollama `/v1` endpoint.
+5. Delete each key independently. Expected status: only the selected profile becomes missing; the other remains available.
+6. Select the no-key profile and verify only a loopback endpoint is accepted.
+7. Lock/disable the OS keyring if practical, then reopen Settings. Expected status: unavailable; the app must not fall back to localStorage, SQLite, or plaintext files.
+8. Restore/unlock the OS keyring and verify status recovers.
 
 Platform notes:
 - Windows: inspect the entry in Windows Credential Manager.
@@ -48,7 +51,17 @@ Use a disposable test key. Never use a personal production credential for this c
 6. Cancel a running task and verify it reaches a terminal cancelled state.
 7. Inspect the audit view/storage and confirm no provider key or raw secret appears.
 
-## 4. MCP lifecycle\n\n1. Configure an unauthenticated test MCP server over HTTPS or loopback HTTP.\n2. Save and connect it from Tools & MCP. Confirm initialize, protocol negotiation, session headers, and tools/list discovery.\n3. Open Agent Control Center and confirm discovered tools are imported only into the approved agent tool scope.\n4. Execute a harmless read-only test tool. Confirm the per-call approval shows the tool name and input preview.\n5. Reject a second call and confirm the remote tool is not invoked.\n6. Disconnect or remove the server. Confirm its imported tools are unregistered and the session is closed where supported.\n7. Restart NEXUS and confirm the saved endpoint reconnects without storing any authentication secret in localStorage.\n\n## 5. Backup and restore
+## 4. MCP lifecycle
+
+1. Configure an unauthenticated test MCP server over HTTPS or loopback HTTP.
+2. Save and connect it from Tools & MCP. Confirm initialize, protocol negotiation, session headers, and tools/list discovery.
+3. Open Agent Control Center and confirm discovered tools are imported only into the approved agent tool scope.
+4. Execute a harmless read-only test tool. Confirm the per-call approval shows the tool name and input preview.
+5. Reject a second call and confirm the remote tool is not invoked.
+6. Disconnect or remove the server. Confirm its imported tools are unregistered and the session is closed where supported.
+7. Restart NEXUS and confirm the saved endpoint reconnects without storing any authentication secret in localStorage.
+
+## 5. Backup and restore
 
 1. Export a workspace backup containing a test conversation, project, memory, and knowledge document.
 2. Confirm provider credentials are not present in the exported JSON.

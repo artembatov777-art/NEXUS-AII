@@ -44,6 +44,7 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
   }, []);
 
   async function connectSavedServer(server: McpServerConfigRecord, signal: AbortSignal) {
+    await runtime.mcpClient.disconnect(server.id);
     setConnectionStates(current => ({ ...current, [server.id]: { status: "connecting", tools: 0, detail: "Initializing MCP session…" } }));
     const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, signal);
     if (!connected.ok) {
