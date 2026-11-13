@@ -166,6 +166,38 @@ export interface TauriProviderProfile {
   settings: ProviderSettings;
 }
 
+/** Builds a local Ollama-compatible profile without probing or starting Ollama. */
+export function createOllamaProviderProfile(model = ""): TauriProviderProfile {
+  return {
+    id: "nexus.ollama",
+    settings: {
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model,
+      inferenceLocation: "local",
+      credentialHandle: "none"
+    }
+  };
+}
+
+/**
+ * Builds a future OmniRoute profile from an owner-supplied HTTPS endpoint.
+ * This only validates and stores configuration; it never connects to it.
+ */
+export function createOmniRouteProviderProfile(
+  baseUrl: string,
+  model: string,
+  credentialHandle: "default" | "ollama" = "default"
+): TauriProviderProfile {
+  const endpointError = providerEndpointError(baseUrl);
+  if (endpointError || !baseUrl.trim().startsWith("https://")) {
+    throw new Error("OmniRoute must be configured with a valid HTTPS endpoint.");
+  }
+  return {
+    id: "nexus.omniroute",
+    settings: { baseUrl: baseUrl.trim(), model, inferenceLocation: "remote", credentialHandle }
+  };
+}
+
 /**
  * Registers multiple independent OpenAI-compatible endpoints in one router.
  * This is adapter preparation only: it never installs, launches, or connects

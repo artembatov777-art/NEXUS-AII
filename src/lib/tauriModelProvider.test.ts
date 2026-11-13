@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
+import { createOllamaProviderProfile, createOmniRouteProviderProfile, createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -13,6 +13,29 @@ const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
 describe("TauriModelProvider", () => {
+  it("prepares Ollama as a loopback-only no-key profile without starting it", () => {
+    expect(createOllamaProviderProfile("qwen2.5:7b")).toEqual({
+      id: "nexus.ollama",
+      settings: {
+        baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b",
+        inferenceLocation: "local", credentialHandle: "none"
+      }
+    });
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("prepares OmniRoute only from an owner-supplied HTTPS endpoint without connecting", () => {
+    expect(createOmniRouteProviderProfile("https://gateway.example/v1", "cloud-model")).toEqual({
+      id: "nexus.omniroute",
+      settings: {
+        baseUrl: "https://gateway.example/v1", model: "cloud-model",
+        inferenceLocation: "remote", credentialHandle: "default"
+      }
+    });
+    expect(() => createOmniRouteProviderProfile("http://gateway.example/v1", "cloud-model")).toThrow(/HTTPS/i);
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
   it("registers independent compatible provider profiles without connecting them", () => {
     mockedIsTauri.mockReturnValue(true);
     const router = createTauriModelRouterForProfiles([
