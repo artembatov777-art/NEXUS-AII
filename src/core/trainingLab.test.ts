@@ -88,6 +88,27 @@ describe("Training Lab governance", () => {
     })).toBe(false);
   });
 
+  it("accepts imported dataset samples when every sample matches exactly one declared split", () => {
+    const withSamples: DatasetManifest = {
+      ...manifest,
+      samples: [
+        { id: "train-1", split: "train", input: "prompt one", expectedOutput: "answer one" },
+        { id: "train-2", split: "train", input: "prompt two", expectedOutput: "answer two" },
+        { id: "validation-1", split: "validation", input: "validation prompt", expectedOutput: "validation answer" },
+        { id: "test-1", split: "test", input: "test prompt", expectedOutput: "test answer" }
+      ]
+    };
+    expect(validateDatasetManifest(withSamples)).toBe(true);
+  });
+
+  it("rejects imported samples assigned to the wrong split or missing sample IDs", () => {
+    const withSamples: DatasetManifest = {
+      ...manifest,
+      samples: [{ id: "train-1", split: "test", input: "prompt", expectedOutput: "answer" }]
+    };
+    expect(validateDatasetManifest(withSamples)).toBe(false);
+  });
+
   it("accepts experiment records without secret-bearing configuration", () => {
     expect(validateTrainingExperiment(experiment)).toBe(true);
   });

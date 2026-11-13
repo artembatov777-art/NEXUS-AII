@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "./trainingDatasetFile";
+
+const rows = [
+  { id: "a", split: "train", input: "prompt", expectedOutput: "answer" },
+  { id: "b", split: "validation", input: "prompt", expectedOutput: "answer" },
+  { id: "c", split: "test", input: "prompt", expectedOutput: "answer" }
+];
+
+describe("training dataset file format", () => {
+  it("imports JSONL samples and round-trips them", () => {
+    const samples = parseTrainingDatasetFile(rows.map(row => JSON.stringify(row)).join("\n"));
+    expect(samples).toEqual(rows);
+    expect(parseTrainingDatasetFile(serializeTrainingDatasetSamples(samples))).toEqual(samples);
+  });
+
+  it("accepts a JSON array export", () => {
+    expect(parseTrainingDatasetFile(JSON.stringify(rows))).toEqual(rows);
+  });
+
+  it("rejects duplicate IDs and missing split coverage", () => {
+    expect(() => parseTrainingDatasetFile([...rows, rows[0]].map(row => JSON.stringify(row)).join("\n"))).toThrow(/duplicate/i);
+    expect(() => parseTrainingDatasetFile(rows.slice(0, 2).map(row => JSON.stringify(row)).join("\n"))).toThrow(/at least one train/i);
+  });
+
+  it("rejects malformed rows and oversized content", () => {
+    expect(() => parseTrainingDatasetFile('{"id":"x","input":"p"}')).toThrow(/requires id/i);
+    expect(() => parseTrainingDatasetFile("x".repeat(1_000_001))).toThrow(/1 MB/i);
+  });
+});

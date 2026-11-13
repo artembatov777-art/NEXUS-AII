@@ -1759,6 +1759,41 @@ fn validate_training_dataset_payload(value: &serde_json::Value) -> Result<(Strin
             }
         }
     }
+    if let Some(samples_value) = value.get("samples") {
+        let samples = samples_value.as_array().ok_or_else(|| "Training dataset samples must be an array.".to_string())?;
+        if samples.len() != all_ids.len() || samples.len() > 300_000 {
+            return Err("Training dataset sample count must match the declared splits.".into());
+        }
+        let mut sample_ids = HashSet::new();
+        let mut total_bytes = 0usize;
+        for sample in samples {
+            let sample_id = sample.get("id").and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "Training sample ID is required.".to_string())?;
+            let split = sample.get("split").and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "Training sample split is required.".to_string())?;
+            let input = sample.get("input").and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "Training sample input is required.".to_string())?;
+            let expected = sample.get("expectedOutput").and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "Training sample expected output is required.".to_string())?;
+            if sample_id.trim().is_empty() || sample_id.len() > 160 || input.trim().is_empty() || input.len() > 12_000
+                || expected.trim().is_empty() || expected.len() > 12_000
+                || !["train", "validation", "test"].contains(&split)
+                || !all_ids.contains(sample_id) || !sample_ids.insert(sample_id.to_string()) {
+                return Err("Training dataset contains an invalid or duplicate sample.".into());
+            }
+            let split_values = splits.get(split).and_then(serde_json::Value::as_array).unwrap();
+            if !split_values.iter().any(|item| item.as_str() == Some(sample_id)) {
+                return Err("Training sample split does not match its manifest split IDs.".into());
+            }
+            total_bytes = total_bytes.saturating_add(sample_id.len()).saturating_add(input.len()).saturating_add(expected.len());
+            if total_bytes > 900_000 {
+                return Err("Training dataset samples exceed the 900 KB content limit.".into());
+            }
+        }
+        if sample_ids != all_ids {
+            return Err("Training dataset sample IDs must exactly match the manifest split IDs.".into());
+        }
+    }
     let created_at = value.get("createdAt").and_then(serde_json::Value::as_i64)
         .filter(|timestamp| *timestamp > 0).ok_or_else(|| "Training dataset timestamp is invalid.".to_string())?;
     Ok((id, version, created_at))
@@ -1941,6 +1976,16 @@ mod database_tests {
         private["privacyClass"] = serde_json::json!("owner_approved");
         private["consentStatus"] = serde_json::json!("pending");
         assert!(validate_training_dataset_payload(&private).is_err());
+
+        let mut with_samples = valid.clone();
+        with_samples["samples"] = serde_json::json!([
+            {"id":"a","split":"train","input":"prompt","expectedOutput":"answer"},
+            {"id":"b","split":"validation","input":"prompt","expectedOutput":"answer"},
+            {"id":"c","split":"test","input":"prompt","expectedOutput":"answer"}
+        ]);
+        assert!(validate_training_dataset_payload(&with_samples).is_ok());
+        with_samples["samples"][0]["split"] = serde_json::json!("test");
+        assert!(validate_training_dataset_payload(&with_samples).is_err());
     }
 
     #[test]

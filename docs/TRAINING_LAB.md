@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The first Training Lab increment establishes governance and evaluation primitives. It does not train, fine-tune, upload, or export any model weights.
+The current Training Lab increment supports governed dataset manifests, explicit JSON/JSONL sample import and JSONL export, live provider comparisons, deterministic phrase evaluation, and immutable experiment records. It does not yet train or fine-tune model weights.
 
 ## Dataset manifest
 
@@ -14,8 +14,11 @@ Each dataset version must record:
 - Consent state: only approved or not-required manifests are accepted for evaluation/training workflows.
 - Explicit approval reference for owner-selected material.
 - Disjoint train, validation, and test item IDs.
+- Optional sample records with input, expected output, and a split assignment. Imported samples must exactly match the manifest IDs and remain within the 900 KB content limit.
 
-Private conversations, memories, workspace files, and chat histories are excluded by default. They must never be silently collected into a dataset. A future import workflow must require explicit owner selection and a durable approval record.
+Import accepts a JSON array or JSONL rows shaped as `{ "id": "case-1", "split": "train", "input": "...", "expectedOutput": "..." }`. The owner explicitly selects the file; privacy class, license, provenance, and consent must still be reviewed before saving. Sample content is persisted with its immutable dataset version in SQLite and can be exported as JSONL.
+
+Private conversations, memories, workspace files, and chat histories are excluded by default. They must never be silently collected into a dataset. The import UI requires explicit owner selection. Owner-approved private material requires an approved consent state and a durable approval reference before it can be saved.
 
 ## Experiment record
 
@@ -28,7 +31,9 @@ Evaluation suites contain stable case IDs, prompts, and required phrases. The ba
 ## Deferred
 
 - Model weight training and LoRA execution.
-- Dataset file storage and import/export UI.
-- Experiment persistence and artifact registry.
+- Training runtime execution and LoRA fine-tuning.
+- Artifact/checkpoint registry and hardware scheduling.
+- Semantic evaluation, human review, cost and robustness metrics.
+- Artifact registry and checkpoint recovery.
 - Hardware scheduling and checkpoint recovery.
 - Automatic ingestion of personal data (not planned).

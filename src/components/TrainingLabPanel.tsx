@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
-import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
+import { scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
 import { runModelComparison as executeModelComparison } from "../lib/modelComparison";
+import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
@@ -24,6 +25,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
   const [trainIds, setTrainIds] = useState("train-001");
   const [validationIds, setValidationIds] = useState("validation-001");
   const [testIds, setTestIds] = useState("test-001");
+  const [importedSamples, setImportedSamples] = useState<DatasetSample[]>([]);
   const [modelId, setModelId] = useState("provider/model-id");
   const [comparisonModels, setComparisonModels] = useState("");
   const [method, setMethod] = useState<ExperimentMethod>("baseline");
@@ -168,6 +170,40 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     }
   }
 
+  async function importDatasetFile(file?: File) {
+    if (!file || working) return;
+    setWorking(true); setError(""); setStatus("Validating explicitly selected dataset samples…");
+    try {
+      const samples = parseTrainingDatasetFile(await file.text());
+      setImportedSamples(samples);
+      setTrainIds(samples.filter(sample => sample.split === "train").map(sample => sample.id).join("\\n"));
+      setValidationIds(samples.filter(sample => sample.split === "validation").map(sample => sample.id).join("\\n"));
+      setTestIds(samples.filter(sample => sample.split === "test").map(sample => sample.id).join("\\n"));
+      setSourceReference("file:" + file.name);
+      setStatus(`Imported ${samples.length} samples: ${samples.filter(sample => sample.split === "train").length} train, ${samples.filter(sample => sample.split === "validation").length} validation, ${samples.filter(sample => sample.split === "test").length} test. Review privacy, license, and consent metadata before saving.`);
+    } catch (cause) {
+      setImportedSamples([]);
+      setError(cause instanceof Error ? cause.message : "Could not import dataset samples.");
+      setStatus("");
+    } finally { setWorking(false); }
+  }
+
+  function exportDatasetSamples(dataset: DatasetManifest) {
+    if (!dataset.samples?.length) {
+      setError("This manifest contains sample IDs only. Import sample data before exporting a dataset file.");
+      return;
+    }
+    const blob = new Blob([serializeTrainingDatasetSamples(dataset.samples)], { type: "application/x-ndjson;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${dataset.id}-v${dataset.version}.jsonl`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setStatus(`Exported ${dataset.samples.length} sample records from ${dataset.name}.`);
+    setError("");
+  }
+
   async function saveDataset() {
     setWorking(true); setError(""); setStatus("");
     try {
@@ -182,6 +218,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         ...(privacyClass === "owner_approved" ? { approvalReference: approvalReference.trim() } : {}),
         sourceReferences: [sourceReference.trim()],
         splits: { train: splitIds(trainIds), validation: splitIds(validationIds), test: splitIds(testIds) },
+        ...(importedSamples.length ? { samples: importedSamples } : {}),
         createdAt: Date.now()
       };
       if (!validateDatasetManifest(manifest)) {
@@ -190,7 +227,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       }
       const result = await repository.saveDataset(manifest);
       if (!result.ok) setError(result.error.message);
-      else { setStatus("Dataset manifest saved. No raw sample content was copied into Training Lab."); await refresh(); }
+      else { setStatus(importedSamples.length ? `Dataset version saved with ${importedSamples.length} imported sample records in SQLite.` : "Dataset manifest saved with sample IDs only; no sample content was imported."); await refresh(); }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save dataset metadata.");
     } finally { setWorking(false); }
@@ -230,6 +267,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
   }
 
   const selectedDataset = selectedDatasetKey;
+  const selectedDatasetRecord = datasets.find(dataset => JSON.stringify([dataset.id, dataset.version]) === selectedDatasetKey);
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
@@ -262,7 +300,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
           <label>Validation sample IDs<textarea rows={2} value={validationIds} onChange={event => setValidationIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
           <label>Test sample IDs<textarea rows={2} value={testIds} onChange={event => setTestIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
         </div>
-        <button className="primary-btn" onClick={() => void saveDataset()} disabled={working}><Save size={14}/> Save dataset manifest</button>
+        <div className="training-two-col"><label className="secondary-btn">Import JSON / JSONL samples<input type="file" accept=".json,.jsonl,.ndjson,application/json" hidden disabled={working} onChange={event => { void importDatasetFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label><span className="training-record-counts">{importedSamples.length} sample record(s) staged for import</span></div>
+        <button className="primary-btn" onClick={() => void saveDataset()} disabled={working}><Save size={14}/> Save dataset version</button>
       </div>
       <div className="training-section">
         <div className="training-section-title"><FlaskConical size={16}/> Manual evaluation bench</div>
@@ -296,7 +335,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       <div className="training-section">
         <div className="training-section-title"><RefreshCw size={15}/> Saved records</div>
         <div className="training-record-counts"><span>{datasets.length} dataset version(s)</span><span>{experiments.length} experiment(s)</span><button className="icon-btn" onClick={() => void refresh()} aria-label="Refresh Training Lab records"><RefreshCw size={14}/></button></div>
-        {datasets.map(dataset => <div className="training-record" key={dataset.id+dataset.version}><strong>{dataset.name} · v{dataset.version}</strong><small>{dataset.license} · {dataset.privacyClass} · {dataset.splits.train.length}/{dataset.splits.validation.length}/{dataset.splits.test.length} train/validation/test IDs</small></div>)}
+        {selectedDatasetRecord && <button className="secondary-btn" onClick={() => exportDatasetSamples(selectedDatasetRecord)} disabled={!selectedDatasetRecord.samples?.length}>Export selected dataset samples (.jsonl)</button>}
+        {datasets.map(dataset => <div className="training-record" key={dataset.id+dataset.version}><strong>{dataset.name} · v{dataset.version}</strong><small>{dataset.license} · {dataset.privacyClass} · {dataset.splits.train.length}/{dataset.splits.validation.length}/{dataset.splits.test.length} train/validation/test IDs · {dataset.samples?.length ?? 0} stored samples</small></div>)}
         {experiments.map(experiment => <div className="training-record" key={experiment.id}><strong>{experiment.name}</strong><small>{experiment.modelId} · {experiment.method} · {new Date(experiment.createdAt).toLocaleString()}</small></div>)}
         {!datasets.length && !experiments.length && <p className="global-search-empty">No Training Lab records yet.</p>}
       </div>

@@ -3,6 +3,13 @@ import type { Result } from "./result";
 export type DatasetPrivacyClass = "public" | "synthetic" | "owner_approved";
 export type DatasetConsentStatus = "approved" | "not_required" | "pending" | "rejected";
 
+export interface DatasetSample {
+  id: string;
+  split: "train" | "validation" | "test";
+  input: string;
+  expectedOutput: string;
+}
+
 export interface DatasetManifest {
   schemaVersion: 1;
   id: string;
@@ -18,6 +25,8 @@ export interface DatasetManifest {
     validation: string[];
     test: string[];
   };
+  /** Optional raw evaluation/training samples, imported only by explicit owner action. */
+  samples?: DatasetSample[];
   createdAt: number;
 }
 
@@ -92,7 +101,25 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
       !uniqueStrings(test, MAX_SPLIT_ITEMS, 160) || test.length === 0) return false;
 
   const allIds = [...train, ...validation, ...test];
-  return new Set(allIds).size === allIds.length;
+  if (new Set(allIds).size !== allIds.length) return false;
+  if (manifest.samples === undefined) return true;
+  if (!Array.isArray(manifest.samples) || manifest.samples.length !== allIds.length || manifest.samples.length > MAX_SPLIT_ITEMS * 3) return false;
+  const splitById = new Map<string, DatasetSample["split"]>();
+  train.forEach(id => splitById.set(id, "train"));
+  validation.forEach(id => splitById.set(id, "validation"));
+  test.forEach(id => splitById.set(id, "test"));
+  const sampleIds = new Set<string>();
+  let totalBytes = 0;
+  for (const sample of manifest.samples) {
+    if (!sample || !boundedText(sample.id, 160) ||
+        !["train", "validation", "test"].includes(sample.split) ||
+        !boundedText(sample.input, 12_000) || !boundedText(sample.expectedOutput, 12_000) ||
+        sampleIds.has(sample.id) || splitById.get(sample.id) !== sample.split) return false;
+    sampleIds.add(sample.id);
+    totalBytes += new TextEncoder().encode(sample.id + sample.input + sample.expectedOutput).byteLength;
+    if (totalBytes > 900_000) return false;
+  }
+  return sampleIds.size === allIds.length && allIds.every(id => sampleIds.has(id));
 }
 
 function containsSensitiveKey(value: unknown, depth = 0): boolean {
