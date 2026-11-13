@@ -312,7 +312,6 @@ export default function App() {
     const maxMessageBytes = 90_000;
     let low = 0;
     let high = file.content.length;
-    let bestEnd = 0;
     let bestPrompt = "";
     while (low <= high) {
       let end = Math.floor((low + high) / 2);
@@ -333,7 +332,6 @@ export default function App() {
       ].filter(Boolean).join("\n\n");
       const promptBytes = encoder.encode(candidatePrompt).byteLength;
       if (candidateBytes <= maxSourceBytes && promptBytes <= maxMessageBytes) {
-        bestEnd = end;
         bestPrompt = candidatePrompt;
         low = Math.floor((low + high) / 2) + 1;
       } else {
@@ -344,7 +342,12 @@ export default function App() {
       setError("The selected file could not be prepared within the model request limit.");
       return;
     }
-    setDraft(current => current.trim() ? `${current}\n\n${bestPrompt}` : bestPrompt);
+    const nextDraft = draft.trim() ? `${draft}\n\n${bestPrompt}` : bestPrompt;
+    if (encoder.encode(nextDraft).byteLength > 100_000) {
+      setError("The selected file plus your existing draft exceeds the chat message limit. Shorten the draft or clear it before adding this file.");
+      return;
+    }
+    setDraft(nextDraft);
     setFileSystemOpen(false);
     setError("");
   }
