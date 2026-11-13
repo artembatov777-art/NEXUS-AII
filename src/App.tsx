@@ -271,20 +271,23 @@ export default function App() {
     chatAbortController.current = controller;
     try {
       const contextParts: string[] = [];
+      const contextWarnings: string[] = [];
       const remembered = await memoryService.search(text, "profile", 5);
-      if (!remembered.ok) throw new Error(`Could not retrieve saved memory: ${remembered.error.message}`);
-      if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
+      if (!remembered.ok) contextWarnings.push(`Saved profile memory unavailable: ${remembered.error.message}`);
+      else if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
       let sourceReferences: import("./types").ChatSourceReference[] = [];
       if (selectedProjectId) {
         const [retrieved, projectMemories] = await Promise.all([
           knowledgeService.retrieve(text, selectedProjectId, 6),
           memoryService.search(text, "project", 5, selectedProjectId)
         ]);
-        if (!retrieved.ok) throw new Error(`Could not retrieve project knowledge: ${retrieved.error.message}`);
-        if (!projectMemories.ok) throw new Error(`Could not retrieve project memories: ${projectMemories.error.message}`);
-        if (retrieved.value.context) contextParts.push("Selected project knowledge:\n" + retrieved.value.context);
-        sourceReferences = retrieved.value.citations;
-        if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
+        if (!retrieved.ok) contextWarnings.push(`Project knowledge unavailable: ${retrieved.error.message}`);
+        else {
+          if (retrieved.value.context) contextParts.push("Selected project knowledge:\n" + retrieved.value.context);
+          sourceReferences = retrieved.value.citations;
+        }
+        if (!projectMemories.ok) contextWarnings.push(`Project memory unavailable: ${projectMemories.error.message}`);
+        else if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
       }
       const assistantId = makeId();
       let streamedAnswer = "";
@@ -297,6 +300,7 @@ export default function App() {
         }]);
       }, controller.signal, usage => setLastUsage(usage));
       updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+      if (contextWarnings.length) setError("Answer generated without some saved context. " + contextWarnings.join(" "));
     } catch (e) {
       if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
     } finally {
