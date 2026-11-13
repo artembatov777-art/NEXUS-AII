@@ -48,6 +48,7 @@ describe("ToolsPanel MCP management", () => {
     expect(runtime.connectMcpHttp).toHaveBeenCalledWith({ id: "demo-server", name: "Demo server", endpoint: "https://mcp.example.com/rpc", version: "1" }, expect.any(AbortSignal));
     expect(runtime.mcpClient.listTools).toHaveBeenCalledWith("demo-server", expect.any(AbortSignal));
     expect(container.textContent).toContain("CONNECTED · 1 TOOLS");
+    expect(container.textContent).toContain("lookup");
   });
 
   it("disconnects and removes a saved endpoint", async () => {

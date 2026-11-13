@@ -19,7 +19,7 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
   const [serverName, setServerName] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [serverId, setServerId] = useState("");
-  const [connectionStates, setConnectionStates] = useState<Record<string, { status: string; tools: number; detail: string }>>({});
+  const [connectionStates, setConnectionStates] = useState<Record<string, { status: string; tools: number; toolNames: string[]; detail: string }>>({});
   const [mcpBusy, setMcpBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState("browser");
@@ -45,19 +45,19 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
 
   async function connectSavedServer(server: McpServerConfigRecord, signal: AbortSignal) {
     await runtime.mcpClient.disconnect(server.id);
-    setConnectionStates(current => ({ ...current, [server.id]: { status: "connecting", tools: 0, detail: "Initializing MCP session…" } }));
+    setConnectionStates(current => ({ ...current, [server.id]: { status: "connecting", tools: 0, toolNames: [], detail: "Initializing MCP session…" } }));
     const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, signal);
     if (!connected.ok) {
-      setConnectionStates(current => ({ ...current, [server.id]: { status: "failed", tools: 0, detail: connected.error.message } }));
+      setConnectionStates(current => ({ ...current, [server.id]: { status: "failed", tools: 0, toolNames: [], detail: connected.error.message } }));
       return;
     }
     if (signal.aborted) { await runtime.mcpClient.disconnect(server.id); return; }
     const listed = await runtime.mcpClient.listTools(server.id, signal);
     if (!listed.ok) {
-      setConnectionStates(current => ({ ...current, [server.id]: { status: "connected", tools: 0, detail: listed.error.message } }));
+      setConnectionStates(current => ({ ...current, [server.id]: { status: "connected", tools: 0, toolNames: [], detail: listed.error.message } }));
       return;
     }
-    setConnectionStates(current => ({ ...current, [server.id]: { status: "connected", tools: listed.value.length, detail: "MCP session initialized. Tools are discovered; agent execution requires per-call approval." } }));
+    setConnectionStates(current => ({ ...current, [server.id]: { status: "connected", tools: listed.value.length, toolNames: listed.value.map(tool => tool.name), detail: "MCP session initialized. Every agent call requires per-call approval." } }));
   }
 
   async function addServer() {
@@ -92,11 +92,11 @@ export function ToolsPanel({ onClose }: { onClose: () => void }) {
           <label>Server ID (optional)<input aria-label="MCP server ID" value={serverId} onChange={event => setServerId(event.target.value)} placeholder="my-server"/></label>
           <button className="primary-btn" disabled={mcpBusy || !serverName.trim() || !endpoint.trim()} onClick={() => void addServer()}><Plus size={14}/> Save & connect</button>
         </div>
-        <p className="mcp-security-note"><LockKeyhole size={13}/> No authentication secrets are stored here. Only HTTPS or loopback HTTP endpoints are accepted. Every imported tool call requires separate approval in Agents.</p>
+        <p className="mcp-security-note"><LockKeyhole size={13}/> This build supports unauthenticated MCP endpoints only. Use HTTPS or loopback HTTP; OAuth and bearer-token setup are not implemented. Every imported tool call requires separate approval in Agents.</p>
         {servers.length === 0 ? <div className="mcp-empty">No MCP servers configured yet.</div> : <div className="mcp-server-list">{servers.map(server => {
-          const state = connectionStates[server.id] ?? { status: "saved", tools: 0, detail: "Saved endpoint. Connection has not been checked yet." };
+          const state = connectionStates[server.id] ?? { status: "saved", tools: 0, toolNames: [], detail: "Saved endpoint. Connection has not been checked yet." };
           return <article className="mcp-server-row" key={server.id}>
-            <div><strong>{server.name}</strong><small>{server.endpoint}</small><span className={"mcp-state " + state.status}>{state.status.toUpperCase()} · {state.tools} TOOLS</span><small>{state.detail}</small></div>
+            <div><strong>{server.name}</strong><small>{server.endpoint}</small><span className={"mcp-state " + state.status}>{state.status.toUpperCase()} · {state.tools} TOOLS</span><small>{state.detail}</small><small>TOOLS: {state.toolNames.join(", ") || "none discovered"}</small></div>
             <div><button className="icon-btn" title="Reconnect MCP server" aria-label={"Reconnect " + server.name} disabled={mcpBusy} onClick={() => void connectSavedServer(server, new AbortController().signal)}><RefreshCw size={14}/></button><button className="icon-btn" title="Remove MCP server" aria-label={"Remove " + server.name} onClick={() => void removeServer(server)}><Trash2 size={14}/></button></div>
           </article>;
         })}</div>}
