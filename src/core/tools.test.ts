@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ToolGateway, type ToolExecutionContext } from "./tools";
+import { ToolGateway, type ToolExecutionContext, type ToolAuditEvent } from "./tools";
 import { ok, err, type Result } from "./result";
 
 const context = (): ToolExecutionContext => ({
@@ -45,6 +45,30 @@ describe("ToolGateway", () => {
     expect(result.ok).toBe(true);
     expect(execute).toHaveBeenCalledOnce();
   });
+  it("serializes concurrent attempts for the same run and step before audit lookup completes", async () => {
+    let releaseHistory!: () => void;
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const audit = {
+      record: vi.fn().mockResolvedValue(ok(undefined)),
+      list: vi.fn(() => new Promise<Result<ToolAuditEvent[]>>(resolve => {
+        releaseHistory = () => resolve(ok([]));
+      }))
+    };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+
+    const first = gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    const concurrent = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(concurrent).toMatchObject({
+      ok: false,
+      error: { code: "tool_failed", message: expect.stringContaining("already executing") }
+    });
+    expect(audit.list).toHaveBeenCalledOnce();
+    releaseHistory();
+    expect((await first).ok).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it("blocks replay when a durable audit record already exists for the same run and step", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const prior = { toolId: "sample", runId: "run-1", traceId: "trace-1", status: "started" as const, timestamp: 100 };

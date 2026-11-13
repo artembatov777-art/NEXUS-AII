@@ -78,6 +78,8 @@ const serializedSize = (value: unknown): number | null => {
 /** All tool execution must pass through this gateway. It is default-deny by construction. */
 export class ToolGateway {
   private readonly tools = new Map<string, ToolDefinition<unknown, unknown>>();
+  /** Prevents concurrent callers from crossing the same run/step audit boundary. */
+  private readonly activeSteps = new Set<string>();
 
   constructor(
     private readonly permissions: PermissionService,
@@ -134,94 +136,104 @@ export class ToolGateway {
     catch { return err("validation", "Tool input validation failed unexpectedly."); }
     if (!validated.ok) return validated;
 
-    // A durable "started" or terminal record means this exact run/step may already
-    // have crossed an external side-effect boundary. Never replay it blindly.
-    if (this.audit.list) {
-      let history: Result<ToolAuditEvent[]>;
-      try { history = await this.audit.list({ runId: context.runId, limit: 500 }); }
-      catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
-      if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
-      const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
-      if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
+    const stepKey = JSON.stringify([context.runId, toolId, context.traceId]);
+    if (this.activeSteps.has(stepKey)) {
+      return err("tool_failed", "This tool step is already executing and cannot be started concurrently.");
     }
-
-    let resource: string;
-    try { resource = tool.resourceForInput ? tool.resourceForInput(validated.value) : tool.id; }
-    catch { return err("validation", "Tool permission resource could not be resolved."); }
-    if (typeof resource !== "string" || !resource.trim() || resource.length > 4096) {
-      return err("validation", "Tool permission resource is invalid.");
-    }
-
-    for (const scope of tool.requiredPermissions) {
-      let decision: "allow" | "deny" | "ask_user";
-      try {
-        decision = await this.permissions.authorize({
-          actorId,
-          scope,
-          resource,
-          reason: `Tool "${tool.id}" requires ${scope}.`,
-          risk: tool.risk
-        });
-      } catch {
-        await this.writeAudit(tool.id, context, "denied", "Permission service failed closed.");
-        return err("permission_denied", "Permission service failed closed.");
-      }
-      if (decision !== "allow") {
-        await this.writeAudit(tool.id, context, "denied", decision === "ask_user" ? "User approval is required." : "Permission denied.");
-        return err("permission_denied", decision === "ask_user" ? "Tool requires explicit user approval." : "Tool permission was denied.");
-      }
-    }
-
-    const auditStarted = await this.writeAudit(tool.id, context, "started");
-    if (!auditStarted.ok) return err("storage_failed", "Tool execution was blocked because the audit event could not be recorded.");
-    if (context.signal.aborted) {
-      await this.writeAudit(tool.id, context, "failed", "Cancelled before execution.");
-      return err("cancelled", "Tool execution was cancelled.");
-    }
-
-    const controller = new AbortController();
-    const onAbort = () => controller.abort();
-    context.signal.addEventListener("abort", onAbort, { once: true });
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, tool.timeoutMs);
+    this.activeSteps.add(stepKey);
     try {
-      const execution = tool.execute(validated.value, { ...context, signal: controller.signal });
-      const timeoutResult = new Promise<never>((_, reject) => {
-        const onControllerAbort = () => reject(new Error(timedOut ? "Tool execution timed out." : "Tool execution was cancelled."));
-        controller.signal.addEventListener("abort", onControllerAbort, { once: true });
-      });
-      const result = await Promise.race([execution, timeoutResult]);
-      if (!result.ok) {
-        await this.writeAudit(tool.id, context, "failed", result.error.code);
-        return result;
+      // A durable "started" or terminal record means this exact run/step may already
+      // have crossed an external side-effect boundary. Never replay it blindly.
+      if (this.audit.list) {
+        let history: Result<ToolAuditEvent[]>;
+        try { history = await this.audit.list({ runId: context.runId, limit: 500 }); }
+        catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
+        if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
+        const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
+        if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
       }
-      const outputSize = serializedSize(result.value);
-      if (outputSize === null || outputSize > MAX_OUTPUT_BYTES) {
-        await this.writeAudit(tool.id, context, "failed", "Output exceeded 64 KB or was not serializable.");
-        return err("tool_failed", "Tool output must be valid JSON and no larger than 64 KB.");
+  
+      let resource: string;
+      try { resource = tool.resourceForInput ? tool.resourceForInput(validated.value) : tool.id; }
+      catch { return err("validation", "Tool permission resource could not be resolved."); }
+      if (typeof resource !== "string" || !resource.trim() || resource.length > 4096) {
+        return err("validation", "Tool permission resource is invalid.");
       }
-      const auditCompleted = await this.writeAudit(tool.id, context, "completed");
-      if (!auditCompleted.ok) {
-        return err(
-          "side_effect_completed_audit_failed",
-          "The tool completed successfully, but its completion audit could not be persisted. Do not automatically retry: the side effect may already have happened."
-        );
+  
+      for (const scope of tool.requiredPermissions) {
+        let decision: "allow" | "deny" | "ask_user";
+        try {
+          decision = await this.permissions.authorize({
+            actorId,
+            scope,
+            resource,
+            reason: `Tool "${tool.id}" requires ${scope}.`,
+            risk: tool.risk
+          });
+        } catch {
+          await this.writeAudit(tool.id, context, "denied", "Permission service failed closed.");
+          return err("permission_denied", "Permission service failed closed.");
+        }
+        if (decision !== "allow") {
+          await this.writeAudit(tool.id, context, "denied", decision === "ask_user" ? "User approval is required." : "Permission denied.");
+          return err("permission_denied", decision === "ask_user" ? "Tool requires explicit user approval." : "Tool permission was denied.");
+        }
       }
-      return result as Result<Output>;
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Tool execution failed.";
-      const cancelled = context.signal.aborted || (!timedOut && controller.signal.aborted);
-      const code = timedOut ? "timeout" : cancelled ? "cancelled" : "tool_failed";
-      await this.writeAudit(tool.id, context, "failed", code);
-      return err(code, message, code === "timeout");
-    } finally {
-      clearTimeout(timeout);
-      context.signal.removeEventListener("abort", onAbort);
+  
+      const auditStarted = await this.writeAudit(tool.id, context, "started");
+      if (!auditStarted.ok) return err("storage_failed", "Tool execution was blocked because the audit event could not be recorded.");
+      if (context.signal.aborted) {
+        await this.writeAudit(tool.id, context, "failed", "Cancelled before execution.");
+        return err("cancelled", "Tool execution was cancelled.");
+      }
+  
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      context.signal.addEventListener("abort", onAbort, { once: true });
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, tool.timeoutMs);
+      try {
+        const execution = tool.execute(validated.value, { ...context, signal: controller.signal });
+        const timeoutResult = new Promise<never>((_, reject) => {
+          const onControllerAbort = () => reject(new Error(timedOut ? "Tool execution timed out." : "Tool execution was cancelled."));
+          controller.signal.addEventListener("abort", onControllerAbort, { once: true });
+        });
+        const result = await Promise.race([execution, timeoutResult]);
+        if (!result.ok) {
+          await this.writeAudit(tool.id, context, "failed", result.error.code);
+          return result;
+        }
+        const outputSize = serializedSize(result.value);
+        if (outputSize === null || outputSize > MAX_OUTPUT_BYTES) {
+          await this.writeAudit(tool.id, context, "failed", "Output exceeded 64 KB or was not serializable.");
+          return err("tool_failed", "Tool output must be valid JSON and no larger than 64 KB.");
+        }
+        const auditCompleted = await this.writeAudit(tool.id, context, "completed");
+        if (!auditCompleted.ok) {
+          return err(
+            "side_effect_completed_audit_failed",
+            "The tool completed successfully, but its completion audit could not be persisted. Do not automatically retry: the side effect may already have happened."
+          );
+        }
+        return result as Result<Output>;
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "Tool execution failed.";
+        const cancelled = context.signal.aborted || (!timedOut && controller.signal.aborted);
+        const code = timedOut ? "timeout" : cancelled ? "cancelled" : "tool_failed";
+        await this.writeAudit(tool.id, context, "failed", code);
+        return err(code, message, code === "timeout");
+      } finally {
+        clearTimeout(timeout);
+        context.signal.removeEventListener("abort", onAbort);
+      }
+      } finally {
+        this.activeSteps.delete(stepKey);
+      }
     }
-  }
+  
 
   private async writeAudit(toolId: string, context: ToolExecutionContext, status: ToolAuditEvent["status"], detail?: string): Promise<Result<void>> {
     try {
