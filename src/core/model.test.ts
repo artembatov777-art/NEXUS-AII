@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ModelDescriptor } from "./domain";
 import { ModelRegistry, ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } from "./model";
-import { ok } from "./result";
+import { ok, type Result } from "./result";
 
 class FakeProvider implements ModelProvider {
   readonly id = "fake";
@@ -55,7 +55,7 @@ describe("ModelRouter", () => {
   it("reports all provider failures when no catalog is available", async () => {
     class OfflineProvider implements ModelProvider {
       readonly id = "offline";
-      async listModels() { throw new Error("Gateway offline"); }
+      async listModels(): Promise<Result<ModelDescriptor[]>> { throw new Error("Gateway offline"); }
       async *stream(_request: ModelRequest): AsyncIterable<ModelEvent> { yield { type: "completed" }; }
     }
     const router = new ModelRouter();
