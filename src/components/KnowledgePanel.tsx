@@ -117,7 +117,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       </label>
       {items.length === 0 ? <div className="memory-empty">Create a project first. Knowledge is isolated by project.</div> : <>
         <div className="knowledge-import">
-          <div><strong><FileText size={15}/> Import a document</strong><p>Plain text and Markdown, up to 1 MB per file.</p></div>
+          <div><strong><FileText size={15}/> Import a document</strong><p>TXT, Markdown, PDF and DOCX, up to 1 MB per file.</p></div>
           <label className="primary-btn"><Upload size={14}/> {working ? "Processing…" : "Choose file"}
             <input type="file" accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFile(e.target.files?.[0]); e.currentTarget.value = ""; }}/>
           </label>

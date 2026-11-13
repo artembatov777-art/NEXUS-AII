@@ -208,19 +208,21 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     setBusy(true);
     try {
       addFeed("Retrieving relevant saved profile and project context…");
+      const contextWarnings: string[] = [];
       const memories = await runtime.memoryService.search(goal, "profile", 4);
-      if (!memories.ok) throw new Error("Could not retrieve saved memory for planning: " + memories.error.message);
-      const contextParts = memories.value.map(item => `[Profile memory: ${item.category}; source: ${item.source.label}] ${item.content}`);
+      const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.category}; source: ${item.source.label}] ${item.content}`) : [];
+      if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
       if (projectId) {
         const [knowledge, projectMemories] = await Promise.all([
           runtime.knowledgeService.retrieve(goal, projectId, 4),
           runtime.memoryService.search(goal, "project", 3, projectId)
         ]);
-        if (!knowledge.ok) throw new Error("Could not retrieve selected project knowledge: " + knowledge.error.message);
-        if (!projectMemories.ok) throw new Error("Could not retrieve selected project memories: " + projectMemories.error.message);
-        if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
-        contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.category}; source: ${item.source.label}] ${item.content}`));
+        if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
+        else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
+        if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
+        else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.category}; source: ${item.source.label}] ${item.content}`));
       }
+      if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
       const referenceContext = contextParts.join("\n\n").slice(0, 12_000);
       addFeed("Sending the task and approved reference context to the configured model planner…");
       const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
