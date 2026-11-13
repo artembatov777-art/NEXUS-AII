@@ -1108,6 +1108,18 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
         Some(v) => Some(v.as_str().filter(|s|s.len()<=1000).ok_or("Invalid audit detail.")?.to_string())
     };
     let tx=connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+    // The Immediate transaction makes this claim atomic across multiple windows/processes.
+    // A durable started/terminal event means this run step must never execute again.
+    if status == "started" {
+        let already_claimed: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tool_audit_events WHERE tool_id=?1 AND run_id=?2 AND trace_id=?3 AND status IN ('started','completed','failed'))",
+            params![tool_id,run_id,trace_id],
+            |row| row.get(0)
+        ).map_err(|error| error.to_string())?;
+        if already_claimed {
+            return Err("Tool step already has a durable execution claim.".into());
+        }
+    }
     tx.execute("INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES(?1,?2,?3,?4,?5,?6)",params![tool_id,run_id,trace_id,status,timestamp,detail]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM tool_audit_events WHERE id NOT IN (SELECT id FROM tool_audit_events ORDER BY id DESC LIMIT ?1)",params![MAX_PERSISTED_EVENTS]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())
@@ -2122,6 +2134,24 @@ mod database_tests {
         assert!(listed[0].get("apiKey").is_none());
         assert!(listed[0].get("prompt").is_none());
         assert!(listed[0].get("unexpected").is_none());
+    }
+
+    #[test]
+    fn native_audit_claim_prevents_duplicate_started_events_atomically() {
+        let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let started=serde_json::json!({"toolId":"notes.write","runId":"run-1","traceId":"step-1","status":"started","timestamp":1.0});
+        record_tool_audit_event_record(&mut connection,started.clone()).expect("first claim");
+        assert!(record_tool_audit_event_record(&mut connection,started.clone()).is_err());
+
+        let completed=serde_json::json!({"toolId":"notes.write","runId":"run-1","traceId":"step-1","status":"completed","timestamp":2.0});
+        record_tool_audit_event_record(&mut connection,completed).expect("terminal event");
+        assert!(record_tool_audit_event_record(&mut connection,started).is_err());
+
+        let denied=serde_json::json!({"toolId":"notes.write","runId":"run-1","traceId":"step-2","status":"denied","timestamp":3.0});
+        record_tool_audit_event_record(&mut connection,denied).expect("denied attempt");
+        let retry=serde_json::json!({"toolId":"notes.write","runId":"run-1","traceId":"step-2","status":"started","timestamp":4.0});
+        record_tool_audit_event_record(&mut connection,retry).expect("retry after denial");
     }
 
     #[test]
