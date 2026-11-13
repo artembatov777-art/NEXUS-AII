@@ -60,3 +60,32 @@ jobs:
           path: src-tauri/target/release/nexus-au*
           if-no-files-found: error
           retention-days: 7
+
+  commit-lockfiles:
+    needs: native
+    if: github.ref == 'refs/heads/feat/nexus-core-architecture' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate Rust dependency lockfile
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+      - name: Commit dependency lockfiles on the protected working branch
+        run: |
+          git add package-lock.json src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Dependency lockfiles are already tracked and unchanged."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Add dependency lockfiles for reproducible builds"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
