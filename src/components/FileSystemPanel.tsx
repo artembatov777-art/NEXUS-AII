@@ -346,13 +346,12 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           rollbackFailures.push(item.destination);
         }
       }
-      if (rollbackFailures.length) {
-        setSelectedPaths([]);
-        setError("Bulk move stopped and rollback was incomplete. " + rollbackFailures.length + " file(s) need manual review: " + rollbackFailures.slice(0, 4).join(", "));
-      } else {
-        setError("Bulk move failed; previously moved files were restored. " + (cause instanceof Error ? cause.message : String(cause)));
-      }
+      const failureMessage = rollbackFailures.length
+        ? "Bulk move stopped and rollback was incomplete. " + rollbackFailures.length + " file(s) need manual review: " + rollbackFailures.slice(0, 4).join(", ")
+        : "Bulk move failed; previously moved files were restored. " + (cause instanceof Error ? cause.message : String(cause));
+      if (rollbackFailures.length) setSelectedPaths([]);
       await refresh(currentPath, true);
+      setError(failureMessage);
     } finally {
       setBusy(false);
     }
