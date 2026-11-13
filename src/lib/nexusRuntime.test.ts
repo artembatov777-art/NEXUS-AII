@@ -200,6 +200,7 @@ describe("createNexusRuntime", () => {
       validateInput: input => input && typeof input === "object" && "path" in input && "content" in input
         ? ok(input as { path: string; content: string })
         : { ok: false as const, error: { code: "validation" as const, message: "Invalid file write", retryable: false } },
+      resourceForInput: input => input.path,
       execute
     }).ok).toBe(true);
     const workflow = runtime.createAgentWorkflow("denial-test-provider", "test-model", "denied-thread", ["workspace.write"]);
