@@ -55,7 +55,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Implement document ingestion and project-scoped knowledge retrieval with source/page/section provenance.
 - [x] Add reliable indexing, rebuild, and recovery behavior: startup reconciliation, bounded batches, corrupt-row cleanup, cancellation, and resumable repair.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
-- [ ] Test privacy boundaries, retrieval quality, citations, and persistence.
+- [x] Test privacy boundaries, project-scoped retrieval quality, source citations, and native/browser persistence.
 
 **Exit criteria:** NEXUS can retrieve the right approved context across sessions and projects, cite source material, and let the owner inspect and control stored information.
 
