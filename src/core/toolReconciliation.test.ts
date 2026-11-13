@@ -75,7 +75,7 @@ describe("ToolReconciliationService", () => {
   });
 
   it("propagates audit history failures and rejects malformed identifiers", async () => {
-    const audit: ListableAuditSink = {
+    const audit: ToolAuditSink & { list: NonNullable<ToolAuditSink["list"]> } = {
       record: vi.fn(async () => ok(undefined)),
       list: vi.fn(async () => ({ ok: false as const, error: { code: "storage_failed" as const, message: "Unavailable", retryable: true } }))
     };

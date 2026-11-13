@@ -60,7 +60,7 @@ export class ToolReconciliationService {
 
 function validId(value: string): boolean {
   return typeof value === "string" && value.trim().length > 0 &&
-    value.length <= 160 && !/[\\u0000-\\u001f\\u007f]/.test(value);
+    value.length <= 160 && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
