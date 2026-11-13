@@ -13,6 +13,30 @@ const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
 describe("TauriModelProvider", () => {
+  it("discovers models independently across multiple registered provider profiles", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command !== "list_provider_models") return Promise.resolve(true);
+      const baseUrl = (args as { baseUrl: string }).baseUrl;
+      return Promise.resolve(baseUrl.includes("ollama") ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
+    });
+    const router = createTauriModelRouterForProfiles([
+      { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "", inferenceLocation: "local", credentialHandle: "none" } },
+      { id: "nexus.omniroute", settings: { baseUrl: "https://ollama-gateway.example/v1", model: "", inferenceLocation: "remote", credentialHandle: "default" } }
+    ]);
+    if (!router) throw new Error("Expected native model router.");
+    const result = await router.listModels();
+    expect(result).toMatchObject({
+      ok: true,
+      value: [
+        { id: "qwen-local", providerId: "nexus.ollama", declaredLocation: "local" },
+        { id: "cloud-a", providerId: "nexus.omniroute", declaredLocation: "remote" },
+        { id: "cloud-b", providerId: "nexus.omniroute", declaredLocation: "remote" }
+      ]
+    });
+    expect(mockedInvoke).toHaveBeenCalledTimes(2);
+  });
+
   it("prepares Ollama as a loopback-only no-key profile without starting it", () => {
     expect(createOllamaProviderProfile("qwen2.5:7b")).toEqual({
       id: "nexus.ollama",
