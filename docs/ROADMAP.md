@@ -41,7 +41,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
 - [ ] Prepare the Ollama adapter as a separate local inference path.
 - [ ] Make local versus remote processing explicit and avoid inferring locality from a loopback gateway URL.
-- [ ] Keep provider secrets in the operating-system credential vault, never browser storage.
+- [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for existing OmniRoute installations and `ollama` for Ollama API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
 - [ ] Add reliable timeout, retry, and request cleanup behavior.
 
 **Exit criteria:** a selected cloud model works through OmniRoute; the local adapter works when a local runtime is available; model identity, route, errors, usage, streaming, and cancellation are observable and tested.

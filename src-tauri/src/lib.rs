@@ -435,8 +435,12 @@ fn delete_knowledge_document(database: State<'_, AppDatabase>, document_id: Stri
     delete_knowledge_document_record(&connection,document_id,project_id)
 }
 
+fn valid_credential_handle(handle: &str) -> bool {
+    matches!(handle, "default" | "ollama")
+}
+
 fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
-    if handle != "default" { return Err("Unknown credential handle.".into()); }
+    if !valid_credential_handle(handle) { return Err("Unknown provider credential profile.".into()); }
     keyring::Entry::new("com.nexusau.desktop", handle).map_err(|e| format!("OS credential store unavailable: {e}"))
 }
 
@@ -470,9 +474,9 @@ fn validate_provider_key(api_key: &str) -> Result<&str, &'static str> {
 }
 
 #[tauri::command]
-fn store_provider_key(api_key: String) -> Result<(), String> {
+fn store_provider_key(api_key: String, credential_handle: String) -> Result<(), String> {
     let normalized = validate_provider_key(&api_key).map_err(str::to_owned)?;
-    credential_entry("default")?.set_password(normalized).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
+    credential_entry(&credential_handle)?.set_password(normalized).map_err(|e| format!("Could not store API key in the OS credential vault: {e}"))
 }
 
 fn classify_provider_vault_status(entry_available: bool, credential_present: Option<bool>) -> &'static str {
@@ -484,9 +488,8 @@ fn classify_provider_vault_status(entry_available: bool, credential_present: Opt
     }
 }
 
-#[tauri::command]
-fn provider_vault_status() -> &'static str {
-    match credential_entry("default") {
+fn provider_vault_status_for(handle: &str) -> &'static str {
+    match credential_entry(handle) {
         Ok(entry) => match entry.get_password() {
             Ok(secret) => classify_provider_vault_status(true, Some(!secret.is_empty())),
             Err(keyring::Error::NoEntry) => classify_provider_vault_status(true, Some(false)),
@@ -497,18 +500,22 @@ fn provider_vault_status() -> &'static str {
 }
 
 #[tauri::command]
-fn has_provider_key() -> bool {
-    provider_vault_status() == "available"
+fn provider_vault_status(credential_handle: String) -> &'static str {
+    provider_vault_status_for(&credential_handle)
 }
 
 #[tauri::command]
-fn delete_provider_key() -> Result<(), String> {
-    match credential_entry("default")?.delete_credential() {
+fn has_provider_key() -> bool {
+    provider_vault_status_for("default") == "available"
+}
+
+#[tauri::command]
+fn delete_provider_key(credential_handle: String) -> Result<(), String> {
+    match credential_entry(&credential_handle)?.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(format!("Could not delete API key from the OS credential vault: {e}"))
     }
-
 }
 
 #[cfg(test)]
@@ -541,6 +548,14 @@ mod payload_validation_tests {
             request_stream_cancellation(&mut state, &format!("stream-{index}"));
         }
         assert_eq!(state.pending_cancellations.len(), MAX_PENDING_STREAM_CANCELLATIONS);
+    }
+
+    #[test]
+    fn provider_credentials_use_separate_allowlisted_vault_profiles() {
+        assert!(valid_credential_handle("default"));
+        assert!(valid_credential_handle("ollama"));
+        assert!(!valid_credential_handle("none"));
+        assert!(!valid_credential_handle("unknown"));
     }
 
     #[test]
