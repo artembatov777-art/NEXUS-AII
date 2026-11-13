@@ -124,10 +124,10 @@ export function loadProvider(storage: StorageAdapter = localStorage): ProviderSe
       typeof value?.baseUrl !== "string" ||
       value.baseUrl.trim().length === 0 ||
       value.baseUrl.length > 2048 ||
-      /[\\u0000-\\u001f\\u007f]/.test(value.baseUrl) ||
+      /[\u0000-\u001f\u007f]/.test(value.baseUrl) ||
       typeof value.model !== "string" ||
       value.model.length > 128 ||
-      /[\\u0000-\\u001f\\u007f]/.test(value.model)
+      /[\u0000-\u001f\u007f]/.test(value.model)
     ) return DEFAULT_PROVIDER;
 
     const credentialHandle = value.credentialHandle;

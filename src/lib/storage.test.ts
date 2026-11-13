@@ -84,7 +84,7 @@ describe("conversation workspace storage", () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:provider:v1", JSON.stringify({
       baseUrl: "https://api.example/v1",
-      model: "invalid\\nmodel",
+      model: "invalid\nmodel",
       inferenceLocation: "remote"
     }));
     expect(loadProvider(storage)).toEqual({
