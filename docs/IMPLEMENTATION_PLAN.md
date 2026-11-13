@@ -6,7 +6,7 @@
 
 The active branch is `feat/nexus-core-architecture`. It contains the React + TypeScript + Vite workspace, Tauri 2/Rust host, SQLite persistence, memory and knowledge retrieval, agent runtime, MCP HTTP transport, Tool Gateway, OS credential-vault support, backup/restore, and cross-platform CI workflows. The native provider command supports one-shot and bounded SSE OpenAI-compatible chat requests through OmniRoute, bounded `/v1/models` discovery, incremental chat rendering, local/remote route disclosure, and native stream cancellation with early-consumer cleanup. The selected inference location is now an explicit owner-declared setting rather than being inferred from a localhost gateway URL; it is persisted with provider settings but is not independently verified by the gateway. An in-memory provider-neutral Model Registry now tracks the discovered catalog, explicit active-model selection, and catalog discovery state; it does not claim verified inference health. Capability metadata and the actual runtime lifecycle remain open. Training Lab now includes dataset-governance validation, deterministic phrase-based evaluation, SQLite persistence for versioned dataset manifests and immutable experiment metadata, and a workspace UI. Artifact tracking, real model evaluation, and model training are not claimed.
 
-The last baseline with recorded cross-platform CI evidence is older than the current documentation/UI changes. The latest branch head must pass fresh CI before those changes are treated as verified. Real interactive desktop and credential-vault smoke tests remain separate manual acceptance items.
+Commit `ae4276e` passed frontend Quality (52 test files / 311 tests; npm audit reported 0 vulnerabilities) and the Mobile Interface Preview workflow. The Windows/macOS/Linux native matrix is still running. Real interactive desktop and credential-vault smoke tests remain separate manual acceptance items.
 
 ## Parallel delivery — Mobile interface preview
 
@@ -285,10 +285,10 @@ The owner-approved seven-phase sequence is interface-first. Historical milestone
 - [x] Add responsive layouts to the main application and mobile preview.
 - [x] Add visible keyboard focus and reduced-motion behavior.
 - [x] Add responsive mobile navigation and consistent dialog Escape/focus/scroll handling.
-- [ ] Audit every visible control, loading/empty/error state, and module transition.
-- [ ] Add automated UI interaction coverage where supported by the current test stack.
+- [x] Audit every visible control, loading/empty/error state, and module transition; native-only and preview-only actions are explicitly disabled or disclosed.
+- [x] Add automated UI interaction coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts.
 - [ ] Verify both the hosted preview and main responsive application on a real iPhone.
-- [ ] Pass frontend Quality, mobile-preview deployment, and native build/test workflows on the final Phase I head.
+- [ ] Pass frontend Quality, mobile-preview deployment, and native build/test workflows on the final Phase I head; current commit `ae4276e` passed frontend Quality and mobile preview, while the native matrix is still running.
 
 **Phase I status: in progress.** Do not mark complete until every exit item is satisfied. The current interface contains deliberately disconnected/mock surfaces for integrations implemented in later phases; those surfaces must disclose that they are not live.
 

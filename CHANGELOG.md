@@ -10,9 +10,10 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Added an injectable embedding extractor boundary so validation and vector conversion can be tested without downloading model weights.
 - Added the explicit Rust `Vec<String>` type to the provider model catalog parser, fixing the cross-platform Rust inference error.
 
-### Verification pending
-- The previous Quality CI failed before tests/build because npm audit found 11 dependency vulnerabilities.
-- The previous Native desktop quality CI failed at `cargo check` on an ambiguous vector type. The new commit must pass fresh CI before either fix is marked verified.
+### Verification
+- Commit `ae4276e`: frontend Quality passed with 52 test files / 311 tests; `npm audit --audit-level=high` reported 0 vulnerabilities.
+- Commit `ae4276e`: Mobile Interface Preview build and deployment passed.
+- Native Windows/macOS/Linux matrix is still running; do not treat the current Rust edits as cross-platform verified until it completes.
 
 ### Added
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
@@ -44,13 +45,14 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Invalid stored checkpoint records and stale writes are rejected.
 - No provider credentials, shell access, or unrestricted host capabilities were added.
 
-### Known limitations
-- The built-in workflow agent is a deterministic demonstration, not a model-powered planner. The live event feed is session-only; checkpoints and final preview state persist in localStorage, but approval grants are ephemeral. Reopening the app requires fresh approval for waiting runs.
-- Agent profile editing currently changes only the built-in local workflow executor name and execution budgets. It is not a general-purpose visual agent authoring system.
-- Browser preview checkpoint and audit storage remain tamperable and non-transactional; native secure persistence and idempotency are required before sensitive tools are enabled.
-- The resumable step-based runtime is wired into the Agent Control Center in browser preview. Approval grants are in-memory and require re-approval after restart.
-- LocalStorage adapters, including memory, checkpoints, and audit, are preview-only and are not encrypted or tamper-proof production storage. The audit adapter also lacks atomic multi-tab writes.
-- SQLite migrations, OS credential vault, native stdio MCP transport, voice, native desktop verification, and hosted proxy remain pending.
-- The new dependency graph has not yet been confirmed by a successful npm audit; the repository still has no committed package lockfile, so resolved transitive versions are not fully reproducible.
+### Current limitations and release gates
+- Browser preview remains a disconnected demonstration: it uses local sample data and cannot call the native provider, credential vault, or owner filesystem.
+- The native desktop stores workspace records, agent checkpoints, audit events, and traces in SQLite. Provider secrets use platform credential-vault adapters; these still require manual lifecycle verification in real desktop sessions.
+- One-time approval grants intentionally remain ephemeral and must be re-issued after restart. Automatic replay/reconciliation of uncertain external side effects is not implemented.
+- Semantic vector embeddings remain in WebView IndexedDB; SQLite is authoritative for knowledge text and metadata. Lexical retrieval remains the fallback.
+- The MCP transport supports configured HTTP(S) servers without OAuth/bearer-token authentication; native stdio transport is not implemented.
+- Voice capture/output, unrestricted shell execution, arbitrary desktop automation, and hosted multi-user proxy are outside Release 1.0 scope.
+- SQLite, browser stores, checkpoints, and exported backups are not application-level encrypted; rely on OS/device protection and treat backups as sensitive.
+- The repository does not yet commit a Rust `Cargo.lock`; a Rust dependency advisory audit remains a release-hardening task.
 
 - Phase II completed for browser-preview/runtime scope: added ToolRegistry, HTTP-capable MCP JSON-RPC client and schema adapter, ModelRouter-backed planning adapter with plan validation, resumable-agent coordinator with approval pause/resume, persistent local trace sink, Trace Inspector, and runtime factories. CI passed on 2026-11-08 with 22 test files and 81 tests. See IMPLEMENTATION_PLAN.md for explicit production boundaries.

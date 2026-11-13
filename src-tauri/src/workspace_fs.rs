@@ -269,6 +269,9 @@ fn write_workspace_file_inner(
     if path.trim().is_empty() || path.len() > 4096 || content.len() as u64 > MAX_TEXT_FILE_BYTES {
         return Err("The file path or content exceeds the allowed size.".into());
     }
+    if expected_content.map_or(false, |expected| expected.len() as u64 > MAX_TEXT_FILE_BYTES) {
+        return Err("The expected file snapshot exceeds the 2 MB edit limit.".into());
+    }
     let target = PathBuf::from(path);
     let parent = target.parent().ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
     let root = access.ensure_new_path_allowed(parent)?;
@@ -283,8 +286,16 @@ fn write_workspace_file_inner(
                 if metadata.len() > MAX_TEXT_FILE_BYTES {
                     return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
                 }
-                let current = fs::read_to_string(&target)
+                let mut current_bytes = Vec::with_capacity(metadata.len() as usize);
+                let current_file = fs::File::open(&target)
                     .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                current_file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut current_bytes)
+                    .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+                    return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+                }
+                let current = String::from_utf8(current_bytes)
+                    .map_err(|_| "The file changed or is no longer readable as UTF-8. Reload it before saving.".to_string())?;
                 if current != expected {
                     return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
                 }
@@ -356,6 +367,26 @@ mod tests {
         assert!(result.unwrap_err().contains("File changed outside NEXUS"));
         assert_eq!(fs::read_to_string(&target).unwrap(), "external edit");
 
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn checked_write_rejects_oversized_expected_snapshot_before_reading_or_mutating() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-checked-size-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("notes.txt");
+        fs::write(&target, "stable").expect("create file");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+        let oversized_snapshot = "x".repeat(MAX_TEXT_FILE_BYTES as usize + 1);
+        let result = write_workspace_file_inner(target.to_str().unwrap(), "replacement", Some(&oversized_snapshot), &access);
+        assert!(result.unwrap_err().contains("expected file snapshot exceeds"));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "stable");
         fs::remove_dir_all(base).expect("cleanup");
     }
 

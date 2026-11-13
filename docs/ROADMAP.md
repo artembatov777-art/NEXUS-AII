@@ -28,7 +28,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add automated UI coverage for mobile navigation, preview-only chat/agent actions, empty input handling, keyboard shortcuts, and dialog keyboard contracts (Vitest + jsdom).
 - [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
 - [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
-- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `0e41f2e`; native Windows/macOS/Linux quality matrix is still running and must pass before Phase I can close.
+- [x] Pass frontend Quality and Mobile Interface Preview workflows on current code commit `ae4276e`; native Windows/macOS/Linux quality matrix is still running and must pass before Phase I can close.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -118,7 +118,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
-- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `0e41f2e`; the native desktop quality matrix is still running. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
+- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `ae4276e`; the native desktop quality matrix is still running. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - OmniRoute is a cloud gateway. A local gateway address does not prove that the selected model runs locally.

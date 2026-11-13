@@ -43,7 +43,7 @@ Last reviewed: 2026-11-13.
 | Audit tampering/loss | Tool executes but audit completion fails | Persist start before side effect; idempotency keys; uncertain outcome state | Native transactional SQLite audit/trace persistence and retention caps are implemented. The gateway checks prior audit records for the same run/step and blocks replay after a started or terminal event; automatic result replay and manual reconciliation remain pending. |
 | State corruption | Stale agent overwrites newer checkpoint | Versioned schema, monotonic sequence, compare-and-swap | Versioned checkpoints use native SQLite persistence with transactional compare-and-swap; approval grants remain ephemeral by design and must be re-issued after restart. |
 | Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Session-aware HTTP transport, bounded metadata/schema/output, HTTPS-or-loopback-only endpoints, and per-call approval with input preview are implemented. OAuth/bearer authentication, domain allowlists, and adversarial live-server tests remain open. |
-| Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Partial; dependency audit currently reports 6 advisories |
+| Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | Frontend `npm audit --audit-level=high` reported 0 vulnerabilities on `ae4276e`; a committed Rust `Cargo.lock` and Rust advisory audit are still missing. GitHub Actions are version-tagged rather than pinned to immutable SHAs. |
 | Web content abuse | Browser agent visits untrusted URL | Domain policy, navigation restrictions, isolated browser context | Not implemented |
 | Local data theft | Device/browser profile is compromised | Minimize secrets, OS keychain, encrypted backup, explicit export | Not implemented |
 
@@ -81,12 +81,12 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 
 ## 7. Known gaps and next controls
 
-1. Add operation-level idempotency and reconciliation for uncertain side effects; native SQLite audit/trace persistence is now implemented.
+1. Add automatic result replay and manual reconciliation for uncertain external side effects; native audit-led replay protection currently blocks blind re-execution.
 2. Add a user-facing approval queue and durable native approval state. The core currently supports ephemeral, one-time, run/agent/permission-bound grants; restart requires re-approval.
 3. Add operation-level idempotency and a durable event outbox to the serializable step-based agent runtime; do not attempt to serialize async-generator internals.
-4. Add Tauri command allowlists, argument validation, CSP review, and native build verification.
-5. Add OS keychain integration and remove any temptation to store provider secrets in browser storage.
-6. Add dependency audit triage; do not apply force upgrades without reviewing breaking changes.
+4. Continue Tauri capability/CSP review and add adversarial path, permission-race, and command-boundary tests; command argument validation and cross-platform native CI are implemented.
+5. Complete manual OS keychain lifecycle smoke tests on real Windows, macOS, and Linux desktop sessions; provider keys already use platform credential-vault adapters.
+6. Commit and review a reproducible Rust `Cargo.lock`, add a Rust dependency advisory audit, and keep the frontend npm audit green; do not apply force upgrades without reviewing breaking changes.
 7. Add adversarial tests for prompt injection, tool output spoofing, path traversal, permission races, and cancellation.
 
 ## 8. Review checklist for every new capability
