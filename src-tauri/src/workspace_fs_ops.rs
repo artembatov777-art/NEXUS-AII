@@ -62,8 +62,10 @@ fn relocate_entry(
     if target == source {
         return Err("The selected entry is already at that location.".into());
     }
-    if fs::symlink_metadata(&target).is_ok() {
-        return Err("A file or folder with that name already exists at the destination.".into());
+    match fs::symlink_metadata(&target) {
+        Ok(_) => return Err("A file or folder with that name already exists at the destination.".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("Could not verify the destination path: {error}")),
     }
     fs::rename(&source, &target)
         .map_err(|error| format!("Could not move the entry. The source and destination may be on different volumes or the entry may be in use: {error}"))?;

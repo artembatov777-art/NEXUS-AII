@@ -157,6 +157,12 @@ describe("FileSystemPanel native workspace access", () => {
     await renderPanel();
     const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("draft.txt"));
     await act(async () => { fileButton!.click(); });
+    const destinationInput = container.querySelector<HTMLInputElement>('input[aria-label="Move destination folder"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(destinationInput, destination);
+      destinationInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Move file");
     await act(async () => { moveButton!.click(); });
     expect(confirm).toHaveBeenCalled();

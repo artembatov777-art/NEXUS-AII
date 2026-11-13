@@ -151,7 +151,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
       const content = await invoke<string>("read_workspace_file", { path: entry.path });
       setSelectedPath(entry.path);
       setRenameName(entry.name);
-      setMoveDestination(currentPath);
+      setMoveDestination("");
       setPreview(content);
       setDraft(content);
       setEditing(false);
@@ -186,13 +186,14 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
     setError("");
     try {
       const nextPath = await invoke<string>("rename_workspace_entry", { path: selectedPath, newName: renameName.trim() });
+      const content = await invoke<string>("read_workspace_file", { path: nextPath });
+      await refresh();
       setSelectedPath(nextPath);
       setRenameName(nextPath.split(/[\\\\/]/).pop() ?? renameName.trim());
-      const content = await invoke<string>("read_workspace_file", { path: nextPath });
       setPreview(content);
       setDraft(content);
+      setEditing(false);
       setNotice("File renamed.");
-      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -279,7 +280,7 @@ export function FileSystemPanel({ onClose }: { onClose: () => void }) {
   return <div className="modal-backdrop file-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="file-workspace" role="dialog" aria-modal="true" aria-labelledby="file-workspace-title">
       <header className="file-workspace-header">
-        <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">NATIVE WORKSPACE MODULE</div><h2 id="file-workspace-title">File system</h2><p>Browse, inspect, create, and edit files in approved folders</p></div></div>
+        <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">NATIVE WORKSPACE MODULE</div><h2 id="file-workspace-title">File system</h2><p>Browse, search, create, edit, rename, and move files in approved folders</p></div></div>
         <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={onClose} aria-label="Close file system"><X size={18}/></button></div>
       </header>
       {!isTauri() ? <div className="file-workspace-empty"><LockKeyhole size={28}/><h3>Native desktop access required</h3><p>Windows folders are accessed by the Tauri desktop app, not the browser preview.</p></div> : <>
