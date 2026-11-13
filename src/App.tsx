@@ -79,6 +79,11 @@ export default function App() {
     providerTestAbortController.current?.abort();
     providerTestAbortController.current = null;
     setModelsLoading(false);
+    setAvailableModels([]);
+    setProviderConnectionState("unchecked");
+    setProviderConnectionMessage("Provider configuration changed. Check the endpoint again.");
+    setModelTestState("unchecked");
+    setModelTestMessage("Provider configuration changed. Run a new generation test.");
   }, [provider.baseUrl, provider.model, provider.inferenceLocation, provider.credentialHandle]);
 
   useEffect(() => {
@@ -372,12 +377,16 @@ export default function App() {
       const refreshed = await registry.refresh();
       if (checkId !== providerCheckGeneration.current) return;
       if (!refreshed.ok) throw new Error(refreshed.error.message);
+      const isOmniRouteAutoAlias = provider.model.trim() === "auto" && (provider.credentialHandle ?? "default") === "default";
       const selected = registry.setActiveModel(NATIVE_MODEL_PROVIDER_ID, provider.model);
-      if (!selected.ok) throw new Error(selected.error.message);
+      if (!selected.ok && !isOmniRouteAutoAlias) throw new Error(selected.error.message);
       const safeModels = registry.listModels().map(model => model.id);
       setAvailableModels(safeModels);
       setProviderConnectionState("reachable");
-      setProviderConnectionMessage("Model catalog loaded with " + safeModels.length + " selectable ID(s). The configured model is \"" + provider.model + "\". Run the generation test to verify that it actually responds.");
+      const modelDescription = isOmniRouteAutoAlias
+        ? "OmniRoute will choose the actual model according to its routing policy."
+        : "The configured model is \"" + provider.model + "\".";
+      setProviderConnectionMessage("Model catalog loaded with " + safeModels.length + " selectable ID(s). " + modelDescription + " Run the generation test to verify that it actually responds.");
       setModelTestState("unchecked");
       setModelTestMessage("Model generation has not been tested in this session.");
       setError("");

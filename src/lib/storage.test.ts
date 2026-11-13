@@ -35,6 +35,17 @@ describe("conversation workspace storage", () => {
     saveProvider(settings, storage);
     expect(loadProvider(storage)).toEqual(settings);
   });
+  it("persists the separate Ollama API-key profile across restarts", () => {
+    const storage = new MemoryStorage();
+    const settings = {
+      baseUrl: "https://ollama.example/v1",
+      model: "qwen3",
+      inferenceLocation: "remote" as const,
+      credentialHandle: "ollama" as const
+    };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
   it("round-trips project ownership", async () => {
     const storage = new MemoryStorage();
     await saveConversations([base], storage);
