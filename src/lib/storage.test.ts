@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConversations, saveConversations, loadProvider, saveProvider, type StorageAdapter } from "./storage";
 import type { Conversation } from "../types";
+
+const { isTauriMock, invokeMock } = vi.hoisted(() => ({ isTauriMock: vi.fn(() => false), invokeMock: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: isTauriMock, invoke: invokeMock }));
 
 class MemoryStorage implements StorageAdapter {
   values = new Map<string, string>();
@@ -11,6 +14,11 @@ const base: Conversation = {
   id: "chat-1", title: "Test", updatedAt: 10, projectId: "project-a",
   messages: [{ id: "message-1", role: "user", content: "hello", createdAt: 9 }]
 };
+
+beforeEach(() => {
+  isTauriMock.mockReturnValue(false);
+  invokeMock.mockReset();
+});
 
 describe("conversation workspace storage", () => {
   it("defaults legacy provider settings to remote instead of inferring locality from localhost", () => {
@@ -61,6 +69,39 @@ describe("conversation workspace storage", () => {
     expect(storage.getItem("nexus-au:conversations:v2")).toContain("chat-1");
     expect(storage.getItem("nexus-au:conversations:v1")).not.toBeNull();
   });
+  it("merges browser conversations into a populated native database before clearing legacy copies", async () => {
+    const storage = new MemoryStorage();
+    const native = { ...base, id: "native-chat", title: "Native", updatedAt: 30 };
+    const browser = { ...base, id: "browser-chat", title: "Browser", updatedAt: 20 };
+    const legacy = { ...base, id: "legacy-chat", title: "Legacy", updatedAt: 10 };
+    const duplicate = { ...base, title: "Stale browser duplicate", updatedAt: 5 };
+    storage.setItem("nexus-au:conversations:v2", JSON.stringify([browser, duplicate]));
+    storage.setItem("nexus-au:conversations:v1", JSON.stringify([legacy]));
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => command === "load_conversations" ? [native] : undefined);
+
+    const loaded = await loadConversations(storage);
+
+    expect(loaded.map(item => item.id)).toEqual(["native-chat", "browser-chat", "legacy-chat"]);
+    expect(loaded.find(item => item.id === "chat-1")?.title).toBe("Test");
+    expect(invokeMock).toHaveBeenCalledWith("save_conversations", { conversations: loaded });
+    expect(storage.getItem("nexus-au:conversations:v2")).toBe("[]");
+    expect(storage.getItem("nexus-au:conversations:v1")).toBe("[]");
+  });
+
+  it("retains browser recovery data when native migration persistence fails", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("nexus-au:conversations:v2", JSON.stringify([base]));
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "load_conversations") return [{ ...base, id: "native-chat" }];
+      throw new Error("SQLite unavailable");
+    });
+
+    await expect(loadConversations(storage)).rejects.toThrow("SQLite unavailable");
+    expect(storage.getItem("nexus-au:conversations:v2")).toContain("chat-1");
+  });
+
   it("drops malformed conversations and malformed messages", async () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:conversations:v2", JSON.stringify([

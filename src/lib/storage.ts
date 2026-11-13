@@ -36,30 +36,71 @@ function normalizeConversation(value: unknown): Conversation | null {
   };
 }
 
+interface StoredConversationRead {
+  items: Conversation[];
+  present: boolean;
+  valid: boolean;
+}
+
+function readConversationKey(storage: StorageAdapter, key: string): StoredConversationRead {
+  const raw = storage.getItem(key);
+  if (raw === null) return { items: [], present: false, valid: true };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return { items: [], present: true, valid: false };
+    return {
+      items: parsed.map(normalizeConversation).filter((item): item is Conversation => item !== null),
+      present: true,
+      valid: true
+    };
+  } catch {
+    return { items: [], present: true, valid: false };
+  }
+}
+
 export async function loadConversations(storage: StorageAdapter = localStorage): Promise<Conversation[]> {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-    const nativeItems = await invoke<Conversation[]>("load_conversations");
-    if (nativeItems.length) return nativeItems;
-    const legacyItems = readBrowserConversations(storage);
-    if (legacyItems.length) await invoke("save_conversations", { conversations: legacyItems });
-    return legacyItems;
+    const nativeRaw = await invoke<unknown[]>("load_conversations");
+    const nativeItems = Array.isArray(nativeRaw)
+      ? nativeRaw.map(normalizeConversation).filter((item): item is Conversation => item !== null)
+      : [];
+    const current = readConversationKey(storage, CHAT_KEY);
+    const legacy = readConversationKey(storage, LEGACY_CHAT_KEY);
+
+    // SQLite is authoritative for duplicate IDs, while distinct valid browser
+    // records are imported even when the native database is already populated.
+    const mergedById = new Map<string, Conversation>();
+    for (const item of nativeItems) mergedById.set(item.id, item);
+    for (const item of current.items) if (!mergedById.has(item.id)) mergedById.set(item.id, item);
+    for (const item of legacy.items) if (!mergedById.has(item.id)) mergedById.set(item.id, item);
+    const merged = [...mergedById.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    const hasValidBrowserData = current.present && current.valid || legacy.present && legacy.valid;
+    const needsPersistence = merged.length !== nativeItems.length || nativeItems.length !== (Array.isArray(nativeRaw) ? nativeRaw.length : 0);
+
+    if (hasValidBrowserData || needsPersistence) {
+      // Do not clear either browser copy unless the full native replacement succeeds.
+      await invoke("save_conversations", { conversations: merged });
+      for (const [key, source] of [[CHAT_KEY, current], [LEGACY_CHAT_KEY, legacy]] as const) {
+        if (source.present && source.valid) {
+          try { storage.setItem(key, "[]"); } catch { /* Native copy is safe; stale data will be deduplicated next launch. */ }
+        }
+      }
+    }
+    return merged;
   }
   return readBrowserConversations(storage);
 }
 
 function readBrowserConversations(storage: StorageAdapter): Conversation[] {
-  try {
-    const current = storage.getItem(CHAT_KEY);
-    const legacy = current === null ? storage.getItem(LEGACY_CHAT_KEY) : null;
-    const parsed: unknown = JSON.parse(current ?? legacy ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    const conversations = parsed.map(normalizeConversation).filter((item): item is Conversation => item !== null);
-    if (current === null && legacy !== null) {
-      // Persist the new schema first; retain v1 as recovery data.
-      try { storage.setItem(CHAT_KEY, JSON.stringify(conversations)); } catch { /* Legacy data remains available. */ }
-    }
-    return conversations;
-  } catch { return []; }
+  const current = readConversationKey(storage, CHAT_KEY);
+  if (current.present) return current.valid ? current.items : [];
+  const legacy = readConversationKey(storage, LEGACY_CHAT_KEY);
+  if (!legacy.valid) return [];
+  if (legacy.present) {
+    // Persist the new schema first; retain v1 as recovery data.
+    try { storage.setItem(CHAT_KEY, JSON.stringify(legacy.items)); } catch { /* Legacy data remains available. */ }
+  }
+  return legacy.items;
 }
 
 export async function saveConversations(items: Conversation[], storage: StorageAdapter = localStorage): Promise<void> {
