@@ -147,6 +147,25 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.querySelector(".file-preview-content pre")?.textContent).toContain("The NEXUS workspace is ready");
   });
 
+  it("records file reads in the native tool audit history without storing the path", async () => {
+    const rootPath = "/home/test/Documents";
+    const filePath = rootPath + "/notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "hello";
+      return undefined;
+    });
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { fileButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("record_tool_audit_event", {
+      event: expect.objectContaining({ toolId: "filesystem.read", runId: "filesystem-owner-ui", status: "completed" })
+    });
+    const auditCall = invokeMock.mock.calls.find(call => call[0] === "record_tool_audit_event");
+    expect(JSON.stringify(auditCall)).not.toContain(filePath);
+  });
   it("hands the selected text file to the AI analysis draft callback", async () => {
     const rootPath = "C:\\Users\\Owner\\Documents";
     const filePath = rootPath + "\\notes.txt";

@@ -25,6 +25,17 @@ const parentPath = (path: string) => {
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return index > 1 ? trimmed.slice(0, index) : trimmed.slice(0, Math.max(index + 1, 1));
 };
+async function recordFilesystemAudit(action: string): Promise<boolean> {
+  try {
+    await invoke("record_tool_audit_event", {
+      event: { toolId: `filesystem.${action}`, runId: "filesystem-owner-ui", traceId: crypto.randomUUID(), status: "completed", timestamp: Date.now() }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const fileIcon = (name: string) => {
   const extension = name.split(".").pop()?.toLowerCase();
   return ["ts", "tsx", "js", "jsx", "rs", "py", "json", "css", "html", "yml", "yaml"].includes(extension ?? "") ? FileCode2 : FileText;
@@ -140,9 +151,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     try {
       const allowed = await invoke<string[]>("grant_workspace_directory", { path: grantPath.trim() });
+      const audited = await recordFilesystemAudit("access_grant");
       setRoots(allowed);
       setGrantPath("");
-      setNotice("Directory access granted. NEXUS can now browse and edit files inside this directory.");
+      setNotice(audited ? "Directory access granted. NEXUS can now browse and edit files inside this directory." : "Directory access was granted, but the audit entry could not be saved.");
       const granted = allowed.find(root => root.toLocaleLowerCase() === grantPath.trim().toLocaleLowerCase()) ?? allowed[0];
       if (granted) await refresh(granted);
     } catch (cause) {
@@ -172,6 +184,8 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setPreview(content);
       setDraft(content);
       setEditing(false);
+      const audited = await recordFilesystemAudit("read");
+      if (!audited) setNotice("File opened, but the audit entry could not be saved.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -185,9 +199,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setError("");
     try {
       await invoke("write_workspace_file", { path: selectedPath, content: draft });
+      const audited = await recordFilesystemAudit("write");
       setPreview(draft);
       setEditing(false);
-      setNotice("File saved.");
+      setNotice(audited ? "File saved." : "File saved, but the audit entry could not be saved.");
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -203,6 +218,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setError("");
     try {
       const nextPath = await invoke<string>("rename_workspace_entry", { path: selectedPath, newName: renameName.trim() });
+      const audited = await recordFilesystemAudit("rename");
       const content = await invoke<string>("read_workspace_file", { path: nextPath });
       await refresh();
       setSelectedPath(nextPath);
@@ -210,7 +226,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setPreview(content);
       setDraft(content);
       setEditing(false);
-      setNotice("File renamed.");
+      setNotice(audited ? "File renamed." : "File renamed, but the audit entry could not be saved.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -235,11 +251,12 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setError("");
     try {
       await invoke<string>("move_workspace_entry", { path: selectedPath, destinationDirectory: moveDestination.trim() });
+      const audited = await recordFilesystemAudit("move");
       setSelectedPath("");
       setPreview("");
       setDraft("");
       setEditing(false);
-      setNotice("File moved.");
+      setNotice(audited ? "File moved." : "File moved, but the audit entry could not be saved.");
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -260,8 +277,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     try {
       if (kind === "directory") await invoke("create_workspace_directory", { path });
       else await invoke("write_workspace_file", { path, content: "" });
+      const audited = await recordFilesystemAudit(kind === "directory" ? "create_directory" : "create_file");
       setNewName("");
-      setNotice(kind === "directory" ? "Folder created." : "File created.");
+      setNotice(audited ? (kind === "directory" ? "Folder created." : "File created.") : (kind === "directory" ? "Folder created, but the audit entry could not be saved." : "File created, but the audit entry could not be saved."));
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -275,6 +293,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     try {
       const allowed = await invoke<string[]>("revoke_workspace_directory", { path });
+      const audited = await recordFilesystemAudit("access_revoke");
       setRoots(allowed);
       setCurrentPath(allowed[0] ?? "");
       setEntries([]);
@@ -283,7 +302,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setDraft("");
       setEditing(false);
       if (allowed[0]) await refresh(allowed[0]);
-      setNotice("Directory access revoked.");
+      setNotice(audited ? "Directory access revoked." : "Directory access was revoked, but the audit entry could not be saved.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
