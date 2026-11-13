@@ -289,7 +289,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       }
       const result = await repository.saveDataset(manifest);
       if (!result.ok) setError(result.error.message);
-      else { setStatus(importedSamples.length ? `Dataset version saved with ${importedSamples.length} imported sample records in SQLite.` : "Dataset manifest saved with sample IDs only; no sample content was imported."); await refresh(); }
+      else { const destination = isTauri() ? "local SQLite" : "browser preview storage"; setStatus(importedSamples.length ? `Dataset version saved with ${importedSamples.length} imported sample records in ${destination}.` : `Dataset manifest saved in ${destination} with sample IDs only; no sample content was imported.`); await refresh(); }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save dataset metadata.");
     } finally { setWorking(false); }
