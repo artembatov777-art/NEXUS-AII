@@ -51,14 +51,14 @@ export function CommandCenter(props: CommandCenterProps) {
     </div>
     <section className={"deck-core " + (busy ? "is-processing" : providerReady ? "is-connected" : "is-standby")} aria-label={"NEXUS AI Core status: " + status.toLowerCase()}>
       <div className="deck-core-grid" aria-hidden="true"/>
-      <div className="deck-core-copy"><span className="deck-overline">CENTRAL INTELLIGENCE SYSTEM</span><h3>NEXUS <em>AI CORE</em></h3><p>{busy ? "Processing an active request" : providerReady ? "Generation test verified for this session" : "Awaiting a verified model connection"}</p><div className="deck-core-tags"><span><i/> {route.toUpperCase()} ROUTE</span><span><i/> {status}</span></div></div>
+      <div className="deck-core-copy"><span className="deck-overline">CENTRAL INTELLIGENCE SYSTEM</span><h3>NEXUS <em>AI CORE</em></h3><p>{busy ? "Processing an active request" : providerReady ? "Generation test verified for this session" : "Awaiting a verified model connection"}</p><div className="deck-core-tags"><span><i/> {route.toUpperCase()} ROUTE</span><span><i/> {t(status)}</span></div></div>
       <div className="deck-reactor" aria-hidden="true"><i className="reactor-ring ring-a"/><i className="reactor-ring ring-b"/><i className="reactor-ring ring-c"/><i className="reactor-ring ring-d"/><div className="reactor-halo"/><div className="reactor-center"><span>N</span><small>CORE</small></div><b className="reactor-node node-a"/><b className="reactor-node node-b"/><b className="reactor-node node-c"/></div>
       <div className="deck-core-readout"><div><span>MODEL</span><strong>{model || "NOT SELECTED"}</strong></div><div><span>PROJECTS</span><strong>{projectCount.toLocaleString()}</strong></div><div><span>CONVERSATIONS</span><strong>{conversationCount.toLocaleString()}</strong></div><div><span>PROVIDER</span><strong className={providerReady ? "readout-good" : "readout-muted"}>{providerReady ? "VERIFIED" : "NOT VERIFIED"}</strong></div></div>
     </section>
     <div className="deck-workspace">
       <section className="deck-tools">
         <div className="deck-section-heading"><div><span>WORKSPACE MODULES</span><h3>Launch a subsystem</h3></div><small>07 MODULES</small></div>
-        <div className="deck-tool-grid">{tools.map(item => { const Icon = item.icon; return <button className="deck-tool" key={item.code} onClick={item.action}><span className="deck-tool-code">{item.code}</span><span className="deck-tool-icon"><Icon size={18}/></span><span className="deck-tool-copy"><strong>{item.label}</strong><small>{item.detail}</small></span><ArrowUpRight className="deck-tool-arrow" size={14}/></button>; })}</div>
+        <div className="deck-tool-grid">{tools.map(item => { const Icon = item.icon; return <button className="deck-tool" key={item.code} onClick={item.action}><span className="deck-tool-code">{item.code}</span><span className="deck-tool-icon"><Icon size={18}/></span><span className="deck-tool-copy"><strong>{t(item.label)}</strong><small>{t(item.detail)}</small></span><ArrowUpRight className="deck-tool-arrow" size={14}/></button>; })}</div>
       </section>
       <aside className="deck-briefing">
         <div className="deck-section-heading"><div><span>MISSION CONTROL</span><h3>Next operation</h3></div><Sparkles size={16}/></div>
@@ -83,6 +83,6 @@ export function CommandCenter(props: CommandCenterProps) {
         {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · updated {formatActivityTime(item.updatedAt)}</small></div></li>)}</ol> : <p>No activity recorded yet. Start a conversation to populate the timeline.</p>}
       </section>
     </div>
-    <div className="deck-footer"><span><ShieldCheck size={13}/> PRIVATE WORKSPACE</span><span>ROUTE: {route.toUpperCase()}</span><span>CORE STATE: {status}</span></div>
+    <div className="deck-footer"><span><ShieldCheck size={13}/> PRIVATE WORKSPACE</span><span>ROUTE: {route.toUpperCase()}</span><span>CORE STATE: {t(status)}</span></div>
   </section>;
 }
