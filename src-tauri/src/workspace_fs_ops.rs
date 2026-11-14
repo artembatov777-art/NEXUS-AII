@@ -361,6 +361,7 @@ pub fn rename_workspace_entries_batch(
     access: State<'_, WorkspaceAccess>,
     journal: State<'_, WorkspaceOperationJournal>,
 ) -> Result<Vec<String>, String> {
+    let _operation_guard = journal.lock_operation()?;
     rename_workspace_entries_batch_inner(entries, &access, Some(&journal))
 }
 
