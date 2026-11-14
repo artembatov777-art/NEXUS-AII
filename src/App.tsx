@@ -780,8 +780,11 @@ export default function App() {
     {imageGenerationOpen && <ImageGenerationDialog accessToken={gatewayToken} onClose={() => setImageGenerationOpen(false)} onGenerated={(image: GeneratedImage, prompt: string) => {
       const target = active ?? { id: makeId(), title: "Generated image", messages: [], updatedAt: Date.now(), ...(selectedProjectId ? { projectId: selectedProjectId } : {}) };
       const nextMessage: ChatMessage = { id: makeId(), role: "assistant", content: prompt ? `Generated image: ${prompt}` : "Generated image", createdAt: Date.now(), imageAttachment: { mimeType: image.mimeType, data: image.data, model: image.model, aspectRatio: image.aspectRatio, imageSize: image.imageSize, byteLength: image.byteLength } };
-      updateMessages(target.id, [...target.messages.filter(message => message.id !== "welcome"), nextMessage]);
-      if (!active) { setConversations(current => current.some(item => item.id === target.id) ? current : [target, ...current]); setActiveId(target.id); }
+      if (active) updateMessages(target.id, [...target.messages.filter(message => message.id !== "welcome"), nextMessage]);
+      else {
+        setConversations(current => [{ ...target, messages: [nextMessage], updatedAt: nextMessage.createdAt }, ...current]);
+        setActiveId(target.id);
+      }
     }} /> }
     {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
       if (id === "focus") { openWorkspacePanel("chat"); setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
