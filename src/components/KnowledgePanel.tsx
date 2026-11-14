@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { BookOpen, FileText, Search, Upload, X, Trash2 } from "lucide-react";
 import { DocumentIngestionService } from "../core/documentIngestion";
 import { parseKnowledgeFile } from "../lib/documentParsers";
@@ -8,6 +9,7 @@ import { WorkspaceKnowledgeRepository, type KnowledgeDocumentSummary } from "../
 import { WorkspaceProjectRepository } from "../lib/projectStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "../lib/knowledgeVectorIndex";
+import { collectWorkspaceKnowledgeFiles } from "../lib/workspaceKnowledgeImport";
 
 export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const projects = useMemo(() => new ProjectService(
@@ -28,6 +30,8 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
+  const [selectedWorkspaceRoot, setSelectedWorkspaceRoot] = useState("");
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
 
   useEffect(() => {
@@ -92,6 +96,48 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     } finally { setWorking(false); }
   }
 
+  async function importApprovedWorkspaceFolder() {
+    if (!isTauri() || !selectedWorkspaceRoot || !projectId || working) return;
+    setWorking(true); setError(""); setStatus("Scanning the explicitly approved workspace folder…");
+    try {
+      const scan = await collectWorkspaceKnowledgeFiles(selectedWorkspaceRoot, invoke);
+      if (scan.files.length === 0) {
+        setStatus(`No supported text files found. ${scan.skippedFiles} unsupported or oversized entries were skipped.`);
+        return;
+      }
+      const totalMb = (scan.totalBytes / (1024 * 1024)).toFixed(1);
+      if (!window.confirm(`Import ${scan.files.length} text files (${totalMb} MB) from this already-approved folder into the selected project knowledge base? Files remain on disk; NEXUS reads only supported text formats. Continue?`)) {
+        setStatus("Workspace import cancelled.");
+        return;
+      }
+      const imported: string[] = [];
+      const failures: string[] = [];
+      for (let index = 0; index < scan.files.length; index += 1) {
+        const file = scan.files[index];
+        setStatus(`Importing workspace file ${index + 1}/${scan.files.length}: ${file.name}`);
+        try {
+          const content = await invoke<string>("read_workspace_file", { path: file.path });
+          const parsed = await parseKnowledgeFile(new File([content], file.name));
+          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(projectId + ":" + file.path.toLocaleLowerCase()));
+          const documentId = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
+          const result = await ingestion.ingest({
+            id: documentId, projectId, fileName: file.name,
+            mediaType: parsed.mediaType, content: parsed.content, pages: parsed.pages
+          });
+          if (!result.ok) failures.push(file.path + ": " + result.error.message);
+          else imported.push(`${file.name} (${result.value.chunkCount} chunks)`);
+        } catch (cause) {
+          failures.push(file.path + ": " + (cause instanceof Error ? cause.message : "Could not read this workspace file."));
+        }
+      }
+      await refreshDocuments(projectId);
+      setStatus(`Workspace import: ${imported.length}/${scan.files.length} files indexed. ${scan.truncated ? "Scan limits were reached. " : ""}${scan.skippedFiles} unsupported or oversized entries skipped.`);
+      if (failures.length) setError(failures.slice(0, 8).join("\\n") + (failures.length > 8 ? `\\n…and ${failures.length - 8} more error(s).` : ""));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not import the approved workspace folder.");
+    } finally { setWorking(false); }
+  }
+
   async function rebuildSemanticIndex() {
     if (!projectId || working) return;
     setWorking(true); setError(""); setStatus("Checking the project's local semantic index and rebuilding missing vectors…");
@@ -137,6 +183,15 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
             <input type="file" multiple accept=".txt,.md,.mdx,.csv,.json,.jsonl,.ndjson,.log,.yaml,.yml,.xml,.ts,.tsx,.js,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.hpp,.cs,.rb,.php,.sh,.ps1,.sql,.toml,.ini,.conf,.properties,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFiles(e.currentTarget.files); e.currentTarget.value = ""; }}/>
           </label>
         </div>
+        {isTauri() && <div className="knowledge-import knowledge-workspace-import">
+          <div><strong><FileText size={15}/> Import from approved workspace</strong><p>Indexes up to 100 supported text files (50 MB) from a folder already approved in NEXUS File System. Binary files are skipped.</p></div>
+          {workspaceRoots.length > 0 ? <>
+            <select aria-label="Approved workspace folder" value={selectedWorkspaceRoot} disabled={working} onChange={event => setSelectedWorkspaceRoot(event.target.value)}>
+              {workspaceRoots.map(path => <option key={path} value={path}>{path}</option>)}
+            </select>
+            <button className="secondary-btn" disabled={working || !selectedWorkspaceRoot || !projectId} onClick={() => void importApprovedWorkspaceFolder()}>Scan and import folder</button>
+          </> : <p>No approved folders yet. Grant access in NEXUS File System, then reopen this panel.</p>}
+        </div>}
         <div className="knowledge-search">
           <label>Search project knowledge</label>
           <div><input aria-label="Search project knowledge" value={query} disabled={working} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
