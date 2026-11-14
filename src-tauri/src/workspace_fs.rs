@@ -385,7 +385,13 @@ fn write_workspace_file_inner(
             // Open once without following a final symlink. Compare and replace
             // through the same handle so a path swap cannot redirect the write.
             let mut file = open_regular_file_readwrite(&target)
-                .map_err(|_| "The file changed or is no longer safely readable. Reload it before saving.".to_string())?;
+                .map_err(|error| {
+                    if error.contains("hard-linked") {
+                        error
+                    } else {
+                        "The file changed or is no longer safely readable. Reload it before saving.".to_string()
+                    }
+                })?;
             let opened_metadata = file.metadata()
                 .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
             if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
