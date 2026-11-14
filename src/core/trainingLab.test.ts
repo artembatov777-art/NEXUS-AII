@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractNumericExperimentMetrics,
+  requiresExplicitDatasetTransferConfirmation,
   scoreDatasetEvaluation,
   scoreEvaluation,
   validateDatasetManifest,
@@ -42,6 +43,12 @@ const experiment: TrainingExperiment = {
 };
 
 describe("Training Lab governance", () => {
+  it("requires transfer confirmation for private datasets even when the route is declared local", () => {
+    expect(requiresExplicitDatasetTransferConfirmation({ privacyClass: "owner_approved" })).toBe(true);
+    expect(requiresExplicitDatasetTransferConfirmation({ privacyClass: "synthetic" })).toBe(false);
+    expect(requiresExplicitDatasetTransferConfirmation({ privacyClass: "public" })).toBe(false);
+  });
+
   it("accepts a versioned synthetic dataset with disjoint splits", () => {
     expect(validateDatasetManifest(manifest)).toBe(true);
   });
