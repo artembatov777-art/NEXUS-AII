@@ -11,7 +11,7 @@ const MAX_EXTRACTED_CHARACTERS = 1_000_000;
 export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFile> {
   if (file.size > MAX_FILE_BYTES) throw new Error("Files larger than 8 MB are not supported.");
   const name = file.name.toLocaleLowerCase();
-  if (/\\.(txt|md|mdx|csv|json|jsonl|ndjson|log|yaml|yml|xml|ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|hpp|cs|rb|php|sh|ps1|sql|toml|ini|conf|properties)$/.test(name)) {
+  if (/\.(txt|md|mdx|csv|json|jsonl|ndjson|log|yaml|yml|xml|ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|hpp|cs|rb|php|sh|ps1|sql|toml|ini|conf|properties)$/.test(name)) {
     const raw = await file.text();
     if (raw.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted text exceeds the 1 MB limit.");
     let content = raw;
@@ -20,7 +20,7 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
       catch { throw new Error("The selected JSON file is not valid JSON."); }
     } else if (name.endsWith(".jsonl") || name.endsWith(".ndjson")) {
       try {
-        content = raw.split(/\\r?\\n/).filter(line => line.trim()).map(line => JSON.stringify(JSON.parse(line))).join("\\n");
+        content = raw.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.stringify(JSON.parse(line))).join("\n");
       } catch {
         throw new Error("The selected JSONL file contains an invalid JSON record.");
       }
