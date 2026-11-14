@@ -34,6 +34,27 @@ describe("semantic knowledge retrieval", () => {
     expect(result.value.context).toContain("page 3");
   });
 
+  it("propagates cancellation from embedding during project knowledge retrieval", async () => {
+    const controller = new AbortController();
+    const repository: KnowledgeRepository = {
+      add: async () => ok(undefined), search: async () => ok(chunks.slice(0, 1)),
+      getByIds: async ids => ok(chunks.filter(chunk => ids.includes(chunk.id))),
+      removeDocument: async () => ok(undefined)
+    };
+    const embeddings: EmbeddingProvider = {
+      embed: async () => {
+        controller.abort();
+        return { ok: false, error: { code: "cancelled", message: "cancelled", retryable: false } };
+      }
+    };
+    const vectors: KnowledgeVectorIndex = {
+      upsert: async () => undefined, removeDocument: async () => undefined,
+      hasProject: async () => true, search: async () => []
+    };
+    const result = await new KnowledgeRetrievalService(repository, embeddings, vectors).retrieve("query", "p1", 4, controller.signal);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+  });
+
   it("does not invoke the embedding provider when the project has no vector index", async () => {
     const repository: KnowledgeRepository = {
       add: async () => ok(undefined),
