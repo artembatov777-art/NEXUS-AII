@@ -10,7 +10,7 @@ const problems = [];
 for (const file of workflowFiles) {
   const source = readFileSync(join(workflowsDirectory, file), "utf8");
   for (const [index, line] of source.split(/\r?\n/).entries()) {
-    const match = line.match(/^\s*uses:\s*([^\s#]+)/);
+    const match = line.match(/^\s*(?:-\s*)?uses:\s*([^\s#]+)/);
     if (!match) continue;
 
     const action = match[1];
