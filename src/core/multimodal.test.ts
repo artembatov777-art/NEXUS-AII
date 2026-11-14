@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateMultimodalPolicy, type MultimodalRequestPolicy } from "./multimodal";
+import { evaluateMultimodalPolicy, type Modality, type MultimodalRequestPolicy } from "./multimodal";
 
 const base: MultimodalRequestPolicy = {
   model: { modelId: "vision-model", location: "remote", modalities: ["text", "image"] },
