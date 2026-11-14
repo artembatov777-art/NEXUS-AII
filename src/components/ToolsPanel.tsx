@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bot, ChevronDown, CircleDot, Cloud, Code2, Database, Globe2, LockKeyhole, Plug, Search, ShieldCheck, Terminal, X, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Activity, Bot, ChevronDown, CircleDot, Code2, Database, Globe2, LockKeyhole, Plug, Search, ShieldCheck, Terminal, X, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
 import { loadMcpServerConfigs, removeMcpServerConfig, saveMcpServerConfig, type McpServerConfigRecord } from "../lib/mcpServerStorage";
 
@@ -10,7 +10,6 @@ const catalog: ToolItem[] = [
   { id: "filesystem", name: "Workspace files", group: "DESKTOP", description: "Read and edit files inside folders explicitly approved by the owner.", icon: Database, mode: "Permission-gated", permission: "Folder access" },
   { id: "terminal", name: "Command runner", group: "DESKTOP", description: "Run narrowly scoped development commands with explicit approval.", icon: Terminal, mode: "Approval required", permission: "Command allowlist" },
   { id: "agents", name: "Agent runtime", group: "NEXUS CORE", description: "Execute bounded agent tasks and record their activity.", icon: Bot, mode: "Bounded execution", permission: "Tool gateway" },
-  { id: "cloud", name: "OmniRoute", group: "AI PROVIDERS", description: "Route model requests through the configured OpenAI-compatible gateway.", icon: Cloud, mode: "Provider-dependent", permission: "Credential vault" }
 ];
 
 export function ToolsPanel({ onClose }: { onClose: () => void }) {
