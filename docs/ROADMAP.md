@@ -113,7 +113,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Post-release / future research
 
-- Voice STT/TTS and hands-free operation.
+- Native/offline STT/TTS, audio-file ingestion, and hands-free operation beyond the current browser/WebView speech controls.
 - Expanded image/audio understanding and multimodal workflows.
 - Multi-agent orchestration beyond the initial bounded runtime.
 - Training Lab expansion, fine-tuning, and model artifact lifecycle.
