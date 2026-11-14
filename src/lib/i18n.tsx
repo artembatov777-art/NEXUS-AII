@@ -587,7 +587,8 @@ interface LanguageContextValue { language: NexusLanguage; setLanguage: (language
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<NexusLanguage>(readLanguage);\n  activeLanguage = language;
+  const [language, setLanguageState] = useState<NexusLanguage>(readLanguage);
+  activeLanguage = language;
   const setLanguage = useCallback((next: NexusLanguage) => {
     activeLanguage = next;
     setLanguageState(next);
