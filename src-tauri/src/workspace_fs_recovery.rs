@@ -133,7 +133,7 @@ impl WorkspaceOperationJournal {
             [], |row| row.get(0)
         ).map_err(|_| "Could not inspect pending file operation recovery.")?;
         Ok(if pending > 0 {
-            Some("An interrupted file operation is waiting for recovery. Restart NEXUS to retry automatic recovery.".into())
+            Some("An interrupted file operation is waiting for recovery. Review the recorded paths and retry or manually reconcile it in the File System panel.".into())
         } else {
             None
         })
