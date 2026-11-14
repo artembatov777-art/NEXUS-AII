@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 const MAX_ALLOWED_ROOTS: usize = 32;
+const MAX_PERMISSION_FILE_BYTES: u64 = 1_048_576;
 const MAX_DIRECTORY_ENTRIES: usize = 500;
 
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
@@ -122,11 +123,22 @@ pub struct WorkspaceAccess {
 
 impl WorkspaceAccess {
     pub fn load(persistence_path: PathBuf) -> Self {
-        let roots = fs::read_to_string(&persistence_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
-            .unwrap_or_default()
-            .into_iter()
+        let persisted = open_regular_file_readonly(&persistence_path).ok()
+            .and_then(|file| {
+                if file.metadata().ok()?.len() > MAX_PERMISSION_FILE_BYTES {
+                    return None;
+                }
+                let mut raw = String::new();
+                file.take(MAX_PERMISSION_FILE_BYTES + 1).read_to_string(&mut raw).ok()?;
+                if raw.len() as u64 > MAX_PERMISSION_FILE_BYTES {
+                    return None;
+                }
+                serde_json::from_str::<Vec<String>>(&raw).ok()
+            })
+            .filter(|values| values.len() <= MAX_ALLOWED_ROOTS)
+            .unwrap_or_default();
+        let roots = persisted.into_iter()
+            .filter(|value| !value.trim().is_empty() && value.len() <= 4096)
             .filter_map(|value| {
                 let path = PathBuf::from(value);
                 let canonical = fs::canonicalize(&path).ok()?;
@@ -812,6 +824,47 @@ mod tests {
         assert!(roots.contains(&fs::canonicalize(&second).expect("canonical second")));
         drop(roots);
         fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_reload_refuses_a_symlinked_permissions_file() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-permission-file-symlink-{}-{nonce}", std::process::id()));
+        let approved = base.join("approved");
+        let settings = base.join("settings");
+        fs::create_dir_all(&approved).expect("create approved root");
+        fs::create_dir_all(&settings).expect("create settings directory");
+        let outside = base.join("outside-permissions.json");
+        let persistence_path = settings.join("permissions.json");
+        fs::write(&outside, serde_json::to_vec(&vec![fs::canonicalize(&approved).expect("canonical root").to_string_lossy()]).expect("serialize outside permissions"))
+            .expect("write outside permissions");
+        symlink(&outside, &persistence_path).expect("replace permissions file with symlink");
+
+        let reloaded = WorkspaceAccess::load(persistence_path);
+        assert!(reloaded.roots.lock().expect("lock roots").is_empty());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn permission_reload_rejects_oversized_files_and_excessive_root_lists() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-permission-limits-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&base).expect("create test directory");
+        let persistence_path = base.join("permissions.json");
+
+        let too_many_roots = vec!["/".to_string(); MAX_ALLOWED_ROOTS + 1];
+        fs::write(&persistence_path, serde_json::to_vec(&too_many_roots).expect("serialize excessive roots"))
+            .expect("write excessive roots");
+        assert!(WorkspaceAccess::load(persistence_path.clone()).roots.lock().expect("lock roots").is_empty());
+
+        fs::write(&persistence_path, vec![b' '; MAX_PERMISSION_FILE_BYTES as usize + 1])
+            .expect("write oversized permissions file");
+        assert!(WorkspaceAccess::load(persistence_path).roots.lock().expect("lock roots").is_empty());
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[cfg(unix)]
