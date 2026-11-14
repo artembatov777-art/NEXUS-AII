@@ -8,7 +8,7 @@ Updated: 2026-11-14
 - Branch: `feat/nexus-core-architecture`
 - Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
 - Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard and unsaved-change protection `9ab2189` / `aaa0b86`, profile regression tests `286579b`, private-dataset transfer policy and regression test `1260917` / `eb2f55a` / `e343792`, and security/threat-model documentation updates.
-- Latest recorded branch head after the current implementation increment: `843b919e8ce8e6f35799c9c143c5ffb22d27a4b3`.
+- Latest recorded branch head after the current implementation increment: `664e524e65f290799029e0d35df4af2f9ec25389`.
 - Draft tracking PR: [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2); it is open and must not be merged without owner approval.
 - Do not work on `main` and do not merge a pull request without owner approval.
 
@@ -85,7 +85,7 @@ The seven-phase sequence below matches `docs/ROADMAP.md`. No phase is formally c
 - OmniRoute must be added and tested as an optional provider adapter during final integration, without removing direct local/cloud providers.
 - Fine-tuning/training runtime, model-weight updates, checkpoint and artifact management remain incomplete.
 - Manual Windows desktop smoke testing, owner-side provider credentials, and actual local-runtime testing require the owner's device and environment.
-- The latest verified baseline `2b9795102cf4de0af73cc6b51b0c11c22c396fe9` passed frontend Quality, npm audit, Vitest, TypeScript/Vite production build, and native Windows/macOS/Linux check/test/build jobs. Subsequent interface and batch-rename commits are not yet verified by a completed CI run; the first native run was cancelled by newer branch pushes.
+- The latest verified baseline `2b9795102cf4de0af73cc6b51b0c11c22c396fe9` passed frontend Quality, npm audit, Vitest, TypeScript/Vite production build, and native Windows/macOS/Linux check/test/build jobs. Subsequent interface, speech-privacy, and batch-rename commits are not yet verified by a completed CI run; the first native run was cancelled by newer branch pushes.
 
 ## Next implementation order
 
