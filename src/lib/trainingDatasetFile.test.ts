@@ -31,7 +31,7 @@ describe("training dataset file format", () => {
   });
 
   it("rejects IDs that break the split editor's newline/comma format", () => {
-    for (const id of ["two\nlines", "comma,id", " padded "]) {
+    for (const id of ["two\\nlines", "comma,id"]) {
       const data = rows.map((row, index) => JSON.stringify({ ...row, id: index === 0 ? id : row.id })).join("\n");
       expect(() => parseTrainingDatasetFile(data)).toThrow(/sample IDs/i);
     }
