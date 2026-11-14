@@ -48,6 +48,7 @@ export class HybridMemoryRetriever {
         const all = await this.repository.exportAll();
         if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
         if (!all.ok || all.value.length > 1_000) return lexicalFallback();
+        if (all.value.length === 0) return lexicalFallback();
         const missing = await this.vectors.reconcile(all.value);
         for (let offset = 0; offset < missing.length; offset += 16) {
           if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
