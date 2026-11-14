@@ -262,6 +262,8 @@ mod tests {
             [&id], |row| row.get(0)
         ).expect("count pending journal rows");
         assert_eq!(remaining, 0);
+        drop(connection);
+        drop(journal);
         fs::remove_dir_all(base).expect("cleanup");
     }
 
@@ -278,6 +280,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&source).unwrap(), "source");
         assert_eq!(fs::read_to_string(&destination).unwrap(), "destination");
         assert!(journal.ensure_ready().is_err());
+        drop(journal);
         fs::remove_dir_all(base).expect("cleanup");
     }
 
@@ -296,6 +299,7 @@ mod tests {
         assert!(journal.recover(&access).is_err());
         assert!(destination.is_symlink());
         assert_eq!(fs::read_to_string(&outside).unwrap(), "outside");
+        drop(journal);
         fs::remove_dir_all(base).expect("cleanup");
     }
 }
