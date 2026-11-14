@@ -191,7 +191,7 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
     {
       id: "workspace.write",
       version: "1.0.0",
-      description: "Create or replace a UTF-8 text file inside an explicitly approved directory. Input: {path,content}, maximum 48 KB. Never deletes files.",
+      description: "Create a new UTF-8 text file inside an explicitly approved directory. Input: {path,content}, maximum 48 KB. Refuses to overwrite any existing file or directory.",
       requiredPermissions: ["filesystem:write:selected"],
       risk: "high",
       timeoutMs: 15_000,
