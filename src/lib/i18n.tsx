@@ -903,6 +903,13 @@ const translations: Record<string, string> = {
   "Last response": "Последний ответ",
   "in": "вход",
   "out": "выход",
+  "Synthetic": "Синтетические данные",
+  "Export selected dataset samples (.jsonl)": "Экспортировать выбранные примеры набора данных (.jsonl)",
+  "Rename": "Переименовать",
+  "IMAGE PREVIEW · READ ONLY · MAX 4 MB": "ПРЕДПРОСМОТР ИЗОБРАЖЕНИЯ · ТОЛЬКО ЧТЕНИЕ · ДО 4 МБ",
+  "TEXT CONTENT · MAX 2 MB": "ТЕКСТОВОЕ СОДЕРЖИМОЕ · ДО 2 МБ",
+  "EXECUTION MODE": "РЕЖИМ ВЫПОЛНЕНИЯ",
+  "REQUIRED PERMISSION": "НЕОБХОДИМОЕ РАЗРЕШЕНИЕ",
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
