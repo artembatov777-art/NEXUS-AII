@@ -1,5 +1,6 @@
 const BACKUP_FORMAT = "nexus-au-encrypted-backup";
-const BACKUP_SCHEMA_VERSION = 1;
+const LEGACY_BACKUP_SCHEMA_VERSION = 1;
+const BACKUP_SCHEMA_VERSION = 2;
 const PBKDF2_ITERATIONS = 600_000;
 const MIN_SUPPORTED_ITERATIONS = 310_000;
 const MAX_SUPPORTED_ITERATIONS = 1_000_000;
@@ -15,7 +16,7 @@ function backupAdditionalData(iterations: number): Uint8Array {
 
 interface EncryptedWorkspaceBackup {
   format: typeof BACKUP_FORMAT;
-  schemaVersion: typeof BACKUP_SCHEMA_VERSION;
+  schemaVersion: typeof LEGACY_BACKUP_SCHEMA_VERSION | typeof BACKUP_SCHEMA_VERSION;
   kdf: "PBKDF2-SHA256";
   iterations: number;
   cipher: "AES-256-GCM";
@@ -65,7 +66,7 @@ async function deriveBackupKey(passphrase: string, salt: Uint8Array, iterations:
 export function isEncryptedWorkspaceBackup(value: unknown): value is EncryptedWorkspaceBackup {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const envelope = value as Partial<EncryptedWorkspaceBackup>;
-  return envelope.format === BACKUP_FORMAT && envelope.schemaVersion === BACKUP_SCHEMA_VERSION &&
+  return envelope.format === BACKUP_FORMAT && (envelope.schemaVersion === LEGACY_BACKUP_SCHEMA_VERSION || envelope.schemaVersion === BACKUP_SCHEMA_VERSION) &&
     envelope.kdf === "PBKDF2-SHA256" && typeof envelope.iterations === "number" && Number.isInteger(envelope.iterations) && envelope.iterations >= MIN_SUPPORTED_ITERATIONS && envelope.iterations <= MAX_SUPPORTED_ITERATIONS &&
     envelope.cipher === "AES-256-GCM" && typeof envelope.salt === "string" &&
     typeof envelope.iv === "string" && typeof envelope.ciphertext === "string";
@@ -107,7 +108,10 @@ export async function decryptWorkspaceBackup(value: unknown, passphrase: string)
       throw new Error("Encrypted backup metadata is invalid.");
     }
     const key = await deriveBackupKey(passphrase, salt, value.iterations);
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: backupAdditionalData(value.iterations) }, key, ciphertext);
+    const algorithm: AesGcmParams = value.schemaVersion === LEGACY_BACKUP_SCHEMA_VERSION
+      ? { name: "AES-GCM", iv }
+      : { name: "AES-GCM", iv, additionalData: backupAdditionalData(value.iterations) };
+    const plaintext = await crypto.subtle.decrypt(algorithm, key, ciphertext);
     if (plaintext.byteLength > MAX_PLAINTEXT_BYTES) throw new Error("Decrypted backup exceeds the supported size.");
     return JSON.parse(new TextDecoder().decode(plaintext));
   } catch {
