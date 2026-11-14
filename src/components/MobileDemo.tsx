@@ -11,15 +11,15 @@ import "./mobile-demo.css";
 type DemoTab = "chat" | "projects" | "memory" | "knowledge" | "agents" | "files" | "tools" | "training" | "settings" | "more";
 
 const sampleMessages = [
-  { role: "assistant" as const, text: "Привет. Я NEXUS, твоя персональная AI-среда. Здесь будут собраны знания, проекты, память и инструменты." },
-  { role: "user" as const, text: "Покажи, что ты умеешь." },
-  { role: "assistant" as const, text: "Я смогу помогать с исследованиями, планированием, обучением и работой с твоими проектами. Сейчас это демонстрационный интерфейс без подключённой модели." }
+  { role: "assistant" as const, text: t("Привет. Я NEXUS, твоя персональная AI-среда. Здесь будут собраны знания, проекты, память и инструменты.") },
+  { role: "user" as const, text: t("Покажи, что ты умеешь.") },
+  { role: "assistant" as const, text: t("Я смогу помогать с исследованиями, планированием, обучением и работой с твоими проектами. Сейчас это демонстрационный интерфейс без подключённой модели.") }
 ];
 
 const demoTools = [
-  { name: "Browser", detail: "Поиск и чтение открытых веб-страниц", permission: "Сетевой доступ" },
-  { name: "GitHub", detail: "Репозитории, коммиты и задачи", permission: "Доступ к репозиторию" },
-  { name: "Workspace files", detail: "Работа с разрешёнными папками", permission: "Разрешение на папку" }
+  { name: "Browser", detail: t("Поиск и чтение открытых веб-страниц"), permission: t("Сетевой доступ") },
+  { name: "GitHub", detail: t("Репозитории, коммиты и задачи"), permission: t("Доступ к репозиторию") },
+  { name: "Workspace files", detail: t("Работа с разрешёнными папками"), permission: t("Разрешение на папку") }
 ];
 
 export function MobileDemo() {
@@ -39,7 +39,7 @@ export function MobileDemo() {
     if (!value) return;
     setMessages(current => [...current, { role: "user", text: value }]);
     setDraft("");
-    setNotice("Демо-режим: сообщение не отправлялось AI-модели.");
+    setNotice(t("Демо-режим: сообщение не отправлялось AI-модели."));
   }
 
   const titles: Record<DemoTab, string> = {
@@ -63,26 +63,26 @@ export function MobileDemo() {
           <div className="demo-brand-mark"><Sparkles size={19}/></div>
           <div><strong>NEXUS</strong><span>PERSONAL AI SYSTEM</span></div>
         </div>
-        <button className="demo-round-button" aria-label={t("Уведомления")} onClick={() => setNotice("Уведомлений пока нет.")}><Bell size={18}/></button>
+        <button className="demo-round-button" aria-label={t("Уведомления")} onClick={() => setNotice(t("Уведомлений пока нет."))}><Bell size={18}/></button>
       </header>
 
       <div className="demo-context-row">
-        <div><span className="demo-context-label">WORKSPACE</span><strong>{titles[tab]}</strong></div>
-        <span className="demo-preview-pill"><span/> PREVIEW</span>
+        <div><span className="demo-context-label">{t("WORKSPACE")}</span><strong>{t(titles[tab])}</strong></div>
+        <span className="demo-preview-pill"><span/> {t("PREVIEW")}</span>
       </div>
 
       <section className="demo-screen" aria-live="polite">
         {tab === "chat" && <>
           <div className="demo-model-card">
             <div className="demo-model-icon"><Brain size={18}/></div>
-            <div><strong>NEXUS Assistant</strong><span>Модель не подключена</span></div>
+            <div><strong>NEXUS Assistant</strong><span>{t("Модель не подключена")}</span></div>
             <MoreHorizontal size={19}/>
           </div>
           <div className="demo-chat-intro">
             <div className="demo-orb" aria-label="NEXUS holographic core"><div className="demo-orb-inner"><Sparkles size={25}/></div></div>
             <span>YOUR PERSONAL AI</span>
-            <h1>Думай шире.<br/>Создавай больше.</h1>
-            <p>Единое пространство для идей, знаний и действий.</p>
+            <h1>{t("Думай шире. Создавай больше.")}</h1>
+            <p>{t("Единое пространство для идей, знаний и действий.")}</p>
           </div>
           <div className="demo-messages">
             {messages.map((message, index) => <article className={`demo-message ${message.role}`} key={index}>
@@ -91,32 +91,32 @@ export function MobileDemo() {
             </article>)}
           </div>
           <div className="demo-suggestions">
-            <button onClick={() => setDraft("Помоги спланировать неделю")}><Zap size={14}/> Планирование</button>
-            <button onClick={() => setDraft("Изучи эту тему и составь конспект")}><BookOpen size={14}/> Обучение</button>
+            <button onClick={() => setDraft("Помоги спланировать неделю")}><Zap size={14}/> {t("Планирование")}</button>
+            <button onClick={() => setDraft("Изучи эту тему и составь конспект")}><BookOpen size={14}/> {t("Обучение")}</button>
           </div>
         </>}
 
         {tab === "projects" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button aria-label={t("Создать проект")} onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
-          <div className="demo-search"><Search size={16}/><input aria-label="Поиск проектов" value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder="Поиск проектов..."/></div>
-          {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>}
-          {"Личное развитие".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>}
-          {"База знаний".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>LEARNING</span><h3>База знаний</h3><p>Материалы и исследования</p><small>12 материалов</small></article>}
-          {!["NEXUS AU", "Личное развитие", "База знаний"].some(name => name.toLowerCase().includes(projectQuery.trim().toLowerCase())) && <p className="demo-empty-search">Проекты не найдены.</p>}
+          <div className="demo-section-heading"><div><span>{t("YOUR WORKSPACE")}</span><h2>{t("Твои проекты")}</h2></div><button aria-label={t("Создать проект")} onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
+          <div className="demo-search"><Search size={16}/><input aria-label={t("Поиск проектов")} value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder={t("Поиск проектов...")}/></div>
+          {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>{t("Персональная AI-экосистема")}</p><small>Интерфейсный прототип · демонстрационные данные</small></article>}
+          {"Личное развитие".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>{t("Цели, навыки и планы")}</p><small>4 заметки</small></article>}
+          {"База знаний".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>LEARNING</span><h3>База знаний</h3><p>{t("Материалы и исследования")}</p><small>12 материалов</small></article>}
+          {!["NEXUS AU", "Личное развитие", "База знаний"].some(name => name.toLowerCase().includes(projectQuery.trim().toLowerCase())) && <p className="demo-empty-search">{t("Проекты не найдены.")}</p>}
         </div>}
 
         {tab === "memory" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>PERSONAL CONTEXT</span><h2>Память NEXUS</h2></div><button aria-label="Добавить память" onClick={() => setNotice("Управление памятью появится в рабочей версии.")}><Plus size={18}/></button></div>
-          <div className="demo-memory-summary"><Brain size={21}/><div><strong>Контекст владельца</strong><span>Демонстрационные записи</span></div><b>08</b></div>
-          <div className="demo-memory-group"><span>ПРЕДПОЧТЕНИЯ</span><article><Sparkles size={16}/><div><strong>Стиль общения</strong><p>Прямые ответы, конкретика и аргументы.</p></div></article><article><BookOpen size={16}/><div><strong>Обучение</strong><p>Структурированные объяснения и примеры.</p></div></article></div>
-          <div className="demo-memory-group"><span>ПРОЕКТЫ И ЦЕЛИ</span><article><FolderKanban size={16}/><div><strong>NEXUS AU</strong><p>Развитие личной AI-экосистемы.</p></div></article><article><Zap size={16}/><div><strong>Долгосрочные цели</strong><p>Навыки, самостоятельность и развитие.</p></div></article></div>
+          <div className="demo-section-heading"><div><span>{t("PERSONAL CONTEXT")}</span><h2>{t("Память NEXUS")}</h2></div><button aria-label={t("Добавить память")} onClick={() => setNotice("Управление памятью появится в рабочей версии.")}><Plus size={18}/></button></div>
+          <div className="demo-memory-summary"><Brain size={21}/><div><strong>{t("Контекст владельца")}</strong><span>{t("Демонстрационные записи")}</span></div><b>08</b></div>
+          <div className="demo-memory-group"><span>{t("ПРЕДПОЧТЕНИЯ")}</span><article><Sparkles size={16}/><div><strong>{t("Стиль общения")}</strong><p>{t("Прямые ответы, конкретика и аргументы.")}</p></div></article><article><BookOpen size={16}/><div><strong>{t("Обучение")}</strong><p>{t("Структурированные объяснения и примеры.")}</p></div></article></div>
+          <div className="demo-memory-group"><span>{t("ПРОЕКТЫ И ЦЕЛИ")}</span><article><FolderKanban size={16}/><div><strong>NEXUS AU</strong><p>{t("Развитие личной AI-экосистемы.")}</p></div></article><article><Zap size={16}/><div><strong>{t("Долгосрочные цели")}</strong><p>{t("Навыки, самостоятельность и развитие.")}</p></div></article></div>
           <div className="demo-safe-note"><ShieldCheck size={16}/> В рабочей версии память будет доступна для просмотра и управления.</div>
         </div>}
 
         {tab === "knowledge" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>PROJECT KNOWLEDGE</span><h2>База знаний</h2></div><BookOpen size={21}/></div>
+          <div className="demo-section-heading"><div><span>{t("PROJECT KNOWLEDGE")}</span><h2>{t("База знаний")}</h2></div><BookOpen size={21}/></div>
           <div className="demo-module-card"><span>ACTIVE PROJECT</span><strong>NEXUS AU</strong><small>Материалы и заметки проекта</small></div>
-          <div className="demo-search demo-knowledge-search"><Search size={16}/><input aria-label="Поиск по базе знаний" value={knowledgeQuery} onChange={event => { setKnowledgeQuery(event.target.value); setKnowledgeSearched(false); }} placeholder="Поиск по документам..."/><button onClick={() => setKnowledgeSearched(true)} disabled={!knowledgeQuery.trim()}>Найти</button></div>
+          <div className="demo-search demo-knowledge-search"><Search size={16}/><input aria-label={t("Поиск по базе знаний")} value={knowledgeQuery} onChange={event => { setKnowledgeQuery(event.target.value); setKnowledgeSearched(false); }} placeholder={t("Поиск по документам...")}/><button onClick={() => setKnowledgeSearched(true)} disabled={!knowledgeQuery.trim()}>Найти</button></div>
           <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ARCHITECTURE.md</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></button>
           <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ROADMAP.md</strong><small>План разработки · 8.6 KB</small></div><ChevronRight size={16}/></button>
           {knowledgeSearched && <div className="demo-safe-note"><Search size={15}/> Демо-поиск по запросу «{knowledgeQuery}». Реальные документы пока не индексируются в мобильном preview.</div>}
@@ -124,7 +124,7 @@ export function MobileDemo() {
         </div>}
 
         {tab === "agents" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>NEXUS AUTOMATION</span><h2>Агенты</h2></div><Bot size={21}/></div>
+          <div className="demo-section-heading"><div><span>{t("NEXUS AUTOMATION")}</span><h2>{t("Агенты")}</h2></div><Bot size={21}/></div>
           <div className="demo-stat-grid"><div><span>AGENTS</span><strong>03</strong></div><div><span>ACTIVE RUNS</span><strong>00</strong></div><div><span>APPROVALS</span><strong>00</strong></div></div>
           <div className="demo-module-card"><span>LOCAL WORKFLOW</span><strong>Task Assistant</strong><small>Ограниченный исполнитель задач с подтверждением действий</small><div className="demo-status-line"><i/> ОЖИДАЕТ ЗАДАЧУ</div></div>
           <label className="demo-field-label">Тестовая задача<textarea aria-label="Тестовая задача для агента" value={agentTask} onChange={event => setAgentTask(event.target.value)} rows={3} placeholder="Опиши задачу для демонстрации..."/></label>
@@ -133,7 +133,7 @@ export function MobileDemo() {
         </div>}
 
         {tab === "files" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>DEVICE WORKSPACE</span><h2>Файловая система</h2></div><HardDrive size={21}/></div>
+          <div className="demo-section-heading"><div><span>{t("DEVICE WORKSPACE")}</span><h2>{t("Файловая система")}</h2></div><HardDrive size={21}/></div>
           <div className="demo-module-card"><span>CONNECTION STATUS</span><strong>Не подключено</strong><small>Доступ к папкам Windows пока не активирован</small><div className="demo-status-line warning"><i/> ОЖИДАЕТ РАЗРЕШЕНИЯ</div></div>
           <button className="demo-file-row" onClick={() => setNotice("Выбор папок Windows будет доступен после подключения NEXUS File System.")}><FolderKanban size={18}/><div><strong>Документы</strong><small>Выбранные папки появятся здесь</small></div><ChevronRight size={16}/></button>
           <button className="demo-file-row" onClick={() => setNotice("Папки появятся после выдачи разрешения на доступ.")}><FolderKanban size={18}/><div><strong>Проекты</strong><small>Папки с разрешённым доступом</small></div><ChevronRight size={16}/></button>
@@ -159,17 +159,17 @@ export function MobileDemo() {
         </div>}
 
         {tab === "settings" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>SYSTEM CONTROL</span><h2>Настройки</h2></div><Settings2 size={21}/></div>
-          <div className="demo-settings-group"><span>ЯЗЫК / LANGUAGE</span><label className="demo-language-setting" htmlFor="demo-language">Язык интерфейса<select id="demo-language" value={language} onChange={event => setLanguage(event.target.value as "ru" | "en")}><option value="ru">Русский</option><option value="en">English</option></select></label></div>
+          <div className="demo-section-heading"><div><span>{t("SYSTEM CONTROL")}</span><h2>{t("Настройки")}</h2></div><Settings2 size={21}/></div>
+          <div className="demo-settings-group"><span>ЯЗЫК / LANGUAGE</span><label className="demo-language-setting" htmlFor="demo-language">{t("Язык интерфейса")}<select id="demo-language" value={language} onChange={event => setLanguage(event.target.value as "ru" | "en")}><option value="ru">Русский</option><option value="en">English</option></select></label></div>
           <div className="demo-settings-profile"><div className="demo-profile-avatar">N</div><div><strong>Владелец NEXUS</strong><span>Личное пространство</span></div><ChevronRight size={18}/></div>
-          <div className="demo-settings-group"><span>СИСТЕМА</span><button onClick={() => setNotice("Подключение моделей появится в рабочей версии.")}><Brain size={17}/> Модели и провайдеры <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки безопасности пока демонстрационные.")}><ShieldCheck size={17}/> Безопасность <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки уведомлений пока демонстрационные.")}><Bell size={17}/> Уведомления <ChevronRight size={17}/></button></div>
-          <div className="demo-settings-group"><span>ПОДДЕРЖКА</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("В мобильном preview голос не подключён. В desktop-версии распознавание зависит от поддержки браузера или WebView.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
+          <div className="demo-settings-group"><span>{t("СИСТЕМА")}</span><button onClick={() => setNotice("Подключение моделей появится в рабочей версии.")}><Brain size={17}/> Модели и провайдеры <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки безопасности пока демонстрационные.")}><ShieldCheck size={17}/> Безопасность <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки уведомлений пока демонстрационные.")}><Bell size={17}/> Уведомления <ChevronRight size={17}/></button></div>
+          <div className="demo-settings-group"><span>{t("ПОДДЕРЖКА")}</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("В мобильном preview голос не подключён. В desktop-версии распознавание зависит от поддержки браузера или WebView.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
           <div className="demo-version">NEXUS AU · INTERFACE PREVIEW · 0.2</div>
         </div>}
 
         {tab === "more" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>NEXUS MODULES</span><h2>Все разделы</h2></div><MoreHorizontal size={21}/></div>
-          <p className="demo-more-intro">Дополнительные модули NEXUS AU. Каждый раздел открывает отдельный экран интерфейса.</p>
+          <div className="demo-section-heading"><div><span>NEXUS MODULES</span><h2>{t("Все разделы")}</h2></div><MoreHorizontal size={21}/></div>
+          <p className="demo-more-intro">{t("Дополнительные модули NEXUS AU. Каждый раздел открывает отдельный экран интерфейса.")}</p>
           <div className="demo-more-grid">
             <button onClick={() => setTab("knowledge")}><div><BookOpen size={19}/></div><span><strong>База знаний</strong><small>Документы и поиск по источникам</small></span><ChevronRight size={16}/></button>
             <button onClick={() => setTab("agents")}><div><Bot size={19}/></div><span><strong>Агенты</strong><small>Задачи, выполнение и подтверждения</small></span><ChevronRight size={16}/></button>
@@ -184,19 +184,19 @@ export function MobileDemo() {
       {tab === "chat" && <div className="demo-chat-footer">
         <div className="demo-composer">
           <button className="demo-add-button" aria-label={t("Добавить вложение")} onClick={() => setNotice("Вложения появятся в следующих версиях демо.")}><Plus size={18}/></button>
-          <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder="Напиши сообщение..." aria-label={t("Сообщение")}/>
+          <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder={t("Напиши сообщение...")} aria-label={t("Сообщение")}/>
           <button className="demo-send-button" onClick={sendDemoMessage} aria-label={t("Отправить сообщение")}><ArrowUp size={18}/></button>
         </div>
-        <p className="demo-disclaimer">Демо-режим · сообщения не отправляются модели</p>
+        <p className="demo-disclaimer">{t("Демо-режим · сообщения не отправляются модели")}</p>
       </div>}
 
       {notice && <button className="demo-notice" aria-live="polite" onClick={() => setNotice("")}>{t(notice)}<span>×</span></button>}
       <nav className="demo-tabbar" aria-label={t("Основная навигация")}>
-        <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
-        <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
-        <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
-        <button className={tab === "settings" ? "active" : ""} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={19}/><span>Настройки</span></button>
-        <button className={tab === "more" || isMoreModule ? "active" : ""} aria-pressed={tab === "more" || isMoreModule} onClick={() => setTab("more")}><MoreHorizontal size={19}/><span>Ещё</span></button>
+        <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>{t("Чат")}</span></button>
+        <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>{t("Проекты")}</span></button>
+        <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>{t("Память")}</span></button>
+        <button className={tab === "settings" ? "active" : ""} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={19}/><span>{t("Настройки")}</span></button>
+        <button className={tab === "more" || isMoreModule ? "active" : ""} aria-pressed={tab === "more" || isMoreModule} onClick={() => setTab("more")}><MoreHorizontal size={19}/><span>{t("Ещё")}</span></button>
       </nav>
       <div className="demo-home-indicator"/>
     </div>
