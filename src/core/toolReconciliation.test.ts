@@ -58,6 +58,14 @@ describe("ToolReconciliationService", () => {
     });
   });
 
+  it("loads the complete bounded run history before identifying ambiguous steps", async () => {
+    const audit = new FakeAudit();
+    const list = vi.spyOn(audit, "list");
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
+    await service.listAmbiguous("run-1");
+    expect(list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
+  });
+
   it("does not expose live or successful runs for reconciliation", async () => {
     const audit = new FakeAudit();
     audit.events = [started];

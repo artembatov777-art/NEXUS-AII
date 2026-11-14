@@ -35,6 +35,15 @@ describe("ToolGateway", () => {
     expect(gateway.register(mcpTool).ok).toBe(true);
   });
 
+  it("reads the full bounded audit history before deciding whether a step can be replayed", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([])) };
+    const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    expect((await gateway.execute("sample", { query: "x" }, context(), "actor-1")).ok).toBe(true);
+    expect(audit.list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
+  });
+
   it("does not confuse an audit record from another run with the current step", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const prior = { toolId: "sample", runId: "another-run", traceId: "trace-1", status: "started" as const, timestamp: 100 };

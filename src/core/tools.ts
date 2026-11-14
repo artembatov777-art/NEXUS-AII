@@ -63,6 +63,8 @@ export interface ToolClock {
   now(): number;
 }
 
+export const MAX_TOOL_AUDIT_HISTORY_EVENTS = 5_000;
+
 const MAX_INPUT_BYTES = 64_000;
 const MAX_OUTPUT_BYTES = 64_000;
 
@@ -146,7 +148,7 @@ export class ToolGateway {
       // have crossed an external side-effect boundary. Never replay it blindly.
       if (this.audit.list) {
         let history: Result<ToolAuditEvent[]>;
-        try { history = await this.audit.list({ runId: context.runId, limit: 500 }); }
+        try { history = await this.audit.list({ runId: context.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
         catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
         if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
         const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");

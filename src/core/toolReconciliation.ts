@@ -1,6 +1,6 @@
 import type { AgentCheckpointRepository } from "./agentCheckpoints";
 import { err, ok, type Result } from "./result";
-import type { ToolAuditEvent, ToolAuditSink } from "./tools";
+import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent, type ToolAuditSink } from "./tools";
 
 export interface AmbiguousToolStep {
   toolId: string;
@@ -29,7 +29,7 @@ export class ToolReconciliationService {
     if (!checkpoint.ok) return checkpoint;
     if (!checkpoint.value || !["failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
 
-    const events = await this.audit.list({ runId, limit: 500 });
+    const events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
     if (!events.ok) return events;
     return ok(findAmbiguous(events.value));
   }
