@@ -185,7 +185,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section className="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title">
       <header className="memory-header">
-        <div><div className="eyebrow">PROJECT KNOWLEDGE</div><h2 id="knowledge-title"><BookOpen size={21}/> Knowledge base</h2><p>Import project documents and retrieve passages with source references. Imported text stays in local project storage; relevant passages may be sent with your chat to the configured model provider.</p></div>
+        <div><div className="eyebrow">{t("PROJECT KNOWLEDGE")}</div><h2 id="knowledge-title"><BookOpen size={21}/> Knowledge base</h2><p>Import project documents and retrieve passages with source references. Imported text stays in local project storage; relevant passages may be sent with your chat to the configured model provider.</p></div>
         <button className="icon-btn" onClick={onClose} aria-label={t("Close knowledge")}><X size={18}/></button>
       </header>
       <label className="knowledge-project">Project
@@ -193,7 +193,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
           {items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
-      {items.length === 0 ? <div className="memory-empty">Create a project first. Knowledge is isolated by project.</div> : <>
+      {items.length === 0 ? <div className="memory-empty">{t("Create a project first. Knowledge is isolated by project.")}</div> : <>
         <div className="knowledge-import">
           <div><strong><FileText size={15}/> Import documents</strong><p>TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file. Relevant passages may be sent to your configured model provider during chat.</p></div>
           <label className="primary-btn"><Upload size={14}/> {working ? "Processing…" : "Choose file"}
@@ -206,17 +206,17 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
             <select aria-label={t("Approved workspace folder")} value={selectedWorkspaceRoot} disabled={working} onChange={event => setSelectedWorkspaceRoot(event.target.value)}>
               {workspaceRoots.map(path => <option key={path} value={path}>{path}</option>)}
             </select>
-            <button className="secondary-btn" disabled={working || !selectedWorkspaceRoot || !projectId} onClick={() => void importApprovedWorkspaceFolder()}>Scan and import folder</button>
-          </> : <p>No approved folders yet. Grant access in NEXUS File System, then reopen this panel.</p>}
+            <button className="secondary-btn" disabled={working || !selectedWorkspaceRoot || !projectId} onClick={() => void importApprovedWorkspaceFolder()}>{t("Scan and import folder")}</button>
+          </> : <p>{t("No approved folders yet. Grant access in NEXUS File System, then reopen this panel.")}</p>}
         </div>}
         <div className="knowledge-search">
-          <label>Search project knowledge</label>
+          <label>{t("Search project knowledge")}</label>
           <div><input aria-label={t("Search project knowledge")} value={query} disabled={working} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
           <button className="primary-btn" disabled={!query.trim() || working} onClick={() => void searchKnowledge()}><Search size={14}/> Search</button></div>
         </div>
       </>}
       {documents.length > 0 && <div className="knowledge-documents">
-        <div className="knowledge-documents-heading"><strong>Project documents</strong><span>{documents.length} files</span><button className="secondary-btn" disabled={working || !projectId} onClick={() => void rebuildSemanticIndex()}>Repair semantic index</button></div>
+        <div className="knowledge-documents-heading"><strong>{t("Project documents")}</strong><span>{documents.length} files</span><button className="secondary-btn" disabled={working || !projectId} onClick={() => void rebuildSemanticIndex()}>{t("Repair semantic index")}</button></div>
         {documents.map(document => <div className="knowledge-document" key={document.documentId}>
           <div><FileText size={14}/><span><strong>{document.fileName}</strong><small>{document.chunkCount} chunks · {document.characterCount.toLocaleString()} characters</small></span></div>
           <button className="icon-btn" disabled={working} onClick={() => void removeDocument(document.documentId)} aria-label={"Remove " + document.fileName}><Trash2 size={14}/></button>
@@ -224,7 +224,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       </div>}
       {status && <div className="knowledge-status">{t(status)}</div>}
       {error && <div className="error-banner">{t(error)}</div>}
-      {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
+      {answer && <div className="knowledge-results"><h3>{t("Retrieved context")}</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>{t("Sources")}</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
       <footer className="project-footnote">Stored in the desktop SQLite database (browser preview uses local storage). Imports support TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
     </section>
   </div>;
