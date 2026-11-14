@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Database, FlaskConical, RefreshCw, Save, X } from "lucide-react";
 import { extractNumericExperimentMetrics, requiresExplicitDatasetTransferConfirmation, scoreDatasetEvaluation, scoreEvaluation, validateDatasetManifest, validateTrainingExperiment, type DatasetManifest, type DatasetSample, type ExperimentMethod, type TrainingExperiment } from "../core/trainingLab";
