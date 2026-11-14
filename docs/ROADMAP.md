@@ -109,7 +109,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Authenticate encrypted-backup envelope metadata with AES-GCM additional authenticated data in schema v2 while retaining schema v1 import compatibility.
 - [x] Redact provider credentials from successful non-streaming output and streamed SSE deltas, including credentials split across delta boundaries.
 - [x] Validate model-generated agent step field types and add planner-level plus end-to-end prompt-injection tests proving untrusted reference context cannot expand the workflow tool allowlist or replace the owner-supplied goal.
-- [ ] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries.
+- [x] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries; CSP/capability contracts are regression-tested, RustSec warnings are documented as tracked upstream dependency risks, and OS credential/platform limitations plus filesystem TOCTOU residuals are recorded in the security review.
 - [ ] Complete error handling, cancellation, observability, and recovery paths.
 - [ ] Run a focused threat-model review against the integrated product.
 
