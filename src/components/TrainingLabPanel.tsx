@@ -396,7 +396,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
-        <div><div className="eyebrow">{t("MODEL DEVELOPMENT")}</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.</p></div>
+        <div><div className="eyebrow">{t("MODEL DEVELOPMENT")}</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>{t("Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.")}</p></div>
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
       <div className="training-notice">
