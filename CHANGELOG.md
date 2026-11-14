@@ -16,7 +16,7 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Native project migration is coordinated across repository instances, and project mutations wait for migration completion.
 - Knowledge imports now send incremental ID-based upserts instead of rewriting a potentially stale full snapshot.
 - File move/rename source validation keeps the final path component unresolved to avoid following a substituted symlink target.
-- Batch file renames now persist a SQLite recovery journal before mutation and automatically attempt safe rollback after an interrupted application session; ambiguous paths fail closed and are surfaced in the File System panel.
+- Batch file renames and bulk file moves now persist a SQLite recovery journal before mutation and automatically attempt safe rollback after an interrupted application session; ambiguous paths fail closed and are surfaced in the File System panel.
 
 ### Verification
 - Commit `ae4276e`: frontend Quality passed with 52 test files / 311 tests; `npm audit --audit-level=high` reported 0 vulnerabilities.
