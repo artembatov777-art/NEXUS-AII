@@ -36,6 +36,50 @@ describe("VoiceControls", () => {
     expect(container.textContent).toContain("Do not dictate sensitive information");
   });
 
+
+  it("submits recognized speech automatically in voice conversation mode", () => {
+    class FakeRecognition {
+      static latest: FakeRecognition | null = null;
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { FakeRecognition.latest = this; }
+      start() { this.onstart?.(); }
+      stop() { this.onend?.(); }
+      abort() { this.onend?.(); }
+    }
+    class FakeUtterance {
+      text: string;
+      lang = "";
+      voice: SpeechSynthesisVoice | null = null;
+      onstart: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(text: string) { this.text = text; }
+    }
+    const speech = Object.assign(new EventTarget(), {
+      getVoices: () => [],
+      speak: vi.fn(),
+      cancel: vi.fn()
+    });
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
+    Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: FakeUtterance });
+    const onTranscript = vi.fn();
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
+    const button = container.querySelector('button[aria-label="Start voice conversation"]');
+    act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const instance = FakeRecognition.latest;
+    expect(instance).not.toBeNull();
+    const result = Object.assign([{ transcript: "send this to NEXUS" }], { isFinal: true });
+    act(() => instance?.onresult?.({ resultIndex: 0, results: [result] }));
+    expect(onTranscript).toHaveBeenCalledWith("send this to NEXUS", true);
+  });
+
   it("passes final recognized speech to the chat composer callback", () => {
     class FakeRecognition {
       lang = "";
