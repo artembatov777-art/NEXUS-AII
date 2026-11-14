@@ -28,7 +28,7 @@ Content-Type: application/json
 }
 ```
 
-Allowed models: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, and `gemini-2.5-pro`. The function validates request size and message shape, limits the message count, bounds generation settings, applies a 30-second upstream timeout, and does not return upstream error bodies or credentials.
+Allowed models: `gemini-3.1-flash-lite` and `gemini-3.8-flash`. The function validates request size and message shape, limits the message count, bounds generation settings, applies a 30-second upstream timeout, and does not return upstream error bodies or credentials.
 
 ## Security note
 
