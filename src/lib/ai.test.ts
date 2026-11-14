@@ -40,7 +40,7 @@ describe("sendMessage AI Core integration", () => {
 
   it("sends browser chat through the Vercel Gemini proxy without exposing the Gemini key", async () => {
     native.mockReturnValue(false);
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       text: "Gemini response",
       usage: { inputTokens: 9, outputTokens: 3 }
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -67,7 +67,7 @@ describe("sendMessage AI Core integration", () => {
       headers: expect.objectContaining({ Authorization: "Bearer session-only-token" }),
       body: expect.stringContaining('"systemInstruction"')
     }));
-    expect(fetchMock.mock.calls[0][1]?.body).not.toContain("AIza");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("AIza");
     expect(createRouter).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
