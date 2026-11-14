@@ -581,10 +581,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   return <div className="modal-backdrop file-workspace-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeWorkspace(); }}>
     <section className="file-workspace" role="dialog" aria-modal="true" aria-labelledby="file-workspace-title">
       <header className="file-workspace-header">
-        <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">NATIVE WORKSPACE MODULE</div><h2 id="file-workspace-title">File system</h2><p>Browse, search, create, edit, rename, and move files in approved folders</p></div></div>
+        <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">{t("NATIVE WORKSPACE MODULE")}</div><h2 id="file-workspace-title">{t("File system")}</h2><p>{t("Browse, search, create, edit, rename, and move files in approved folders")}</p></div></div>
         <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={closeWorkspace} aria-label={t("Close file system")}><X size={18}/></button></div>
       </header>
-      {!isTauri() ? <div className="file-workspace-empty"><LockKeyhole size={28}/><h3>Native desktop access required</h3><p>Windows folders are accessed by the Tauri desktop app, not the browser preview.</p></div> : <>
+      {!isTauri() ? <div className="file-workspace-empty"><LockKeyhole size={28}/><h3>{t("Native desktop access required")}</h3><p>{t("Windows folders are accessed by the Tauri desktop app, not the browser preview.")}</p></div> : <>
         <div className="file-workspace-toolbar">
           <div className="file-search"><HardDrive size={15}/><span>{currentPath || "No folder selected"}</span></div>
           <button className="secondary-btn" onClick={() => void refresh()} disabled={!currentPath || busy}><RefreshCw size={14}/> Refresh</button>
@@ -592,17 +592,17 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         </div>
         <div className="file-search-toolbar">
           <div className="file-search-mode" role="group" aria-label="Search mode">
-            <button className="secondary-btn" aria-pressed={!contentSearchMode} onClick={() => { setContentSearchMode(false); setContentMatches([]); setContentSearchSummary(""); }} disabled={busy}>Names</button>
-            <button className="secondary-btn" aria-pressed={contentSearchMode} onClick={() => { setContentSearchMode(true); setEntries([]); }} disabled={busy}>Text content</button>
+            <button className="secondary-btn" aria-pressed={!contentSearchMode} onClick={() => { setContentSearchMode(false); setContentMatches([]); setContentSearchSummary(""); }} disabled={busy}>{t("Names")}</button>
+            <button className="secondary-btn" aria-pressed={contentSearchMode} onClick={() => { setContentSearchMode(true); setEntries([]); }} disabled={busy}>{t("Text content")}</button>
           </div>
           <label className="file-search-input"><Search size={14}/><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchFiles(); }} placeholder={contentSearchMode ? "Find text inside files (max 500 files)" : "Search names in this folder and subfolders"} aria-label="Search approved folders"/></label>
           <button className="secondary-btn" onClick={() => void searchFiles()} disabled={busy || !currentPath || !searchQuery.trim()}><Search size={13}/> Search</button>
-          {searchActive && <button className="secondary-btn" onClick={() => { setSearchQuery(""); void refresh(); }} disabled={busy}>Clear</button>}
+          {searchActive && <button className="secondary-btn" onClick={() => { setSearchQuery(""); void refresh(); }} disabled={busy}>{t("Clear")}</button>}
         </div>
         <div className="file-access-grant">
-          <div className="file-pane-label">APPROVED DIRECTORIES</div>
-          <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
-          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy || Boolean(recoveryStatus)}>Revoke</button></div>)}
+          <div className="file-pane-label">{t("APPROVED DIRECTORIES")}</div>
+          <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>{t("Allow folder")}</button></div>
+          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy || Boolean(recoveryStatus)}>{t("Revoke")}</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
         {recoveryStatus && <div className="error-banner file-recovery-banner" role="alert">
@@ -619,17 +619,17 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
                 </div>)}
               </div>
             </details>}
-            <button className="secondary-btn" onClick={() => void acknowledgeRecovery(operation.operationId)} disabled={busy}>Confirm manual reconciliation</button>
+            <button className="secondary-btn" onClick={() => void acknowledgeRecovery(operation.operationId)} disabled={busy}>{t("Confirm manual reconciliation")}</button>
           </div>)}
-          <button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>Retry recovery</button>
+          <button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>{t("Retry recovery")}</button>
         </div>}
-        {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
+        {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>{t("Reload latest version")}</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{t(notice)}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
-            <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
-            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || Boolean(recoveryStatus) || (!renamePrefix && !renameSuffix)}>Rename selected</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy || Boolean(recoveryStatus)}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
+            <div className="file-table-head"><span>{t("NAME")}</span><span>{t("SIZE")}</span><span>{t("MODIFIED")}</span></div>
+            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || Boolean(recoveryStatus) || (!renamePrefix && !renameSuffix)}>{t("Rename selected")}</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy || Boolean(recoveryStatus)}>{t("Move selected")}</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>{t("Clear")}</button></div>}
             <div className="file-list" role="list" aria-label={t("Workspace files")}>
               {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
                 const name = match.path.split(/[\\/]/).pop() ?? match.path;
@@ -642,16 +642,16 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
             {currentPath && <div className="file-create-row"><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="New file or folder name"/><button className="secondary-btn" onClick={() => void createEntry("file")} disabled={busy || !newName.trim()}><File size={14}/> New file</button><button className="secondary-btn" onClick={() => void createEntry("directory")} disabled={busy || !newName.trim()}><FolderPlus size={14}/> New folder</button></div>}
           </div>
           <aside className="file-preview-pane">
-            <div className="file-pane-label">INSPECTOR</div>
+            <div className="file-pane-label">{t("INSPECTOR")}</div>
             {selectedPath ? <><div className="file-preview-icon"><SelectedIcon size={24}/></div><h3>{selectedPath.split(/[\\/]/).pop()}</h3><p>{selectedPath}</p><div className="file-entry-actions">
-              <label>Rename file<input aria-label={t("New file name")} value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
+              <label>{t("Rename file")}<input aria-label={t("New file name")} value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
               <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || Boolean(recoveryStatus) || !renameName.trim()}>Rename</button>
-              <label>Move to approved folder<div className="file-move-input"><input aria-label={t("Move destination folder")} value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder={t("Destination folder path")}/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
-              <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || Boolean(recoveryStatus) || !moveDestination.trim()}>Move file</button>
-            </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">IMAGE PREVIEW · READ ONLY · MAX 4 MB</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</> : <span className="file-image-readonly">Image previews are read-only. Original file is unchanged.</span>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
+              <label>{t("Move to approved folder")}<div className="file-move-input"><input aria-label={t("Move destination folder")} value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder={t("Destination folder path")}/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>{t("Browse")}</button></div></label>
+              <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || Boolean(recoveryStatus) || !moveDestination.trim()}>{t("Move file")}</button>
+            </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">IMAGE PREVIEW · READ ONLY · MAX 4 MB</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>{t("Cancel")}</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>{t("Edit file")}</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>{t("Analyze with AI")}</button>}</> : <span className="file-image-readonly">{t("Image previews are read-only. Original file is unchanged.")}</span>}</div></> : <div className="file-empty">{t("Select a text file to inspect or edit it.")}</div>}
           </aside>
         </div>
-        <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={closeWorkspace}>Close workspace</button></footer>
+        <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={closeWorkspace}>{t("Close workspace")}</button></footer>
       </>}
     </section>
   </div>;
