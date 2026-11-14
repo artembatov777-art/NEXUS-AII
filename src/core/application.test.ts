@@ -119,4 +119,30 @@ describe("NexusApplication", () => {
       error: { code: "cancelled", retryable: false }
     });
   });
+
+  it("sends prepared project context and persists assistant source provenance", async () => {
+    let received: Array<{ role: string; content: string }> = [];
+    const provider: ModelProvider = {
+      id: "test-provider", listModels: async () => ok([]),
+      async *stream(request) { received = request.messages; yield { type: "text_delta", text: "Grounded answer" }; yield { type: "completed" }; }
+    };
+    const { repository, conversations, application } = setup(provider);
+    const created = await conversations.create({ projectId: "project-7" });
+    if (!created.ok) throw new Error("Conversation setup failed.");
+    const events = [];
+    for await (const event of application.sendMessage({
+      conversationId: created.value.id, providerId: provider.id, model: "test-model", content: "What does the source say?",
+      requestMessages: [{ role: "system", content: "Untrusted project reference: manual page 4." }, { role: "user", content: "What does the source say?" }],
+      assistantMetadata: { sourceReferences: [{ documentId: "doc-7", sourceLabel: "Manual", page: 4, chunkId: "chunk-7" }] }
+    })) events.push(event);
+    expect(received).toEqual([{ role: "system", content: "Untrusted project reference: manual page 4." }, { role: "user", content: "What does the source say?" }]);
+    expect(await repository.get(created.value.id)).toMatchObject({ ok: true, value: {
+      projectId: "project-7", messages: [
+        { role: "user", content: "What does the source say?" },
+        { role: "assistant", content: "Grounded answer", metadata: { sourceReferences: [{ page: 4 }] } }
+      ]
+    }});
+    expect(events.at(-1)).toMatchObject({ ok: true, value: { assistantText: "Grounded answer" } });
+  });
+
 });
