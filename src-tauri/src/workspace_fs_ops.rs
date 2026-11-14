@@ -1,4 +1,5 @@
 use crate::workspace_fs::{open_regular_file_readonly, WorkspaceAccess};
+use crate::workspace_fs_recovery::{RenameEntry, WorkspaceOperationJournal};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -106,7 +107,7 @@ fn validate_entry_name(name: &str) -> Result<(), String> {
 }
 
 /// Atomically moves an entry only when the destination does not exist.
-fn rename_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
         use std::ffi::CString;
@@ -249,7 +250,9 @@ pub struct WorkspaceRenameRequest {
 fn rename_workspace_entries_batch_inner(
     entries: Vec<WorkspaceRenameRequest>,
     access: &WorkspaceAccess,
+    journal: Option<&WorkspaceOperationJournal>,
 ) -> Result<Vec<String>, String> {
+    if let Some(journal) = journal { journal.ensure_ready()?; }
     if entries.is_empty() || entries.len() > 100 {
         return Err("Select between 1 and 100 files for batch rename.".into());
     }
@@ -312,6 +315,16 @@ fn rename_workspace_entries_batch_inner(
         plans.push((source, canonical_parent, entry.new_name, original_name));
     }
 
+    let journal_id = if let Some(journal) = journal {
+        let entries = plans.iter().map(|(source, parent, new_name, _)| RenameEntry {
+            source: source.clone(),
+            destination: parent.join(new_name),
+        }).collect::<Vec<_>>();
+        Some(journal.begin(&entries)?)
+    } else {
+        None
+    };
+
     let mut renamed: Vec<(String, PathBuf, String)> = Vec::with_capacity(plans.len());
     for (source, parent, new_name, original_name) in plans {
         match relocate_entry(access, &source, &parent, Some(&new_name)) {
@@ -324,6 +337,9 @@ fn rename_workspace_entries_batch_inner(
                     }
                 }
                 if rollback_failures.is_empty() {
+                    if let (Some(journal), Some(operation_id)) = (journal, journal_id.as_deref()) {
+                        journal.complete(operation_id).map_err(|error| format!("Batch rename failed and files were restored, but its recovery record remains: {error}. Original error: {cause}"))?;
+                    }
                     return Err(format!("Batch rename failed; earlier names were restored. {cause}"));
                 }
                 return Err(format!(
@@ -333,6 +349,9 @@ fn rename_workspace_entries_batch_inner(
             }
         }
     }
+    if let (Some(journal), Some(operation_id)) = (journal, journal_id.as_deref()) {
+        journal.complete(operation_id)?;
+    }
     Ok(renamed.into_iter().map(|(path, _, _)| path).collect())
 }
 
@@ -340,8 +359,9 @@ fn rename_workspace_entries_batch_inner(
 pub fn rename_workspace_entries_batch(
     entries: Vec<WorkspaceRenameRequest>,
     access: State<'_, WorkspaceAccess>,
+    journal: State<'_, WorkspaceOperationJournal>,
 ) -> Result<Vec<String>, String> {
-    rename_workspace_entries_batch_inner(entries, &access)
+    rename_workspace_entries_batch_inner(entries, &access, Some(&journal))
 }
 
 #[cfg(test)]
@@ -473,7 +493,7 @@ mod tests {
         assert!(relocate_entry(&access, &link, &root, Some("moved.txt")).is_err());
         assert!(rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: link.to_string_lossy().into_owned(), new_name: "renamed.txt".into() }
-        ], &access).is_err());
+        ], &access, None).is_err());
         assert!(link.is_symlink());
         assert_eq!(fs::read_to_string(&outside).expect("read outside target"), "outside data");
         fs::remove_dir_all(base).expect("cleanup");
@@ -503,7 +523,7 @@ mod tests {
         let result = rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "archived-one.txt".into() },
             WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "archived-two.md".into() },
-        ], &access).expect("rename selected files");
+        ], &access, None).expect("rename selected files");
         assert_eq!(result.len(), 2);
         assert_eq!(fs::read_to_string(root.join("archived-one.txt")).unwrap(), "first contents");
         assert_eq!(fs::read_to_string(root.join("archived-two.md")).unwrap(), "second contents");
@@ -522,7 +542,7 @@ mod tests {
         let result = rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "renamed.txt".into() },
             WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "taken.txt".into() },
-        ], &access);
+        ], &access, None);
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(&first).unwrap(), "first");
         assert_eq!(fs::read_to_string(&second).unwrap(), "second");
