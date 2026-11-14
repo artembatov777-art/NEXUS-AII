@@ -102,9 +102,9 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Phase VI — Security & Integration
 
-- [ ] Integrate UI, AI Core, memory, agents, tools, and filesystem through stable application contracts.
-- [ ] Complete permission enforcement and approval policy across all modules.
-- [ ] Complete credential-vault, secret-redaction, and data-routing reviews.
+- [x] Integrate UI, AI Core, memory, agents, tools, and filesystem through stable application contracts: `NexusApplication` handles production chat, `NexusRuntime` composes agent/tool/memory services, repository adapters separate browser preview from native SQLite, and filesystem access remains behind scoped Tauri commands.
+- [x] Complete permission enforcement and approval policy across all modules: default-deny Tool Gateway, host-bound actor identity, per-scope approvals, MCP per-call confirmation, approved-root filesystem access, and fail-closed audit-history verification.
+- [x] Complete credential-vault, secret-redaction, and data-routing reviews: OS credential-vault storage, provider-key redaction across streamed and non-streamed output, explicit local/remote route disclosure, and documented platform limitations. Owner-side credential-vault lifecycle smoke tests remain a Phase VII release gate.
 - [x] Add versioned backup/restore coverage for projects, conversations, memories, knowledge, agent checkpoints, Training Lab datasets/experiments, and sanitized audit/trace history. Provider keys and approved folder permissions are excluded; v1 backups remain importable with an explicit warning.
 - [x] Authenticate encrypted-backup envelope metadata with AES-GCM additional authenticated data in schema v2 while retaining schema v1 import compatibility.
 - [x] Redact provider credentials from successful non-streaming output and streamed SSE deltas, including credentials split across delta boundaries.
