@@ -610,7 +610,8 @@ const translations: Record<string, string> = {
   "Suomi": "Финский",
   "Workspace": "Рабочее пространство",
   "Move conversation here": "Переместить диалог сюда",
-  "NEXUS": "NEXUS"
+  "NEXUS": "NEXUS",
+  "Русский": "Russian"
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
