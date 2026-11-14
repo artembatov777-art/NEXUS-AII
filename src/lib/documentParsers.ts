@@ -11,7 +11,7 @@ const MAX_EXTRACTED_CHARACTERS = 1_000_000;
 export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFile> {
   if (file.size > MAX_FILE_BYTES) throw new Error("Files larger than 8 MB are not supported.");
   const name = file.name.toLocaleLowerCase();
-  if (/\\.(txt|md|csv|json|jsonl|ndjson|log|yaml|yml|xml)$/.test(name)) {
+  if (/\\.(txt|md|mdx|csv|json|jsonl|ndjson|log|yaml|yml|xml|ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|hpp|cs|rb|php|sh|ps1|sql|toml|ini|conf|properties)$/.test(name)) {
     const raw = await file.text();
     if (raw.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted text exceeds the 1 MB limit.");
     let content = raw;
@@ -57,5 +57,5 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
     if (!result.value.trim()) throw new Error("No readable text was found in this DOCX file.");
     return { mediaType: "text/plain", content: result.value };
   }
-  throw new Error("Unsupported file type. Choose TXT, Markdown, CSV, JSON/JSONL, YAML, XML, PDF, or DOCX.");
+  throw new Error("Unsupported file type. Choose TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF, or DOCX.");
 }
