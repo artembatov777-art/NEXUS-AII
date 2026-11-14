@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
+import { LanguageProvider } from "./lib/i18n";
 const App = lazy(() => import("./App"));
 const MobileDemo = lazy(() => import("./components/MobileDemo").then(module => ({ default: module.MobileDemo })));
 import "./styles.css";
