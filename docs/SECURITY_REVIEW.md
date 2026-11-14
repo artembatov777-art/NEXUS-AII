@@ -62,7 +62,7 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 ### CI supply-chain controls
 
-- The Quality, native desktop, and Mobile Interface Preview workflows pin every third-party GitHub Action to a reviewed immutable commit SHA rather than a movable major-version tag. The Rust toolchain action is also pinned to a commit; the Rust compiler channel it installs remains the explicitly selected stable channel.
+- The Quality, native desktop, and Mobile Interface Preview workflows pin every third-party GitHub Action to a reviewed immutable commit SHA rather than a movable major-version tag. JavaScript actions use Node 24-compatible releases; the Pages artifact composite action is pinned and its nested upload-artifact dependency is pinned by the upstream action. The Rust toolchain action is also pinned to a commit; the Rust compiler channel it installs remains the explicitly selected stable channel.
 - Workflow token permissions default to `contents: read`. The native lockfile-maintenance job alone receives job-scoped `contents: write` so it can commit the reviewed lockfile update to the feature branch.
 - GitHub Pages permissions are scoped by job: the build job receives only `contents: read` and `pages: write` for Pages configuration; the deploy job receives `pages: write` and `id-token: write`. The build job does not receive an OIDC token permission.
 - These controls reduce workflow supply-chain and token blast radius. They do not replace dependency review, artifact provenance, branch protection, or independent security testing.
