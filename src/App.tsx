@@ -349,7 +349,7 @@ export default function App() {
       let streamedAnswer = "";
       setLastUsage(null);
       if (isTauri() && chatApplication) {
-        const persisted = await conversationRepository.save(mapUiConversationToDomain({ ...target, messages: target.messages.filter(message => message.id !== "welcome") }));
+        const persisted = await conversationRepository.save(mapUiConversationToDomain({ ...target, title: target.title === "New conversation" ? (next.find(message => message.role === "user")?.content.slice(0, 36) || target.title) : target.title, messages: target.messages.filter(message => message.id !== "welcome") }));
         if (!persisted.ok) throw new Error(persisted.error.message);
         const prepared: ModelMessage[] = prepareConversationRequest(next.map(({ role, content }) => ({ role, content })), contextParts.join("\n\n")).messages;
         let applicationError = "";
