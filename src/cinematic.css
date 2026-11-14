@@ -1064,3 +1064,10 @@
 .studio-health-list strong { color:#e7ebff; font-size:12px; }
 .studio-health-list small { color:#8793b2; font-size:10px; }
 .studio-health-list b { color:#9eafd5; font-size:9px; letter-spacing:.08em; }
+
+.studio-edge-builder { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+.studio-edge-builder select { min-width:160px; flex:1; border:1px solid rgba(128,146,205,.24); border-radius:8px; padding:9px 10px; color:#dce4ff; background:#0b1225; font-size:11px; }
+.studio-edge-list { display:flex; flex-direction:column; gap:6px; margin:10px 0 14px; }
+.studio-edge-list article { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid rgba(128,146,205,.13); border-radius:8px; color:#aebcff; background:rgba(20,29,52,.4); font-size:10px; }
+.studio-edge-list article span { color:#dce3ff; overflow-wrap:anywhere; }
+.studio-edge-list article button { margin-left:auto; color:#9ca8c7; }
