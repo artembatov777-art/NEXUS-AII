@@ -12,17 +12,19 @@ export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: s
   const [error, setError] = useState("");
   const [image, setImage] = useState<GeneratedImage | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !controller.current) onClose();
+      if (event.key === "Escape" && !controller.current) onCloseRef.current();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
       controller.current?.abort();
     };
-  }, [onClose]);
+  }, []);
 
   async function generate() {
     if (working) {
@@ -42,6 +44,7 @@ export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: s
       const result = await generateGeminiImage(prompt, accessToken, {
         aspectRatio,
         imageSize,
+        remoteConsent: remoteApproved,
         signal: next.signal
       });
       if (!next.signal.aborted) setImage(result);
