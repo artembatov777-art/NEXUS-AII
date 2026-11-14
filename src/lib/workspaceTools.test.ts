@@ -11,7 +11,7 @@ import { registerWorkspaceTools } from "./workspaceTools";
 
 function setup() {
   const permissions = { authorize: vi.fn().mockResolvedValue("allow") };
-  const audit = { record: vi.fn().mockResolvedValue({ ok: true, value: undefined }) };
+  const audit = { record: vi.fn().mockResolvedValue({ ok: true, value: undefined }), list: vi.fn().mockResolvedValue({ ok: true, value: [] }) };
   const gateway = new ToolGateway(permissions, audit, { now: () => 1 });
   return { gateway, registry: new ToolRegistry(gateway), permissions, audit };
 }
