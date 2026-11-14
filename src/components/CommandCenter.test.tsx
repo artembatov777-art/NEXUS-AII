@@ -1,21 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LanguageProvider } from "../lib/i18n";
 import { CommandCenter } from "./CommandCenter";
 
 let container: HTMLDivElement;
 let root: Root;
-
-function renderInEnglish(node: ReactNode) {
-  renderInEnglish(<LanguageProvider>{node}</LanguageProvider>));
-}
-
-async function renderInEnglishAsync(node: ReactNode) {
-  await act(async () => { root.render(<LanguageProvider>{node}</LanguageProvider>); });
-}
 const actions = {
   onOpenAgents: vi.fn(), onOpenMemory: vi.fn(), onOpenKnowledge: vi.fn(),
   onOpenProjects: vi.fn(), onOpenFiles: vi.fn(), onOpenTools: vi.fn(), onOpenTrainingLab: vi.fn(),
@@ -39,7 +30,7 @@ describe("NEXUS Command Center", () => {
     act(() => root.render(<CommandCenter
       projectCount={3} conversationCount={12} model="auto" route="remote"
       providerReady={false} providerConnection="unchecked" credentialVault="missing" workspaceReady={true} busy={false} recentActivity={[]} {...actions}
-    />);
+    />));
   });
   afterEach(() => {
     act(() => root.unmount());
@@ -63,34 +54,34 @@ describe("NEXUS Command Center", () => {
   });
 
   it("treats the local no-key profile as a valid vault state", () => {
-    renderInEnglish(<CommandCenter
+    act(() => root.render(<CommandCenter
       projectCount={0} conversationCount={0} model="qwen2.5:7b" route="local"
       providerReady={false} providerConnection="unchecked" credentialVault="not_required"
       workspaceReady={true} busy={false} recentActivity={[]} {...actions}
-    />);
+    />));
     const vault = container.querySelector('[aria-label="System monitor"] article:nth-child(3)');
     expect(vault?.getAttribute("data-health")).toBe("good");
     expect(vault?.textContent).toContain("NOT REQUIRED");
     expect(vault?.textContent).toContain("No key required for loopback profile");
   });
   it("does not present browser preview credential storage as available", () => {
-    renderInEnglish(<CommandCenter
+    act(() => root.render(<CommandCenter
       projectCount={0} conversationCount={0} model="auto" route="remote"
       providerReady={false} providerConnection="unchecked" credentialVault="browser"
       workspaceReady={true} busy={false} recentActivity={[]} {...actions}
-    />);
+    />));
     expect(container.querySelector('[aria-label="System monitor"] article:nth-child(3)')?.getAttribute("data-health")).toBe("pending");
     expect(container.textContent).toContain("Native vault unavailable in browser preview");
   });
 
   it("renders saved conversation history in the workspace timeline", () => {
-    renderInEnglish(<CommandCenter
+    act(() => root.render(<CommandCenter
       projectCount={1} conversationCount={1} model="auto" route="remote"
       providerReady={true} providerConnection="reachable" credentialVault="available"
       workspaceReady={true} busy={false}
       recentActivity={[{ id: "recent-1", title: "NEXUS interface review", updatedAt: Date.now(), messageCount: 8 }]}
       {...actions}
-    />);
+    />));
     expect(container.textContent).toContain("WORKSPACE TIMELINE");
     expect(container.textContent).toContain("NEXUS interface review");
     expect(container.textContent).toContain("8 messages");
