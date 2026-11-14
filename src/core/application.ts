@@ -58,6 +58,8 @@ export class NexusApplication {
         yield ok(event);
       }
 
+      if (!assistantText.trim()) throw new Error("Provider returned an empty streaming response.");
+
       if (assistantText.trim()) {
         const saved = await this.conversations.appendMessage(input.conversationId, {
           role: "assistant",
