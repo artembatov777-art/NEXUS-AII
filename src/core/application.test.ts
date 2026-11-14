@@ -106,7 +106,7 @@ describe("NexusApplication", () => {
       signal: controller.signal
     })) {
       events.push(event);
-      if (event.ok && event.value.type === "text_delta") controller.abort();
+      if (event.ok && "type" in event.value && event.value.type === "text_delta") controller.abort();
     }
 
     const stored = await repository.get(created.value.id);
