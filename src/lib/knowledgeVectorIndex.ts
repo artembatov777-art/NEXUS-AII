@@ -1,7 +1,7 @@
 export const LOCAL_EMBEDDING_MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 import type { KnowledgeChunk, KnowledgeVectorIndex } from "../core/knowledge";
 
-interface VectorRow {
+export interface VectorRow {
   id: string;
   chunkId?: string;
   modelId?: string;
@@ -69,6 +69,20 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return Math.max(0, Math.min(1, dot / Math.sqrt(leftNorm * rightNorm)));
 }
 
+/** Ignore vectors from retired embedding models even before a background reconciliation finishes. */
+export function rankKnowledgeVectorRows(
+  rows: VectorRow[],
+  vector: number[],
+  projectId: string,
+  limit: number
+): Array<{ id: string; score: number }> {
+  return rows.filter(row => row.projectId === projectId && row.modelId === LOCAL_EMBEDDING_MODEL_ID)
+    .map(row => ({ id: row.chunkId ?? row.id, score: cosineSimilarity(vector, row.vector) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(1, Math.min(100, limit)));
+}
+
 /** Durable browser vector store with composite project/chunk keys and repairable indexing. */
 export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
   private database?: Promise<IDBDatabase>;
@@ -127,12 +141,7 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
 
   async search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>> {
     const db = await this.open();
-    const rows = await this.readAll(db);
-    return rows.filter(row => row.projectId === projectId)
-      .map(row => ({ id: row.chunkId ?? row.id, score: cosineSimilarity(vector, row.vector) }))
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, Math.max(1, Math.min(100, limit)));
+    return rankKnowledgeVectorRows(await this.readAll(db), vector, projectId, limit);
   }
 
   private open(): Promise<IDBDatabase> {

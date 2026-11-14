@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cosineSimilarity, LOCAL_EMBEDDING_MODEL_ID, normalizeVectorRows, planVectorReconciliation, vectorStorageKey } from "./knowledgeVectorIndex";
+import { cosineSimilarity, LOCAL_EMBEDDING_MODEL_ID, normalizeVectorRows, planVectorReconciliation, rankKnowledgeVectorRows, vectorStorageKey } from "./knowledgeVectorIndex";
 
 describe("knowledge vector index similarity", () => {
   it("scores identical normalized vectors at one", () => {
@@ -17,6 +17,16 @@ describe("knowledge vector index similarity", () => {
   });
 });
 
+
+describe("active embedding model search", () => {
+  it("never mixes retired model vectors into current semantic results", () => {
+    const rows = [
+      { id: "current-key", chunkId: "current", modelId: LOCAL_EMBEDDING_MODEL_ID, projectId: "p1", documentId: "doc", vector: [1, 0], updatedAt: 2 },
+      { id: "old-key", chunkId: "old", modelId: "previous-model", projectId: "p1", documentId: "doc", vector: [1, 0], updatedAt: 1 }
+    ];
+    expect(rankKnowledgeVectorRows(rows, [1, 0], "p1", 10)).toEqual([{ id: "current", score: 1 }]);
+  });
+});
 
 describe("knowledge vector reconciliation", () => {
   it("retains malformed keyed rows for cleanup instead of hiding them", () => {
