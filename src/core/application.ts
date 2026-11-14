@@ -1,6 +1,6 @@
 import type { ConversationId, Message } from "./domain";
 import type { ConversationService } from "./conversation";
-import type { ModelEvent, ModelRouter } from "./model";
+import type { ModelEvent, ModelMessage, ModelRouter } from "./model";
 import { err, ok, type Result } from "./result";
 
 export interface SendMessageInput {
@@ -8,6 +8,10 @@ export interface SendMessageInput {
   providerId: string;
   model: string;
   content: string;
+  /** Prepared bounded request with retrieved memory and project context. */
+  requestMessages?: ModelMessage[];
+  /** Persist source/page citations with the assistant turn. */
+  assistantMetadata?: Record<string, unknown>;
   signal?: AbortSignal;
 }
 
@@ -42,7 +46,7 @@ export class NexusApplication {
     try {
       const stream = this.models.stream(input.providerId, {
         model: input.model,
-        messages: userMessage.value.messages.map((message: Message) => ({
+        messages: input.requestMessages ?? userMessage.value.messages.map((message: Message) => ({
           role: message.role,
           content: message.content
         })),
@@ -57,7 +61,8 @@ export class NexusApplication {
       if (assistantText.trim()) {
         const saved = await this.conversations.appendMessage(input.conversationId, {
           role: "assistant",
-          content: assistantText
+          content: assistantText,
+          ...(input.assistantMetadata ? { metadata: input.assistantMetadata } : {})
         });
         if (!saved.ok) {
           yield saved;
