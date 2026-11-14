@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { BookOpen, FileText, Search, Upload, X, Trash2 } from "lucide-react";
@@ -185,7 +186,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     <section className="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title">
       <header className="memory-header">
         <div><div className="eyebrow">PROJECT KNOWLEDGE</div><h2 id="knowledge-title"><BookOpen size={21}/> Knowledge base</h2><p>Import project documents and retrieve passages with source references. Imported text stays in local project storage; relevant passages may be sent with your chat to the configured model provider.</p></div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close knowledge"><X size={18}/></button>
+        <button className="icon-btn" onClick={onClose} aria-label={t("Close knowledge")}><X size={18}/></button>
       </header>
       <label className="knowledge-project">Project
         <select value={projectId} disabled={working} onChange={e => { setProjectId(e.target.value); setAnswer(""); setCitations([]); }}>
@@ -202,7 +203,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         {isTauri() && <div className="knowledge-import knowledge-workspace-import">
           <div><strong><FileText size={15}/> Import from approved workspace</strong><p>Indexes up to 100 supported text files (50 MB) from a folder already approved in NEXUS File System. Binary files, credential folders, and build artifacts are skipped.</p></div>
           {workspaceRoots.length > 0 ? <>
-            <select aria-label="Approved workspace folder" value={selectedWorkspaceRoot} disabled={working} onChange={event => setSelectedWorkspaceRoot(event.target.value)}>
+            <select aria-label={t("Approved workspace folder")} value={selectedWorkspaceRoot} disabled={working} onChange={event => setSelectedWorkspaceRoot(event.target.value)}>
               {workspaceRoots.map(path => <option key={path} value={path}>{path}</option>)}
             </select>
             <button className="secondary-btn" disabled={working || !selectedWorkspaceRoot || !projectId} onClick={() => void importApprovedWorkspaceFolder()}>Scan and import folder</button>
@@ -210,7 +211,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         </div>}
         <div className="knowledge-search">
           <label>Search project knowledge</label>
-          <div><input aria-label="Search project knowledge" value={query} disabled={working} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
+          <div><input aria-label={t("Search project knowledge")} value={query} disabled={working} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void searchKnowledge(); }} placeholder="e.g. What are the core architecture decisions?"/>
           <button className="primary-btn" disabled={!query.trim() || working} onClick={() => void searchKnowledge()}><Search size={14}/> Search</button></div>
         </div>
       </>}
