@@ -50,10 +50,11 @@ describe("POST /api/gemini-image", () => {
 
   it("rejects empty, oversized, and invalid image options before contacting Google", async () => {
     for (const body of [
-      { prompt: " " },
-      { prompt: "x".repeat(2_001) },
-      { prompt: "a cat", aspectRatio: "7:5" },
-      { prompt: "a cat", imageSize: "8K" }
+      { prompt: "A cat" },
+      { prompt: " ", allowRemoteProcessing: true },
+      { prompt: "x".repeat(2_001), allowRemoteProcessing: true },
+      { prompt: "a cat", aspectRatio: "7:5", allowRemoteProcessing: true },
+      { prompt: "a cat", imageSize: "8K", allowRemoteProcessing: true }
     ]) {
       const res = response();
       await handler(request({ body }), res);
@@ -72,7 +73,7 @@ describe("POST /api/gemini-image", () => {
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
     const res = response();
-    await handler(request({ body: { prompt: "A quiet mountain lake", aspectRatio: "16:9", imageSize: "1K" } }), res);
+    await handler(request({ body: { prompt: "A quiet mountain lake", aspectRatio: "16:9", imageSize: "1K", allowRemoteProcessing: true } }), res);
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
@@ -95,7 +96,7 @@ describe("POST /api/gemini-image", () => {
       candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: Buffer.from("not an image").toString("base64") } }] } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const res = response();
-    await handler(request({ body: { prompt: "A landscape" } }), res);
+    await handler(request({ body: { prompt: "A landscape", allowRemoteProcessing: true } }), res);
     expect(res.statusCode).toBe(502);
     expect(res.json()).toEqual({ error: "Gemini returned an invalid image payload." });
   });
