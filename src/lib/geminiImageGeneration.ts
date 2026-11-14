@@ -1,15 +1,6 @@
-export type ImageAspectRatio = "1:1" | "3:2" | "2:3" | "4:3" | "3:4" | "5:4" | "4:5" | "16:9" | "9:16" | "21:9";
-export type ImageSize = "1K" | "2K";
+import type { GeneratedImage, ImageAspectRatio, ImageSize } from "../core/imageGeneration";
+export type { GeneratedImage, ImageAspectRatio, ImageSize } from "../core/imageGeneration";
 
-export interface GeneratedImage {
-  mimeType: "image/png" | "image/jpeg" | "image/webp";
-  data: string;
-  byteLength: number;
-  text: string;
-  model: string;
-  aspectRatio: ImageAspectRatio;
-  imageSize: ImageSize;
-}
 
 export async function generateGeminiImage(
   prompt: string,
