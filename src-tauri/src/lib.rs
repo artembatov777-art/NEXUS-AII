@@ -2146,6 +2146,37 @@ pub fn run() {
 mod database_tests {
     use super::*;
     #[test]
+    fn native_image_attachments_are_validated_and_have_a_migrated_storage_column() {
+        let valid = serde_json::json!({
+            "mimeType":"image/png","data":"iVBORw0KGgo=","byteLength":8,
+            "model":"gemini-3.1-flash-image","aspectRatio":"16:9","imageSize":"1K"
+        });
+        assert!(validate_stored_image_attachment(&valid).is_ok());
+        let mut invalid = valid.clone();
+        invalid["mimeType"] = serde_json::json!("image/svg+xml");
+        assert!(validate_stored_image_attachment(&invalid).is_err());
+        let mut mismatched = valid.clone();
+        mismatched["byteLength"] = serde_json::json!(9);
+        assert!(validate_stored_image_attachment(&mismatched).is_err());
+        let mut oversized = valid.clone();
+        oversized["data"] = serde_json::json!("A".repeat(4_300_004));
+        assert!(validate_stored_image_attachment(&oversized).is_err());
+
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply image attachment migration");
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
+        assert_eq!(version, 10);
+        connection.execute("INSERT INTO conversations(id,title,updated_at) VALUES('chat-image','Image',1)", []).expect("create conversation");
+        let image_json = valid.to_string();
+        connection.execute(
+            "INSERT INTO messages(id,conversation_id,role,content,created_at,image_attachment) VALUES('message-image','chat-image','assistant','Generated image',1,?1)",
+            params![image_json]
+        ).expect("persist image attachment");
+        let stored: String = connection.query_row("SELECT image_attachment FROM messages WHERE id='message-image'", [], |row| row.get(0)).expect("read image attachment");
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&stored).expect("parse stored image"), valid);
+    }
+
+    #[test]
     fn training_dataset_manifest_requires_provenance_and_disjoint_splits() {
         let valid = serde_json::json!({
             "schemaVersion":1,"id":"dataset-1","version":1,"name":"Synthetic baseline",
