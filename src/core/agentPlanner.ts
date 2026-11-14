@@ -13,6 +13,7 @@ export class AgentPlanner {
     if(signal.aborted)return err("cancelled","Planning was cancelled.");
     if(referenceContext!==undefined&&(typeof referenceContext!=="string"||referenceContext.length>12_000))return err("validation","Planner reference context exceeds 12,000 characters.");
     const response=await this.model.createPlan({goal:goal.trim(),tools:tools.map(t=>({...t,requiredPermissions:[...t.requiredPermissions],tags:[...t.tags]})),signal,...(referenceContext?.trim()?{referenceContext:referenceContext.trim()}:{})});
+    if(signal.aborted)return err("cancelled","Planning was cancelled.");
     if(!response.ok)return response;
     const plan=response.value;
     if(!plan||plan.goal!==goal.trim()||!Array.isArray(plan.steps)||plan.steps.length>this.maxSteps)return err("validation","Planner returned an invalid plan or exceeded its step budget.");
