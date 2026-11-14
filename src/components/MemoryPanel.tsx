@@ -185,7 +185,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
         </div>
         {scope === "project" && <label>Project<select value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Select project…</option>{projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
         <input className="memory-tags" aria-label={t("Memory tags")} value={tags} onChange={event => setTags(event.target.value)} placeholder={t("Tags, separated by commas")}/>
-        {error && <div className="error-banner memory-error">{error}</div>}
+        {error && <div className="error-banner memory-error">{t(error)}</div>}
         <div className="memory-footer"><span>Saved locally on this device. You control deletion.</span><button className="primary-btn" disabled={!content.trim() || saving} onClick={() => void saveMemory()}>{saving ? "Saving…" : "Save memory"}</button></div>
       </div>
     </section>
