@@ -1,4 +1,4 @@
-use crate::workspace_fs::WorkspaceAccess;
+use crate::workspace_fs::{open_regular_file_readonly, WorkspaceAccess};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -47,13 +47,12 @@ fn read_image_preview(access: &WorkspaceAccess, requested_path: &Path) -> Result
     if !canonical.starts_with(&root) {
         return Err("The selected image is outside an approved directory.".into());
     }
-    let metadata = fs::metadata(&canonical)
-        .map_err(|error| format!("Could not inspect the selected image: {error}"))?;
-    if !metadata.is_file() || metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
+    let file = open_regular_file_readonly(&canonical)?;
+    let metadata = file.metadata()
+        .map_err(|error| format!("Could not inspect the opened image: {error}"))?;
+    if metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
         return Err("Image preview supports regular files up to 4 MB.".into());
     }
-    let mut file = fs::File::open(&canonical)
-        .map_err(|error| format!("Could not open the selected image: {error}"))?;
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     use std::io::Read;
     file.take(MAX_IMAGE_PREVIEW_BYTES + 1).read_to_end(&mut bytes)
