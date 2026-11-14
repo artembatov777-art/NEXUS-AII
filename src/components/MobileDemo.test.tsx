@@ -125,6 +125,13 @@ describe("mobile interface preview interactions", () => {
     expect(container.textContent).toContain("Реальные документы пока не индексируются");
   });
 
+  it("describes voice support accurately in the isolated mobile preview", () => {
+    act(() => buttonContaining("Настройки").click());
+    act(() => buttonContaining("Голос и звук").click());
+    expect(container.textContent).toContain("В мобильном preview голос не подключён");
+    expect(container.textContent).toContain("зависит от поддержки браузера или WebView");
+  });
+
   it("expands tool details and dismisses preview notices", () => {
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Tools & MCP").click());
