@@ -8,7 +8,8 @@ Updated: 2026-11-14
 - Branch: `feat/nexus-core-architecture`
 - Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
 - Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard and unsaved-change protection `9ab2189` / `aaa0b86`, profile regression tests `286579b`, private-dataset transfer policy and regression test `1260917` / `eb2f55a` / `e343792`, and security/threat-model documentation updates.
-- Latest recorded branch commit at this update: `5d499dadca427b45e00dee6c1e3d96943897fd72`.
+- Latest recorded branch head before this status refresh: `192711c1dd797a5c630650acbaa454520e60ab18`.
+- Draft tracking PR: [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2); it is open and must not be merged without owner approval.
 - Do not work on `main` and do not merge a pull request without owner approval.
 
 ## Verified CI
