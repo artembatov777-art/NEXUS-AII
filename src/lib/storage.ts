@@ -6,6 +6,7 @@ import { isValidCredentialHandle } from "./providerCredentials";
 const CHAT_KEY = "nexus-au:conversations:v2";
 const LEGACY_CHAT_KEY = "nexus-au:conversations:v1";
 const PROVIDER_KEY = "nexus-au:provider:v1";
+const MAX_BROWSER_IMAGE_ATTACHMENT_BYTES = 4_400_000;
 
 export interface StorageAdapter {
   getItem(key: string): string | null;
@@ -129,6 +130,11 @@ export async function saveConversations(items: Conversation[], storage: StorageA
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     await invoke("save_conversations", { conversations: items });
     return;
+  }
+  const imageBytes = items.reduce((total, conversation) => total +
+    conversation.messages.reduce((messageTotal, message) => messageTotal + (message.imageAttachment?.data.length ?? 0), 0), 0);
+  if (imageBytes > MAX_BROWSER_IMAGE_ATTACHMENT_BYTES) {
+    throw new Error("Generated image history exceeds the browser storage budget. Export a workspace backup or remove older image messages before saving more images.");
   }
   storage.setItem(CHAT_KEY, JSON.stringify(items));
 }
