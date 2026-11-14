@@ -235,6 +235,30 @@ describe("ToolGateway", () => {
     expect(largeOutput).toMatchObject({ ok: false, error: { code: "tool_failed" } });
   });
 
+  it("marks timed-out tool execution as non-retryable because side effects may still complete", async () => {
+    vi.useFakeTimers();
+    try {
+      const { gateway, audit } = setup();
+      const execute = vi.fn((_input: { query: string }, _context: ToolExecutionContext) =>
+        new Promise<Result<unknown>>(() => { /* Simulates an executor that ignores cancellation. */ }));
+      expect(gateway.register({ ...definition(execute), timeoutMs: 100 }).ok).toBe(true);
+
+      const pending = gateway.execute("sample", { query: "write something" }, context(), "user-1");
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "timeout", retryable: false }
+      });
+      expect(execute).toHaveBeenCalledOnce();
+      expect(audit.record).toHaveBeenNthCalledWith(1, expect.objectContaining({ status: "started" }));
+      expect(audit.record).toHaveBeenNthCalledWith(2, expect.objectContaining({ status: "failed", detail: "timeout" }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not run tools for pre-cancelled requests", async () => {
     const { gateway, permissions } = setup();
     const tool = definition();
