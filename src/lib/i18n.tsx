@@ -846,6 +846,21 @@ const translations: Record<string, string> = {
   "Открыть эксперименты": "Open experiments",
   "Запустить демо": "Run demo",
   "Интерфейсный прототип · демонстрационные данные": "Interface prototype · sample data",
+  "SUPPORT": "ПОДДЕРЖКА",
+  "PREFERENCES": "ПРЕДПОЧТЕНИЯ",
+  "PROJECTS AND GOALS": "ПРОЕКТЫ И ЦЕЛИ",
+  "Демо-поиск по запросу «": "Demo search for “",
+  "Реальные документы пока не индексируются в мобильном preview.": "Real documents are not indexed in the mobile preview yet.",
+  "В мобильном preview голос не подключён. В desktop-версии распознавание зависит от поддержки браузера или WebView.": "Voice is not connected in the mobile preview. Recognition in the desktop version depends on browser or WebView support.",
+  "NEXUS AU — личная AI-экосистема в разработке.": "NEXUS AU is a personal AI ecosystem in development.",
+  "Настройки безопасности пока демонстрационные.": "Security settings are demo-only.",
+  "Настройки уведомлений пока демонстрационные.": "Notification settings are demo-only.",
+  "Подключение моделей появится в рабочей версии.": "Model connections will be available in the full version.",
+  "В рабочей версии память будет доступна для просмотра и управления.": "Memory will be viewable and manageable in the full version.",
+  "Источники и поиск будут связаны с проектами в рабочей версии.": "Sources and search will be linked to projects in the full version.",
+  "Реальные агенты будут работать через разрешения, подтверждения и журнал действий.": "Live agents will use permissions, approvals and an action log.",
+  "Каталог не подключает сервисы и не выдаёт разрешения автоматически.": "The catalog does not connect services or grant permissions automatically.",
+  "Личные переписки и файлы не добавляются в датасеты автоматически.": "Private conversations and files are not added to datasets automatically.",
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
