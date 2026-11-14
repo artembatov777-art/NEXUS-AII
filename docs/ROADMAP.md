@@ -93,6 +93,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Add in-app conflict resolution for journal records that remain ambiguous after retry, and complete parent-directory TOCTOU hardening.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
+- [x] Revalidate persisted approved roots at startup and discard grants if the canonical path changed or the root became a symlink/reparse point; regression coverage rejects a root replaced by an outside symlink.
 - [x] Keep the final source component unresolved during move, rename, and batch-rename validation so a substituted final symlink cannot redirect the operation to its target.
 - [x] Connect approved workspace folders to project knowledge import while retaining native path checks, size caps, binary-file exclusion, and explicit consent.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
@@ -107,6 +108,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add versioned backup/restore coverage for projects, conversations, memories, knowledge, agent checkpoints, Training Lab datasets/experiments, and sanitized audit/trace history. Provider keys and approved folder permissions are excluded; v1 backups remain importable with an explicit warning.
 - [x] Authenticate encrypted-backup envelope metadata with AES-GCM additional authenticated data in schema v2 while retaining schema v1 import compatibility.
 - [x] Redact provider credentials from successful non-streaming output and streamed SSE deltas, including credentials split across delta boundaries.
+- [x] Validate model-generated agent step field types and add planner-level plus end-to-end prompt-injection tests proving untrusted reference context cannot expand the workflow tool allowlist or replace the owner-supplied goal.
 - [ ] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries.
 - [ ] Complete error handling, cancellation, observability, and recovery paths.
 - [ ] Run a focused threat-model review against the integrated product.
