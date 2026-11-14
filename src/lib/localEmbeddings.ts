@@ -1,10 +1,10 @@
 import { err, ok, type Result } from "../core/result";
 import type { EmbeddingProvider } from "../core/knowledge";
+import { LOCAL_EMBEDDING_MODEL_ID } from "./knowledgeVectorIndex";
 
 type TensorOutput = { tolist(): unknown };
 type Extractor = (texts: string[], options: { pooling: "mean"; normalize: true }) => Promise<TensorOutput>;
 type ExtractorFactory = () => Promise<Extractor>;
-const MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 
 /** Runs a small sentence-transformer locally in the browser; model weights are downloaded on first use. */
 export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {

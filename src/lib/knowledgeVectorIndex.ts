@@ -1,4 +1,4 @@
-export const LOCAL_EMBEDDING_MODEL_ID = "onnx-community/all-MiniLM-L6-v2";
+export const LOCAL_EMBEDDING_MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 import type { KnowledgeChunk, KnowledgeVectorIndex } from "../core/knowledge";
 
 interface VectorRow {
