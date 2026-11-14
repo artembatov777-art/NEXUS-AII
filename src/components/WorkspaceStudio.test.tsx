@@ -64,6 +64,18 @@ describe("NEXUS Studio", () => {
     expect(container.textContent).toContain("Browser preview cannot access native file and credential services.");
   });
 
+  it("ignores malformed persisted workflow progress", () => {
+    act(() => root.unmount());
+    localStorage.setItem("nexus-au:studio-workflows:v1", JSON.stringify([{
+      id: "bad", name: "Broken", steps: ["Only step"], completed: [0, 0, 9]
+    }]));
+    root = createRoot(container);
+    act(() => root.render(<WorkspaceStudio {...actions} conversations={[]} projects={[]} providerConfigured={false} providerVerified={false} nativeRuntime={false} workspaceReady={true} focusMode={false}/>));
+    click("Workflows");
+    expect(container.textContent).toContain("Create a reusable checklist for a process you repeat.");
+    expect(container.textContent).not.toContain("Broken");
+  });
+
   it("routes voice and focus controls to the active workspace", () => {
     click("Voice Control");
     expect(actions.onOpenChat).toHaveBeenCalledOnce();
