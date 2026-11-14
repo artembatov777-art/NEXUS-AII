@@ -72,6 +72,24 @@ describe("sendMessage AI Core integration", () => {
     vi.unstubAllGlobals();
   });
 
+  it("rejects messages larger than the Gemini proxy limit before making a request", async () => {
+    native.mockReturnValue(false);
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendMessage(
+      { ...settings, baseUrl: "/api/gemini", model: "gemini-3.1-flash-lite" },
+      [{ ...messages[0], content: "x".repeat(12_001) }],
+      "",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "session-only-token"
+    )).rejects.toThrow(/12,000-character/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("requires the separate NEXUS proxy token in browser mode", async () => {
     native.mockReturnValue(false);
     await expect(sendMessage({ ...settings, baseUrl: "/api/gemini" }, messages))
