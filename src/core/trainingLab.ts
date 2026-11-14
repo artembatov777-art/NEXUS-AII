@@ -32,6 +32,15 @@ export interface DatasetManifest {
 
 export type ExperimentMethod = "baseline" | "prompting" | "retrieval" | "tooling" | "lora";
 
+/**
+ * Private owner-approved samples always require an explicit transfer warning.
+ * A provider's declared "local" route is not proof that a loopback endpoint
+ * cannot forward requests to a remote service.
+ */
+export function requiresExplicitDatasetTransferConfirmation(dataset: Pick<DatasetManifest, "privacyClass">): boolean {
+  return dataset.privacyClass === "owner_approved";
+}
+
 export interface TrainingExperiment {
   schemaVersion: 1;
   id: string;
