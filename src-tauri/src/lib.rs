@@ -269,6 +269,12 @@ fn validate_stored_image_attachment(value: &serde_json::Value) -> Result<(), Str
         return Err("Stored image attachment has invalid or oversized base64 data.".into());
     }
     let padding = if data.ends_with("==") { 2 } else if data.ends_with('=') { 1 } else { 0 };
+    let unpadded = &data[..data.len() - padding];
+    if unpadded.contains('=') ||
+        (padding == 1 && unpadded.len() % 4 != 3) ||
+        (padding == 2 && unpadded.len() % 4 != 2) {
+        return Err("Stored image attachment base64 padding is invalid.".into());
+    }
     let decoded_len = (data.len() / 4) * 3 - padding;
     let declared_len = value.get("byteLength").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
     if decoded_len != declared_len || declared_len == 0 || declared_len > 3_200_000 {
