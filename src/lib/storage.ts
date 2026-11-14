@@ -51,7 +51,10 @@ function isValidStoredImageAttachment(value: unknown): value is NonNullable<Conv
       !["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"].includes(value.aspectRatio) ||
       (value.imageSize !== "1K" && value.imageSize !== "2K")) return false;
   const padding = value.data.endsWith("==") ? 2 : value.data.endsWith("=") ? 1 : 0;
-  return (value.data.length / 4) * 3 - padding === value.byteLength;
+  const unpadded = value.data.slice(0, value.data.length - padding);
+  const validPadding = !unpadded.includes("=") &&
+    (padding === 0 || (padding === 1 && unpadded.length % 4 === 3) || (padding === 2 && unpadded.length % 4 === 2));
+  return validPadding && (value.data.length / 4) * 3 - padding === value.byteLength;
 }
 
 interface StoredConversationRead {
