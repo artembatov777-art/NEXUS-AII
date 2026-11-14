@@ -5,6 +5,13 @@ import { err, ok, type Result } from "../core/result";
 import { LocalStorageMemoryRepository, rankMemories, type StorageLike } from "./memoryStorage";
 import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 
+// Separate UI panels share one renderer and one localStorage object. Coordinate
+// legacy imports across repository instances so simultaneous panel startup cannot
+// race duplicate migrations or re-import a stale browser snapshot.
+const memoryMigrations = new WeakMap<StorageLike, Promise<void>>();
+const knowledgeMigrations = new WeakMap<StorageLike, Promise<void>>();
+
+
 export function tokenizeKnowledgeTerms(value: string): string[] {
   return [...new Set(value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])];
 }
@@ -18,7 +25,7 @@ export class WorkspaceMemoryRepository implements MemoryRepository, MemorySearch
   private readonly local: LocalStorageMemoryRepository;
   private migration?: Promise<void>;
 
-  constructor(storage: StorageLike) {
+  constructor(private readonly storage: StorageLike) {
     this.local = new LocalStorageMemoryRepository(storage);
   }
 
@@ -29,21 +36,28 @@ export class WorkspaceMemoryRepository implements MemoryRepository, MemorySearch
   private async ensureMigrated(): Promise<void> {
     if (!isTauri()) return;
     if (!this.migration) {
-      const pending = (async () => {
-        const nativeRecords = await invoke<MemoryRecord[]>("load_memories");
-        const legacy = await this.local.exportAll();
-        if (!legacy.ok) throw new Error(legacy.error.message);
+      let pending = memoryMigrations.get(this.storage);
+      if (!pending) {
+        pending = (async () => {
+          const nativeRecords = await invoke<MemoryRecord[]>("load_memories");
+          const legacy = await this.local.exportAll();
+          if (!legacy.ok) throw new Error(legacy.error.message);
 
-        const existing = new Set(nativeRecords.map(record => record.id));
-        for (const record of legacy.value) {
-          if (existing.has(record.id)) continue;
-          await invoke("save_memory", { record });
-          existing.add(record.id);
-        }
-        // Leaving the old copy in localStorage would resurrect records deleted
-        // from SQLite on the next app launch. Clear only after every write succeeds.
-        this.local.clearLegacy();
-      })();
+          const existing = new Set(nativeRecords.map(record => record.id));
+          for (const record of legacy.value) {
+            if (existing.has(record.id)) continue;
+            await invoke("save_memory", { record });
+            existing.add(record.id);
+          }
+          // Leaving the old copy in localStorage would resurrect records deleted
+          // from SQLite on the next app launch. Clear only after every write succeeds.
+          this.local.clearLegacy();
+        })();
+        memoryMigrations.set(this.storage, pending);
+        void pending.catch(() => {
+          if (memoryMigrations.get(this.storage) === pending) memoryMigrations.delete(this.storage);
+        });
+      }
       this.migration = pending.catch(error => {
         this.migration = undefined;
         throw error;
@@ -145,7 +159,7 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   private readonly local: LocalStorageKnowledgeRepository;
   private migration?: Promise<void>;
 
-  constructor(storage: StorageLike) {
+  constructor(private readonly storage: StorageLike) {
     this.local = new LocalStorageKnowledgeRepository(storage);
   }
 
@@ -153,17 +167,24 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   private async ensureMigrated(): Promise<void> {
     if (!isTauri()) return;
     if (!this.migration) {
-      const pending = (async () => {
-        const nativeChunks = await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
-        const legacy = await this.local.exportAll();
-        if (!legacy.ok) throw new Error(legacy.error.message);
+      let pending = knowledgeMigrations.get(this.storage);
+      if (!pending) {
+        pending = (async () => {
+          const nativeChunks = await invoke<KnowledgeChunk[]>("load_knowledge_chunks");
+          const legacy = await this.local.exportAll();
+          if (!legacy.ok) throw new Error(legacy.error.message);
 
-        const existing = new Set(nativeChunks.map(chunk => chunk.id));
-        const missing = legacy.value.filter(chunk => !existing.has(chunk.id));
-        if (missing.length) await invoke("save_knowledge_chunks", { chunks: missing });
-        // Prevent deleted native documents from being re-imported on next launch.
-        this.local.clearLegacy();
-      })();
+          const existing = new Set(nativeChunks.map(chunk => chunk.id));
+          const missing = legacy.value.filter(chunk => !existing.has(chunk.id));
+          if (missing.length) await invoke("save_knowledge_chunks", { chunks: missing });
+          // Prevent deleted native documents from being re-imported on next launch.
+          this.local.clearLegacy();
+        })();
+        knowledgeMigrations.set(this.storage, pending);
+        void pending.catch(() => {
+          if (knowledgeMigrations.get(this.storage) === pending) knowledgeMigrations.delete(this.storage);
+        });
+      }
       this.migration = pending.catch(error => {
         this.migration = undefined;
         throw error;

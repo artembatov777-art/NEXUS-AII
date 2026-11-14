@@ -97,6 +97,27 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     expect(afterDelete.ok && afterDelete.value.map(record => record.id)).not.toContain("shared-native");
   });
 
+  it("coordinates legacy memory migration across simultaneous panel repositories", async () => {
+    isTauriMock.mockReturnValue(true);
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageMemoryRepository(storage);
+    await legacy.save(memory("legacy-once", "Imported exactly once"));
+    invokeMock.mockImplementation(async command => {
+      if (command === "load_memories") return [];
+      if (command === "save_memory") return undefined;
+      throw new Error("Unexpected native command: " + command);
+    });
+    const first = new WorkspaceMemoryRepository(storage);
+    const second = new WorkspaceMemoryRepository(storage);
+    const [firstResult, secondResult] = await Promise.all([
+      first.list("all", 10), second.list("all", 10)
+    ]);
+    expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_memories")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "save_memory")).toHaveLength(1);
+  });
+
   it("loads selected memory IDs from the current native snapshot", async () => {
     isTauriMock.mockReturnValue(true);
     const records = [memory("one", "First memory"), memory("two", "Second memory")];
@@ -191,6 +212,31 @@ describe("WorkspaceKnowledgeRepository native freshness", () => {
     const reopened = new WorkspaceKnowledgeRepository(storage);
     const afterDelete = await reopened.search("Legacy knowledge", "project-1", 10);
     expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+
+  it("coordinates legacy knowledge migration across simultaneous panel repositories", async () => {
+    isTauriMock.mockReturnValue(true);
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageKnowledgeRepository(storage);
+    const chunk: KnowledgeChunk = {
+      id: "legacy-once", documentId: "legacy-doc", projectId: "project-1",
+      text: "Imported exactly once", sourceLabel: "legacy.md"
+    };
+    await legacy.add([chunk]);
+    invokeMock.mockImplementation(async command => {
+      if (command === "load_knowledge_chunks") return [];
+      if (command === "save_knowledge_chunks") return undefined;
+      throw new Error("Unexpected native command: " + command);
+    });
+    const first = new WorkspaceKnowledgeRepository(storage);
+    const second = new WorkspaceKnowledgeRepository(storage);
+    const [firstResult, secondResult] = await Promise.all([
+      first.search("Imported", "project-1", 10), second.search("Imported", "project-1", 10)
+    ]);
+    expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_knowledge_chunks")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks")).toHaveLength(1);
   });
 
   it("exposes document imports, replacements, and deletions across repository instances", async () => {
