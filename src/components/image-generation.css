@@ -1,0 +1,21 @@
+.image-generation-backdrop{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:18px;background:rgba(3,7,12,.78);backdrop-filter:blur(14px)}
+.image-generation-dialog{width:min(720px,100%);max-height:min(92dvh,900px);overflow:auto;padding:24px;border:1px solid rgba(111,170,198,.22);border-radius:18px;background:#0c121a;color:#e9f1f6;box-shadow:0 24px 90px rgba(0,0,0,.55)}
+.image-generation-header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.image-generation-header h2{margin:5px 0 0;font-size:22px;font-weight:600}
+.image-generation-disclosure{margin:16px 0;padding:12px 14px;border:1px solid rgba(100,170,200,.16);border-radius:10px;background:rgba(58,105,132,.09);color:#aabac7;font-size:12px;line-height:1.55}
+.image-generation-prompt,.image-generation-options label{display:grid;gap:8px;color:#dce7ee;font-size:13px}
+.image-generation-prompt textarea,.image-generation-options select{width:100%;border:1px solid rgba(130,166,188,.2);border-radius:9px;background:#080e15;color:#e8f1f6;padding:11px;font:inherit;resize:vertical}
+.image-generation-prompt small{justify-self:end;color:#75899a;font-size:11px}
+.image-generation-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.image-generation-consent{display:flex;align-items:flex-start;gap:9px;margin:17px 0;color:#aebdca;font-size:12px;line-height:1.5}
+.image-generation-consent input{margin-top:2px;accent-color:#78b8d5}
+.image-generation-error{color:#ff9b9b;font-size:13px}
+.image-generation-status{display:flex;align-items:center;gap:9px;color:#9cc8df;font-size:13px}
+.image-generation-spinner{animation:image-generation-spin 1s linear infinite}
+.image-generation-result{display:grid;justify-items:start;gap:12px;margin-top:18px}
+.image-generation-result img{display:block;max-width:100%;max-height:480px;object-fit:contain;border:1px solid rgba(130,166,188,.2);border-radius:10px;background:#070b10}
+.image-generation-result p{margin:0;color:#c6d3dc;font-size:13px}
+.image-generation-result-meta{color:#7f94a5;font-size:11px}
+.image-generation-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+@keyframes image-generation-spin{to{transform:rotate(360deg)}}
+@media(max-width:560px){.image-generation-dialog{padding:17px}.image-generation-options{grid-template-columns:1fr}.image-generation-actions{position:sticky;bottom:-17px;padding:12px 0 0;background:#0c121a}}
