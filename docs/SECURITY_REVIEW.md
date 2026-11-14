@@ -46,6 +46,7 @@
 - SQLite schema migrations run in one exclusive transaction. Workspace backup import is transactional and has rollback tests.
 - Project deletion uses native database cleanup/cascade behavior and clears project-scoped semantic vectors.
 - Tool audit and trace history have bounded retention; trace attributes are redacted and bounded. Owner-initiated filesystem reads, content searches, creates, edits, renames, moves, and permission changes also create native audit events without including private paths.
+- Regular-file reads, content search, and image previews open the final path component without following symlinks/reparse points. Existing-file writes use a checked handle with no-follow flags; new-file creation uses atomic create-new semantics and refuses to truncate an existing destination. This reduces final-component substitution risk but does not eliminate hostile parent-directory races or hard-link aliasing.
 - Provider credentials are excluded from backups.
 - SQLite files, browser localStorage/IndexedDB, agent checkpoints, and exported workspace backups are **not application-level encrypted**. Protect the OS account and device storage; treat exported backups as sensitive files.
 
@@ -79,14 +80,14 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 - Native offline speech models, audio-file ingestion, and background hands-free operation are out of scope. Current voice controls are user-initiated browser/WebView APIs and depend on host speech support; recognition may use an online service.
 - Unrestricted desktop automation, filesystem access outside owner-approved roots, general shell execution, and notification workflows are not implemented. The File System module supports bounded read/write/create/search/rename/move operations only within explicitly approved roots. Batch rename is limited to regular files in one directory, preflights all targets, rejects overwrites and Windows-reserved device names, and attempts rollback after partial failure; successful renames create per-file audit events, while incomplete rollback is surfaced for manual review.
 - Browser/WebView speech recognition and speech synthesis controls are implemented where host APIs exist. Voice input is user-initiated and depends on host microphone permission; recognition may use a browser-provided network service, so NEXUS does not promise offline or on-device transcription. Native offline STT/TTS and audio-file ingestion are not implemented.
-- The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session.
+- The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session. Implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100` passed frontend Quality (59 test files / 391 tests), npm audit (0 vulnerabilities), production build, native Windows/macOS/Linux checks/tests/builds, and Rust dependency audit.
 - The frontend Quality workflow includes `npm audit --audit-level=high`; each latest run must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
 
 ## Release checklist
 
 - [ ] Manually verify key save, status, use, and delete in Windows Credential Manager, macOS Keychain, and a Linux Secret Service desktop session.
 - [ ] Verify OS account/disk encryption and backup handling on release machines.
-- [ ] Run dependency audit and remediate applicable production dependency advisories.
+- [x] Run frontend npm audit and Rust cargo audit in CI; both completed successfully for implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100`. Continue reviewing future advisories rather than treating one clean run as a permanent guarantee.
 - [ ] Add GUI automation once a supported WebDriver/desktop test runner is available for all target platforms.
 - [ ] Complete independent security testing before exposing remote MCP or broader desktop automation capabilities.
 

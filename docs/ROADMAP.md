@@ -14,7 +14,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ## Phase I — Complete interface
 
-**Status: in progress — final visual refinement and CI verification.** This phase is about the complete user experience and stable UI contracts. Mock data is acceptable where a backend belongs to a later phase, but every visible control must behave honestly and clearly identify unavailable integrations.
+**Status: in progress — automated verification passed; final visual refinement and fresh owner-side iPhone acceptance remain.** This phase is about the complete user experience and stable UI contracts. Mock data is acceptable where a backend belongs to a later phase, but every visible control must behave honestly and clearly identify unavailable integrations.
 
 - [x] Establish the restrained JARVIS visual language and shared responsive styling.
 - [x] Build the desktop workspace shell, navigation, chat, history, and system overview.
@@ -29,7 +29,10 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Verify the hosted preview and main responsive workspace on a real iPhone Safari session (owner-confirmed on the earlier interface baseline; repeat after this visual refresh).
 - [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
 - [x] Historical baseline `ae4276e` passed frontend Quality, Mobile Interface Preview, and the native Windows/macOS/Linux matrix.
-- [ ] Re-run frontend Quality, Mobile Interface Preview, and the native matrix on the current branch head after the latest provider-profile and interface changes.
+- [x] Frontend Quality passed on `435b8914e31126f8261e0f10e2921bc5d8314100` (59 test files, 391 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities).
+- [x] Native Windows/macOS/Linux matrix passed on `435b8914e31126f8261e0f10e2921bc5d8314100`, including Rust checks, library tests, and native application builds. The workflow also completed the Rust dependency audit successfully.
+- [x] Mobile Interface Preview build and Pages deployment passed for UI-identical frontend commit `64f8d5d0b2d045d5326aac76a462518ed56a7e73`.
+- [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -44,7 +47,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Make local versus remote processing explicit and avoid inferring locality from a loopback provider URL.
 - [x] Keep provider secrets in separate allowlisted OS credential-vault profiles (`default` for generic cloud-provider endpoints and `ollama` for additional provider API-key endpoints); the no-key profile is loopback-only. Browser storage never receives provider secrets.
 - [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior.
-- [ ] Confirm the native Windows/macOS/Linux CI matrix on the latest branch head.
+- [x] Confirm the native Windows/macOS/Linux CI matrix on implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100`; all three native builds and Rust test jobs passed. The subsequent branch-head commit `36cdfdd1fa6d96053ef9459b79ecd15310eb71a1` only reorders the root package dependency list in `Cargo.lock`.
 
 **Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. OmniRoute is integrated only in the final phase.
 
@@ -82,6 +85,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
 - [x] Add bounded raster-image previews (PNG/JPEG/GIF/WebP/BMP, signature-checked, 4 MB cap, read-only) and batch file moves with explicit confirmation, no-overwrite behavior, per-file audit events, and rollback attempts on partial failure; component and Rust tests cover success, conflicts, rollback, invalid image signatures, and size limits.
 - [x] Add safe batch file rename with prefix/suffix patterns, extension preservation, same-directory scope, no-overwrite preflight, per-file audit events, rollback attempts, and component/Rust regression tests.
+- [x] Refuse final-component symlink/reparse-point traversal for regular-file reads, image previews, and content search; create-new writes cannot truncate an existing destination. Existing-file writes use a checked handle and no-follow open flags.
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
@@ -125,7 +129,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - Active implementation branch: `feat/nexus-core-architecture`.
 - Protected working rule: do not modify `main` and do not merge a pull request without the owner's permission.
 - The mobile preview is isolated behind `?demo=1`, uses local sample data, and does not connect to AI providers or credentials.
-- The mobile preview has five jsdom interaction tests. The current code Quality and Mobile Interface Preview workflows passed on `ae4276e`; the native desktop quality matrix passed on `ae4276e`; follow-on filesystem changes require fresh CI. The earlier interface baseline was owner-confirmed on iPhone Safari, but the current visual refresh still needs a fresh owner-side iPhone check.
+- The isolated mobile preview has interaction coverage for navigation, secondary modules, demo chat, project and knowledge search, agent disclosure, tool details, notices, and voice disclosure. Current frontend Quality passed on `435b8914e31126f8261e0f10e2921bc5d8314100` with 59 test files and 391 tests; the native Windows/macOS/Linux matrix passed on the same implementation commit. The Mobile Interface Preview build and deployment passed for the UI-identical frontend commit `64f8d5d0b2d045d5326aac76a462518ed56a7e73`. A fresh owner-side iPhone Safari check after the latest visual refresh remains open.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
 - An endpoint address does not prove that inference is local. OmniRoute is not configured during core development and will be tested as an optional adapter at final integration.

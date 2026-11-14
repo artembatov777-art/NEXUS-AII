@@ -2,101 +2,104 @@
 
 Updated: 2026-11-14
 
-## Working branch
+## Working branch and delivery rules
 
 - Repository: `artembatov777-art/NEXUS-AII`
-- Branch: `feat/nexus-core-architecture`
-- Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
-- Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard and unsaved-change protection `9ab2189` / `aaa0b86`, profile regression tests `286579b`, private-dataset transfer policy and regression test `1260917` / `eb2f55a` / `e343792`, and security/threat-model documentation updates.
-- Latest implementation commit before this status refresh: `ec04a0b90ffc270dfb1bf0361162d6061f805b1c`.
-- Draft tracking PR: [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2); it is open and must not be merged without owner approval.
-- Do not work on `main` and do not merge a pull request without owner approval.
+- Active branch: `feat/nexus-core-architecture`
+- Current branch head at this update: `36cdfdd1fa6d96053ef9459b79ecd15310eb71a1`
+- Latest implementation commit with completed CI evidence: `435b8914e31126f8261e0f10e2921bc5d8314100`
+- The current head is a subsequent lockfile-only dependency-order update from the native workflow; its PR-triggered workflows currently show `action_required` and have no jobs, so do not claim a fresh run for that exact head.
+- Draft PR [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2) remains open and unmerged. Never merge it without owner approval.
+- `main` has not been changed.
+- Current provider paths are direct compatible cloud endpoints and Ollama. OmniRoute is intentionally deferred until final integration and only if the owner chooses it.
 
-## Verified CI
+## Verified automation evidence
 
-For code baseline `daedf7126fc006a75f83ad515b9ce27e80cec8c5`:
+For implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100`:
 
-- Frontend quality: passed.
-- Vitest: 56 test files, 336 tests passed.
-- TypeScript/Vite production build: passed.
-- npm audit: 0 vulnerabilities.
-- Mobile interface preview build/deploy: passed.
-- Native desktop Windows/macOS/Linux matrix: was still running when this status was written. Do not claim native build or Rust tests passed until that run finishes successfully.
+- Frontend Quality passed.
+- Vitest: 59 test files, 391 tests passed.
+- TypeScript and Vite production build passed.
+- `npm audit --audit-level=high`: 0 vulnerabilities.
+- Native Windows, macOS, and Linux jobs all passed `cargo check`, Rust library tests, and native application builds.
+- Rust dependency audit (`cargo audit`) passed.
+- Native workflow uploaded Windows, macOS, and Linux build artifacts for manual smoke tests.
+- Mobile Interface Preview build and Pages deployment passed for UI-identical frontend commit `64f8d5d0b2d045d5326aac76a462518ed56a7e73`.
+- These are CI/build results, not proof of interactive credential-vault behavior, provider connectivity, or a fresh iPhone Safari acceptance on the latest visual revision.
 
-The later commits include documentation and provider-profile UX/test changes. CI status for the current branch head has not been independently retrieved in this session. Do not treat the older baseline's passing tests as verification of these later commits.
+## Implemented baseline
 
-## Implemented in the latest development increment
+### Phase I — Complete interface
 
-### Provider architecture
+- Restrained JARVIS-inspired desktop workspace with responsive layout, dynamic NEXUS core, command center, chat, conversation history, focus mode, command palette, global search, and module navigation.
+- Projects, Memory, Knowledge, Agents, Tools & MCP, File System, Training Lab, and provider settings are reachable from the workspace.
+- Mobile preview is isolated behind `?demo=1`; it uses local sample data and never contacts providers or native filesystem APIs.
+- Visible controls use real UI behavior or clearly disclose preview/unsupported states.
+- Keyboard focus, reduced-motion preferences, modal focus handling, and mobile navigation behavior have automated coverage.
+- Mobile preview interactions cover navigation, secondary modules, demo chat, project and knowledge search, agent disclosures, tool details, notices, and voice disclosure.
+- Remaining acceptance: recheck the latest hosted preview and the main responsive workspace in a real iPhone Safari session after the visual refresh.
 
-- Core development no longer depends on OmniRoute. The gateway-specific profile builder and setup control have been removed; current runtime paths are direct compatible cloud endpoints and Ollama.
-- The default endpoint is an Ollama-compatible loopback URL, with no model preselected and no API key required for the no-key local profile.
-- Model discovery shows only IDs actually returned by the configured endpoint. Configured but undiscovered IDs are not injected into the catalog.
-- The first discovered model is selected only after a successful catalog response.
-- Provider discovery no longer clears its own successful state when it updates the selected model.
-- Direct compatible local and cloud endpoints remain available. OmniRoute is reserved for final integration as an optional adapter behind the provider-neutral contract.
-- Provider location remains owner-declared; the application cannot verify upstream routing from a URL alone.
+### Phase II — AI Core
 
-### Training Lab
+- Provider-neutral model router and registry, model discovery, status/health checks, normalized errors, streaming, usage, cancellation, bounded retry/backoff, and request cleanup are implemented.
+- Direct compatible cloud endpoints and Ollama OpenAI-compatible `/v1` endpoint are the active routes.
+- Provider profiles save endpoint/model/declared route/credential handle; secrets are held in OS credential-vault entries, not browser storage or backups.
+- No-key profile is restricted by the native host to loopback endpoints.
+- Local/remote route is explicitly owner-declared; a loopback gateway does not prove inference stays local.
+- Live provider verification remains pending: Ollama must be running on an owner-controlled computer, and cloud credentials must be supplied and stored through the native settings UI.
+- OmniRoute UI, setup, and connection are excluded from active development by the current project decision.
 
-- Dataset manifests can include real sample records, not just IDs.
-- JSON array and JSONL/NDJSON import are supported through explicit file selection.
-- JSONL export is supported for saved sample records.
-- Train/validation/test split IDs and sample assignments are validated in TypeScript and Rust.
-- Imported sample content is bounded and persisted with immutable dataset versions in the native SQLite repository.
-- Held-out test-split evaluation sends only sample inputs to the configured model; expected outputs remain local for scoring.
-- Evaluation records exact-match, expected-output containment, per-case completion, and latency metrics.
-- Remote evaluation of owner-approved private datasets requires an explicit confirmation.
-- A single dataset evaluation is bounded to 1,000 test cases and can be cancelled.
-- Training Lab model comparison now preserves successful model outputs when one provider fails; cancellation remains global.
-- Actual model-weight training, LoRA execution, and checkpoint/artifact management are not implemented yet.
-- Provider profiles support multiple saved endpoint configurations without storing API keys; the UI confirms profile deletion and protects unsaved changes when switching profiles. Regression tests were added, but these latest tests have not yet been confirmed by CI.
-- The File System panel supports bounded raster-image previews, batch file moves, and batch file renaming with prefix/suffix patterns, extension preservation, same-directory scope, no-overwrite preflight, per-file audit events, and rollback attempts. Component and Rust regression tests cover the new batch-rename paths; current-head CI must confirm them.
-- Owner-approved private Training Lab datasets now require explicit transfer confirmation regardless of the declared provider route. The warning explains that a local/loopback endpoint may still forward requests remotely; expected outputs remain local. A core policy regression test was added, but current-head CI has not yet been verified.
+### Phase III — Memory & Knowledge
 
-### Voice
+- Inspectable memory create/revise/search/delete, project-scoped document ingestion and retrieval, source/page/section provenance, semantic indexing, reconciliation, rebuild, cancellation, and recovery are implemented.
+- Approved profile/project context can be supplied to chat and bounded agent planning as untrusted reference data.
+- Integrated application acceptance remains part of the full release journey.
 
-- Voice controls are integrated into the chat composer.
-- Speech recognition transcripts are inserted into the draft.
-- Speech synthesis can read the latest assistant response.
-- Unsupported host speech APIs are reported instead of pretending to work.
-- Voice component tests cover unsupported recognition and transcript delivery.
-- Recognition and synthesis availability depends on the WebView/browser speech implementation; native offline speech is not guaranteed.
+### Phase IV — Agents & Tools
 
-## Phase status
+- Bounded agent runtime, model-driven planning, durable SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit trail, and duplicate-step replay protection are implemented.
+- MCP HTTP transport, discovery/import, schema/output bounds, per-call approval, and owner-confirmed reconciliation for ambiguous outcomes are implemented.
+- Automatic persisted input-bound result replay for eligible deterministic operations remains open; external side effects must not be replayed blindly.
+- Broader OAuth/authentication, adversarial live-server tests, and end-to-end owner smoke tests remain open.
 
-The seven-phase sequence below matches `docs/ROADMAP.md`. No phase is formally closed until its full exit criteria are verified.
+### Phase V — NEXUS File System
 
-1. Complete interface: IN PROGRESS; current-head CI and owner-side iPhone visual acceptance remain to be reconfirmed.
-2. AI Core: IN PROGRESS; provider-neutral runtime is implemented, while live local/cloud verification and final capability/lifecycle boundaries remain.
-3. Memory & Knowledge: IMPLEMENTED BASELINE; integrated acceptance remains tied to the complete application.
-4. Agents & Tools: PARTIAL; automatic input-bound result replay and final integration/smoke tests remain.
-5. NEXUS File System: IN PROGRESS; scoped operations, previews, batch moves, and batch rename are implemented; broader recovery remains.
-6. Security & Integration: PARTIAL; integrated permission, credential-vault, platform-boundary, and threat-model acceptance remain.
-7. Testing & Release 1.0: NOT RELEASE-READY; full end-to-end, owner-side smoke tests, packaging, and release evidence remain.
+- Owner-approved folder roots, scoped browsing/search, text reads, guarded analysis drafts, regular-file create/edit, individual rename/move, raster image previews, batch moves, and batch rename are implemented.
+- Batch operations have no-overwrite checks, per-file audit events, and rollback attempts.
+- Final-component symlink/reparse-point following is refused for regular-file reads, content search, and image previews. Existing-file writes use checked no-follow handles; create-new writes refuse to truncate existing destinations.
+- Residual risks remain: hostile parent-directory TOCTOU races, hard-link aliasing, and broader interrupted multi-file operation recovery require further work and adversarial tests.
 
-## Known incomplete work
+### Phase VI — Security & Integration
 
-- Image attachments and image-to-model processing are not integrated into chat.
-- Audio-file ingestion/transcription is not implemented. Current voice support is browser/WebView speech input/output.
-- Saved provider profiles can store multiple endpoint configurations, but only one profile is active at a time. A complete provider-specific capability registry remains to be completed.
-- Local runtime lifecycle management (install/download models, load/unload, resource reporting) is not implemented. Ollama must already be installed and running externally.
-- Direct cloud support currently targets compatible OpenAI-style endpoints; non-compatible vendor APIs need dedicated adapters.
-- OmniRoute must be added and tested as an optional provider adapter during final integration, without removing direct local/cloud providers.
-- Fine-tuning/training runtime, model-weight updates, checkpoint and artifact management remain incomplete.
-- Manual Windows desktop smoke testing, owner-side provider credentials, and actual local-runtime testing require the owner's device and environment.
-- The latest verified baseline `2b9795102cf4de0af73cc6b51b0c11c22c396fe9` passed frontend Quality, npm audit, Vitest, TypeScript/Vite production build, and native Windows/macOS/Linux check/test/build jobs. Subsequent interface, speech-privacy, and batch-rename commits are not yet verified by a completed CI run; the first native run was cancelled by newer branch pushes.
+- Provider secrets use platform credential-vault adapters; logs/traces are bounded and redacted; workspace backups exclude credentials and approved folder permissions.
+- Default-deny permissions, per-action confirmations, MCP trust boundaries, bounded transport, and audit-led side-effect controls are implemented.
+- Remaining: integrated cross-module acceptance, user-side credential-vault lifecycle checks, Tauri capability/CSP review, parent-path race tests, hard-link tests, prompt-injection/tool-output adversarial tests, and end-to-end recovery verification.
+- Application data, browser stores, agent checkpoints, and exported backups are not application-level encrypted; OS account/disk protection remains necessary.
+
+### Phase VII — Testing & Release 1.0
+
+- Automated frontend and native CI evidence is recorded above.
+- Remaining: interactive desktop smoke tests, live provider tests, backup/restore and crash-recovery acceptance, full end-to-end/security coverage, packaging/signing, installation instructions, and release notes.
+- The project is not release-ready and no phase is marked complete solely because code compiles.
+
+## Owner-side release gates
+
+1. Verify hosted mobile preview and main responsive workspace in iPhone Safari.
+2. On desktop, verify credential save/status/use/delete in Windows Credential Manager, macOS Keychain, and Linux Secret Service.
+3. Verify folder selection, approved-root boundaries, file read/write/rename/move, conflict behavior, and audit history on real desktop sessions.
+4. Verify a running local Ollama service and one compatible cloud provider; never paste API keys into chat or issue trackers.
+5. Verify backup export/import, interrupted-operation recovery, and cancellation behavior.
+6. Review release artifacts and installation flow on supported platforms.
 
 ## Next implementation order
 
-1. Retrieve and inspect frontend Quality, Mobile Interface Preview, and native CI for the current branch head; fix failures before relying on older test evidence.
-2. Complete the remaining interface acceptance checks, including the latest hosted mobile preview on a real iPhone Safari session.
-3. Finish AI Core provider capability metadata, provider-profile integration, runtime lifecycle/status boundaries, and live local/cloud verification on the owner's device.
-4. Continue the remaining filesystem conflict/recovery and bulk-organization work.
-5. Complete the integrated security review, including credential-vault, audit, CSP, Tauri capability, and dependency boundaries.
-6. Expand multimodal chat with validated image attachments, provider content-part transport, and audio-file handling.
-7. Complete Training Lab artifact/runtime boundaries without claiming model-weight training that is not implemented.
-8. Run end-to-end user journeys, security tests, Windows packaging, and owner-side manual smoke tests.
-9. Integrate OmniRoute only as an optional adapter during final integration, if the owner chooses to proceed.
+1. Continue Phase I visual and interaction refinement, preserving the restrained JARVIS direction and mobile/desktop parity.
+2. Close AI Core runtime edge cases and provider capability/lifecycle metadata without integrating OmniRoute prematurely.
+3. Complete agent result-replay design only for deterministic, input-bound, side-effect-safe operations.
+4. Expand filesystem conflict/recovery handling and adversarial path tests.
+5. Finish integrated security review and cross-module permissions/error recovery.
+6. Expand multimodal chat and Training Lab only where real provider/runtime behavior can be verified; do not label evaluation tooling as model-weight training.
+7. Complete end-to-end journeys, desktop smoke tests, packaging, and release evidence.
+8. Consider optional OmniRoute integration only during final integration and only with owner approval.
 
-Do not report NEXUS AU as complete until every required module and end-to-end acceptance criterion is implemented and tested.
+Do not report NEXUS AU as complete until all seven phases meet their exit criteria and the owner-side release gates have evidence.

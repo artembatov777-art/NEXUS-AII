@@ -45,7 +45,8 @@ Last reviewed: 2026-11-14.
 | Malicious plugin/MCP server | Tool metadata or response contains hostile instructions | Per-server trust, per-tool approval, isolation, output limits | Session-aware HTTP transport, bounded metadata/schema/output, HTTPS-or-loopback-only endpoints, and per-call approval with input preview are implemented. OAuth/bearer authentication, domain allowlists, and adversarial live-server tests remain open. |
 | Supply-chain compromise | Vulnerable dependency or compromised action | Lockfile, dependency review, pinned actions, audit and update policy | A Rust `Cargo.lock` is committed and the native workflow includes `cargo audit`; frontend Quality includes `npm audit --audit-level=high`. The last recorded zero-vulnerability npm result is tied to an older baseline, and the current branch-head workflow results still need verification. GitHub Actions are version-tagged rather than pinned to immutable SHAs. |
 | Web content abuse | Browser agent visits untrusted URL | Domain policy, navigation restrictions, isolated browser context | Not implemented |
-| Local data theft | Device/browser profile is compromised | Minimize secrets, OS keychain, encrypted backup, explicit export | Not implemented |
+| Local data theft | Device/browser profile is compromised | Minimize secrets, OS keychain, encrypted backup, explicit export | Provider secrets use the OS credential vault and are excluded from backups; application data and backups are not app-level encrypted. |
+| Filesystem path substitution | Final path component is replaced by a symlink/reparse point between validation and use | Open regular files without following the final component; compare snapshots; atomic create-new writes; audit actions | Final-component no-follow opens are used for reads/search/image previews and checked existing-file writes; create-new refuses overwrite. Hostile parent-directory TOCTOU races and hard-link aliasing remain residual risks and need adversarial tests. |
 
 ## 5. Permission matrix
 
@@ -84,9 +85,9 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 1. Add automatic input-bound result replay for eligible deterministic operations; native audit-led replay protection and owner-confirmed manual reconciliation currently prevent blind re-execution of uncertain external side effects.
 2. Add a user-facing approval queue and durable native approval state. The core currently supports ephemeral, one-time, run/agent/permission-bound grants; restart requires re-approval.
 3. Add operation-level idempotency and a durable event outbox to the serializable step-based agent runtime; do not attempt to serialize async-generator internals.
-4. Continue Tauri capability/CSP review and add adversarial path, permission-race, and command-boundary tests; command argument validation and cross-platform native CI are implemented.
+4. Continue Tauri capability/CSP review and add adversarial path, permission-race, hard-link, parent-directory TOCTOU, and command-boundary tests; final-component no-follow file opens and cross-platform native CI are implemented.
 5. Complete manual OS keychain lifecycle smoke tests on real Windows, macOS, and Linux desktop sessions; provider keys already use platform credential-vault adapters.
-6. Keep the committed Rust `Cargo.lock`, native `cargo audit`, and frontend npm audit green; inspect the current branch-head results and do not apply force upgrades without reviewing breaking changes.
+6. Keep the committed Rust `Cargo.lock`, native `cargo audit`, and frontend npm audit green; implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100` passed the Rust audit and frontend audit (0 vulnerabilities). Inspect each new branch-head result and do not apply force upgrades without reviewing breaking changes.
 7. Add adversarial tests for prompt injection, tool output spoofing, path traversal, permission races, and cancellation.
 
 ## 8. Review checklist for every new capability
