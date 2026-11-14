@@ -181,8 +181,11 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   async function acknowledgeRecovery(operationId: string) {
     const operation = recoveryOperations.find(item => item.operationId === operationId);
     const pathCount = operation?.entries.length ?? 0;
+    const reviewMessage = operation?.valid && pathCount > 0
+      ? `Verify all ${pathCount} recorded path pair(s) in your file manager first.`
+      : "This record has no readable path details. Clear it only if you have independently reviewed the affected files.";
     const confirmed = window.confirm(
-      `Mark recovery record ${operationId} as manually reconciled?\n\nNEXUS will not move, rename, or delete any files. It will only remove this recovery record. Verify the ${pathCount} recorded path pair(s) above in your file manager first.`
+      `Mark recovery record ${operationId} as manually reconciled?\n\nNEXUS will not move, rename, or delete any files. It will only remove this recovery record.\n\n${reviewMessage}`
     );
     if (!confirmed) return;
     setBusy(true);
