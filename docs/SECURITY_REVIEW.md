@@ -36,7 +36,7 @@
 
 ### MCP
 
-- HTTP transport omits ambient credentials, rejects redirects and dangerous header overrides, supports MCP session/protocol headers and best-effort session deletion, bounds response streaming to 2 MB, and applies a caller-cancellable 30-second default request timeout.
+- HTTP transport omits ambient browser credentials, rejects redirects and dangerous header overrides, reserves Authorization/Proxy-Authorization/X-Api-Key until a vault-backed MCP credential flow exists, supports MCP session/protocol headers and best-effort session deletion, bounds response streaming to 2 MB, and applies a caller-cancellable 30-second default request timeout.
 - SSE parsing is correlated to the request ID and limits event size/count.
 - Server protocol version and capabilities are checked; initialization notification, paginated discovery, health checks, disconnect cleanup, and reconnect with a fresh transport are implemented.
 - Remote tool schemas use a bounded JSON-Schema subset. Unsupported keywords, unsafe object keys, malformed metadata, duplicate tool names, and oversized results are rejected.
