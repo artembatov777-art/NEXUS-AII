@@ -48,6 +48,19 @@ describe("runDatasetEvaluation", () => {
     expect(result.total).toBe(3);
   });
 
+  it("refuses to send training or validation samples to the provider", async () => {
+    const training = { ...samples(["train"])[0], split: "train" as const };
+    await expect(runDatasetEvaluation([training], async () => "must not run")).rejects.toThrow(/held-out test samples/);
+  });
+
+  it("returns failures in dataset order even when provider requests finish out of order", async () => {
+    const result = await runDatasetEvaluation(samples(["slow-failure", "fast-failure"]), async sample => {
+      await new Promise(resolve => setTimeout(resolve, sample.id === "slow-failure" ? 8 : 1));
+      throw new Error(sample.id);
+    }, { concurrency: 2 });
+    expect(result.failures.map(item => item.sampleId)).toEqual(["slow-failure", "fast-failure"]);
+  });
+
   it("rejects invalid concurrency, duplicate IDs, and oversized evaluations", async () => {
     await expect(runDatasetEvaluation(samples(["a"]), async () => "ok", { concurrency: 5 })).rejects.toThrow(/concurrency/);
     await expect(runDatasetEvaluation(samples(["a", "a"]), async () => "ok")).rejects.toThrow(/duplicate/);

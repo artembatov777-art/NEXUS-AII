@@ -36,14 +36,19 @@ export async function runDatasetEvaluation(
   if (options.signal?.aborted) throw new Error("Dataset evaluation was cancelled.");
   const ids = new Set<string>();
   for (const sample of samples) {
-    if (!sample || typeof sample.id !== "string" || !sample.id.trim() || ids.has(sample.id)) {
+    if (!sample || typeof sample.id !== "string" || sample.id.trim() !== sample.id ||
+        !sample.id || sample.id.length > 160 || ids.has(sample.id)) {
       throw new Error("Dataset evaluation contains an invalid or duplicate sample ID.");
+    }
+    if (sample.split !== "test" || typeof sample.input !== "string" ||
+        !sample.input.trim() || sample.input.length > 12_000) {
+      throw new Error("Only valid held-out test samples may be sent to a provider.");
     }
     ids.add(sample.id);
   }
 
   const outputs = Object.create(null) as Record<string, DatasetEvaluationOutput>;
-  const failures: DatasetEvaluationFailure[] = [];
+  const failuresByIndex: Array<DatasetEvaluationFailure | undefined> = new Array(samples.length);
   const now = options.now ?? (() => performance.now());
   let cursor = 0;
   let completed = 0;
@@ -61,10 +66,10 @@ export async function runDatasetEvaluation(
         outputs[sample.id] = { response, latencyMs: Math.max(0, now() - startedAt) };
       } catch (cause) {
         if (options.signal?.aborted) return;
-        failures.push({
+        failuresByIndex[index] = {
           sampleId: sample.id,
           message: cause instanceof Error ? cause.message.slice(0, 500) : "Provider request failed."
-        });
+        };
       } finally {
         completed += 1;
         options.onProgress?.(completed, samples.length);
@@ -73,5 +78,5 @@ export async function runDatasetEvaluation(
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, samples.length) }, () => worker()));
   if (options.signal?.aborted) throw new Error("Dataset evaluation was cancelled.");
-  return { outputs, failures, completed, total: samples.length };
+  return { outputs, failures: failuresByIndex.filter((item): item is DatasetEvaluationFailure => item !== undefined), completed, total: samples.length };
 }
