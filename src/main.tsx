@@ -11,8 +11,10 @@ const isMobileDemo = new URLSearchParams(window.location.search).get("demo") ===
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
+    <LanguageProvider>
     <Suspense fallback={<div role="status" style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#070b12", color: "#79c7e8", fontFamily: "sans-serif", fontSize: "10px", letterSpacing: ".2em" }}>INITIALIZING NEXUS AU</div>}>
       {isMobileDemo ? <MobileDemo /> : <App />}
     </Suspense>
+    </LanguageProvider>
   </React.StrictMode>
 );
