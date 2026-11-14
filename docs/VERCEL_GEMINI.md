@@ -19,7 +19,7 @@ Content-Type: application/json
 
 ```json
 {
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.1-flash-lite",
   "messages": [
     { "role": "user", "content": "Reply with NEXUS_OK." }
   ],
