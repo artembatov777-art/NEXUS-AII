@@ -6,7 +6,7 @@ Updated: 2026-11-15
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `474fd7f1d9c910b62701131f0c85d160d3ca486b` (ordinary-chat execution boundary and regression coverage). Latest branch head: `a9207ab4108a55b7d9292f4d64c9a987ae2f6e6e` (roadmap reconciliation).
+- Latest source implementation commit: `80a548f916e3e6031bc304b182588b8fd5e72fb3` (provider-generation test updated for the execution boundary). Latest branch head has advanced with image-router and documentation commits; verify the PR head before relying on this snapshot.
 - Latest completed frontend Quality commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -29,9 +29,10 @@ Updated: 2026-11-15
 
 - Fixed long-prompt memory retrieval: the hybrid retriever now bounds its search query to 500 characters instead of failing context assembly when a chat message is longer. A regression test covers the bounded query.
 - Added an explicit execution-evidence boundary to ordinary chat requests. The text-only chat path must not claim to have run code, accessed a filesystem, created files, browsed the web, or completed external actions without a real host tool result. This addresses the earlier browser-chat behavior that described filesystem operations without verifiable tool execution.
-- Added a secured Gemini 3.1 Flash Image server endpoint and a chat-composer image-generation dialog. It requires explicit per-request remote-processing consent, keeps the Google API key server-side, restricts model/options, checks image signatures, bounds the response size, and supports preview/download. Generated images are not yet persisted in conversation history; the control is enabled only for the hosted Gemini proxy profile with a NEXUS access token.
+- Added a provider-neutral image-generation router with explicit capability declarations, plus a Gemini 3.1 Flash Image adapter and chat-composer dialog. The secured server endpoint requires explicit per-request remote-processing consent, keeps the Google API key server-side, restricts model/options, checks image signatures, bounds the response size, cancels upstream generation on client disconnect, and supports preview/download. Generated images are not yet persisted in conversation history; the control is enabled only for the hosted Gemini proxy profile with a NEXUS access token.
 - Added a browser/WebView voice-conversation mode that submits recognized speech through the ordinary chat path, speaks completed answers, supports interruption, and returns to listening. One-shot voice input remains available. This relies on host speech APIs and is not offline/native STT/TTS.
-- Frontend Quality on commit `e9d0c5f9463453e02fed37178990036c9a1283bf` ran 76 test files / 539 tests: 537 passed and 2 failed (one outdated voice callback assertion and one image-proxy test missing the required consent field). Both test defects were corrected in later commits, and additional voice/system-prompt tests were added. A post-fix Quality run has not yet been observed for the current branch head. The current Vercel status is pending; no deployment success is claimed.
+- Frontend Quality on commit `e9d0c5f9463453e02fed37178990036c9a1283bf` ran 76 test files / 539 tests: 537 passed and 2 failed (an outdated voice callback assertion and an image-proxy test missing the required consent field). Those test defects were corrected in later commits.
+- A subsequent Quality run on commit `09007f7dd2ccb7682d55083a5d31da5d52dee209` ran 78 test files / 549 tests: 548 passed and 1 failed because the provider-generation test still expected the pre-boundary user-only message list. The assertion was updated in commit `80a548f916e3e6031bc304b182588b8fd5e72fb3`. A post-fix Quality run has not yet been observed for the latest branch head. The Vercel status for the last inspected source commit was pending; no deployment success is claimed.
 - The last confirmed successful frontend Quality baseline remains `da4a19b8f624c32c8266b45db97bd538a88dec9b`; it predates the current working-session source changes. Do not treat that result as verification of the current head.
 
 ## Phase I — Complete interface
