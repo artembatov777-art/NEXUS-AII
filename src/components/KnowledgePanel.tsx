@@ -145,7 +145,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       }
       await refreshDocuments(projectId);
       setStatus(`Workspace import: ${imported.length}/${scan.files.length} files indexed. ${scan.truncated ? "Scan limits were reached. " : ""}${scan.skippedFiles} unsupported or oversized entries skipped.`);
-      if (failures.length) setError(failures.slice(0, 8).join("\\n") + (failures.length > 8 ? `\\n…and ${failures.length - 8} more error(s).` : ""));
+      if (failures.length) setError(failures.slice(0, 8).join("\n") + (failures.length > 8 ? `\n…and ${failures.length - 8} more error(s).` : ""));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not import the approved workspace folder.");
     } finally { setWorking(false); }
