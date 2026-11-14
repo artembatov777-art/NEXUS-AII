@@ -564,7 +564,8 @@ const translations: Record<string, string> = {
   "Основная навигация": "Main navigation",
   "Отправить сообщение": "Send message",
   "Сообщение": "Message",
-  "Добавить вложение": "Add attachment"
+  "Добавить вложение": "Add attachment",
+  "INITIALIZING NEXUS AU": "ЗАПУСК NEXUS AU"
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
