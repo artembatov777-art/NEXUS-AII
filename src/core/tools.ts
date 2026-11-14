@@ -70,7 +70,7 @@ const MAX_OUTPUT_BYTES = 64_000;
 
 const isValidIdentifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 160 &&
-  !/[\\u0000-\\u001f\\u007f]/.test(value);
+  !/[\u0000-\u001f\u007f]/.test(value);
 
 const serializedSize = (value: unknown): number | null => {
   try {
