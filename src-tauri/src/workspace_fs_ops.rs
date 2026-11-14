@@ -312,7 +312,7 @@ fn move_workspace_entries_batch_inner(
             return Err("The selected files create duplicate destination paths.".into());
         }
         match fs::symlink_metadata(&target) {
-            Ok(_) => return Err(format!("A file or folder already exists at destination: {}", target.file_name().unwrap_or_default().to_string_lossy())),
+            Ok(_) => return Err(format!("A file or folder already exists at destination: {}", target.file_name().and_then(|value| value.to_str()).unwrap_or("selected file"))),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(format!("Could not verify a destination path: {error}")),
         }
