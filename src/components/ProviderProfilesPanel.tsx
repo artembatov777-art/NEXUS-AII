@@ -153,6 +153,6 @@ export function ProviderProfilesPanel({
       {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>Delete profile</button>}
     </div>
     <small>Profiles store endpoint, model, declared route and credential handle only. API keys are never stored here. Selecting a profile does not connect to it.</small>
-    {status && <small role="status">{status}</small>}
+    {status && <small role="status">{t(status)}</small>}
   </section>;
 }
