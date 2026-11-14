@@ -125,7 +125,7 @@ describe("McpHttpTransport", () => {
   it("prevents custom headers from replacing transport-owned fields", () => {
     expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "Content-Type": "text/plain" } })).toThrow(/managed/);
     expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "MCP-Session-Id": "attacker" } })).toThrow(/managed/);
-    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "X-Test": "safe\\r\\nInjected: yes" } })).toThrow(/invalid/);
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "X-Test": "safe\r\nInjected: yes" } })).toThrow(/invalid/);
   });
 
   it("rejects duplicate, malformed, oversized and uncorrelated SSE frames", () => {

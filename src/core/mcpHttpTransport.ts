@@ -128,7 +128,7 @@ export class McpHttpTransport implements McpTransport {
       if (/^(host|content-length|cookie|origin|content-type|accept|mcp-session-id|mcp-protocol-version)$/i.test(key)) {
         throw new Error(`Header "${key}" is managed by the MCP transport and cannot be overridden.`);
       }
-      if (!key.trim() || /[\\r\\n]/.test(key) || typeof value !== "string" || /[\\r\\n]/.test(value)) {
+      if (!key.trim() || /[\r\n]/.test(key) || typeof value !== "string" || /[\r\n]/.test(value)) {
         throw new Error("MCP custom headers contain an invalid name or value.");
       }
     }
