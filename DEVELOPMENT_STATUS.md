@@ -6,7 +6,7 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `f9ce7808e4affa547a777b2cca204f809b5180b5`.
+- Latest source implementation commit: `e9869a1968d471e24d9694abeecd26056f9959e9`.
 - Latest completed frontend Quality commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -17,7 +17,7 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43627930950`). Mobile Interface Preview passed on the same commit (run `43627931063`). Native cross-platform verification for the latest source/test changes is pending; the corrected filesystem test fixtures now persist canonical roots. The current native matrix is queued behind active package jobs.
+- Frontend Quality passed on `e9869a1968d471e24d9694abeecd26056f9959e9` (73 test files / 517 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities). Mobile Interface Preview passed on the same commit. The mobile sidebar stacking fix is included; real iPhone Safari acceptance remains owner-side. Native Windows/macOS/Linux packaging and tests for the latest branch head remain pending behind active native package jobs.
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - A prior Windows/macOS native run exposed test fixtures persisting non-canonical temporary roots. Both filesystem fixture helpers now persist canonical roots, matching the production grant contract; the corrected cross-platform run is pending.
@@ -81,7 +81,7 @@ SQLite, browser stores, and checkpoints are not application-level encrypted. Rem
 
 ## Phase VII — Testing & Release 1.0
 
-Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview passed on the same commit. Native Windows/macOS/Linux tests and package generation for the current source changes remain pending. No signed public release has been produced.
+Frontend Quality passed on `e9869a1968d471e24d9694abeecd26056f9959e9` (73 test files / 517 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview passed on the same commit. Native Windows/macOS/Linux tests and package generation for the current branch head remain pending. No signed public release has been produced.
 
 Release acceptance still requires:
 - Successful current Windows/macOS/Linux Rust tests and native package builds.
@@ -99,7 +99,7 @@ Release acceptance still requires:
 - Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests). Mobile Interface Preview is in progress and native cross-platform verification remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
 - Next engineering block: finish Phase V parent-directory TOCTOU hardening and close the in-app recovery-conflict workflow. The File System panel supports path review, retry, and explicit manual-reconciliation acknowledgment; the owner must resolve conflicting paths without overwrite. Then proceed to Phase VII release acceptance.
-- Latest source implementation commit: `f9ce7808e4affa547a777b2cca204f809b5180b5`; subsequent test/documentation commits may follow without changing that source baseline.
+- Latest source implementation commit: `e9869a1968d471e24d9694abeecd26056f9959e9`; subsequent documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
