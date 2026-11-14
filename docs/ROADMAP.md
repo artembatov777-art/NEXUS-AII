@@ -40,6 +40,20 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 **Status: active.**
 
+### Required multimodal and voice capabilities
+
+The existing `src/core/multimodal.ts` is a policy-validation layer, not an image-generation implementation. The existing `VoiceControls` uses browser/WebView speech recognition and speech synthesis; it is not yet a continuous conversational voice runtime. These distinctions must remain visible in the UI and release notes.
+
+- [ ] Add a provider-neutral image-generation contract and capability discovery; do not infer image-generation support from a text model's ID.
+- [ ] Implement at least one real image-generation adapter, bounded prompt/output handling, cancellation, clear provider attribution, and explicit consent before remote prompt or image processing.
+- [ ] Add image-generation controls to chat, render returned images in conversation history, and support safe save/export without placing provider secrets in browser storage.
+- [ ] Add automated tests for unsupported providers, malformed image responses, size limits, cancellation, and remote-consent denial.
+- [ ] Upgrade voice controls from separate one-shot dictation/manual playback to an explicit conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and safely return to listening.
+- [ ] Keep push-to-talk available as a lower-permission alternative; clearly disclose when browser/WebView speech services may process audio remotely.
+- [ ] Test voice-mode lifecycle, duplicate submission prevention, permission denial, unsupported hosts, interruption, and cleanup on navigation/unmount.
+- [ ] Do not claim offline/native voice until an actual local STT/TTS runtime is implemented and verified.
+
+
 - [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
 - [ ] Evaluate an optional OmniRoute adapter during final integration only if the owner explicitly chooses to add it; no OmniRoute UI, profile setup, or connection is part of current development.
 - [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
@@ -117,6 +131,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 **Exit criteria:** all modules operate as one system with consistent permissions, secure secret handling, traceable actions, and tested recovery.
 
 ## Phase VII — Testing & Release 1.0
+
+Image generation and conversational voice are release requirements, not roadmap footnotes. Release acceptance must verify at least one supported image-generation provider end to end, image persistence/rendering in conversation history, explicit remote-processing consent, and a complete voice conversation including interruption and permission-denied behavior.
 
 - [ ] Complete unit, integration, end-to-end, and security test coverage for release-critical flows.
 - [ ] Pass frontend Quality and native Windows/macOS/Linux build and Rust test workflows.
