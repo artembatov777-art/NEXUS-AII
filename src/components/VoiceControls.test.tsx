@@ -1,21 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LanguageProvider } from "../lib/i18n";
 import { VoiceControls } from "./VoiceControls";
 
 let container: HTMLDivElement;
 let root: Root;
-
-function renderInEnglish(node: ReactNode) {
-  renderInEnglish(<LanguageProvider>{node}</LanguageProvider>));
-}
-
-async function renderInEnglishAsync(node: ReactNode) {
-  await act(async () => { root.render(<LanguageProvider>{node}</LanguageProvider>); });
-}
 
 beforeEach(() => {
   container = document.createElement("div");
@@ -34,7 +25,7 @@ afterEach(() => {
 
 describe("VoiceControls", () => {
   it("reports unsupported speech recognition instead of pretending to listen", () => {
-    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
     const button = container.querySelector('button[aria-label="Start voice input"]');
     expect(button).not.toBeNull();
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -42,7 +33,7 @@ describe("VoiceControls", () => {
   });
 
   it("discloses that host speech recognition may use an online service", () => {
-    renderInEnglish(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
     expect(container.textContent).toContain("Speech recognition may use an online service");
     expect(container.textContent).toContain("Do not dictate sensitive information");
   });
@@ -81,7 +72,7 @@ describe("VoiceControls", () => {
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: FakeUtterance });
     const onTranscript = vi.fn();
-    renderInEnglish(<VoiceControls onTranscript={onTranscript} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
     const button = container.querySelector('button[aria-label="Start voice conversation"]');
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     const instance = FakeRecognition.latest;
@@ -128,14 +119,14 @@ describe("VoiceControls", () => {
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: FakeUtterance });
     const onTranscript = vi.fn();
-    renderInEnglish(<VoiceControls onTranscript={onTranscript} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
     const button = container.querySelector('button[aria-label="Start voice conversation"]');
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     const firstRecognition = FakeRecognition.latest;
     const result = Object.assign([{ transcript: "read the answer" }], { isFinal: true });
     act(() => firstRecognition?.onresult?.({ resultIndex: 0, results: [result] }));
-    renderInEnglish(<VoiceControls onTranscript={onTranscript} textToSpeak="" isGenerating={true} />);
-    renderInEnglish(<VoiceControls onTranscript={onTranscript} textToSpeak="NEXUS is ready." isGenerating={false} />);
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" isGenerating={true} />));
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="NEXUS is ready." isGenerating={false} />));
     expect(speech.speak).toHaveBeenCalledTimes(1);
     const spoken = vi.mocked(speech.speak).mock.calls[0]?.[0] as FakeUtterance;
     expect(spoken.text).toBe("NEXUS is ready.");
@@ -162,7 +153,7 @@ describe("VoiceControls", () => {
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: class { constructor(public text: string) {} } });
-    renderInEnglish(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
     const start = container.querySelector('button[aria-label="Start voice conversation"]');
     act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     const active = FakeRecognition.latest;
@@ -192,7 +183,7 @@ describe("VoiceControls", () => {
     const speech = Object.assign(new EventTarget(), { getVoices: () => [], speak: vi.fn(), cancel: vi.fn() });
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
-    renderInEnglish(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
     const start = container.querySelector('button[aria-label="Start voice input"]');
     act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     const active = FakeRecognition.latest;
@@ -224,7 +215,7 @@ describe("VoiceControls", () => {
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: class { constructor(public text: string) {} } });
-    renderInEnglish(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
     const start = container.querySelector('button[aria-label="Start voice conversation"]');
     act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     act(() => FakeRecognition.latest?.onerror?.({ error: "not-allowed" }));
@@ -251,7 +242,7 @@ describe("VoiceControls", () => {
     }
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
     const onTranscript = vi.fn();
-    renderInEnglish(<VoiceControls onTranscript={onTranscript} textToSpeak="" />);
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
     const button = container.querySelector('button[aria-label="Start voice input"]');
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(onTranscript).toHaveBeenCalledWith("hello from voice", false);
