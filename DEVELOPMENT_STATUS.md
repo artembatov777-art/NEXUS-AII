@@ -8,7 +8,7 @@ Updated: 2026-11-14
 - Branch: `feat/nexus-core-architecture`
 - Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
 - Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard and unsaved-change protection `9ab2189` / `aaa0b86`, profile regression tests `286579b`, private-dataset transfer policy and regression test `1260917` / `eb2f55a` / `e343792`, and security/threat-model documentation updates.
-- Latest recorded branch head after the current implementation increment: `664e524e65f290799029e0d35df4af2f9ec25389`.
+- Latest implementation commit before this status refresh: `ec04a0b90ffc270dfb1bf0361162d6061f805b1c`.
 - Draft tracking PR: [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2); it is open and must not be merged without owner approval.
 - Do not work on `main` and do not merge a pull request without owner approval.
 
@@ -29,7 +29,7 @@ The later commits include documentation and provider-profile UX/test changes. CI
 
 ### Provider architecture
 
-- Core development no longer depends on OmniRoute.
+- Core development no longer depends on OmniRoute. The gateway-specific profile builder and setup control have been removed; current runtime paths are direct compatible cloud endpoints and Ollama.
 - The default endpoint is an Ollama-compatible loopback URL, with no model preselected and no API key required for the no-key local profile.
 - Model discovery shows only IDs actually returned by the configured endpoint. Configured but undiscovered IDs are not injected into the catalog.
 - The first discovered model is selected only after a successful catalog response.
