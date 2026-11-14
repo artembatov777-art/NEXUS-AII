@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const JOURNAL_VERSION: u32 = 1;
 const MAX_JOURNALED_OPERATIONS: usize = 8;
 const MAX_JOURNALED_ENTRIES: usize = 100;
+const MAX_JOURNAL_PAYLOAD_BYTES: usize = 1_048_576;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +84,9 @@ impl WorkspaceOperationJournal {
             version: JOURNAL_VERSION,
             entries: entries.to_vec(),
         }).map_err(|error| format!("Could not serialize the file operation journal: {error}"))?;
+        if payload.len() > MAX_JOURNAL_PAYLOAD_BYTES {
+            return Err("The file operation journal exceeds the recovery size limit.".into());
+        }
         let connection = self.connection.lock()
             .map_err(|_| "The file operation journal is unavailable.")?;
         connection.execute(
@@ -152,8 +156,13 @@ impl WorkspaceOperationJournal {
             .map_err(|error| format!("Could not decode pending file operations: {error}"))?;
 
         Ok(pending.into_iter().map(|(operation_id, payload)| {
-            match serde_json::from_str::<RenameJournal>(&payload) {
-                Ok(journal) if journal.version == JOURNAL_VERSION
+            let parsed = if payload.len() <= MAX_JOURNAL_PAYLOAD_BYTES {
+                serde_json::from_str::<RenameJournal>(&payload).ok()
+            } else {
+                None
+            };
+            match parsed {
+                Some(journal) if journal.version == JOURNAL_VERSION
                     && !journal.entries.is_empty()
                     && journal.entries.len() <= MAX_JOURNALED_ENTRIES => {
                     let entries = journal.entries.into_iter().map(|entry| RecoveryEntryDetails {
@@ -172,7 +181,7 @@ impl WorkspaceOperationJournal {
                 _ => RecoveryOperationDetails {
                     operation_id,
                     valid: false,
-                    error: Some("This recovery record is invalid. Review it before clearing the record.".into()),
+                    error: Some("This recovery record is invalid or exceeds the recovery size limit. Review it before clearing the record.".into()),
                     entries: Vec::new(),
                 }
             }
@@ -224,6 +233,11 @@ impl WorkspaceOperationJournal {
         }
 
         for (operation_id, payload) in pending {
+            if payload.len() > MAX_JOURNAL_PAYLOAD_BYTES {
+                let message = "A pending file operation journal exceeds the recovery size limit and was preserved for manual review.".to_string();
+                self.set_recovery_error(Some(message.clone()))?;
+                return Err(message);
+            }
             let journal: RenameJournal = match serde_json::from_str::<RenameJournal>(&payload) {
                 Ok(value) if value.version == JOURNAL_VERSION
                     && !value.entries.is_empty()
@@ -528,6 +542,35 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn oversized_recovery_payload_is_preserved_and_never_deserialized() {
+        let (base, _root, access, journal) = fixture();
+        let connection = journal.connection.lock().expect("journal connection");
+        connection.execute(
+            "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
+            params!["oversized-record", "x".repeat(MAX_JOURNAL_PAYLOAD_BYTES + 1), 1_i64],
+        ).expect("insert oversized recovery payload");
+        drop(connection);
+
+        let details = journal.recovery_details(&access).expect("inspect oversized record");
+        assert_eq!(details.len(), 1);
+        assert!(!details[0].valid);
+        assert!(details[0].error.as_deref().unwrap_or_default().contains("size limit"));
+        let error = journal.recover(&access).expect_err("oversized record must fail closed");
+        assert!(error.contains("size limit"));
+        assert!(journal.recovery_status().expect("recovery status").is_some());
+
+        let connection = journal.connection.lock().expect("journal connection");
+        let remaining: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal WHERE operation_id=?1",
+            ["oversized-record"], |row| row.get(0)
+        ).expect("verify record retained");
+        assert_eq!(remaining, 1);
+        drop(connection);
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
     #[test]
     fn recovery_never_follows_a_symlink_at_a_journaled_destination() {
         use std::os::unix::fs::symlink;
