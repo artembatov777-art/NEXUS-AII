@@ -79,7 +79,7 @@ describe("mobile interface preview interactions", () => {
 
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Файловая система").click());
-    expect(container.textContent).toContain("DEVICE WORKSPACE");
+    expect(container.textContent).toContain("РАБОЧЕЕ ПРОСТРАНСТВО УСТРОЙСТВА");
   });
 
   it("sends a local demo message without contacting an AI model", () => {
@@ -113,15 +113,15 @@ describe("mobile interface preview interactions", () => {
   it("opens every secondary module from the mobile module hub", () => {
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Инструменты и MCP").click());
-    expect(container.textContent).toContain("TOOL GATEWAY");
+    expect(container.textContent).toContain("ШЛЮЗ ИНСТРУМЕНТОВ");
 
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Training Lab").click());
-    expect(container.textContent).toContain("MODEL DEVELOPMENT");
+    expect(container.textContent).toContain("РАЗРАБОТКА МОДЕЛЕЙ");
 
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Агенты").click());
-    expect(container.textContent).toContain("NEXUS AUTOMATION");
+    expect(container.textContent).toContain("АВТОМАТИЗАЦИЯ NEXUS");
   });
 
   it("filters the demo project list and exposes an empty search state", () => {
@@ -153,7 +153,7 @@ describe("mobile interface preview interactions", () => {
 
   it("expands tool details and dismisses preview notices", () => {
     act(() => buttonContaining("Ещё").click());
-    act(() => buttonContaining("Tools & MCP").click());
+    act(() => buttonContaining("Инструменты и MCP").click());
     const browser = buttonContaining("Browser");
     expect(browser.getAttribute("aria-expanded")).toBe("true");
     act(() => browser.click());
