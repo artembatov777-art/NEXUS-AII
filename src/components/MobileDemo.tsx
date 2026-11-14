@@ -87,7 +87,7 @@ export function MobileDemo() {
           <div className="demo-messages">
             {messages.map((message, index) => <article className={`demo-message ${message.role}`} key={index}>
               {message.role === "assistant" && <div className="demo-message-avatar"><Sparkles size={14}/></div>}
-              <div className="demo-message-bubble">{message.text}</div>
+              <div className="demo-message-bubble">{t(message.text)}</div>
             </article>)}
           </div>
           <div className="demo-suggestions">
@@ -190,7 +190,7 @@ export function MobileDemo() {
         <p className="demo-disclaimer">Демо-режим · сообщения не отправляются модели</p>
       </div>}
 
-      {notice && <button className="demo-notice" aria-live="polite" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+      {notice && <button className="demo-notice" aria-live="polite" onClick={() => setNotice("")}>{t(notice)}<span>×</span></button>}
       <nav className="demo-tabbar" aria-label={t("Основная навигация")}>
         <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
         <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
