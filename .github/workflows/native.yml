@@ -36,15 +36,22 @@ jobs:
       - run: npm run build
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
-      - name: Build native application without packaging installers
-        run: npm run tauri build -- --no-bundle
-      - name: Upload native executable for manual desktop smoke tests
+      - name: Build Windows installers
+        if: runner.os == 'Windows'
+        run: npm run tauri build -- --bundles nsis,msi
+      - name: Build macOS disk image
+        if: runner.os == 'macOS'
+        run: npm run tauri build -- --bundles dmg
+      - name: Build Linux packages
+        if: runner.os == 'Linux'
+        run: npm run tauri build -- --bundles appimage,deb
+      - name: Upload native installer packages for manual smoke tests
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-au-${{ runner.os }}-${{ github.sha }}
-          path: src-tauri/target/release/nexus-au*
+          name: nexus-au-installers-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/bundle/**/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   update-rust-lockfile:
     needs: native
