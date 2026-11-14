@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../lib/i18n";
 import { useState } from "react";
 import {
   ArrowUp, AudioLines, Bell, BookOpen, Brain, Bot, ChevronRight,
@@ -22,6 +23,7 @@ const demoTools = [
 ];
 
 export function MobileDemo() {
+  const { language, setLanguage } = useLanguage();
   const [tab, setTab] = useState<DemoTab>("chat");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState(sampleMessages);
@@ -158,6 +160,7 @@ export function MobileDemo() {
 
         {tab === "settings" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>SYSTEM CONTROL</span><h2>Настройки</h2></div><Settings2 size={21}/></div>
+          <div className="demo-settings-group"><span>ЯЗЫК / LANGUAGE</span><label className="demo-language-setting" htmlFor="demo-language">Язык интерфейса<select id="demo-language" value={language} onChange={event => setLanguage(event.target.value as "ru" | "en")}><option value="ru">Русский</option><option value="en">English</option></select></label></div>
           <div className="demo-settings-profile"><div className="demo-profile-avatar">N</div><div><strong>Владелец NEXUS</strong><span>Личное пространство</span></div><ChevronRight size={18}/></div>
           <div className="demo-settings-group"><span>СИСТЕМА</span><button onClick={() => setNotice("Подключение моделей появится в рабочей версии.")}><Brain size={17}/> Модели и провайдеры <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки безопасности пока демонстрационные.")}><ShieldCheck size={17}/> Безопасность <ChevronRight size={17}/></button><button onClick={() => setNotice("Настройки уведомлений пока демонстрационные.")}><Bell size={17}/> Уведомления <ChevronRight size={17}/></button></div>
           <div className="demo-settings-group"><span>ПОДДЕРЖКА</span><button onClick={() => setNotice("NEXUS AU — личная AI-экосистема в разработке.")}><CircleHelp size={17}/> О проекте <ChevronRight size={17}/></button><button onClick={() => setNotice("В мобильном preview голос не подключён. В desktop-версии распознавание зависит от поддержки браузера или WebView.")}><AudioLines size={17}/> Голос и звук <ChevronRight size={17}/></button></div>
