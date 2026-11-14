@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Plus, Search, Trash2, X, Pencil, Check, Download } from "lucide-react";
 import { MemoryService, type MemoryCategory, type MemoryRecord, type MemoryScope, type MemoryId } from "../core/memory";
+import { HybridMemoryRetriever } from "../core/knowledge";
 import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
+import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
+import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
 import { WorkspaceProjectRepository } from "../lib/projectStorage";
 
@@ -10,11 +13,17 @@ interface MemoryPanelProps {
 }
 
 export function MemoryPanel({ onClose }: MemoryPanelProps) {
+  const memoryRepository = useMemo(() => new WorkspaceMemoryRepository(window.localStorage), []);
   const service = useMemo(() => new MemoryService(
-    new WorkspaceMemoryRepository(window.localStorage),
+    memoryRepository,
     { memoryId: () => crypto.randomUUID() as MemoryId },
     { now: () => Date.now() }
-  ), []);
+  ), [memoryRepository]);
+  const memoryRetriever = useMemo(() => new HybridMemoryRetriever(
+    memoryRepository,
+    new LocalTransformerEmbeddingProvider(),
+    new IndexedDbMemoryVectorIndex()
+  ), [memoryRepository]);
   const [records, setRecords] = useState<MemoryRecord[]>([]);
   const [query, setQuery] = useState("");
   const [content, setContent] = useState("");
@@ -39,15 +48,24 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   async function refresh(search = query) {
     const requestId = ++refreshSequence.current;
     try {
-      const result = search.trim()
-        ? await service.search(search, "all", 50)
-        : await service.list("all", 50);
-      if (requestId !== refreshSequence.current) return;
-      if (result.ok) {
-        setRecords(result.value);
-        setError("");
+      if (search.trim()) {
+        const result = await memoryRetriever.search(search, "all", 50);
+        if (requestId !== refreshSequence.current) return;
+        if (result.ok) {
+          setRecords(result.value.map(item => item.record));
+          setError("");
+        } else {
+          setError(result.error.message);
+        }
       } else {
-        setError(result.error.message);
+        const result = await service.list("all", 50);
+        if (requestId !== refreshSequence.current) return;
+        if (result.ok) {
+          setRecords(result.value);
+          setError("");
+        } else {
+          setError(result.error.message);
+        }
       }
     } catch (cause) {
       if (requestId === refreshSequence.current) {
