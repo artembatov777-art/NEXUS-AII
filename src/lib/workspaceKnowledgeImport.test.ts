@@ -69,6 +69,28 @@ describe("collectWorkspaceKnowledgeFiles", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
+
+  it("caps a scan at 100 files and reports the truncated result", async () => {
+    const entries = Array.from({ length: 101 }, (_, index) => ({
+      name: "file-" + index + ".txt", path: "/approved/file-" + index + ".txt",
+      kind: "file", sizeBytes: 10
+    }));
+    const result = await collectWorkspaceKnowledgeFiles("/approved", vi.fn(async () => entries));
+    expect(result.files).toHaveLength(100);
+    expect(result.truncated).toBe(true);
+    expect(result.totalBytes).toBe(1_000);
+  });
+
+  it("compares Windows paths case-insensitively without accepting sibling prefixes", async () => {
+    const invoke = vi.fn(async () => [
+      { name: "notes.txt", path: "c:\\work\\notes.txt", kind: "file", sizeBytes: 5 },
+      { name: "escape.txt", path: "C:\\work-evil\\escape.txt", kind: "file", sizeBytes: 5 }
+    ]);
+    const result = await collectWorkspaceKnowledgeFiles("C:\\Work", invoke);
+    expect(result.files.map(file => file.name)).toEqual(["notes.txt"]);
+    expect(result.skippedFiles).toBe(1);
+  });
+
   it("rejects invalid roots and malformed directory listings", async () => {
     await expect(collectWorkspaceKnowledgeFiles(" ", vi.fn())).rejects.toThrow(/approved workspace/);
     await expect(collectWorkspaceKnowledgeFiles("/approved", vi.fn(async () => null))).rejects.toThrow(/invalid data/);
