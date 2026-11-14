@@ -1,4 +1,5 @@
 use crate::workspace_fs::WorkspaceAccess;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::State;
@@ -173,6 +174,113 @@ pub fn move_workspace_entry(
     relocate_entry(&access, Path::new(&path), Path::new(&destination_directory), None)
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRenameRequest {
+    path: String,
+    new_name: String,
+}
+
+fn rename_workspace_entries_batch_inner(
+    entries: Vec<WorkspaceRenameRequest>,
+    access: &WorkspaceAccess,
+) -> Result<Vec<String>, String> {
+    if entries.is_empty() || entries.len() > 100 {
+        return Err("Select between 1 and 100 files for batch rename.".into());
+    }
+
+    let mut seen_sources = HashSet::new();
+    let mut seen_targets = HashSet::new();
+    let mut common_parent: Option<PathBuf> = None;
+    let mut plans: Vec<(PathBuf, PathBuf, String, String)> = Vec::with_capacity(entries.len());
+
+    // Validate the complete batch before changing any file.
+    for entry in entries {
+        if entry.path.trim().is_empty() || entry.path.len() > 4096 {
+            return Err("A selected file path is invalid.".into());
+        }
+        validate_entry_name(&entry.new_name)?;
+        let source_path = PathBuf::from(&entry.path);
+        let metadata = fs::symlink_metadata(&source_path)
+            .map_err(|error| format!("Could not inspect a selected file: {error}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("Batch rename supports regular files only; folders, symbolic links, and special entries are excluded.".into());
+        }
+        let source_root = access.allowed_root_for(&source_path)?;
+        let source = fs::canonicalize(&source_path)
+            .map_err(|error| format!("Could not resolve a selected file: {error}"))?;
+        if source == source_root || !source.starts_with(&source_root) {
+            return Err("An approved root directory itself cannot be renamed.".into());
+        }
+        if !seen_sources.insert(source.clone()) {
+            return Err("The same file was selected more than once.".into());
+        }
+        let parent = source.parent()
+            .ok_or_else(|| "A selected file has no parent directory.".to_string())?
+            .to_path_buf();
+        let canonical_parent = fs::canonicalize(&parent)
+            .map_err(|error| format!("Could not resolve a selected file's parent directory: {error}"))?;
+        if !canonical_parent.starts_with(&source_root) {
+            return Err("All renamed files must remain inside an approved directory.".into());
+        }
+        if let Some(expected_parent) = &common_parent {
+            if expected_parent != &canonical_parent {
+                return Err("Batch rename is limited to files in the same directory.".into());
+            }
+        } else {
+            common_parent = Some(canonical_parent.clone());
+        }
+        let target = canonical_parent.join(&entry.new_name);
+        if target == source {
+            return Err("The rename pattern leaves at least one file name unchanged.".into());
+        }
+        let target_key = target.to_string_lossy().to_lowercase();
+        if !seen_targets.insert(target_key) {
+            return Err("The rename pattern creates duplicate destination names.".into());
+        }
+        match fs::symlink_metadata(&target) {
+            Ok(_) => return Err(format!("A file or folder already exists at destination: {}", entry.new_name)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("Could not verify a destination file name: {error}")),
+        }
+        let original_name = source.file_name()
+            .ok_or_else(|| "A selected file has no valid name.".to_string())?
+            .to_string_lossy().into_owned();
+        plans.push((source, canonical_parent, entry.new_name, original_name));
+    }
+
+    let mut renamed: Vec<(String, PathBuf, String)> = Vec::with_capacity(plans.len());
+    for (source, parent, new_name, original_name) in plans {
+        match relocate_entry(access, &source, &parent, Some(&new_name)) {
+            Ok(next_path) => renamed.push((next_path, parent, original_name)),
+            Err(cause) => {
+                let mut rollback_failures = Vec::new();
+                for (renamed_path, original_parent, original_name) in renamed.iter().rev() {
+                    if relocate_entry(access, Path::new(renamed_path), original_parent, Some(original_name)).is_err() {
+                        rollback_failures.push(renamed_path.clone());
+                    }
+                }
+                if rollback_failures.is_empty() {
+                    return Err(format!("Batch rename failed; earlier names were restored. {cause}"));
+                }
+                return Err(format!(
+                    "Batch rename failed and rollback was incomplete. Review these files manually: {}. Original error: {cause}",
+                    rollback_failures.iter().take(4).cloned().collect::<Vec<_>>().join(", ")
+                ));
+            }
+        }
+    }
+    Ok(renamed.into_iter().map(|(path, _, _)| path).collect())
+}
+
+#[tauri::command]
+pub fn rename_workspace_entries_batch(
+    entries: Vec<WorkspaceRenameRequest>,
+    access: State<'_, WorkspaceAccess>,
+) -> Result<Vec<String>, String> {
+    rename_workspace_entries_batch_inner(entries, &access)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +376,72 @@ mod tests {
         assert!(relocate_entry(&access, &folder, &child, None).is_err());
         assert!(relocate_entry(&access, &root, &root, Some("renamed")).is_err());
         assert!(relocate_entry(&access, &folder, &outside, None).is_err());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_rename_preserves_extensions_and_file_contents() {
+        let (base, root, access) = fixture();
+        let first = root.join("one.txt");
+        let second = root.join("two.md");
+        fs::write(&first, "first contents").expect("create first file");
+        fs::write(&second, "second contents").expect("create second file");
+        let result = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "archived-one.txt".into() },
+            WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "archived-two.md".into() },
+        ], &access).expect("rename selected files");
+        assert_eq!(result.len(), 2);
+        assert_eq!(fs::read_to_string(root.join("archived-one.txt")).unwrap(), "first contents");
+        assert_eq!(fs::read_to_string(root.join("archived-two.md")).unwrap(), "second contents");
+        assert!(!first.exists() && !second.exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_rename_preflights_conflicts_without_changing_any_file() {
+        let (base, root, access) = fixture();
+        let first = root.join("one.txt");
+        let second = root.join("two.txt");
+        fs::write(&first, "first").expect("create first");
+        fs::write(&second, "second").expect("create second");
+        fs::write(root.join("taken.txt"), "existing").expect("create conflict");
+        let result = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "renamed.txt".into() },
+            WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "taken.txt".into() },
+        ], &access);
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second");
+        assert_eq!(fs::read_to_string(root.join("taken.txt")).unwrap(), "existing");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_rename_rejects_duplicate_names_mixed_directories_and_outside_paths() {
+        let (base, root, access) = fixture();
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).expect("create nested");
+        let first = root.join("one.txt");
+        let second = nested.join("two.txt");
+        fs::write(&first, "one").expect("create first");
+        fs::write(&second, "two").expect("create second");
+        let duplicate = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "same.txt".into() },
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "other.txt".into() },
+        ], &access);
+        assert!(duplicate.is_err());
+        let mixed = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "one-new.txt".into() },
+            WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "two-new.txt".into() },
+        ], &access);
+        assert!(mixed.is_err());
+        let outside = base.join("outside.txt");
+        fs::write(&outside, "outside").expect("create outside");
+        let escaped = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: outside.to_string_lossy().into_owned(), new_name: "moved.txt".into() },
+        ], &access);
+        assert!(escaped.is_err());
+        assert!(first.exists() && second.exists() && outside.exists());
         fs::remove_dir_all(base).expect("cleanup");
     }
 
