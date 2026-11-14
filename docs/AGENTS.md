@@ -12,6 +12,7 @@ Agents are bounded task workers. They do not bypass the Tool Gateway, owner-appr
 - `src/core/toolInvocationAgent.ts` adapts model-planned tool calls to the Tool Gateway. `src/lib/workspaceTools.ts` registers bounded list, search, content-search, read, write, mkdir, rename, and move operations. Native Rust filesystem commands remain the final access-control boundary.
 - `src/components/AgentControlCenter.tsx` exposes the local preview workflow, model-backed planning, task execution, checkpoint controls, ambiguous-outcome reconciliation, and recent audit events.
 - `src/core/multiAgentCoordinator.ts` executes validated, dependency-ordered plans with a bounded number of delegated steps. The current model-planned workflow assigns those steps to the Tool Invocation Agent; a full specialist-agent team is not yet a release claim.
+- The coordinator deep-copies the validated JSON plan before yielding or pausing for approval, so caller mutation cannot change a previously reviewed nested tool input.
 - MCP servers can be configured over HTTPS or loopback HTTP, discovered, and imported into the Tool Registry. Every imported call requires a separate owner confirmation. The current UI supports unauthenticated MCP endpoints only; OAuth and bearer-token credential flows are not implemented.
 
 ## Built-in workflows
