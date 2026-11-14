@@ -950,6 +950,8 @@ const translations: Record<string, string> = {
   "Could not copy text.": "Не удалось скопировать текст.",
   "Could not read clipboard.": "Не удалось прочитать буфер обмена.",
   "Clipboard access is unavailable in this browser context.": "Доступ к буферу обмена недоступен в этом браузере.",
+  "Version": "Версия",
+  "AU WORKSPACE": "РАБОЧЕЕ ПРОСТРАНСТВО AU",
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
