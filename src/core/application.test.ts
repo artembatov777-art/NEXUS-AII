@@ -79,7 +79,7 @@ describe("NexusApplication", () => {
     ]);
     expect(events.at(-1)).toMatchObject({
       ok: false,
-      error: { code: "provider_unavailable", retryable: true }
+      error: { code: "provider_unavailable", retryable: false }
     });
   });
 
