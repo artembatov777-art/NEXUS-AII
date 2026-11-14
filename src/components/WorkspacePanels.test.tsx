@@ -78,7 +78,7 @@ describe("ToolsPanel preview interactions", () => {
     expect(dialog?.textContent).toContain("LIVE MCP + CATALOG");
     expect(dialog?.textContent).toContain("00 / 00");
     expect(dialog?.textContent).toContain("Connect a real MCP server above");
-    expect(dialog?.textContent).toContain("06");
+    expect(dialog?.textContent).toContain("05");
   });
 
   it("filters the catalog and renders a clear no-results state", () => {
