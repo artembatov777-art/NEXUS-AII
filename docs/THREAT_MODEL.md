@@ -2,7 +2,7 @@
 
 Status: initial design baseline, not a completed security audit.
 Scope: current React/Vite + Tauri/Rust desktop foundation and planned local-first AI modules.
-Last reviewed: 2026-11-13.
+Last reviewed: 2026-11-14.
 
 ## 1. Security objectives
 
