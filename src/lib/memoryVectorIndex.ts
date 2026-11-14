@@ -22,7 +22,7 @@ export function normalizeMemoryVectorRows(value: unknown): MemoryVectorRow[] {
     const scope = row.scope;
     if (scope !== "profile" && scope !== "project" && scope !== "conversation") return [];
     return [{
-      id: row.id,
+      id: row.id!,
       modelId: typeof row.modelId === "string" ? row.modelId : "",
       scope,
       ...(typeof row.projectId === "string" ? { projectId: row.projectId } : {}),
@@ -36,7 +36,7 @@ export function planMemoryVectorReconciliation(rows: MemoryVectorRow[], records:
   staleIds: string[];
   missingRecords: MemoryRecord[];
 } {
-  const expected = new Map(records.map(record => [record.id, record]));
+  const expected = new Map<string, MemoryRecord>(records.map(record => [record.id, record]));
   const indexed = new Set<string>();
   const staleIds: string[] = [];
   for (const row of rows) {
