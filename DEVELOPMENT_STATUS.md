@@ -35,6 +35,13 @@ Updated: 2026-11-15
 - A subsequent Quality run on commit `09007f7dd2ccb7682d55083a5d31da5d52dee209` ran 78 test files / 549 tests: 548 passed and 1 failed because the provider-generation test still expected the pre-boundary user-only message list. The assertion was updated in commit `80a548f916e3e6031bc304b182588b8fd5e72fb3`. A post-fix Quality run has not yet been observed for the latest branch head. The Vercel status for the last inspected source commit was pending; no deployment success is claimed.
 - The last confirmed successful frontend Quality baseline remains `da4a19b8f624c32c8266b45db97bd538a88dec9b`; it predates the current working-session source changes. Do not treat that result as verification of the current head.
 
+## Additional work in the current continuation
+
+- Generated images are now persisted as assistant-message attachments in conversation history, rendered inline in the chat, and round-tripped through the existing browser/native conversation storage adapter. Storage validation checks MIME type, base64 shape/decoded byte length, metadata bounds, and a 3.2 MB decoded payload ceiling. Storage and repository regression tests were added. Iterative image editing is not implemented.
+- Voice regression coverage now includes duplicate final-transcript suppression, explicit microphone permission denial, ending a voice conversation, and aborting active recognition on unmount. Real browser/WebView compatibility, interruption behavior, and offline/native STT/TTS remain unverified.
+- Additional image and voice changes are committed on `feat/nexus-core-architecture`. No CI result for the latest continuation commits has been observed; the previous Quality failure was an outdated AI generation-check expectation and the test assertion was updated afterward. Do not claim the latest branch head passes CI until a fresh run completes.
+- Vercel status for the most recently inspected commit was pending. No hosted deployment success is claimed.
+
 ## Phase I — Complete interface
 
 The desktop workspace, restrained JARVIS-inspired visual system, responsive layouts, chat/history, command palette, global search, projects, memory, knowledge, agents, tools/MCP, file system, Training Lab, and provider settings are implemented. Heavy modules are lazy-loaded. Mobile preview is isolated behind `?demo=1` and does not contact a model or native filesystem.
