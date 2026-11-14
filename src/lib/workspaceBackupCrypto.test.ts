@@ -22,6 +22,36 @@ describe("encrypted workspace backups", () => {
     await expect(decryptWorkspaceBackup(tampered, "correct horse battery staple")).rejects.toThrow(/passphrase/i);
   });
 
+  it("continues to import legacy version-one encrypted backups", async () => {
+    const payload = { format: "nexus-au-backup", schemaVersion: 2, legacy: true };
+    const passphrase = "correct horse battery staple";
+    const salt = new Uint8Array(16).fill(7);
+    const iv = new Uint8Array(12).fill(9);
+    const iterations = 310_000;
+    const material = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]
+    );
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+      material, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+    );
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(payload))
+    );
+    const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+    const legacyEnvelope = {
+      format: "nexus-au-encrypted-backup",
+      schemaVersion: 1,
+      kdf: "PBKDF2-SHA256",
+      iterations,
+      cipher: "AES-256-GCM",
+      salt: encode(salt),
+      iv: encode(iv),
+      ciphertext: encode(new Uint8Array(ciphertext))
+    };
+    await expect(decryptWorkspaceBackup(legacyEnvelope, passphrase)).resolves.toEqual(payload);
+  });
+
   it("authenticates encryption parameters as part of the backup envelope", async () => {
     const encrypted = JSON.parse(await encryptWorkspaceBackup(
       { format: "nexus-au-backup", schemaVersion: 2, value: "private" },
