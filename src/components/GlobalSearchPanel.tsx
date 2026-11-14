@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useMemo, useRef, useState } from "react";
 import { Search, MessageSquare, Brain, BookOpen, X } from "lucide-react";
 import type { Conversation } from "../types";
@@ -78,13 +79,13 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
     <section className="global-search-modal" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
       <header className="memory-header">
         <div><div className="eyebrow">WORKSPACE SEARCH</div><h2 id="global-search-title"><Search size={20}/> Search everything</h2><p>Choose which workspace data to search.</p></div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close search"><X size={18}/></button>
+        <button className="icon-btn" onClick={onClose} aria-label={t("Close search")}><X size={18}/></button>
       </header>
       <form className="global-search-form" onSubmit={event => { event.preventDefault(); void searchAll(); }}>
-        <input aria-label="Search workspace" autoFocus value={query} onChange={event => { setQuery(event.target.value); clearResults(); }} placeholder="Search workspace data…" />
+        <input aria-label={t("Search workspace")} autoFocus value={query} onChange={event => { setQuery(event.target.value); clearResults(); }} placeholder={t("Search workspace data…")} />
         <button className="primary-btn" disabled={!query.trim() || working}><Search size={14}/>{working ? "Searching…" : "Search"}</button>
       </form>
-      <div className="global-search-scopes" aria-label="Search scopes">
+      <div className="global-search-scopes" aria-label={t("Search scopes")}>
         <label><input type="checkbox" checked={includeConversations} onChange={event => { setIncludeConversations(event.target.checked); clearResults(); }}/> Conversations</label>
         <label><input type="checkbox" checked={includeMemories} onChange={event => { setIncludeMemories(event.target.checked); clearResults(); }}/> Memories</label>
         <label><input type="checkbox" checked={includeKnowledge} onChange={event => { setIncludeKnowledge(event.target.checked); clearResults(); }}/> Project knowledge</label>
