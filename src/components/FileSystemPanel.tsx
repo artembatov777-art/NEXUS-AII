@@ -16,7 +16,7 @@ type WorkspaceContentMatch = { path: string; lineNumber: number; preview: string
 type WorkspaceContentSearch = { matches: WorkspaceContentMatch[]; totalMatches: number; scannedFiles: number; truncated: boolean };
 type WorkspaceImagePreview = { dataUrl: string; mediaType: string; sizeBytes: number };
 
-const isRasterImage = (name: string) => /\\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+const isRasterImage = (name: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
 
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B`
   : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB`
