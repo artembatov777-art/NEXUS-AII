@@ -79,6 +79,14 @@ Release acceptance still requires:
 - Signed/reproducible artifacts, release notes, and a known-limitations list.
 - Fresh iPhone Safari acceptance for the latest mobile preview.
 
+## Resume point
+
+- Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
+- Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
+- Frontend Quality and Mobile Interface Preview passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`. Native cross-platform verification for the latest source changes remains pending.
+- Next engineering task: trace the production desktop chat path in `src/App.tsx` and integrate it with the stable application facade and durable conversation repository without losing project context, knowledge citations, streaming, or cancellation. Add end-to-end integration coverage before moving to the remaining Phase VI filesystem recovery and threat-model work.
+- Latest source implementation commit: `eeb665f5391fac6d21f4fd54689f9dcc540c0be8`; documentation-only commits may follow without changing that source baseline.
+
 ## Owner-side blockers
 
 These steps cannot be honestly completed by source-code changes or headless CI alone:
