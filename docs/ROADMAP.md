@@ -89,7 +89,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add safe batch file rename with prefix/suffix patterns, extension preservation, same-directory scope, no-overwrite preflight, per-file audit events, rollback attempts, and component/Rust regression tests.
 - [x] Persist batch-rename and batch-move intent in SQLite before the first filesystem mutation and recover interrupted batches on startup with no-overwrite rollback; ambiguous path states fail closed and remain visible in the File System panel.
 - [x] Refuse final-component symlink/reparse-point traversal for regular-file reads, image previews, and content search; create-new writes cannot truncate an existing destination. Existing-file writes use a checked handle and no-follow open flags.
-- [ ] Add a guided conflict-resolution flow for journal records that cannot be safely auto-restored, and complete parent-directory TOCTOU hardening.
+- [x] Add a visible retry action for interrupted-operation recovery after an owner resolves a path conflict in the file manager.
+- [ ] Add in-app conflict resolution for journal records that remain ambiguous after retry, and complete parent-directory TOCTOU hardening.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
 - [x] Keep the final source component unresolved during move, rename, and batch-rename validation so a substituted final symlink cannot redirect the operation to its target.
