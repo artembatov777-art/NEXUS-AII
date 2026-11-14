@@ -2,7 +2,7 @@ import { err, ok, type Result } from "../core/result";
 import type { ProviderSettings } from "../types";
 import type { StorageAdapter } from "./storage";
 import { isLoopbackProviderEndpoint, providerEndpointError } from "./providerEndpoint";
-import { isValidCredentialHandle } from "./providerCredentials";
+import { isDedicatedCredentialHandle, isValidCredentialHandle } from "./providerCredentials";
 
 export interface ProviderProfileRecord {
   id: string;
@@ -74,11 +74,17 @@ export function loadProviderProfiles(storage: StorageAdapter = localStorage): Re
   }
   const profiles: ProviderProfileRecord[] = [];
   const ids = new Set<string>();
+  const dedicatedHandles = new Set<string>();
   for (const item of parsed.profiles) {
     const validated = validateProviderProfile(item);
     if (!validated.ok) return validated;
     if (ids.has(validated.value.id)) return err("validation", "Saved provider profiles contain duplicate IDs.");
     ids.add(validated.value.id);
+    const handle = validated.value.settings.credentialHandle;
+    if (isDedicatedCredentialHandle(handle)) {
+      if (dedicatedHandles.has(handle)) return err("validation", "Dedicated provider credential handles must be unique per saved profile.");
+      dedicatedHandles.add(handle);
+    }
     profiles.push(validated.value);
   }
   return ok(profiles);
@@ -93,11 +99,17 @@ export function saveProviderProfiles(
   }
   const normalized: ProviderProfileRecord[] = [];
   const ids = new Set<string>();
+  const dedicatedHandles = new Set<string>();
   for (const item of profiles) {
     const validated = validateProviderProfile(item);
     if (!validated.ok) return validated;
     if (ids.has(validated.value.id)) return err("validation", "Provider profile IDs must be unique.");
     ids.add(validated.value.id);
+    const handle = validated.value.settings.credentialHandle;
+    if (isDedicatedCredentialHandle(handle)) {
+      if (dedicatedHandles.has(handle)) return err("validation", "Dedicated provider credential handles must be unique per saved profile.");
+      dedicatedHandles.add(handle);
+    }
     normalized.push(validated.value);
   }
   try {
@@ -116,6 +128,10 @@ export function upsertProviderProfile(
   const validated = validateProviderProfile(profile);
   if (!validated.ok) return validated;
   const exists = profiles.some(item => item.id === validated.value.id);
+  const handle = validated.value.settings.credentialHandle;
+  if (isDedicatedCredentialHandle(handle) && profiles.some(item =>
+    item.id !== validated.value.id && item.settings.credentialHandle === handle
+  )) return err("validation", "Dedicated provider credential handles must be unique per saved profile.");
   if (!exists && profiles.length >= MAX_PROFILES) return err("validation", `A maximum of ${MAX_PROFILES} provider profiles can be saved.`);
   return ok(exists
     ? profiles.map(item => item.id === validated.value.id ? validated.value : item)

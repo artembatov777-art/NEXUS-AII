@@ -84,6 +84,25 @@ describe("provider profile persistence", () => {
     expect(saveProviderProfiles(many, storage)).toMatchObject({ ok: false });
   });
 
+  it("rejects two profiles that point at the same dedicated credential entry", () => {
+    const handle = "profile-0123456789abcdef0123456789abcdef";
+    const first = {
+      ...ollama,
+      id: "nexus.cloud.a",
+      settings: { ...ollama.settings, baseUrl: "https://a.example/v1", model: "model-a", inferenceLocation: "remote" as const, credentialHandle: handle }
+    };
+    const second = {
+      ...ollama,
+      id: "nexus.cloud.b",
+      settings: { ...ollama.settings, baseUrl: "https://b.example/v1", model: "model-b", inferenceLocation: "remote" as const, credentialHandle: handle }
+    };
+    const storage = new MemoryStorage();
+    expect(saveProviderProfiles([first, second], storage)).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(upsertProviderProfile([first], second)).toMatchObject({ ok: false, error: { code: "validation" } });
+    storage.setItem("nexus-au:provider-profiles:v1", JSON.stringify({ schemaVersion: 1, profiles: [first, second] }));
+    expect(loadProviderProfiles(storage)).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("leaves malformed persisted data untouched instead of silently replacing it", () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:provider-profiles:v1", "{broken");

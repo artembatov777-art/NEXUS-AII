@@ -151,16 +151,29 @@ export default function App() {
   useEffect(() => { if (conversationsReady) void saveConversations(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady]);
   useEffect(() => { saveProvider(provider); }, [provider]);
   useEffect(() => {
+    let active = true;
     const credentialHandle = provider.credentialHandle ?? "default";
     setProviderVaultStatus("loading");
     setHasProviderKey(false);
-    if (!isTauri()) { setProviderVaultStatus("browser"); return; }
-    if (credentialHandle === "none") { setProviderVaultStatus("not_required"); return; }
+    if (!isTauri()) {
+      setProviderVaultStatus("browser");
+      return () => { active = false; };
+    }
+    if (credentialHandle === "none") {
+      setProviderVaultStatus("not_required");
+      return () => { active = false; };
+    }
     void invoke<ProviderVaultStatus>("provider_vault_status", { credentialHandle }).then(status => {
+      if (!active) return;
       const safeStatus: ProviderVaultStatus = ["available", "missing", "unavailable"].includes(status) ? status : "unavailable";
       setProviderVaultStatus(safeStatus);
       setHasProviderKey(safeStatus === "available");
-    }).catch(() => { setProviderVaultStatus("unavailable"); setHasProviderKey(false); });
+    }).catch(() => {
+      if (!active) return;
+      setProviderVaultStatus("unavailable");
+      setHasProviderKey(false);
+    });
+    return () => { active = false; };
   }, [provider.credentialHandle]);
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
