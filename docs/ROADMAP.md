@@ -8,7 +8,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 - **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
 - **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted violet and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
-- **Model strategy:** hybrid local and cloud through provider-neutral adapters. Ollama is the initial local runtime; OmniRoute's non-connecting profile/adapter path is prepared, while live gateway integration remains deferred until final integration.
+- **Model strategy:** hybrid local and cloud through provider-neutral adapters. Ollama is the initial local runtime; OmniRoute is excluded from active development and may be evaluated only during final integration if the owner chooses.
 - **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
 - **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
 
@@ -38,8 +38,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 **Status: active.**
 
 - [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
-- [x] Prepare the optional OmniRoute profile builder and multi-profile adapter path without connecting it.
-- [ ] Verify the real OmniRoute account connection with owner-provided credentials during final integration.
+- [ ] Evaluate an optional OmniRoute adapter during final integration only if the owner explicitly chooses to add it; no OmniRoute UI, profile setup, or connection is part of current development.
 - [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
 - [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
 - [x] Make local versus remote processing explicit and avoid inferring locality from a loopback provider URL.
