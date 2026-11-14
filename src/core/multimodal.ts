@@ -38,9 +38,22 @@ function boundedText(value: unknown, max: number): value is string {
 }
 
 export function evaluateMultimodalPolicy(policy: MultimodalRequestPolicy): MultimodalPolicyResult {
+  if (!policy || typeof policy !== "object") {
+    return { allowed: false, reason: "The multimodal request policy is invalid." };
+  }
   const { model, requiredModalities, attachments } = policy;
-  if (!boundedText(model.modelId, 160)) return { allowed: false, reason: "A valid model ID is required." };
+  if (!model || typeof model !== "object" || !boundedText(model.modelId, 160)) {
+    return { allowed: false, reason: "A valid model ID is required." };
+  }
   if (!["local", "remote"].includes(model.location)) return { allowed: false, reason: "The model processing location is invalid." };
+  if (!Array.isArray(model.modalities) || model.modalities.length === 0 ||
+      model.modalities.some(item => !["text", "image", "audio", "document"].includes(item)) ||
+      new Set(model.modalities).size !== model.modalities.length) {
+    return { allowed: false, reason: "The selected model capability declaration is invalid." };
+  }
+  if (typeof policy.allowRemoteProcessing !== "boolean") {
+    return { allowed: false, reason: "Remote-processing consent must be explicit." };
+  }
   if (!Array.isArray(requiredModalities) || requiredModalities.length === 0 ||
       requiredModalities.some(item => !["text", "image", "audio", "document"].includes(item)) ||
       new Set(requiredModalities).size !== requiredModalities.length) {
@@ -59,7 +72,8 @@ export function evaluateMultimodalPolicy(policy: MultimodalRequestPolicy): Multi
   let totalBytes = 0;
   const ids = new Set<string>();
   for (const attachment of attachments) {
-    if (!boundedText(attachment.id, 160) || ids.has(attachment.id) ||
+    if (!attachment || typeof attachment !== "object" ||
+        !boundedText(attachment.id, 160) || ids.has(attachment.id) ||
         !boundedText(attachment.sourceLabel, 300) ||
         !MIME_TYPES[attachment.kind]?.includes(attachment.mimeType) ||
         !Number.isSafeInteger(attachment.byteLength) || attachment.byteLength <= 0) {
