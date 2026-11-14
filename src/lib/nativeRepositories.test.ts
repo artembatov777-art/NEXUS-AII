@@ -102,9 +102,14 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     const storage = new FakeStorage();
     const legacy = new LocalStorageMemoryRepository(storage);
     await legacy.save(memory("legacy-once", "Imported exactly once"));
-    invokeMock.mockImplementation(async command => {
-      if (command === "load_memories") return [];
-      if (command === "save_memory") return undefined;
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const record = args?.record as MemoryRecord;
+        nativeRecords.set(record.id, record);
+        return undefined;
+      }
       throw new Error("Unexpected native command: " + command);
     });
     const first = new WorkspaceMemoryRepository(storage);
@@ -114,7 +119,9 @@ describe("WorkspaceMemoryRepository browser fallback", () => {
     ]);
     expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
     expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
-    expect(invokeMock.mock.calls.filter(([command]) => command === "load_memories")).toHaveLength(1);
+    // One load belongs to the shared migration; each repository then reads
+    // the live native snapshot independently instead of caching stale data.
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_memories")).toHaveLength(3);
     expect(invokeMock.mock.calls.filter(([command]) => command === "save_memory")).toHaveLength(1);
   });
 
@@ -223,9 +230,13 @@ describe("WorkspaceKnowledgeRepository native freshness", () => {
       text: "Imported exactly once", sourceLabel: "legacy.md"
     };
     await legacy.add([chunk]);
-    invokeMock.mockImplementation(async command => {
-      if (command === "load_knowledge_chunks") return [];
-      if (command === "save_knowledge_chunks") return undefined;
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
       throw new Error("Unexpected native command: " + command);
     });
     const first = new WorkspaceKnowledgeRepository(storage);
@@ -235,7 +246,9 @@ describe("WorkspaceKnowledgeRepository native freshness", () => {
     ]);
     expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
     expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
-    expect(invokeMock.mock.calls.filter(([command]) => command === "load_knowledge_chunks")).toHaveLength(1);
+    // One load belongs to the shared migration; each repository then reads
+    // the live native snapshot independently instead of caching stale data.
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_knowledge_chunks")).toHaveLength(3);
     expect(invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks")).toHaveLength(1);
   });
 
