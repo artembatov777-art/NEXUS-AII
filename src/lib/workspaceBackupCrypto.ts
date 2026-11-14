@@ -1,6 +1,8 @@
 const BACKUP_FORMAT = "nexus-au-encrypted-backup";
 const BACKUP_SCHEMA_VERSION = 1;
-const PBKDF2_ITERATIONS = 310_000;
+const PBKDF2_ITERATIONS = 600_000;
+const MIN_SUPPORTED_ITERATIONS = 310_000;
+const MAX_SUPPORTED_ITERATIONS = 1_000_000;
 const MAX_PLAINTEXT_BYTES = 35_000_000;
 const MAX_CIPHERTEXT_BYTES = 50_000_000;
 const MIN_PASSPHRASE_LENGTH = 12;
@@ -9,7 +11,7 @@ interface EncryptedWorkspaceBackup {
   format: typeof BACKUP_FORMAT;
   schemaVersion: typeof BACKUP_SCHEMA_VERSION;
   kdf: "PBKDF2-SHA256";
-  iterations: typeof PBKDF2_ITERATIONS;
+  iterations: number;
   cipher: "AES-256-GCM";
   salt: string;
   iv: string;
@@ -40,13 +42,13 @@ function validatePassphrase(passphrase: string): void {
   }
 }
 
-async function deriveBackupKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveBackupKey(passphrase: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
   if (!globalThis.crypto?.subtle) throw new Error("Secure backup encryption is unavailable in this runtime.");
   const material = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     material,
     { name: "AES-GCM", length: 256 },
     false,
@@ -58,7 +60,7 @@ export function isEncryptedWorkspaceBackup(value: unknown): value is EncryptedWo
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const envelope = value as Partial<EncryptedWorkspaceBackup>;
   return envelope.format === BACKUP_FORMAT && envelope.schemaVersion === BACKUP_SCHEMA_VERSION &&
-    envelope.kdf === "PBKDF2-SHA256" && envelope.iterations === PBKDF2_ITERATIONS &&
+    envelope.kdf === "PBKDF2-SHA256" && typeof envelope.iterations === "number" && Number.isInteger(envelope.iterations) && envelope.iterations >= MIN_SUPPORTED_ITERATIONS && envelope.iterations <= MAX_SUPPORTED_ITERATIONS &&
     envelope.cipher === "AES-256-GCM" && typeof envelope.salt === "string" &&
     typeof envelope.iv === "string" && typeof envelope.ciphertext === "string";
 }
@@ -72,7 +74,7 @@ export async function encryptWorkspaceBackup(value: unknown, passphrase: string)
   }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveBackupKey(passphrase, salt);
+  const key = await deriveBackupKey(passphrase, salt, PBKDF2_ITERATIONS);
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
   const envelope: EncryptedWorkspaceBackup = {
     format: BACKUP_FORMAT,
@@ -98,7 +100,7 @@ export async function decryptWorkspaceBackup(value: unknown, passphrase: string)
     if (salt.length !== 16 || iv.length !== 12 || ciphertext.length < 16) {
       throw new Error("Encrypted backup metadata is invalid.");
     }
-    const key = await deriveBackupKey(passphrase, salt);
+    const key = await deriveBackupKey(passphrase, salt, value.iterations);
     const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
     if (plaintext.byteLength > MAX_PLAINTEXT_BYTES) throw new Error("Decrypted backup exceeds the supported size.");
     return JSON.parse(new TextDecoder().decode(plaintext));
