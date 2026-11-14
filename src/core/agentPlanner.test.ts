@@ -16,6 +16,15 @@ describe("AgentPlanner", () => {
     expect(received).toBe("Profile preference: concise summaries.");
   });
 
+  it("discards a plan returned after the run is cancelled", async () => {
+    const controller = new AbortController();
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => {
+      controller.abort();
+      return ok({ goal, steps: [] });
+    } });
+    const result = await planner.plan("Find notes", tools, controller.signal);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+  });
   it("rejects oversized reference context before calling the model", async () => {
     const createPlan = vi.fn(async ({ goal }: { goal: string }) => ok({ goal, steps: [] }));
     const planner = new AgentPlanner({ createPlan });
