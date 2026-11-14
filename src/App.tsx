@@ -44,7 +44,7 @@ const moduleLoadingFallback = <div className="modal-backdrop"><div className="mo
 const welcome: ChatMessage = {
   id: "welcome",
   role: "assistant",
-  content: "Welcome to NEXUS AU. Your workspace is ready. Configure an AI provider in settings, then start a conversation.",
+  content: "Welcome to NEXUS AU. Your workspace is ready. Configure an AI provider in settings, then start a conversation. Local semantic memory search may download an embedding model on first use; chat generation follows the selected provider route.",
   createdAt: Date.now()
 };
 
