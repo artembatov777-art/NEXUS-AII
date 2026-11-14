@@ -252,6 +252,34 @@ describe("WorkspaceKnowledgeRepository native freshness", () => {
     expect(invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks")).toHaveLength(1);
   });
 
+  it("upserts only newly added chunks instead of rewriting a stale native snapshot", async () => {
+    isTauriMock.mockReturnValue(true);
+    const existing: KnowledgeChunk = {
+      id: "existing-chunk", documentId: "existing-doc", projectId: "project-1",
+      text: "Keep this concurrently stored document", sourceLabel: "existing.md"
+    };
+    const added: KnowledgeChunk = {
+      id: "new-chunk", documentId: "new-doc", projectId: "project-1",
+      text: "Add this independent document", sourceLabel: "new.md"
+    };
+    const nativeChunks = new Map<string, KnowledgeChunk>([[existing.id, existing]]);
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const repository = new WorkspaceKnowledgeRepository(new FakeStorage());
+    expect((await repository.add([added])).ok).toBe(true);
+    const writes = invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks");
+    expect(writes).toHaveLength(1);
+    expect(writes[0][1]).toEqual({ chunks: [added] });
+    expect([...nativeChunks.values()].map(chunk => chunk.id).sort()).toEqual(["existing-chunk", "new-chunk"]);
+  });
+
   it("exposes document imports, replacements, and deletions across repository instances", async () => {
     isTauriMock.mockReturnValue(true);
     const nativeChunks = new Map<string, KnowledgeChunk>();
