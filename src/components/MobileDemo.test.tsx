@@ -111,7 +111,7 @@ describe("mobile interface preview interactions", () => {
     if (!search) throw new Error("Project search input was not found.");
     setInputValue(search, "no matching project");
     expect(container.textContent).toContain("Проекты не найдены.");
-    expect(container.textContent).not.toContain("NEXUS AU");
+    expect(container.querySelectorAll(".demo-project-card")).toHaveLength(0);
   });
 
   it("keeps knowledge search explicitly in preview mode", () => {
