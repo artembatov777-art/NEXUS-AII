@@ -213,6 +213,31 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
   });
 
+  it("keeps the previous inspector selection when an image preview is rejected", async () => {
+    const rootPath = "/home/test/Pictures";
+    const imagePath = rootPath + "/broken.png";
+    const textPath = rootPath + "/notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "notes.txt", path: textPath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 },
+        { name: "broken.png", path: imagePath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 }
+      ];
+      if (command === "read_workspace_file") return "safe text";
+      if (command === "read_workspace_image_preview") throw new Error("Image signature is invalid.");
+      return undefined;
+    });
+    await renderPanel();
+    const textButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { textButton!.click(); });
+    const imageButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("broken.png"));
+    await act(async () => { imageButton!.click(); });
+    expect(container.querySelector(".file-preview-pane h3")?.textContent).toBe("notes.txt");
+    expect(container.querySelector(".file-preview-content pre")?.textContent).toBe("safe text");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Image signature is invalid.");
+  });
+
   it("previews approved raster images without treating binary data as editable text", async () => {
     const rootPath = "/home/test/Pictures";
     const filePath = rootPath + "/diagram.png";

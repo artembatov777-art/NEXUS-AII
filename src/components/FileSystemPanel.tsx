@@ -99,6 +99,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       if (selectedPath && !result.some(entry => entry.path === selectedPath)) {
         setSelectedPath("");
         setPreview("");
+        setImagePreview(null);
         setDraft("");
         setEditing(false);
       }
