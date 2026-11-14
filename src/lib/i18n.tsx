@@ -567,10 +567,10 @@ const translations: Record<string, string> = {
   "Добавить вложение": "Add attachment"
 };
 let activeLanguage: NexusLanguage = "ru";
-const reverseTranslations = Object.fromEntries(Object.entries(translations).map(([english, russian]) => [russian, english]));
+const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
 
 export function translate(value: string, language: NexusLanguage = activeLanguage): string {
-  return language === "ru" ? (translations[value] ?? value) : (reverseTranslations[value] ?? value);
+  const sourceIsRussian = /[А-Яа-яЁё]/.test(value);\n  if (language === "ru") return sourceIsRussian ? value : (translations[value] ?? value);\n  return sourceIsRussian ? (translations[value] ?? value) : (reverseTranslations[value] ?? value);
 }
 
 export const t = (value: string): string => translate(value);
