@@ -13,7 +13,7 @@ function createResponse() {
   };
 }
 
-function createRequest({ method = "POST", headers = {}, body = {} } = {}) {
+function createRequest({ method = "POST", headers = {}, body = {}, raw = false } = {}) {
   const request = new EventEmitter();
   request.method = method;
   request.headers = {
@@ -21,6 +21,7 @@ function createRequest({ method = "POST", headers = {}, body = {} } = {}) {
     "content-type": "application/json",
     ...headers
   };
+  if (!raw) request.body = body;
   queueMicrotask(() => {
     request.emit("data", Buffer.from(JSON.stringify(body)));
     request.emit("end");
@@ -54,6 +55,31 @@ describe("POST /api/gemini", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ error: "Unauthorized." });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts Vercel's pre-parsed JSON body without trying to consume the request stream", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: "NEXUS_OK" }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      body: { messages: [{ role: "user", content: "Hello" }] }
+    }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().text).toBe("NEXUS_OK");
+  });
+
+  it("supports bounded raw JSON stream parsing when the runtime has not parsed the body", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: "NEXUS_OK" }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      raw: true,
+      body: { messages: [{ role: "user", content: "Hello" }] }
+    }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().text).toBe("NEXUS_OK");
   });
 
   it("rejects malformed message history before contacting Google", async () => {
