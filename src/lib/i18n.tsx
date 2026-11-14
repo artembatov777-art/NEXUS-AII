@@ -952,8 +952,19 @@ const translations: Record<string, string> = {
   "Clipboard access is unavailable in this browser context.": "Доступ к буферу обмена недоступен в этом браузере.",
   "Version": "Версия",
   "AU WORKSPACE": "РАБОЧЕЕ ПРОСТРАНСТВО AU",
+  "PROCESSING": "ОБРАБОТКА",
+  "READY": "ГОТОВО",
+  "Knowledge": "Знания",
+  "AVAILABLE": "ДОСТУПНО",
+  "UNAVAILABLE": "НЕДОСТУПНО",
+  "MISSING": "ОТСУТСТВУЕТ",
+  "BROWSER": "БРАУЗЕР",
+  "ITEMS": "ЭЛЕМЕНТОВ",
+  "UNCHECKED": "НЕ ПРОВЕРЕНО",
+  "REACHABLE": "ДОСТУПЕН",
+  "FAILED": "ОШИБКА",
 };
-let activeLanguage: NexusLanguage = "ru";
+let activeLanguage: NexusLanguage = "en";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
 
 export function translate(value: string, language: NexusLanguage = activeLanguage): string {
@@ -988,8 +999,12 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
+const standaloneLanguageContext: LanguageContextValue = {
+  language: "en",
+  setLanguage: () => undefined,
+  t: translate
+};
+
 export function useLanguage() {
-  const value = useContext(LanguageContext);
-  if (!value) throw new Error("useLanguage must be used inside LanguageProvider");
-  return value;
+  return useContext(LanguageContext) ?? standaloneLanguageContext;
 }
