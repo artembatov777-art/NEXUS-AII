@@ -49,7 +49,7 @@
 - Dedicated saved cloud profiles use a strict, generated per-profile credential handle; the native host validates its exact format before keyring access. Legacy shared handles remain supported, and deleting a dedicated profile also deletes its associated vault entry.
 - Regular-file reads, content search, image previews, and checked writes open the final path component without following symlinks/reparse points and reject files with multiple hard links. New-file creation uses atomic create-new semantics. File moves and renames use platform-specific atomic no-replace operations, so a destination created after preflight is not overwritten. Hostile parent-directory TOCTOU races and interrupted multi-file rollback remain residual risks.
 - Provider credentials are excluded from backups.
-- SQLite files, browser localStorage/IndexedDB, agent checkpoints, and exported workspace backups are **not application-level encrypted**. Protect the OS account and device storage; treat exported backups as sensitive files.
+- SQLite files, browser localStorage/IndexedDB, and agent checkpoints are not application-level encrypted. Exported workspace backups now use AES-256-GCM with PBKDF2-SHA256 passphrase derivation; lost passphrases cannot be recovered. Protect the OS account and device storage.
 
 ### Webview policy
 
@@ -75,7 +75,7 @@ The Tauri CSP sets default-src self, base-uri self, object-src none, form-action
 
 - The native provider path supports bounded SSE streaming and cancellation. A provider may still ignore cancellation after a request has reached its own infrastructure; the native host enforces request and stream bounds.
 - The configured provider and MCP endpoints are user-controlled. HTTPS is required for non-loopback provider requests, but there is no host allowlist.
-- SQLite, browser stores, checkpoints, and backup files rely on OS-level account/disk protection rather than app-level encryption.
+- SQLite, browser stores, and checkpoints rely on OS-level account/disk protection rather than app-level encryption. Exported backup files are encrypted before leaving the app; passphrases are held only in UI memory and are never persisted.
 - The semantic vector index is stored in IndexedDB. It is reconciled against SQLite knowledge records on startup/restore and rebuilt in bounded batches, but embeddings are not stored in native SQLite.
 - Browser preview intentionally uses localStorage and is not a secure multi-user environment.
 - Native offline speech models, audio-file ingestion, and background hands-free operation are out of scope. Current voice controls are user-initiated browser/WebView APIs and depend on host speech support; recognition may use an online service.
