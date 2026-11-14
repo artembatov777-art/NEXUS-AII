@@ -9,9 +9,11 @@ describe("prepareConversationRequest", () => {
     const history = Array.from({ length: 140 }, (_, index) => message(index % 2 ? "assistant" : "user", "turn-" + index));
     const prepared = prepareConversationRequest(history);
     expect(prepared.messages).toHaveLength(100);
-    expect(prepared.messages[0]?.content).toBe("turn-40");
+    expect(prepared.messages[0]?.role).toBe("system");
+    expect(prepared.messages[0]?.content).toContain("Older conversation turns were omitted");
+    expect(prepared.messages[1]?.content).toBe("turn-41");
     expect(prepared.messages.at(-1)?.content).toBe("turn-139");
-    expect(prepared.omittedMessageCount).toBe(40);
+    expect(prepared.omittedMessageCount).toBe(41);
   });
 
   it("reserves a system slot and budget for retrieved reference context", () => {
