@@ -358,7 +358,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       <header className="agent-center-header">
         <div className="agent-center-title">
           <div className="agent-center-icon"><Bot size={20}/></div>
-          <div><div className="eyebrow">NEXUS AU / CONTROL PLANE</div><h2 id="agent-center-title">Agent Control Center</h2><p>Bounded execution, explicit approvals, checkpoints and audit.</p></div>
+          <div><div className="eyebrow">{t("NEXUS AU / CONTROL PLANE")}</div><h2 id="agent-center-title">{t("Agent Control Center")}</h2><p>{t("Bounded execution, explicit approvals, checkpoints and audit.")}</p></div>
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="Close agent control center"><X size={18}/></button>
       </header>
@@ -366,44 +366,44 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       {runtimeState.error && <div className="agent-error"><AlertTriangle size={16}/>{t(runtimeState.error)}</div>}
 
       <section className="agent-runtime-strip" aria-label="Agent runtime overview">
-        <article><span className="agent-runtime-mark"/><div><strong>{registeredAgents.length}</strong><small>Registered agents</small></div></article>
-        <article data-state="running"><span className="agent-runtime-mark"/><div><strong>{runningCount}</strong><small>Running</small></div></article>
-        <article data-state="approval"><span className="agent-runtime-mark"/><div><strong>{pendingApprovalCount}</strong><small>Awaiting approval</small></div></article>
-        <article data-state="completed"><span className="agent-runtime-mark"/><div><strong>{completedCount}</strong><small>Completed</small></div></article>
-        <article data-state="failed"><span className="agent-runtime-mark"/><div><strong>{failedCount}</strong><small>Failed / cancelled</small></div></article>
+        <article><span className="agent-runtime-mark"/><div><strong>{registeredAgents.length}</strong><small>{t("Registered agents")}</small></div></article>
+        <article data-state="running"><span className="agent-runtime-mark"/><div><strong>{runningCount}</strong><small>{t("Running")}</small></div></article>
+        <article data-state="approval"><span className="agent-runtime-mark"/><div><strong>{pendingApprovalCount}</strong><small>{t("Awaiting approval")}</small></div></article>
+        <article data-state="completed"><span className="agent-runtime-mark"/><div><strong>{completedCount}</strong><small>{t("Completed")}</small></div></article>
+        <article data-state="failed"><span className="agent-runtime-mark"/><div><strong>{failedCount}</strong><small>{t("Failed / cancelled")}</small></div></article>
       </section>
 
       <div className="agent-center-grid">
         <section className="agent-main-column">
           <article className="agent-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENTS · {registeredAgents.length}</span><h3>{registeredAgents[0]?.name ?? BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">LOCAL DEMO</span></div>
+            <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENTS · {registeredAgents.length}</span><h3>{registeredAgents[0]?.name ?? BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">{t("LOCAL DEMO")}</span></div>
             <p>{registeredAgents[0]?.description ?? BUILT_IN_AGENT_CATALOG[0].description}</p>
             <div className="agent-metadata">
               <span><Activity size={13}/> {registeredAgents[0]?.maxSteps ?? 3} max steps</span>
               <span><Clock3 size={13}/> {Math.round((registeredAgents[0]?.timeoutMs ?? 15_000) / 1_000)} sec limit</span>
               <span><Shield size={13}/> {(registeredAgents[0]?.requiredPermissions ?? []).join(", ") || "No permissions"}</span>
             </div>
-            <label className="agent-task-label" htmlFor="agent-task">Task input</label>
+            <label className="agent-task-label" htmlFor="agent-task">{t("Task input")}</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
             <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
           <article className="agent-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">AGENT CONFIGURATION</span><h3>Profile settings</h3></div><span className="agent-local-tag">V1.{profile.revision}.0</span></div>
-            <label className="agent-task-label" htmlFor="agent-name">Display name</label>
+            <div className="agent-card-heading"><div><span className="agent-kicker">{t("AGENT CONFIGURATION")}</span><h3>{t("Profile settings")}</h3></div><span className="agent-local-tag">V1.{profile.revision}.0</span></div>
+            <label className="agent-task-label" htmlFor="agent-name">{t("Display name")}</label>
             <input id="agent-name" className="agent-profile-input" value={profile.name} maxLength={80} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))}/>
             <div className="agent-profile-fields">
-              <label>Maximum steps<input type="number" min={1} max={20} value={profile.maxSteps} onChange={event => setProfile(current => ({ ...current, maxSteps: Number(event.target.value) }))}/></label>
-              <label>Timeout (seconds)<input type="number" min={1} max={60} value={Math.round(profile.timeoutMs / 1_000)} onChange={event => setProfile(current => ({ ...current, timeoutMs: Number(event.target.value) * 1_000 }))}/></label>
+              <label>{t("Maximum steps")}<input type="number" min={1} max={20} value={profile.maxSteps} onChange={event => setProfile(current => ({ ...current, maxSteps: Number(event.target.value) }))}/></label>
+              <label>{t("Timeout (seconds)")}<input type="number" min={1} max={60} value={Math.round(profile.timeoutMs / 1_000)} onChange={event => setProfile(current => ({ ...current, timeoutMs: Number(event.target.value) * 1_000 }))}/></label>
             </div>
-            <div className="agent-form-footer"><span>Permission requirement stays fixed: tool:execute</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={saveProfile}>Save profile</button></div>
+            <div className="agent-form-footer"><span>{t("Permission requirement stays fixed: tool:execute")}</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={saveProfile}>{t("Save profile")}</button></div>
             <div className="agent-disclaimer">Changing the profile creates a new agent version. Finish or reject active runs first; older checkpoints cannot resume on a different version.</div>
           </article>
 
           <article className="agent-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">LIVE EXECUTION</span><h3>Run event stream</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
-            {feed.length === 0 ? <div className="agent-empty">Start a run to inspect progress, approval handoffs and output.</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
+            <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
+            {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
             {busy && <button className="agent-danger-button" onClick={() => controller.current?.abort()}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
@@ -411,36 +411,36 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
         <aside className="agent-side-column">
           <article className="agent-card agent-approval-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">HUMAN IN THE LOOP</span><h3>Approval queue</h3></div><span className="agent-count">{checkpoints.filter(item => item.status === "waiting_for_approval").length}</span></div>
-            {checkpoints.filter(item => item.status === "waiting_for_approval").length === 0 ? <div className="agent-empty">No pending approvals.</div> :
+            <div className="agent-card-heading"><div><span className="agent-kicker">{t("HUMAN IN THE LOOP")}</span><h3>{t("Approval queue")}</h3></div><span className="agent-count">{checkpoints.filter(item => item.status === "waiting_for_approval").length}</span></div>
+            {checkpoints.filter(item => item.status === "waiting_for_approval").length === 0 ? <div className="agent-empty">{t("No pending approvals.")}</div> :
               checkpoints.filter(item => item.status === "waiting_for_approval").map(checkpoint => <div className="agent-approval-item" key={checkpoint.runId}>
                 <strong>{checkpoint.pendingApproval?.permission}</strong><p>{taskFromCheckpoint(checkpoint)}</p><small>Run {checkpoint.runId}</small>
-                <div className="agent-approval-actions"><button onClick={() => approve(checkpoint)} disabled={busy}><Check size={13}/> Approve once</button><button onClick={() => void reject(checkpoint)} disabled={busy}>Reject</button></div>
+                <div className="agent-approval-actions"><button onClick={() => approve(checkpoint)} disabled={busy}><Check size={13}/> Approve once</button><button onClick={() => void reject(checkpoint)} disabled={busy}>{t("Reject")}</button></div>
               </div>)}
           </article>
 
           <article className="agent-card">
-            <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED CHECKPOINTS</span><h3>Run history</h3></div><span className="agent-count">{checkpoints.length}</span></div>
-            {checkpoints.length === 0 ? <div className="agent-empty">No saved runs yet.</div> :
+            <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
+            {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
               <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
-                {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>View saved result</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>Continue checkpoint</button>}
+                {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
+                {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>{t("Continue checkpoint")}</button>}
               </div>)}</div>}
           </article>
 
           <article className="agent-card">
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
-              <div className="agent-card-heading"><div><span className="agent-kicker">OWNER REVIEW REQUIRED</span><h3>Ambiguous tool outcomes</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
+              <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
               <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
               {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
                 <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
-                <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>Mark manually reconciled</button>
+                <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>{t("Mark manually reconciled")}</button>
               </div>)}
             </div>}
-            <div className="agent-card-heading"><div><span className="agent-kicker">TOOL GATEWAY</span><h3>Recent tool audit</h3></div><span className="agent-count">{auditEvents.length}</span></div>
-            {auditEvents.length === 0 ? <div className="agent-empty">No tool executions have been recorded.</div> :
+            <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
+            {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
               <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
                 <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
@@ -449,7 +449,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           </article>
         </aside>
       </div>
-      <footer className="agent-center-footer"><span>{isTauri() ? "Storage: native SQLite checkpoints, audit and traces" : "Storage: browser localStorage preview"} · approval grants: one-time</span><span>Default-deny tool policy</span></footer>
+      <footer className="agent-center-footer"><span>{isTauri() ? "Storage: native SQLite checkpoints, audit and traces" : "Storage: browser localStorage preview"} · approval grants: one-time</span><span>{t("Default-deny tool policy")}</span></footer>
     </section>
   </div>;
 }
