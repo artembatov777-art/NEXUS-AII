@@ -154,15 +154,24 @@ fn relocate_entry(
     destination_directory: &Path,
     requested_name: Option<&str>,
 ) -> Result<String, String> {
-    let source_metadata = fs::symlink_metadata(source_path)
+    // Resolve only the parent directory. Canonicalizing the complete source
+    // path follows a final symlink and can redirect a rename to a different file.
+    let requested_parent = source_path.parent()
+        .ok_or_else(|| "The selected entry has no parent directory.".to_string())?;
+    let source_root = access.allowed_root_for(requested_parent)?;
+    let canonical_source_parent = fs::canonicalize(requested_parent)
+        .map_err(|error| format!("Could not resolve the selected entry's directory: {error}"))?;
+    if !canonical_source_parent.starts_with(&source_root) {
+        return Err("The selected entry is outside an approved directory.".into());
+    }
+    let source_name = source_path.file_name()
+        .ok_or_else(|| "The selected entry has no valid name.".to_string())?;
+    let source = canonical_source_parent.join(source_name);
+    let source_metadata = fs::symlink_metadata(&source)
         .map_err(|error| format!("Could not inspect the selected entry: {error}"))?;
     if source_metadata.file_type().is_symlink() || (!source_metadata.is_file() && !source_metadata.is_dir()) {
         return Err("NEXUS can move only regular files and directories, not symbolic links or special entries.".into());
     }
-
-    let source_root = access.allowed_root_for(source_path)?;
-    let source = fs::canonicalize(source_path)
-        .map_err(|error| format!("Could not resolve the selected entry: {error}"))?;
     if source == source_root || !source.starts_with(&source_root) {
         return Err("An approved root directory itself cannot be renamed or moved.".into());
     }
@@ -250,34 +259,32 @@ fn rename_workspace_entries_batch_inner(
     let mut common_parent: Option<PathBuf> = None;
     let mut plans: Vec<(PathBuf, PathBuf, String, String)> = Vec::with_capacity(entries.len());
 
-    // Validate the complete batch before changing any file.
+    // Validate the complete batch before changing any file. Resolve each
+    // parent, never the final component, so a symlink cannot redirect the plan.
     for entry in entries {
         if entry.path.trim().is_empty() || entry.path.len() > 4096 {
             return Err("A selected file path is invalid.".into());
         }
         validate_entry_name(&entry.new_name)?;
-        let source_path = PathBuf::from(&entry.path);
-        let metadata = fs::symlink_metadata(&source_path)
+        let requested_path = PathBuf::from(&entry.path);
+        let requested_parent = requested_path.parent()
+            .ok_or_else(|| "A selected file has no parent directory.".to_string())?;
+        let source_root = access.allowed_root_for(requested_parent)?;
+        let canonical_parent = fs::canonicalize(requested_parent)
+            .map_err(|error| format!("Could not resolve a selected file's parent directory: {error}"))?;
+        if !canonical_parent.starts_with(&source_root) {
+            return Err("All renamed files must remain inside an approved directory.".into());
+        }
+        let source_name = requested_path.file_name()
+            .ok_or_else(|| "A selected file has no valid name.".to_string())?;
+        let source = canonical_parent.join(source_name);
+        let metadata = fs::symlink_metadata(&source)
             .map_err(|error| format!("Could not inspect a selected file: {error}"))?;
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("Batch rename supports regular files only; folders, symbolic links, and special entries are excluded.".into());
         }
-        let source_root = access.allowed_root_for(&source_path)?;
-        let source = fs::canonicalize(&source_path)
-            .map_err(|error| format!("Could not resolve a selected file: {error}"))?;
-        if source == source_root || !source.starts_with(&source_root) {
-            return Err("An approved root directory itself cannot be renamed.".into());
-        }
         if !seen_sources.insert(source.clone()) {
             return Err("The same file was selected more than once.".into());
-        }
-        let parent = source.parent()
-            .ok_or_else(|| "A selected file has no parent directory.".to_string())?
-            .to_path_buf();
-        let canonical_parent = fs::canonicalize(&parent)
-            .map_err(|error| format!("Could not resolve a selected file's parent directory: {error}"))?;
-        if !canonical_parent.starts_with(&source_root) {
-            return Err("All renamed files must remain inside an approved directory.".into());
         }
         if let Some(expected_parent) = &common_parent {
             if expected_parent != &canonical_parent {
@@ -450,6 +457,25 @@ mod tests {
         fs::write(destination.join("duplicate.txt"), "two").expect("create duplicate target");
         assert!(relocate_entry(&access, &source_dir.join("duplicate.txt"), &destination, None).is_err());
         assert_eq!(fs::read_to_string(destination.join("duplicate.txt")).unwrap(), "two");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn move_and_batch_rename_reject_final_component_symlinks() {
+        use std::os::unix::fs::symlink;
+        let (base, root, access) = fixture();
+        let outside = base.join("outside.txt");
+        let link = root.join("linked.txt");
+        fs::write(&outside, "outside data").expect("create outside target");
+        symlink(&outside, &link).expect("create selected symlink");
+
+        assert!(relocate_entry(&access, &link, &root, Some("moved.txt")).is_err());
+        assert!(rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: link.to_string_lossy().into_owned(), new_name: "renamed.txt".into() }
+        ], &access).is_err());
+        assert!(link.is_symlink());
+        assert_eq!(fs::read_to_string(&outside).expect("read outside target"), "outside data");
         fs::remove_dir_all(base).expect("cleanup");
     }
 
