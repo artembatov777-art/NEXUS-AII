@@ -23,7 +23,7 @@ const transportWith = (respond: (request: McpRequest) => McpResponse): McpTransp
 describe("McpClient", () => {
   it("initializes, negotiates capabilities, sends initialized notification and imports tools through the gateway", async () => {
     const authorize = vi.fn(async () => "allow" as const);
-    const tools = new ToolGateway({ authorize }, { record: async () => ok(undefined) }, { now: () => 1 });
+    const tools = new ToolGateway({ authorize }, { record: async () => ok(undefined), list: async () => ok([]) }, { now: () => 1 });
     const registry = new ToolRegistry(tools);
     const transport: McpTransport = {
       request: vi.fn(async (request: McpRequest): Promise<McpResponse> => request.method === "initialize"
