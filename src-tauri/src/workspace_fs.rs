@@ -90,6 +90,31 @@ fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
     Ok(file)
 }
 
+fn create_workspace_permissions_temp(path: &Path) -> Result<(PathBuf, fs::File), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("workspace-permissions");
+    for attempt in 0..16 {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temporary = parent.join(format!(".{name}.tmp-{}-{nonce}-{attempt}", std::process::id()));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+        match options.open(&temporary) {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Could not write workspace permissions: {error}")),
+        }
+    }
+    Err("Could not create a unique temporary workspace permissions file.".into())
+}
+
 pub struct WorkspaceAccess {
     roots: Mutex<Vec<PathBuf>>,
     persistence_path: PathBuf,
@@ -114,11 +139,17 @@ impl WorkspaceAccess {
         if let Some(parent) = self.persistence_path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Could not create workspace settings directory: {e}"))?;
         }
-        let temporary = self.persistence_path.with_extension("json.tmp");
-        let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&temporary)
-            .map_err(|e| format!("Could not write workspace permissions: {e}"))?;
-        file.write_all(&serialized).map_err(|e| format!("Could not save workspace permissions: {e}"))?;
-        file.sync_all().map_err(|e| format!("Could not flush workspace permissions: {e}"))?;
+        // Never open a predictable temporary path with truncate(true): a pre-created
+        // symlink there could redirect this write outside the app settings directory.
+        let (temporary, mut file) = create_workspace_permissions_temp(&self.persistence_path)?;
+        let write_result = file.write_all(&serialized)
+            .map_err(|e| format!("Could not save workspace permissions: {e}"))
+            .and_then(|()| file.sync_all().map_err(|e| format!("Could not flush workspace permissions: {e}")));
+        drop(file);
+        if let Err(error) = write_result {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
+        }
         #[cfg(windows)]
         {
             // Windows rename does not replace an existing destination. Keep a
@@ -694,6 +725,36 @@ mod tests {
         };
         assert!(access.allowed_root_for(&root).is_ok());
         assert!(access.allowed_root_for(&sibling).is_err());
+        fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_persistence_does_not_follow_a_preexisting_temporary_symlink() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-persist-symlink-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        let settings = base.join("settings");
+        fs::create_dir_all(&root).expect("create approved root");
+        fs::create_dir_all(&settings).expect("create settings directory");
+        let persistence_path = settings.join("allowed-workspace-directories.json");
+        let outside = base.join("outside.txt");
+        fs::write(&outside, "must remain untouched").expect("create outside file");
+        let predictable_temp = persistence_path.with_extension("json.tmp");
+        symlink(&outside, &predictable_temp).expect("create pre-existing temporary symlink");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(Vec::new()),
+            persistence_path: persistence_path.clone(),
+        };
+
+        access.persist(&[fs::canonicalize(&root).expect("canonical root")])
+            .expect("persist without following the predictable temporary symlink");
+        assert_eq!(fs::read_to_string(&outside).expect("read outside file"), "must remain untouched");
+        assert!(fs::symlink_metadata(&predictable_temp).expect("inspect symlink").file_type().is_symlink());
+        let reloaded = WorkspaceAccess::load(persistence_path);
+        assert_eq!(reloaded.roots.lock().expect("lock roots").len(), 1);
         fs::remove_dir_all(&base).expect("cleanup");
     }
 
