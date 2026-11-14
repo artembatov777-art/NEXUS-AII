@@ -104,7 +104,7 @@ describe("POST /api/gemini-image", () => {
   it("aborts the upstream request when the browser client disconnects", async () => {
     let upstreamSignal;
     vi.mocked(fetch).mockImplementation((_url, options) => new Promise((_resolve, reject) => {
-      upstreamSignal = options?.signal as AbortSignal;
+      upstreamSignal = options?.signal;
       upstreamSignal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
     }));
     const req = request({ body: { prompt: "A landscape", allowRemoteProcessing: true } });
