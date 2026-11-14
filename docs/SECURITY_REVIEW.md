@@ -60,6 +60,13 @@
 
 The Tauri CSP sets default-src self, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI.
 
+### CI supply-chain controls
+
+- The Quality, native desktop, and Mobile Interface Preview workflows pin every third-party GitHub Action to a reviewed immutable commit SHA rather than a movable major-version tag. The Rust toolchain action is also pinned to a commit; the Rust compiler channel it installs remains the explicitly selected stable channel.
+- Workflow token permissions default to `contents: read`. The native lockfile-maintenance job alone receives job-scoped `contents: write` so it can commit the reviewed lockfile update to the feature branch.
+- GitHub Pages permissions are scoped by job: the build job receives only `contents: read` and `pages: write` for Pages configuration; the deploy job receives `pages: write` and `id-token: write`. The build job does not receive an OIDC token permission.
+- These controls reduce workflow supply-chain and token blast radius. They do not replace dependency review, artifact provenance, branch protection, or independent security testing.
+
 ## Direct provider boundary and deferred gateway integration
 
 - Cloud and local model requests use directly configured compatible `/v1` provider endpoints. OmniRoute is not installed, configured, or connected, and is not required by the AI Core.
