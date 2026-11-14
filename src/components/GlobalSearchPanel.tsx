@@ -90,7 +90,7 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
         <label><input type="checkbox" checked={includeMemories} onChange={event => { setIncludeMemories(event.target.checked); clearResults(); }}/> Memories</label>
         <label><input type="checkbox" checked={includeKnowledge} onChange={event => { setIncludeKnowledge(event.target.checked); clearResults(); }}/> Project knowledge</label>
       </div>
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{t(error)}</div>}
       <div className="global-search-results">
         {chatResults.length > 0 && <section><h3><MessageSquare size={14}/> Conversations <span>{chatResults.length}</span></h3>{chatResults.map(item => <button className="global-search-result" key={item.id} onClick={() => onOpenConversation(item)}><strong>{item.title}</strong><small>{item.messages.length} messages · {projects.find(p => p.id === item.projectId)?.name ?? "Personal workspace"}</small></button>)}</section>}
         {memoryResults.length > 0 && <section><h3><Brain size={14}/> Memories <span>{memoryResults.length}</span></h3>{memoryResults.map(item => <button className="global-search-result" key={item.id} onClick={onOpenMemory}><strong>{item.content}</strong><small>{item.category} · {item.scope}</small></button>)}</section>}
