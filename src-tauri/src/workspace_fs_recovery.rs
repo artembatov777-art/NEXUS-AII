@@ -271,6 +271,28 @@ mod tests {
     }
 
     #[test]
+    fn recovery_restores_only_the_completed_prefix_of_a_partial_batch() {
+        let (base, root, access, journal) = fixture();
+        let first = root.join("one.txt");
+        let first_target = root.join("one-new.txt");
+        let second = root.join("two.txt");
+        let second_target = root.join("two-new.txt");
+        fs::write(&first_target, "first contents").expect("write first moved file");
+        fs::write(&second, "second contents").expect("write second not-yet-moved file");
+        journal.begin(&[
+            RenameEntry { source: first.clone(), destination: first_target.clone() },
+            RenameEntry { source: second.clone(), destination: second_target.clone() },
+        ]).expect("persist batch plan");
+        journal.recover(&access).expect("recover partial batch");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first contents");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second contents");
+        assert!(!first_target.exists());
+        assert!(!second_target.exists());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
     fn recovery_leaves_conflicting_paths_untouched_and_blocks_new_batches() {
         let (base, root, access, journal) = fixture();
         let source = root.join("draft.txt");
