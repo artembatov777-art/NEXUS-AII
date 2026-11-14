@@ -65,7 +65,7 @@ Default is **deny**. Permissions are scoped to the requesting actor and resource
 | Shell/process execution | Deny | Not exposed in current runtime; future sandbox only |
 | MCP server connection | Deny | Owner explicitly configures and connects a trusted unauthenticated endpoint; each tool call requires separate approval |
 | OS notifications | Deny | User-configured opt-in |
-| Microphone/audio capture | Deny | Visible push-to-talk / active capture indicator |
+| Microphone/audio capture | No background capture; user action required | Push-to-talk only; host/browser permission applies, and recognition may be processed by a browser-provided service |
 
 ## 6. Operational invariants
 
