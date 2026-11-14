@@ -38,7 +38,7 @@ export async function sendMessage(
     const systemInstruction = systemMessage
       ? new TextDecoder().decode(new TextEncoder().encode(systemMessage.content).slice(0, 24_000))
       : "";
-    const payload: Record<string, unknown> = {
+    const requestPayload: Record<string, unknown> = {
       model: settings.model,
       messages: turns,
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -46,11 +46,11 @@ export async function sendMessage(
       ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {})
     };
     // Keep the serialized request below the server's 64 KiB hard limit.
-    while (new TextEncoder().encode(JSON.stringify(payload)).byteLength > 60 * 1024 && turns.length > 1) {
+    while (new TextEncoder().encode(JSON.stringify(requestPayload)).byteLength > 60 * 1024 && turns.length > 1) {
       turns = turns.slice(1);
-      payload.messages = turns;
+      requestPayload.messages = turns;
     }
-    if (new TextEncoder().encode(JSON.stringify(payload)).byteLength > 64 * 1024) {
+    if (new TextEncoder().encode(JSON.stringify(requestPayload)).byteLength > 64 * 1024) {
       throw new Error("This request is too large for the Gemini proxy. Shorten the message or reduce attached context.");
     }
     const response = await fetch("/api/gemini", {
@@ -59,22 +59,28 @@ export async function sendMessage(
         "Content-Type": "application/json",
         Authorization: `Bearer ${gatewayToken.trim()}`
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestPayload),
       signal
     });
-    const payload = await response.json().catch(() => ({})) as {
+    type GeminiProxyResponse = {
       text?: string;
       usage?: { inputTokens?: number | null; outputTokens?: number | null };
       error?: string;
     };
-    if (!response.ok) throw new Error(payload.error || `Gemini proxy request failed (HTTP ${response.status}).`);
-    if (typeof payload.text !== "string" || !payload.text.trim()) throw new Error("Gemini returned an empty response.");
+    let resultPayload: GeminiProxyResponse;
+    try {
+      resultPayload = await response.json() as GeminiProxyResponse;
+    } catch {
+      throw new Error(`Gemini proxy returned an invalid response (HTTP ${response.status}).`);
+    }
+    if (!response.ok) throw new Error(resultPayload.error || `Gemini proxy request failed (HTTP ${response.status}).`);
+    if (typeof resultPayload.text !== "string" || !resultPayload.text.trim()) throw new Error("Gemini returned an empty response.");
     onUsage?.({
-      ...(typeof payload.usage?.inputTokens === "number" ? { inputTokens: payload.usage.inputTokens } : {}),
-      ...(typeof payload.usage?.outputTokens === "number" ? { outputTokens: payload.usage.outputTokens } : {})
+      ...(typeof resultPayload.usage?.inputTokens === "number" ? { inputTokens: resultPayload.usage.inputTokens } : {}),
+      ...(typeof resultPayload.usage?.outputTokens === "number" ? { outputTokens: resultPayload.usage.outputTokens } : {})
     });
-    onDelta?.(payload.text);
-    return payload.text;
+    onDelta?.(resultPayload.text);
+    return resultPayload.text;
   }
 
   const router = createTauriModelRouter(settings);
@@ -103,7 +109,6 @@ export async function sendMessage(
   if (!answer.trim()) throw new Error("Provider returned an empty streaming response.");
   return answer;
 }
-
 
 export interface ProviderGenerationCheck {
   response: string;
