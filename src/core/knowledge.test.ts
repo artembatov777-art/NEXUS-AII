@@ -25,6 +25,30 @@ describe("knowledge retrieval",()=>{
   const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture","all",5,controller.signal);
   expect(result).toMatchObject({ok:false,error:{code:"cancelled"}});
  });
+ it("reconciles persistent semantic vectors before retrieving approved memories",async()=>{
+  const records=[
+   {...rec("lex"),scope:"profile" as const},
+   {...rec("semantic"),scope:"profile" as const}
+  ];
+  const repository:MemorySearchRepository={
+   search:async()=>ok([records[0]]),
+   getByIds:async ids=>ok(records.filter(record=>ids.includes(record.id))),
+   exportAll:async()=>ok(records)
+  };
+  const indexed=new Map<string,number[]>();
+  const vectors:VectorMemoryIndex={
+   upsert:async(record,vector)=>{indexed.set(record.id,vector);},
+   remove:async id=>{indexed.delete(id);},
+   reconcile:async all=>all.filter(record=>!indexed.has(record.id)),
+   search:async()=>[{id:"semantic",score:.98}]
+  };
+  const embeddings:EmbeddingProvider={
+   embed:async texts=>ok(texts.map(text=>text==="semantic query"?[1,0]:[0,1]))
+  };
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("semantic query","profile",5);
+  expect(indexed.size).toBe(2);
+  expect(result.ok&&result.value[0].record.id).toBe("semantic");
+ });
  it("never returns semantic matches from another project",async()=>{
   const chunks=[
    {id:"same-project",documentId:"d1",projectId:"p1",text:"Allowed project content",sourceLabel:"allowed.md"},
