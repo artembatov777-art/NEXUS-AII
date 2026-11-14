@@ -186,9 +186,9 @@ fn rollback_entry(access: &WorkspaceAccess, entry: &RenameEntry) -> Result<(), S
     let canonical_destination_parent = fs::canonicalize(destination_parent)
         .map_err(|error| format!("Could not resolve a journaled destination directory: {error}"))?;
     if source_root != destination_root
-        || canonical_source_parent != canonical_destination_parent
-        || !canonical_source_parent.starts_with(&source_root) {
-        return Err("A journaled rename no longer resolves to its original approved directory.".into());
+        || !canonical_source_parent.starts_with(&source_root)
+        || !canonical_destination_parent.starts_with(&source_root) {
+        return Err("A journaled operation no longer resolves inside its original approved directory.".into());
     }
 
     let source_name = entry.source.file_name()
