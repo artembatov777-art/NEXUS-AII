@@ -145,4 +145,23 @@ describe("NexusApplication", () => {
     expect(events.at(-1)).toMatchObject({ ok: true, value: { assistantText: "Grounded answer" } });
   });
 
+
+  it("rejects a completed but empty model stream instead of recording a false success", async () => {
+    const provider: ModelProvider = {
+      id: "test-provider", listModels: async () => ok([]),
+      async *stream() { yield { type: "completed" }; }
+    };
+    const { repository, conversations, application } = setup(provider);
+    const created = await conversations.create();
+    if (!created.ok) throw new Error("Conversation setup failed.");
+    const events = [];
+    for await (const event of application.sendMessage({
+      conversationId: created.value.id, providerId: provider.id, model: "test-model", content: "Answer this."
+    })) events.push(event);
+    expect(events.at(-1)).toMatchObject({ ok: false, error: { code: "provider_unavailable", retryable: false } });
+    expect(await repository.get(created.value.id)).toMatchObject({
+      ok: true, value: { messages: [{ role: "user", content: "Answer this." }] }
+    });
+  });
+
 });
