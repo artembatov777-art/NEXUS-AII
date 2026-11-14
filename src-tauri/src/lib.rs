@@ -2161,6 +2161,9 @@ mod database_tests {
         let mut invalid = valid.clone();
         invalid["mimeType"] = serde_json::json!("image/svg+xml");
         assert!(validate_stored_image_attachment(&invalid).is_err());
+        let mut malformed_base64 = valid.clone();
+        malformed_base64["data"] = serde_json::json!("=iVBORw0KGgo");
+        assert!(validate_stored_image_attachment(&malformed_base64).is_err());
         let mut mismatched = valid.clone();
         mismatched["byteLength"] = serde_json::json!(9);
         assert!(validate_stored_image_attachment(&mismatched).is_err());
