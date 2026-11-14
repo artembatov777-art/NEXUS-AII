@@ -142,7 +142,7 @@ impl WorkspaceOperationJournal {
         }
 
         for (operation_id, payload) in pending {
-            let journal: RenameJournal = match serde_json::from_str(&payload) {
+            let journal: RenameJournal = match serde_json::from_str::<RenameJournal>(&payload) {
                 Ok(value) if value.version == JOURNAL_VERSION
                     && !value.entries.is_empty()
                     && value.entries.len() <= MAX_JOURNALED_ENTRIES => value,
