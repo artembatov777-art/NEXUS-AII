@@ -474,8 +474,8 @@ mod tests {
         assert_eq!(details.len(), 1);
         assert!(details[0].valid);
         assert_eq!(details[0].entries.len(), 1);
-        assert_eq!(details[0].entries[0].source, source.to_string_lossy());
-        assert_eq!(details[0].entries[0].destination, destination.to_string_lossy());
+        assert_eq!(details[0].entries[0].source, source.to_string_lossy().into_owned());
+        assert_eq!(details[0].entries[0].destination, destination.to_string_lossy().into_owned());
         assert_eq!(details[0].entries[0].source_state, "regular file");
         assert_eq!(details[0].entries[0].destination_state, "regular file");
         drop(journal);
@@ -508,8 +508,15 @@ mod tests {
         let (base, root, _access, journal) = fixture();
         let first = journal.begin(&[RenameEntry { source: root.join("one"), destination: root.join("one-new") }])
             .expect("persist first operation");
-        let second = journal.begin(&[RenameEntry { source: root.join("two"), destination: root.join("two-new") }])
-            .expect("persist second operation");
+        let second_payload = serde_json::to_string(&RenameJournal {
+            version: JOURNAL_VERSION,
+            entries: vec![RenameEntry { source: root.join("two"), destination: root.join("two-new") }],
+        }).expect("serialize second operation");
+        journal.connection.lock().expect("journal connection").execute(
+            "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
+            params!["rename-manual-second", second_payload, 2i64],
+        ).expect("insert second pending operation");
+        let second = "rename-manual-second";
         journal.acknowledge_manual_resolution(&first).expect("acknowledge first operation");
         assert!(journal.recovery_status().expect("status").is_some());
         assert!(journal.ensure_ready().is_err());
@@ -533,6 +540,8 @@ mod tests {
         journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
             .expect("persist pending operation");
         assert!(journal.recover(&access).is_err());
+        let details = journal.recovery_details(&access).expect("read symlink recovery details");
+        assert_eq!(details[0].entries[0].destination_state, "link (not followed)");
         assert!(destination.is_symlink());
         assert_eq!(fs::read_to_string(&outside).unwrap(), "outside");
         drop(journal);
