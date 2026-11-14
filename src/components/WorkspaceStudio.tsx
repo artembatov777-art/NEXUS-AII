@@ -32,11 +32,17 @@ const isGraphNode = (value: unknown): value is GraphNode => !!value && typeof va
   typeof (value as GraphNode).id === "string" && typeof (value as GraphNode).label === "string" &&
   ["idea", "project", "conversation"].includes((value as GraphNode).kind);
 const isGraphEdge = (value: unknown): value is GraphEdge => !!value && typeof value === "object" && typeof (value as GraphEdge).id === "string" && typeof (value as GraphEdge).from === "string" && typeof (value as GraphEdge).to === "string" && (value as GraphEdge).from !== (value as GraphEdge).to;
-const isWorkflow = (value: unknown): value is WorkflowDraft => !!value && typeof value === "object" &&
-  typeof (value as WorkflowDraft).id === "string" && typeof (value as WorkflowDraft).name === "string" &&
-  Array.isArray((value as WorkflowDraft).steps) && (value as WorkflowDraft).steps.length <= 30 &&
-  (value as WorkflowDraft).steps.every(step => typeof step === "string") &&
-  Array.isArray((value as WorkflowDraft).completed) && (value as WorkflowDraft).completed.every(step => Number.isInteger(step));
+const isWorkflow = (value: unknown): value is WorkflowDraft => {
+  if (!value || typeof value !== "object") return false;
+  const workflow = value as WorkflowDraft;
+  if (typeof workflow.id !== "string" || !workflow.id || workflow.id.length > 128 ||
+      typeof workflow.name !== "string" || workflow.name.length > 100 ||
+      !Array.isArray(workflow.steps) || workflow.steps.length === 0 || workflow.steps.length > 30 ||
+      !workflow.steps.every(step => typeof step === "string" && step.length <= 240) ||
+      !Array.isArray(workflow.completed) || workflow.completed.length > workflow.steps.length) return false;
+  return workflow.completed.every(step => Number.isInteger(step) && step >= 0 && step < workflow.steps.length) &&
+    new Set(workflow.completed).size === workflow.completed.length;
+};
 
 type Props = {
   onClose: () => void;
