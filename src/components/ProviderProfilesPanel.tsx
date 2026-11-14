@@ -142,15 +142,15 @@ export function ProviderProfilesPanel({
           setStatus("Profile selected. No provider connection was started.");
         }
       }}>
-        <option value="">Current unsaved configuration</option>
+        <option value="">{t("Current unsaved configuration")}</option>
         {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
       </select>
     </label>
     <div className="modal-actions">
       <input aria-label={t("New provider profile name")} value={label} onChange={event => setLabel(event.target.value)} placeholder={t("Name this configuration")}/>
-      <button className="secondary-btn" type="button" onClick={saveAsNew}>Save as profile</button>
-      {selectedProfile && <button className="secondary-btn" type="button" onClick={updateSelected} disabled={!isDirty}>Update selected</button>}
-      {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>Delete profile</button>}
+      <button className="secondary-btn" type="button" onClick={saveAsNew}>{t("Save as profile")}</button>
+      {selectedProfile && <button className="secondary-btn" type="button" onClick={updateSelected} disabled={!isDirty}>{t("Update selected")}</button>}
+      {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>{t("Delete profile")}</button>}
     </div>
     <small>Profiles store endpoint, model, declared route and credential handle only. API keys are never stored here. Selecting a profile does not connect to it.</small>
     {status && <small role="status">{t(status)}</small>}
