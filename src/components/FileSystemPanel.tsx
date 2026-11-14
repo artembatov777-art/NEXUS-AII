@@ -436,8 +436,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setNotice("Renamed " + renamedPaths.length + " files." + (auditFailures ? " " + auditFailures + " audit entr" + (auditFailures === 1 ? "y could" : "ies could") + " not be saved." : ""));
       await refresh(currentPath, true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const failureMessage = cause instanceof Error ? cause.message : String(cause);
       await refresh(currentPath, true);
+      setError(failureMessage);
     } finally {
       setBusy(false);
     }
