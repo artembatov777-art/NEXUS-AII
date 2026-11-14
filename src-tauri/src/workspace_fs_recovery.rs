@@ -252,6 +252,9 @@ mod tests {
         fs::write(&destination, "original contents").expect("write moved file");
         let id = journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
             .expect("persist pending operation");
+        drop(journal);
+        let journal = WorkspaceOperationJournal::open(&base.join("journal.sqlite"))
+            .expect("reopen journal after simulated process restart");
         journal.recover(&access).expect("recover interrupted operation");
         assert!(source.exists());
         assert!(!destination.exists());
