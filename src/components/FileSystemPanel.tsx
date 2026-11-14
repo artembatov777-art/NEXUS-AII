@@ -206,13 +206,13 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     try {
-      setSelectedPath(entry.path);
-      setRenameName(entry.name);
       setMoveDestination("");
       setEditing(false);
-      setConflictDetected(false);
       if (isRasterImage(entry.name)) {
         const image = await invoke<WorkspaceImagePreview>("read_workspace_image_preview", { path: entry.path });
+        setSelectedPath(entry.path);
+        setRenameName(entry.name);
+        setConflictDetected(false);
         setImagePreview(image);
         setPreview("");
         setDraft("");
@@ -220,6 +220,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         if (!audited) setNotice("Image preview loaded, but the audit entry could not be saved.");
       } else {
         const content = await invoke<string>("read_workspace_file", { path: entry.path });
+        setSelectedPath(entry.path);
+        setRenameName(entry.name);
+        setConflictDetected(false);
         setImagePreview(null);
         setPreview(content);
         setDraft(content);
