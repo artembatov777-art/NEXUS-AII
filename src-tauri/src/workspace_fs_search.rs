@@ -1,3 +1,4 @@
+use crate::workspace_fs::open_regular_file_readonly;
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -94,7 +95,7 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
             if metadata.len() > MAX_FILE_BYTES { continue; }
 
             let mut bytes = Vec::with_capacity(metadata.len() as usize);
-            let file = match fs::File::open(&canonical) {
+            let file = match open_regular_file_readonly(&canonical) {
                 Ok(value) => value,
                 Err(_) => continue,
             };
