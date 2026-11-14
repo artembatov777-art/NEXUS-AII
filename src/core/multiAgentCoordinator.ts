@@ -98,11 +98,15 @@ export class MultiAgentCoordinator {
     }
     const invalid = validateCoordinationInput(plan, assignments, this.maxAgents);
     if (invalid) { yield { type: "failed", runId, detail: invalid }; return; }
-    const safePlan: AgentPlan = {
-      goal: plan.goal,
-      steps: plan.steps.map(step => ({ ...step, dependsOn: [...step.dependsOn] }))
-    };
-    const safeAssignments = { ...assignments };
+    // Detach the complete plan at the trust boundary. A shallow copy leaves nested
+    // step.input objects mutable while a run is paused for owner approval.
+    const serializedPlan = serializedJson(plan);
+    if (serializedPlan === null) {
+      yield { type: "failed", runId, detail: "Coordination plan is not serializable." };
+      return;
+    }
+    const safePlan = JSON.parse(serializedPlan) as AgentPlan;
+    const safeAssignments = Object.fromEntries(Object.entries(assignments)) as Record<string, AgentId>;
     const outputs = new Map<string, unknown>();
     yield { type: "started", runId };
     await this.trace(runId, "started");
