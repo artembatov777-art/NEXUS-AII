@@ -188,7 +188,7 @@ describe("VoiceControls", () => {
     const start = container.querySelector('button[aria-label="Start voice conversation"]');
     act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     act(() => FakeRecognition.latest?.onerror?.({ error: "not-allowed" }));
-    expect(container.textContent).toContain("Microphone permission was denied");
+    expect(container.textContent).toContain("Microphone access was denied");
     expect(container.textContent).not.toContain("End conversation");
   });
 
