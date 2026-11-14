@@ -14,6 +14,7 @@ import { registerWorkspaceTools } from "../lib/workspaceTools";
 import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
 import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
 import { loadMcpServerConfigs } from "../lib/mcpServerStorage";
+import { canUseAgentProvider } from "../lib/agentProviderAvailability";
 
 const THREAD_ID = "nexus-agent-control-center";
 
@@ -47,11 +48,11 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
 }
 
 export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string }) {
-  const [runtimeState] = useState<RuntimeState>(() => {
+  const runtimeState = useMemo<RuntimeState>(() => {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
       if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
-      const models = hasProviderKey ? createTauriModelRouter(providerSettings) : null;
+      const models = canUseAgentProvider(providerSettings, hasProviderKey) ? createTauriModelRouter(providerSettings) : null;
       const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource }) => {
@@ -74,7 +75,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } catch (cause) {
       return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
     }
-  });
+  }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation]);
   const [task, setTask] = useState("");
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
