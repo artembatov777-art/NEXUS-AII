@@ -16,7 +16,7 @@ Updated: 2026-11-14
 ## Verified automation evidence
 
 - Frontend Quality passed on `a19452e69885ca1d58828ba67cdfe289c7285857`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment also passed on this commit.
-- Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. The native workflow for `a19452e69885ca1d58828ba67cdfe289c7285857` is queued; do not treat it as passed until all three platform jobs finish.
+- Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
