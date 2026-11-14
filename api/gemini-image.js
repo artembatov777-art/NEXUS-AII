@@ -85,6 +85,17 @@ export default async function handler(req, res) {
   if (!IMAGE_SIZES.has(imageSize)) return sendJson(res, 400, { error: "Unsupported image size." });
 
   const controller = new AbortController();
+  let clientDisconnected = Boolean(req.aborted);
+  const abortForClient = () => {
+    clientDisconnected = true;
+    controller.abort();
+  };
+  const abortForClosedResponse = () => {
+    if (res.writableEnded !== true) abortForClient();
+  };
+  req.on?.("aborted", abortForClient);
+  res.on?.("close", abortForClosedResponse);
+  if (clientDisconnected) controller.abort();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
     const upstream = await fetch(
@@ -140,10 +151,13 @@ export default async function handler(req, res) {
       imageSize
     });
   } catch (error) {
+    if (clientDisconnected) return;
     return sendJson(res, error.name === "AbortError" ? 504 : 502, {
       error: error.name === "AbortError" ? "Gemini image generation timed out." : "Could not reach Gemini image generation."
     });
   } finally {
     clearTimeout(timeout);
+    req.off?.("aborted", abortForClient);
+    res.off?.("close", abortForClosedResponse);
   }
 }
