@@ -116,6 +116,38 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps an incomplete batch-rename rollback warning visible if refresh also fails", async () => {
+    const rootPath = "/home/test/Documents";
+    let listCalls = 0;
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") {
+        listCalls += 1;
+        if (listCalls > 1) throw new Error("Folder refresh failed");
+        return [{ name: "one.txt", path: rootPath + "/one.txt", kind: "file", sizeBytes: 10, modifiedAtMs: 0 }];
+      }
+      if (command === "rename_workspace_entries_batch") {
+        throw new Error("Batch rename failed and rollback was incomplete. Review these files manually: one-new.txt");
+      }
+      return undefined;
+    });
+    await renderPanel();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Select one.txt for bulk move"]')!;
+    await act(async () => { checkbox.click(); });
+    const prefix = container.querySelector<HTMLInputElement>('[aria-label="Bulk rename prefix"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(prefix, "new-");
+      prefix.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const renameButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Rename selected"));
+    await act(async () => { renameButton!.click(); });
+    expect(container.textContent).toContain("Batch rename failed and rollback was incomplete");
+    expect(container.textContent).not.toContain("Folder refresh failed");
+    vi.unstubAllGlobals();
+  });
+
   it("rolls back earlier batch moves when a later file conflicts", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
