@@ -124,8 +124,13 @@ export class McpHttpTransport implements McpTransport {
       return rawFetcher(input, { ...init, signal });
     };
     this.headers = { ...(options.headers ?? {}) };
-    for (const key of Object.keys(this.headers)) {
-      if (/^(host|content-length|cookie|origin)$/i.test(key)) throw new Error(`Header "${key}" cannot be overridden.`);
+    for (const [key, value] of Object.entries(this.headers)) {
+      if (/^(host|content-length|cookie|origin|content-type|accept|mcp-session-id|mcp-protocol-version)$/i.test(key)) {
+        throw new Error(`Header "${key}" is managed by the MCP transport and cannot be overridden.`);
+      }
+      if (!key.trim() || /[\\r\\n]/.test(key) || typeof value !== "string" || /[\\r\\n]/.test(value)) {
+        throw new Error("MCP custom headers contain an invalid name or value.");
+      }
     }
   }
 
