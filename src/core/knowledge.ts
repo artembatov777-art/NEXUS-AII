@@ -30,8 +30,10 @@ export class HybridMemoryRetriever {
   }
 
   async search(query: string, scope: MemoryScope = "all", limit = 10, signal?: AbortSignal, projectId?: string): Promise<Result<RankedMemory[]>> {
-    const normalized = query.trim();
-    if (!normalized || normalized.length > 500 || !Number.isInteger(limit) || limit < 1 || limit > 50 ||
+    // Chat prompts can be much longer than a useful memory-search query.
+    // Bound the retrieval query instead of failing the whole answer context.
+    const normalized = query.trim().slice(0, 500);
+    if (!normalized || !Number.isInteger(limit) || limit < 1 || limit > 50 ||
         (scope === "project" && !projectId?.trim())) return err("validation", "Memory search query, scope, project, or result limit is invalid.");
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     const lexical = await this.repository.search(normalized, scope, Math.min(100, limit * 5), projectId);
