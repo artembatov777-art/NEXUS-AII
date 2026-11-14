@@ -28,13 +28,28 @@ function normalizeConversation(value: unknown): Conversation | null {
     role: message.role as "user" | "assistant",
     content: message.content as string,
     createdAt: message.createdAt as number,
-    ...(Array.isArray(message.sourceReferences) ? { sourceReferences: message.sourceReferences } : {})
+    ...(Array.isArray(message.sourceReferences) ? { sourceReferences: message.sourceReferences } : {}),
+    ...(isValidStoredImageAttachment(message.imageAttachment) ? { imageAttachment: message.imageAttachment } : {})
   }));
   const projectId = typeof value.projectId === "string" && value.projectId.trim() ? value.projectId : undefined;
   return {
     id: value.id, title: value.title.slice(0, 120), messages, updatedAt: value.updatedAt,
     ...(projectId ? { projectId } : {})
   };
+}
+
+
+function isValidStoredImageAttachment(value: unknown): value is NonNullable<Conversation["messages"][number]["imageAttachment"]> {
+  if (!isRecord(value) || !["image/png", "image/jpeg", "image/webp"].includes(String(value.mimeType)) ||
+      typeof value.data !== "string" || value.data.length > 4_300_000 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(value.data) || value.data.length % 4 !== 0 ||
+      !Number.isSafeInteger(value.byteLength) || (value.byteLength as number) <= 0 ||
+      (value.byteLength as number) > 3_200_000 ||
+      typeof value.model !== "string" || value.model.length > 160 ||
+      typeof value.aspectRatio !== "string" || value.aspectRatio.length > 8 ||
+      (value.imageSize !== "1K" && value.imageSize !== "2K")) return false;
+  const padding = value.data.endsWith("==") ? 2 : value.data.endsWith("=") ? 1 : 0;
+  return (value.data.length / 4) * 3 - padding === value.byteLength;
 }
 
 interface StoredConversationRead {
