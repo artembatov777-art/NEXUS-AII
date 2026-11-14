@@ -7,7 +7,7 @@ Updated: 2026-11-14
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
 - Latest source implementation commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`.
-- Latest completed frontend Quality commit: `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`
+- Latest completed frontend Quality commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -57,6 +57,8 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 ## Phase VI — Security & Integration
 - Tool execution timeouts are now explicitly non-retryable because an executor may ignore cancellation and finish an external side effect after the caller times out; the durable `started`/`failed` audit trail keeps the step available for owner reconciliation. Regression coverage exercises an executor that ignores its abort signal.
 - Filesystem recovery journal payloads are limited to 1 MiB when written and before JSON deserialization. Recovery and inspection SQL checks the BLOB byte length before transferring payload text into Rust, so oversized records are not loaded for parsing. Oversized or malformed records remain preserved for manual review, block recovery/mutations, and are surfaced as invalid in recovery details. Regression tests cover oversized persisted records, multibyte UTF-8 sizing, and rejection of oversized serialized writes.
+- Tauri security contract tests inspect the actual CSP and default capability manifest, enforcing same-origin scripts, the WebAssembly-only compilation exception, explicit connect destinations, and the narrow permission list.
+- New conversation titles are normalized for whitespace and Unicode-safe truncation before persistence; unit tests cover existing titles, blank messages, whitespace, and emoji.
 
 Additional source hardening is now present on the working branch, with fresh CI verification pending:
 - Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
