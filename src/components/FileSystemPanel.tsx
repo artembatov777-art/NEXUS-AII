@@ -89,10 +89,8 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }, [editing, draft, preview, onClose]);
 
   async function refreshRecoveryState(): Promise<string | null> {
-    const [status, operations] = await Promise.all([
-      invoke<string | null>("get_workspace_operation_recovery_status"),
-      invoke<WorkspaceRecoveryOperation[]>("get_workspace_operation_recovery_details")
-    ]);
+    const operations = await invoke<WorkspaceRecoveryOperation[]>("get_workspace_operation_recovery_details");
+    const status = await invoke<string | null>("get_workspace_operation_recovery_status");
     setRecoveryStatus(status);
     setRecoveryOperations(operations);
     return status;
