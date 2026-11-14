@@ -169,7 +169,8 @@ export default function App() {
     void loadConversations().then(items => { if (mounted) { setConversations(items); setConversationsReady(true); } }).catch(e => { if (mounted) { setError(e instanceof Error ? e.message : "Could not load conversations."); setConversationsReady(true); } });
     return () => { mounted = false; };
   }, []);
-  useEffect(() => { if (conversationsReady) void conversationRepository.replaceAll(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady, conversationRepository]);
+  // Streaming deltas are ephemeral UI state. The application facade commits the final (or partial-on-failure) turn atomically; do not let a stale React snapshot overwrite that durable write mid-stream.
+  useEffect(() => { if (conversationsReady && !busy) void conversationRepository.replaceAll(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady, conversationRepository, busy]);
   useEffect(() => { saveProvider(provider); }, [provider]);
   useEffect(() => {
     let active = true;
