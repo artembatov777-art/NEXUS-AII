@@ -92,7 +92,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     const operations = await invoke<WorkspaceRecoveryOperation[]>("get_workspace_operation_recovery_details");
     const status = await invoke<string | null>("get_workspace_operation_recovery_status");
     setRecoveryStatus(status);
-    setRecoveryOperations(operations);
+    setRecoveryOperations(Array.isArray(operations) ? operations : []);
     return status;
   }
 
