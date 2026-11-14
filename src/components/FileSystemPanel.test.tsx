@@ -49,6 +49,31 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_workspace_operation_recovery_status");
   });
 
+  it("retries interrupted filesystem recovery and re-enables file operations", async () => {
+    const rootPath = "/home/test/Documents";
+    let recovered = false;
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_workspace_operation_recovery_status") {
+        return recovered ? null : "An interrupted batch needs recovery.";
+      }
+      if (command === "retry_workspace_operation_recovery") {
+        recovered = true;
+        return undefined;
+      }
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      return undefined;
+    });
+    await renderPanel();
+    expect(container.textContent).toContain("Filesystem recovery required");
+    const retryButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Retry recovery");
+    await act(async () => { retryButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("retry_workspace_operation_recovery");
+    expect(container.textContent).not.toContain("Filesystem recovery required");
+    expect(container.textContent).toContain("Filesystem recovery completed");
+  });
+
   it("moves selected files through one native journaled batch and records each move", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
