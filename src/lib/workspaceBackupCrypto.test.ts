@@ -22,6 +22,16 @@ describe("encrypted workspace backups", () => {
     await expect(decryptWorkspaceBackup(tampered, "correct horse battery staple")).rejects.toThrow(/passphrase/i);
   });
 
+  it("authenticates encryption parameters as part of the backup envelope", async () => {
+    const encrypted = JSON.parse(await encryptWorkspaceBackup(
+      { format: "nexus-au-backup", schemaVersion: 2, value: "private" },
+      "correct horse battery staple"
+    ));
+    const alteredIterations = { ...encrypted, iterations: encrypted.iterations + 1 };
+    await expect(decryptWorkspaceBackup(alteredIterations, "correct horse battery staple"))
+      .rejects.toThrow(/passphrase|integrity/i);
+  });
+
   it("rejects unsupported envelopes and weak passphrases", async () => {
     expect(isEncryptedWorkspaceBackup({ format: "nexus-au-backup", schemaVersion: 2 })).toBe(false);
     await expect(encryptWorkspaceBackup({ data: true }, "short")).rejects.toThrow(/12/);
