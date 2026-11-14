@@ -52,7 +52,7 @@ Automatic persisted input-bound result replay is intentionally not implemented: 
 
 Owner-approved roots, scoped browsing/search, guarded text reads, create/edit, rename/move, image previews, batch rename, no-overwrite destination semantics, conflict detection, secure permission snapshots, and audit events are implemented. Platform-specific atomic no-replace operations prevent a destination created after preflight from being overwritten. Renaming a file preserves the active image preview state.
 
-Residual work: hostile parent-directory TOCTOU protection and durable recovery of interrupted multi-file operations. Real desktop permission and filesystem behavior must be verified by the owner.
+Residual work: hostile parent-directory TOCTOU protection, a guided resolution flow for journal records that cannot be safely auto-restored, and owner-side desktop filesystem smoke tests. Batch rename and bulk move now have durable startup recovery; real device behavior remains unverified.
 - Move, rename, and batch-rename now canonicalize the approved parent directory while preserving the final source component unresolved; regression tests reject final-component symlinks without touching their targets.
 
 ## Phase VI — Security & Integration
