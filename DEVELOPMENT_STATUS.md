@@ -20,7 +20,7 @@ Updated: 2026-11-14
 - Mobile Interface Preview build and deployment passed on the same source commit.
 - Native Windows/macOS/Linux Rust tests and installer packaging are still being verified. The current matrix has reached package creation on Windows, macOS, and Linux after adding a square Linux AppImage icon; the full matrix and artifact uploads are not yet confirmed. Do not treat a queued or partial matrix as a pass.
 - Native filesystem permission snapshots now use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
-- Batch file rename now writes a durable SQLite operation journal before the first move, attempts reverse-order rollback after interrupted startup, refuses to overwrite conflicting paths, and exposes unresolved recovery status in the File System panel. Bulk move still uses in-process rollback and remains a separate recovery gap.
+- Batch file rename and bulk file move now write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status in the File System panel.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 
 ## Phase I — Complete interface
