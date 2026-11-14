@@ -172,6 +172,7 @@ describe("FileSystemPanel native workspace access", () => {
     const destination = rootPath + "/Archive";
     const firstPath = rootPath + "/one.txt";
     const secondPath = rootPath + "/two.txt";
+    let recoveryChecks = 0;
     isTauriMock.mockReturnValue(true);
     openMock.mockResolvedValue(destination);
     invokeMock.mockImplementation(async (command: string) => {
@@ -183,7 +184,10 @@ describe("FileSystemPanel native workspace access", () => {
       if (command === "move_workspace_entries_batch") {
         throw new Error("Batch move failed and rollback was incomplete. Review these files manually: one.txt");
       }
-      if (command === "get_workspace_operation_recovery_status") return "Automatic recovery stopped; manual review is required.";
+      if (command === "get_workspace_operation_recovery_status") {
+        recoveryChecks += 1;
+        return recoveryChecks <= 2 ? null : "Automatic recovery stopped; manual review is required.";
+      }
       return undefined;
     });
     await renderPanel();
