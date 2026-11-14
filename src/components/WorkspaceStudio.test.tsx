@@ -64,6 +64,33 @@ describe("NEXUS Studio", () => {
     expect(container.textContent).toContain("Browser preview cannot access native file and credential services.");
   });
 
+  it("routes voice and focus controls to the active workspace", () => {
+    click("Voice Control");
+    expect(actions.onOpenChat).toHaveBeenCalledOnce();
+    click("Focus Mode");
+    expect(actions.onClose).toHaveBeenCalledOnce();
+    expect(actions.onToggleFocus).toHaveBeenCalledOnce();
+  });
+
+  it("creates and persists reusable workflow checklists", () => {
+    click("Workflows");
+    const name = container.querySelector<HTMLInputElement>('input[aria-label="Workflow name"]');
+    const steps = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Workflow steps"]');
+    if (!name || !steps) throw new Error("Workflow fields missing");
+    const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    const textSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (!inputSetter || !textSetter) throw new Error("Native form setters unavailable");
+    act(() => {
+      inputSetter.call(name, "Morning review");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      textSetter.call(steps, "Review inbox\\nPlan the day");
+      steps.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click("Create workflow");
+    expect(container.textContent).toContain("Morning review");
+    expect(JSON.parse(localStorage.getItem("nexus-au:studio-workflows:v1") ?? "[]")).toHaveLength(1);
+  });
+
   it("routes connected features to their real modules", () => {
     click("Agent Command Center");
     expect(actions.onOpenAgents).toHaveBeenCalledOnce();
