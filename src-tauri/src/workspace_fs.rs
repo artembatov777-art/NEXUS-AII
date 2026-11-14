@@ -425,6 +425,31 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn file_reads_and_writes_refuse_to_follow_symbolic_links() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-no-follow-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let outside = base.join("outside.txt");
+        fs::write(&outside, "outside data").expect("create outside file");
+        let link = root.join("linked.txt");
+        symlink(&outside, &link).expect("create symbolic link");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        assert!(open_regular_file_readonly(&link).is_err());
+        let result = write_workspace_file_inner(link.to_str().unwrap(), "changed", None, &access);
+        assert!(result.is_err(), "write must not follow a symlink target");
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "outside data");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
     #[test]
     fn checked_write_rejects_external_changes_without_overwriting_them() {
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
