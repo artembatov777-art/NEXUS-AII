@@ -242,6 +242,136 @@ pub fn move_workspace_entry(
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceMoveRequest {
+    path: String,
+    destination_directory: String,
+}
+
+fn move_workspace_entries_batch_inner(
+    entries: Vec<WorkspaceMoveRequest>,
+    access: &WorkspaceAccess,
+    journal: Option<&WorkspaceOperationJournal>,
+) -> Result<Vec<String>, String> {
+    if let Some(journal) = journal { journal.ensure_ready()?; }
+    if entries.is_empty() || entries.len() > 100 {
+        return Err("Select between 1 and 100 files for batch move.".into());
+    }
+
+    let mut seen_sources = HashSet::new();
+    let mut seen_targets = HashSet::new();
+    let mut common_root: Option<PathBuf> = None;
+    let mut plans: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        if entry.path.trim().is_empty() || entry.path.len() > 4096
+            || entry.destination_directory.trim().is_empty() || entry.destination_directory.len() > 4096 {
+            return Err("A selected source or destination path is invalid.".into());
+        }
+        let requested_source = PathBuf::from(&entry.path);
+        let requested_parent = requested_source.parent()
+            .ok_or_else(|| "A selected file has no parent directory.".to_string())?;
+        let source_root = access.allowed_root_for(requested_parent)?;
+        let canonical_source_parent = fs::canonicalize(requested_parent)
+            .map_err(|error| format!("Could not resolve a selected file's directory: {error}"))?;
+        if !canonical_source_parent.starts_with(&source_root) {
+            return Err("A selected file is outside an approved directory.".into());
+        }
+        let source_name = requested_source.file_name()
+            .ok_or_else(|| "A selected file has no valid name.".to_string())?;
+        let source = canonical_source_parent.join(source_name);
+        let metadata = fs::symlink_metadata(&source)
+            .map_err(|error| format!("Could not inspect a selected file: {error}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("Batch move supports regular files only; folders, symbolic links, and special entries are excluded.".into());
+        }
+        if !seen_sources.insert(source.clone()) {
+            return Err("The same file was selected more than once.".into());
+        }
+
+        let requested_destination = Path::new(&entry.destination_directory);
+        let destination_root = access.allowed_root_for(requested_destination)?;
+        let destination = fs::canonicalize(requested_destination)
+            .map_err(|error| format!("Could not resolve the destination directory: {error}"))?;
+        if source_root != destination_root || !destination.is_dir() || !destination.starts_with(&source_root) {
+            return Err("Every destination must be an existing directory inside the same approved root as its source file.".into());
+        }
+        if let Some(expected_root) = &common_root {
+            if expected_root != &source_root {
+                return Err("Batch move must stay inside one approved directory.".into());
+            }
+        } else {
+            common_root = Some(source_root.clone());
+        }
+
+        let target = destination.join(source_name);
+        if target == source {
+            return Err("A selected file is already in its destination directory.".into());
+        }
+        let target_key = target.to_string_lossy().to_lowercase();
+        if !seen_targets.insert(target_key) {
+            return Err("The selected files create duplicate destination paths.".into());
+        }
+        match fs::symlink_metadata(&target) {
+            Ok(_) => return Err(format!("A file or folder already exists at destination: {}", target.file_name().unwrap_or_default().to_string_lossy())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("Could not verify a destination path: {error}")),
+        }
+        plans.push((source, destination));
+    }
+
+    let journal_id = if let Some(journal) = journal {
+        let entries = plans.iter().map(|(source, destination)| RenameEntry {
+            source: source.clone(),
+            destination: destination.join(source.file_name().unwrap_or_default()),
+        }).collect::<Vec<_>>();
+        Some(journal.begin(&entries)?)
+    } else {
+        None
+    };
+
+    let mut moved: Vec<(String, PathBuf)> = Vec::with_capacity(plans.len());
+    for (source, destination) in plans {
+        let original_parent = source.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
+        match relocate_entry(access, &source, &destination, None) {
+            Ok(next_path) => moved.push((next_path, original_parent)),
+            Err(cause) => {
+                let mut rollback_failures = Vec::new();
+                for (moved_path, original_parent) in moved.iter().rev() {
+                    if relocate_entry(access, Path::new(moved_path), original_parent, None).is_err() {
+                        rollback_failures.push(moved_path.clone());
+                    }
+                }
+                if rollback_failures.is_empty() {
+                    if let (Some(journal), Some(operation_id)) = (journal, journal_id.as_deref()) {
+                        journal.complete(operation_id).map_err(|error| format!("Batch move failed and files were restored, but its recovery record remains: {error}. Original error: {cause}"))?;
+                    }
+                    return Err(format!("Batch move failed; earlier files were restored. {cause}"));
+                }
+                return Err(format!(
+                    "Batch move failed and rollback was incomplete. Review these files manually: {}. Original error: {cause}",
+                    rollback_failures.iter().take(4).cloned().collect::<Vec<_>>().join(", ")
+                ));
+            }
+        }
+    }
+    if let (Some(journal), Some(operation_id)) = (journal, journal_id.as_deref()) {
+        journal.complete(operation_id)?;
+    }
+    Ok(moved.into_iter().map(|(path, _)| path).collect())
+}
+
+#[tauri::command]
+pub fn move_workspace_entries_batch(
+    entries: Vec<WorkspaceMoveRequest>,
+    access: State<'_, WorkspaceAccess>,
+    journal: State<'_, WorkspaceOperationJournal>,
+) -> Result<Vec<String>, String> {
+    let _operation_guard = journal.lock_operation()?;
+    move_workspace_entries_batch_inner(entries, &access, Some(&journal))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceRenameRequest {
     path: String,
     new_name: String,
