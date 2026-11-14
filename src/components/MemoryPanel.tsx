@@ -142,11 +142,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
         <div className="memory-header-actions"><button className="secondary-btn" onClick={() => void exportMemories()}><Download size={14}/> Export</button><button className="icon-btn" onClick={onClose} aria-label="Close memory"><X size={18}/></button></div>
       </header>
 
-      <div className="memory-search"><Search size={16}/><input aria-label="Search saved memories" value={query} onChange={event => {
-        const value = event.target.value;
-        setQuery(value);
-        void refresh(value);
-      }} placeholder="Search saved memories…"/></div>
+      <div className="memory-search"><Search size={16}/><input aria-label="Search saved memories" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void refresh(query); }} placeholder="Search saved memories…"/><button className="secondary-btn" disabled={searching} onClick={() => void refresh(query)}>{searching ? "Searching…" : "Search"}</button></div>
 
       <div className="memory-list">
         {records.map(record => <article className="memory-record" key={record.id}>
