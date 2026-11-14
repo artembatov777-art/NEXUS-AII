@@ -1,33 +1,36 @@
-# Provider adapter preparation
+# Provider adapter contract
 
-NEXUS uses a provider-neutral `ModelRouter`. The native OpenAI-compatible adapter can register multiple independent endpoint profiles through `createTauriModelRouterForProfiles`.
+NEXUS uses a provider-neutral `ModelRouter`. The active native adapter connects directly to configured OpenAI-compatible endpoints. No aggregator or gateway is required by the AI Core.
 
-## Current adapter contract
+## Current routes
 
-Each profile supplies a stable router ID and the existing `ProviderSettings` shape:
-
-- `baseUrl`: HTTPS for remote endpoints; HTTP is accepted only for loopback addresses
-- `model`: exact model ID returned by that endpoint
-- `inferenceLocation`: owner-declared `local` or `remote`; it is not independently verified
-- `credentialHandle`: OS-vault profile name, or `none` for loopback-only no-key runtimes
-
-Credentials are passed to the native Rust host as a vault handle. They are never copied into frontend model objects or persisted provider profile JSON.
-
-## Future endpoint profiles (prepared, not connected)
-
-| Profile ID | Intended endpoint | Credential mode | State |
+| Profile | Endpoint | Credential mode | Runtime behavior |
 |---|---|---|---|
-| `nexus.ollama` | `http://127.0.0.1:11434/v1` | `none` | Adapter-compatible; not installed or started |
-| `nexus.omniroute` | User-configured HTTPS gateway URL, or HTTP loopback endpoint | OS credential vault | Adapter-compatible; not configured or connected |
-| `nexus.native-provider` | Current active endpoint from Settings | Existing vault profile | Current single-endpoint UI |
+| `nexus.native-provider` | Owner-configured compatible endpoint | OS credential vault or loopback-only no-key | Active Settings/chat route |
+| `nexus.ollama` | `http://127.0.0.1:11434/v1` | No key | Prepared locally; not installed or started by NEXUS |
+| Additional saved profiles | Owner-configured HTTPS compatible endpoints | Dedicated OS-vault entry per saved cloud profile | Saved without connecting; explicit discovery or inference is required |
 
-The multi-profile factory performs no network request. A provider is contacted only when the caller explicitly runs model discovery or inference. No background connection, installation, process launch, or gateway dependency is introduced.
+The generic `createTauriModelRouterForProfiles` factory can register multiple direct compatible endpoints without contacting them. The current chat UI selects one active profile at a time. Saving or selecting a profile does not start a network request.
 
-## Security and limitations
+## Credential handles
 
-- Remote endpoints require HTTPS. Plain HTTP is accepted only for localhost/loopback, including a locally hosted OmniRoute instance.
+- API keys are stored only in the platform credential vault.
+- New saved cloud profiles receive a dedicated, randomly generated handle with a strict `profile-[32 lowercase hex]` format.
+- The native host validates the handle before any keyring operation; arbitrary account names cannot be supplied through IPC.
+- Legacy `default` and `ollama` handles remain as shared slots for existing configurations.
+- `none` is accepted only for localhost/loopback endpoints.
+- Deleting a profile also deletes its dedicated vault entry. Shared legacy keys are not deleted when one profile using them is removed.
+- Profile JSON and workspace backups contain only endpoint/model/route/handle metadata, never the API key itself.
+
+## Network and runtime rules
+
+- Remote endpoints require HTTPS. Plain HTTP is accepted only for localhost/loopback.
 - Redirects are disabled in the native HTTP client.
 - URL credentials, query parameters, and fragments are rejected.
-- `inferenceLocation` is an owner disclosure, not proof of where an upstream gateway executes inference.
-- This adapter supports the bounded OpenAI-compatible chat-completions and model-catalog contract. Provider-specific features must be declared and tested before use.
-- Settings now stores, updates, deletes, and selects up to 16 local provider profiles without connecting when a profile is selected. Chat and the current agent panel still use one active endpoint at a time; the multi-profile router factory is available for host-level composition but is not yet the default chat router.
+- `inferenceLocation` is an owner-declared disclosure, not proof of where an upstream service executes inference.
+- The adapter supports bounded OpenAI-compatible model discovery and chat completions with streaming/cancellation. Provider-specific capabilities must be declared and tested before use.
+- NEXUS does not install Ollama, download model weights, or manage provider process lifecycle in this baseline.
+
+## Deferred gateway integration
+
+No OmniRoute-specific profile builder, adapter, or live connection is implemented. A gateway may be evaluated only during final integration if the owner explicitly chooses it. Core local and direct-cloud operation must remain fully functional without a gateway.

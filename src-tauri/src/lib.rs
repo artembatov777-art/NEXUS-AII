@@ -442,7 +442,15 @@ fn delete_knowledge_document(database: State<'_, AppDatabase>, document_id: Stri
 }
 
 fn valid_credential_handle(handle: &str) -> bool {
-    matches!(handle, "default" | "ollama")
+    if matches!(handle, "default" | "ollama") {
+        return true;
+    }
+    let Some(profile_id) = handle.strip_prefix("profile-") else {
+        return false;
+    };
+    profile_id.len() == 32 && profile_id.bytes().all(|byte| {
+        byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
+    })
 }
 
 fn credential_entry(handle: &str) -> Result<keyring::Entry, String> {
@@ -560,8 +568,12 @@ mod payload_validation_tests {
     fn provider_credentials_use_separate_allowlisted_vault_profiles() {
         assert!(valid_credential_handle("default"));
         assert!(valid_credential_handle("ollama"));
+        assert!(valid_credential_handle("profile-0123456789abcdef0123456789abcdef"));
         assert!(!valid_credential_handle("none"));
         assert!(!valid_credential_handle("unknown"));
+        assert!(!valid_credential_handle("profile-../../etc/passwd"));
+        assert!(!valid_credential_handle("profile-0123456789ABCDEF0123456789ABCDEF"));
+        assert!(!valid_credential_handle("profile-0123456789abcdef"));
     }
 
     #[test]

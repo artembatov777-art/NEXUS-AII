@@ -10,6 +10,7 @@ import { ProviderProfilesPanel } from "./ProviderProfilesPanel";
 let container: HTMLDivElement;
 let root: Root;
 const onSelect = vi.fn();
+const onDeleteCredential = vi.fn(async (_handle: string) => {});
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const localSettings: ProviderSettings = {
@@ -43,7 +44,7 @@ describe("ProviderProfilesPanel", () => {
     expect(saveProviderProfiles([{
       id: "nexus.cloud", label: "Cloud", settings: cloudSettings
     }]).ok).toBe(true);
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     const option = container.querySelector<HTMLOptionElement>('option[value="nexus.cloud"]');
     expect(option?.textContent).toBe("Cloud");
     expect(onSelect).not.toHaveBeenCalled();
@@ -51,7 +52,7 @@ describe("ProviderProfilesPanel", () => {
   });
 
   it("saves a named profile without persisting credentials", async () => {
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     setValue(container.querySelector<HTMLInputElement>('[aria-label="New provider profile name"]')!, "Local model");
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Save as profile")!.click(); });
     const raw = window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? "";
@@ -60,13 +61,46 @@ describe("ProviderProfilesPanel", () => {
     expect(raw).toContain("127.0.0.1:11434");
   });
 
+  it("assigns an isolated OS-vault handle to each new cloud profile", async () => {
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
+    setValue(container.querySelector<HTMLInputElement>('[aria-label="New provider profile name"]')!, "Second cloud");
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Save as profile")!.click(); });
+    const saved = JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}');
+    const handle = saved.profiles[0]?.settings?.credentialHandle;
+    expect(handle).toMatch(/^profile-[a-f0-9]{32}$/);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ credentialHandle: handle }));
+    expect(container.textContent).toContain("Enter and save its API key");
+  });
+
+  it("deletes a dedicated vault key together with its profile", async () => {
+    const handle = "profile-0123456789abcdef0123456789abcdef";
+    const settings = { ...cloudSettings, credentialHandle: handle };
+    saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings }]);
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={settings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
+    expect(onDeleteCredential).toHaveBeenCalledWith(handle);
+    expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles).toHaveLength(0);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ credentialHandle: "none" }));
+  });
+
+  it("restores a dedicated profile if its key cannot be deleted", async () => {
+    const handle = "profile-0123456789abcdef0123456789abcdef";
+    const settings = { ...cloudSettings, credentialHandle: handle };
+    saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings }]);
+    onDeleteCredential.mockRejectedValueOnce(new Error("vault unavailable"));
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={settings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
+    expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles).toHaveLength(1);
+    expect(container.textContent).toContain("profile was restored");
+  });
+
   it("does not switch profiles when the current profile has unsaved changes and the owner cancels", async () => {
     saveProviderProfiles([
       { id: "nexus.cloud", label: "Cloud", settings: cloudSettings },
       { id: "nexus.local", label: "Local", settings: localSettings }
     ]);
     const changedSettings = { ...cloudSettings, model: "unsaved-model-change" };
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={changedSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={changedSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     vi.stubGlobal("confirm", vi.fn(() => false));
     const select = container.querySelector<HTMLSelectElement>('[aria-label="Saved provider profiles"]')!;
     await act(async () => {
@@ -80,7 +114,7 @@ describe("ProviderProfilesPanel", () => {
 
   it("keeps a saved profile when deletion is cancelled", async () => {
     saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings: cloudSettings }]);
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     vi.stubGlobal("confirm", vi.fn(() => false));
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
     expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles)
@@ -89,12 +123,13 @@ describe("ProviderProfilesPanel", () => {
 
   it("updates and deletes the selected profile", async () => {
     saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings: cloudSettings }]);
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     const updatedSettings = { ...cloudSettings, model: "model-b" };
-    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={updatedSettings} onSelect={onSelect}/>); });
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={updatedSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Update selected")!.click(); });
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toContain("model-b");
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
     expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles).toEqual([]);
+    expect(onDeleteCredential).not.toHaveBeenCalled();
   });
 });

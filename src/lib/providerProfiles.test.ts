@@ -47,6 +47,18 @@ describe("provider profile persistence", () => {
     })).toMatchObject({ ok: false, error: { code: "validation" } });
   });
 
+  it("accepts a strictly formatted dedicated OS-vault handle and rejects arbitrary handles", () => {
+    const handle = "profile-0123456789abcdef0123456789abcdef";
+    expect(validateProviderProfile({
+      ...ollama,
+      settings: { ...ollama.settings, baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote", credentialHandle: handle }
+    })).toMatchObject({ ok: true, value: { settings: { credentialHandle: handle } } });
+    expect(validateProviderProfile({
+      ...ollama,
+      settings: { ...ollama.settings, baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote", credentialHandle: "profile-../../secret" }
+    })).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("drops unrecognized secret fields while normalizing a profile", () => {
     const result = validateProviderProfile({
       ...ollama, apiKey: "do-not-persist",

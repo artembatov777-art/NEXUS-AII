@@ -26,8 +26,8 @@ export interface ProviderSettings {
   model: string;
   /** Owner-declared processing location; upstream routing is not independently verifiable. */
   inferenceLocation: "local" | "remote";
-  /** "none" is accepted only by the native host for loopback runtimes such as Ollama. */
-  credentialHandle?: "default" | "ollama" | "none";
+  /** Shared slots, no-key loopback mode, or a strictly validated per-profile OS-vault handle. */
+  credentialHandle?: string;
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
   baseUrl: "http://127.0.0.1:11434/v1",

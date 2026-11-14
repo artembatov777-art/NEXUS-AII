@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ProviderSettings } from "../types";
+import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
+import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
 import {
   loadProviderProfiles, removeProviderProfile, saveProviderProfiles,
   upsertProviderProfile, type ProviderProfileRecord
@@ -7,10 +8,12 @@ import {
 
 export function ProviderProfilesPanel({
   currentSettings,
-  onSelect
+  onSelect,
+  onDeleteCredential
 }: {
   currentSettings: ProviderSettings;
   onSelect: (settings: ProviderSettings) => void;
+  onDeleteCredential: (credentialHandle: string) => Promise<void>;
 }) {
   const [profiles, setProfiles] = useState<ProviderProfileRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -45,7 +48,7 @@ export function ProviderProfilesPanel({
     }
     setProfiles(next);
     setSelectedId(selected);
-    setStatus("Provider profile saved locally. API keys remain in the OS credential vault.");
+    setStatus("Provider profile saved locally. API keys remain in OS credential-vault entries.");
     return true;
   }
 
@@ -56,12 +59,24 @@ export function ProviderProfilesPanel({
       return;
     }
     const id = `nexus.profile.${crypto.randomUUID()}`;
-    const next = upsertProviderProfile(profiles, { id, label: nextLabel, settings: currentSettings });
+    const settings: ProviderSettings = {
+      ...currentSettings,
+      credentialHandle: currentSettings.credentialHandle === "none"
+        ? "none"
+        : createProfileCredentialHandle()
+    };
+    const next = upsertProviderProfile(profiles, { id, label: nextLabel, settings });
     if (!next.ok) {
       setStatus(next.error.message);
       return;
     }
-    if (persist(next.value, id)) setLabel("");
+    if (persist(next.value, id)) {
+      setLabel("");
+      onSelect(settings);
+      if (settings.credentialHandle !== "none") {
+        setStatus("Profile saved with an isolated key slot. Enter and save its API key in Provider settings.");
+      }
+    }
   }
 
   function updateSelected() {
@@ -78,15 +93,41 @@ export function ProviderProfilesPanel({
     persist(next.value, selectedProfile.id);
   }
 
-  function deleteSelected() {
+  async function deleteSelected() {
     if (!selectedProfile) return;
-    if (!window.confirm(`Delete saved provider profile "${selectedProfile.label}"? Its API key remains in the OS credential vault.`)) return;
+    const credentialHandle = selectedProfile.settings.credentialHandle ?? "default";
+    const hasDedicatedKey = isDedicatedCredentialHandle(credentialHandle);
+    const consequence = hasDedicatedKey
+      ? " Its dedicated API key will also be deleted from the OS credential vault."
+      : " Any shared API key remains in the OS credential vault.";
+    if (!window.confirm(`Delete saved provider profile "${selectedProfile.label}"?${consequence}`)) return;
     const next = removeProviderProfile(profiles, selectedProfile.id);
     if (!next.ok) {
       setStatus(next.error.message);
       return;
     }
-    persist(next.value, "");
+    const saved = saveProviderProfiles(next.value);
+    if (!saved.ok) {
+      setStatus(saved.error.message);
+      return;
+    }
+    if (hasDedicatedKey) {
+      try {
+        await onDeleteCredential(credentialHandle);
+      } catch {
+        const restored = saveProviderProfiles(profiles);
+        setStatus(restored.ok
+          ? "The dedicated API key could not be removed. The profile was restored so you can retry."
+          : "The key could not be removed and the profile could not be restored. The unused key may remain in the OS vault.");
+        return;
+      }
+    }
+    setProfiles(next.value);
+    setSelectedId("");
+    setStatus("Provider profile deleted.");
+    if (hasDedicatedKey && currentSettings.credentialHandle === credentialHandle) {
+      onSelect(DEFAULT_PROVIDER);
+    }
   }
 
   return <section className="provider-profiles" aria-label="Saved provider profiles">

@@ -2,7 +2,7 @@
 
 **A personal AI ecosystem built for one owner.**
 
-NEXUS AU is a hybrid local-and-cloud desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, and automation. Voice is deferred until after Release 1.0.
+NEXUS AU is a hybrid local-and-cloud desktop environment and long-term engineering project for building a personally controlled AI system: its own model, memory, reasoning and context services, agents, tools, and automation. Native/offline voice is deferred; current browser/WebView speech controls are host-dependent and do not imply a native voice runtime.
 
 The strategic goal is not to publish a multi-user AI service or remain a thin client for model aggregators. The goal is to develop **NEXUS Model** as the primary intelligence of a private AI environment. Direct local and cloud provider adapters use a provider-neutral interface; no gateway is required during core development.
 
@@ -33,7 +33,7 @@ NEXUS AU desktop
                  └─ long-term independent model research
 ~~~
 
-NEXUS AU connects directly to compatible local runtimes and cloud provider endpoints through a provider-neutral router. The non-connecting OmniRoute profile builder and adapter path are prepared; live gateway connection remains an optional final-integration step without changing the AI Core.
+NEXUS AU currently connects directly to compatible local runtimes and cloud provider endpoints through a provider-neutral router. No OmniRoute-specific profile builder or gateway connection is implemented. An optional gateway adapter may be evaluated only during final integration if the owner chooses, without making it a core dependency.
 
 ## Practical model strategy
 1. Establish a provider-neutral model runtime with direct cloud-provider adapters and local inference adapters.
@@ -47,13 +47,13 @@ Prompting, retrieval, fine-tuning, and foundation-model pretraining are differen
 ## Current implementation
 The repository already contains a React + TypeScript + Vite frontend, a Tauri 2 / Rust desktop host, local persistence, memory and knowledge retrieval, agent runtime foundations, MCP HTTP integration, permission-gated tool execution, credential-vault support, and cross-platform CI.
 
-These facts do not mean every planned feature is production-ready. See the implementation plan and platform smoke-test protocol for verified status and remaining manual checks.
+These facts do not mean every planned feature is production-ready. See `docs/ROADMAP.md` and `DEVELOPMENT_STATUS.md` for the active seven-phase order and verified status; use `docs/PLATFORM_SMOKE_TESTS.md` and `docs/OWNER_SMOKE_TESTS.md` for manual acceptance.
 
 ## Technology
 - Frontend: React, TypeScript, Vite.
 - Desktop: Tauri 2, Rust.
 - Storage: SQLite plus bounded local indexes and managed attachment storage.
-- Model layer: provider-neutral contracts, direct local inference adapters, and compatible cloud-provider adapters; optional OmniRoute adapter at final integration.
+- Model layer: provider-neutral contracts, direct local inference adapters, and compatible cloud-provider adapters; any gateway adapter remains optional future work.
 - Agent integrations: Tool Gateway and MCP.
 - Quality: unit/integration tests, CI, security review, and real desktop smoke tests.
 

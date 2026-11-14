@@ -15,10 +15,13 @@ This checklist is for real-device acceptance after the automated build. CI compi
 
 Run separately on each supported desktop OS:
 
-- Save a test provider key through NEXUS settings.
+- Create two saved cloud profiles and verify each receives a different dedicated credential handle.
+- Save a different test provider key in each profile through NEXUS settings.
 - Confirm the UI reports the vault entry as available.
 - Restart NEXUS and confirm the saved key remains available without being displayed in the UI.
 - Run endpoint discovery and a short generation test.
+- Change one profile's key and confirm the other profile remains available.
+- Delete one saved profile and confirm only its dedicated vault entry is removed; any legacy shared key remains untouched.
 - Delete the saved key and confirm the UI reports it missing.
 - Confirm no provider key appears in localStorage, SQLite workspace backup, logs, trace attributes, or exported files.
 - On Linux, verify the signed-in desktop session exposes an unlocked Secret Service-compatible keyring. Headless CI does not establish this.

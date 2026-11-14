@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Conversation, ProviderSettings } from "../types";
 import { DEFAULT_PROVIDER } from "../types";
+import { isValidCredentialHandle } from "./providerCredentials";
 
 const CHAT_KEY = "nexus-au:conversations:v2";
 const LEGACY_CHAT_KEY = "nexus-au:conversations:v1";
@@ -131,10 +132,9 @@ export function loadProvider(storage: StorageAdapter = localStorage): ProviderSe
     ) return DEFAULT_PROVIDER;
 
     const credentialHandle = value.credentialHandle;
-    const safeCredentialHandle =
-      credentialHandle === "default" || credentialHandle === "ollama" || credentialHandle === "none"
-        ? credentialHandle
-        : undefined;
+    const safeCredentialHandle = isValidCredentialHandle(credentialHandle)
+      ? credentialHandle
+      : undefined;
 
     return {
       baseUrl: value.baseUrl.trim(),

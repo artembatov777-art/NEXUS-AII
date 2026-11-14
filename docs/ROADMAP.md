@@ -49,7 +49,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add bounded transient-status retries, Retry-After handling, cancellation-aware backoff, and request cleanup behavior.
 - [x] Confirm the native Windows/macOS/Linux CI matrix on implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100`; all three native builds and Rust test jobs passed. The subsequent branch-head commit `36cdfdd1fa6d96053ef9459b79ecd15310eb71a1` only reorders the root package dependency list in `Cargo.lock`.
 
-**Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. OmniRoute is integrated only in the final phase.
+**Exit criteria:** direct cloud-provider models and local models work through the provider-neutral router; model identity, route, errors, usage, streaming, and cancellation are observable and tested. An optional gateway is evaluated only in the final phase if the owner explicitly chooses it.
 
 ## Phase III — Memory & Knowledge
 
@@ -132,6 +132,6 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - The isolated mobile preview has interaction coverage for navigation, secondary modules, demo chat, project and knowledge search, agent disclosure, tool details, notices, and voice disclosure. Current frontend Quality passed on `435b8914e31126f8261e0f10e2921bc5d8314100` with 59 test files and 391 tests; the native Windows/macOS/Linux matrix passed on the same implementation commit. The Mobile Interface Preview build and deployment passed for the UI-identical frontend commit `64f8d5d0b2d045d5326aac76a462518ed56a7e73`. A fresh owner-side iPhone Safari check after the latest visual refresh remains open.
 - Browser preview uses the Web Clipboard API where permitted; provider secrets, model discovery, and native backup actions are disabled when the native desktop host is unavailable.
 - The local transformer runtime is dynamically imported only when semantic embeddings are requested, keeping its large runtime out of the initial static import graph.
-- An endpoint address does not prove that inference is local. OmniRoute is not configured during core development and will be tested as an optional adapter at final integration.
+- An endpoint address does not prove that inference is local. OmniRoute is not configured during core development and may be evaluated as an optional adapter at final integration only if the owner chooses.
 - Ollama requires a running local computer or server; it cannot run on the owner's iPhone by itself.
 - Model catalog entries must originate from the provider's discovery response; configured model IDs must never be injected as if they were available. A later mobile-preview build exposed a missing `Database` icon import in `MobileDemo.tsx`; the import was restored. The hosted preview remains a static interface demo and is not connected to Rust, OmniRoute, Ollama, or the owner filesystem. Real Windows folder permissions and provider-key verification remain owner-side release gates.

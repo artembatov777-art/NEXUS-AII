@@ -2,6 +2,7 @@ import { err, ok, type Result } from "../core/result";
 import type { ProviderSettings } from "../types";
 import type { StorageAdapter } from "./storage";
 import { isLoopbackProviderEndpoint, providerEndpointError } from "./providerEndpoint";
+import { isValidCredentialHandle } from "./providerCredentials";
 
 export interface ProviderProfileRecord {
   id: string;
@@ -39,7 +40,7 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   }
 
   const credentialHandle = settings.credentialHandle === undefined ? "default" : settings.credentialHandle;
-  if (!["default", "ollama", "none"].includes(String(credentialHandle))) {
+  if (!isValidCredentialHandle(credentialHandle)) {
     return err("validation", "Provider profile credential handle is unsupported.");
   }
   if (credentialHandle === "none" && !isLoopbackProviderEndpoint(settings.baseUrl)) {

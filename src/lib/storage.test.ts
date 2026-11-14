@@ -80,6 +80,18 @@ describe("conversation workspace storage", () => {
     saveProvider(settings, storage);
     expect(loadProvider(storage)).toEqual(settings);
   });
+  it("restores a validated per-profile credential handle without storing the secret", () => {
+    const storage = new MemoryStorage();
+    const settings = {
+      baseUrl: "https://api.example/v1",
+      model: "model-a",
+      inferenceLocation: "remote" as const,
+      credentialHandle: "profile-0123456789abcdef0123456789abcdef"
+    };
+    saveProvider(settings, storage);
+    expect(loadProvider(storage)).toEqual(settings);
+  });
+
   it("rejects oversized or control-character provider settings", () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:provider:v1", JSON.stringify({

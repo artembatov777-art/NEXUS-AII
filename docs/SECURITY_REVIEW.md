@@ -46,6 +46,7 @@
 - SQLite schema migrations run in one exclusive transaction. Workspace backup import is transactional and has rollback tests.
 - Project deletion uses native database cleanup/cascade behavior and clears project-scoped semantic vectors.
 - Tool audit and trace history have bounded retention; trace attributes are redacted and bounded. Owner-initiated filesystem reads, content searches, creates, edits, renames, moves, and permission changes also create native audit events without including private paths.
+- Dedicated saved cloud profiles use a strict, generated per-profile credential handle; the native host validates its exact format before keyring access. Legacy shared handles remain supported, and deleting a dedicated profile also deletes its associated vault entry.
 - Regular-file reads, content search, and image previews open the final path component without following symlinks/reparse points. Existing-file writes use a checked handle with no-follow flags; new-file creation uses atomic create-new semantics and refuses to truncate an existing destination. This reduces final-component substitution risk but does not eliminate hostile parent-directory races or hard-link aliasing.
 - Provider credentials are excluded from backups.
 - SQLite files, browser localStorage/IndexedDB, agent checkpoints, and exported workspace backups are **not application-level encrypted**. Protect the OS account and device storage; treat exported backups as sensitive files.
