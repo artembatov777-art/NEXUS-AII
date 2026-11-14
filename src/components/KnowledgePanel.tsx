@@ -86,7 +86,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       }
       await refreshDocuments(projectId);
       setStatus(`Imported ${imported.length}/${selected.length} document(s). ${skipped ? `${skipped} extra file(s) were skipped by the 20-file batch limit. ` : ""}${imported.length ? imported.join("; ") : "No documents were imported."}`);
-      if (failures.length) setError(failures.slice(0, 8).join("\\n") + (failures.length > 8 ? `\\n…and ${failures.length - 8} more error(s).` : ""));
+      if (failures.length) setError(failures.slice(0, 8).join("\n") + (failures.length > 8 ? `\n…and ${failures.length - 8} more error(s).` : ""));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Document batch import failed.");
     } finally { setWorking(false); }
