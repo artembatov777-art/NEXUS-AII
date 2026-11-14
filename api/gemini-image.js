@@ -2,7 +2,7 @@ const MAX_BODY_BYTES = 8 * 1024;
 const MAX_PROMPT_CHARS = 2_000;
 const MODEL = "gemini-3.1-flash-image";
 const ASPECT_RATIOS = new Set(["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"]);
-const IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
+const IMAGE_SIZES = new Set(["1K", "2K"]);
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -116,10 +116,10 @@ export default async function handler(req, res) {
     if (!image) return sendJson(res, 502, { error: "Gemini returned no supported image." });
 
     const encoded = image.inlineData.data;
-    if (encoded.length > 12_000_000) return sendJson(res, 502, { error: "Generated image exceeded the 9 MB response limit." });
+    if (encoded.length > 4_300_000) return sendJson(res, 502, { error: "Generated image exceeded the 3.2 MB response limit for this hosted client." });
     const imageBuffer = Buffer.from(encoded, "base64");
-    if (!imageBuffer.length || imageBuffer.length > 9 * 1024 * 1024) {
-      return sendJson(res, 502, { error: "Generated image exceeded the 9 MB response limit." });
+    if (!imageBuffer.length || imageBuffer.length > 3_200_000) {
+      return sendJson(res, 502, { error: "Generated image exceeded the 3.2 MB response limit for this hosted client." });
     }
     const mimeType = image.inlineData.mimeType;
     const signatureValid = mimeType === "image/png" ? imageBuffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
