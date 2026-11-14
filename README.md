@@ -59,8 +59,10 @@ These facts do not mean every planned feature is production-ready. See `docs/ROA
 
 ## Development
 
+For platform prerequisites, installer artifacts, and first-launch setup, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
 ~~~bash
-npm install
+npm ci --legacy-peer-deps
 npm run dev
 npm run build
 npm run tauri dev
@@ -75,3 +77,4 @@ npm run tauri dev
 - Implementation status: docs/IMPLEMENTATION_PLAN.md
 - Security model: docs/SECURITY.md
 - Platform smoke tests: docs/PLATFORM_SMOKE_TESTS.md
+- Desktop installation and build artifacts: docs/INSTALLATION.md
