@@ -184,7 +184,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
           </label>
         </div>
         {isTauri() && <div className="knowledge-import knowledge-workspace-import">
-          <div><strong><FileText size={15}/> Import from approved workspace</strong><p>Indexes up to 100 supported text files (50 MB) from a folder already approved in NEXUS File System. Binary files are skipped.</p></div>
+          <div><strong><FileText size={15}/> Import from approved workspace</strong><p>Indexes up to 100 supported text files (50 MB) from a folder already approved in NEXUS File System. Binary files, credential folders, and build artifacts are skipped.</p></div>
           {workspaceRoots.length > 0 ? <>
             <select aria-label="Approved workspace folder" value={selectedWorkspaceRoot} disabled={working} onChange={event => setSelectedWorkspaceRoot(event.target.value)}>
               {workspaceRoots.map(path => <option key={path} value={path}>{path}</option>)}
