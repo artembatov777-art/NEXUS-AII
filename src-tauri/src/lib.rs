@@ -42,6 +42,8 @@ struct StoredMessage {
     created_at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_references: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image_attachment: Option<serde_json::Value>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -247,9 +249,41 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 9;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 10 {
+        transaction.execute_batch("ALTER TABLE messages ADD COLUMN image_attachment TEXT;")?;
+        version = 10;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
+
+fn validate_stored_image_attachment(value: &serde_json::Value) -> Result<(), String> {
+    let mime = value.get("mimeType").and_then(|v| v.as_str()).unwrap_or("");
+    if !["image/png", "image/jpeg", "image/webp"].contains(&mime) {
+        return Err("Stored image attachment has an unsupported MIME type.".into());
+    }
+    let data = value.get("data").and_then(|v| v.as_str()).unwrap_or("");
+    if data.is_empty() || data.len() > 4_300_000 || data.len() % 4 != 0 ||
+        !data.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'+' || byte == b'/' || byte == b'=') {
+        return Err("Stored image attachment has invalid or oversized base64 data.".into());
+    }
+    let padding = if data.ends_with("==") { 2 } else if data.ends_with('=') { 1 } else { 0 };
+    let decoded_len = (data.len() / 4) * 3 - padding;
+    let declared_len = value.get("byteLength").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    if decoded_len != declared_len || declared_len == 0 || declared_len > 3_200_000 {
+        return Err("Stored image attachment byte length is invalid or exceeds 3.2 MB.".into());
+    }
+    let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let ratio = value.get("aspectRatio").and_then(|v| v.as_str()).unwrap_or("");
+    let size = value.get("imageSize").and_then(|v| v.as_str()).unwrap_or("");
+    if model.trim().is_empty() || model.len() > 160 ||
+        !["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"].contains(&ratio) ||
+        !["1K", "2K"].contains(&size) {
+        return Err("Stored image attachment metadata is invalid.".into());
+    }
+    Ok(())
+}
 
 #[tauri::command]
 fn load_conversations(database: State<'_, AppDatabase>) -> Result<Vec<StoredConversation>, String> {
@@ -262,10 +296,11 @@ fn load_conversations(database: State<'_, AppDatabase>) -> Result<Vec<StoredConv
     let mut conversations = Vec::with_capacity(metadata.len());
     for (id,title,project_id,updated_at) in metadata {
         let messages = {
-            let mut statement = connection.prepare("SELECT id,role,content,created_at,source_references FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e| e.to_string())?;
+            let mut statement = connection.prepare("SELECT id,role,content,created_at,source_references,image_attachment FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e| e.to_string())?;
             let rows = statement.query_map(params![id], |row| {
                 let source_json: Option<String> = row.get(4)?;
-                Ok(StoredMessage { id: row.get(0)?, role: row.get(1)?, content: row.get(2)?, created_at: row.get(3)?, source_references: source_json.and_then(|json| serde_json::from_str(&json).ok()) })
+                let image_json: Option<String> = row.get(5)?;
+                Ok(StoredMessage { id: row.get(0)?, role: row.get(1)?, content: row.get(2)?, created_at: row.get(3)?, source_references: source_json.and_then(|json| serde_json::from_str(&json).ok()), image_attachment: image_json.and_then(|json| serde_json::from_str(&json).ok()) })
             }).map_err(|e| e.to_string())?;
             rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?
         };
@@ -293,7 +328,9 @@ fn save_conversations(database: State<'_, AppDatabase>, conversations: Vec<Store
                 return Err("Message data is invalid or exceeds database limits.".into());
             }
             let source_json = message.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e| e.to_string())?;
-            transaction.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)", params![message.id,conversation.id,message.role,message.content,message.created_at,source_json]).map_err(|e| e.to_string())?;
+            if let Some(image) = &message.image_attachment { validate_stored_image_attachment(image)?; }
+            let image_json = message.image_attachment.as_ref().map(serde_json::to_string).transpose().map_err(|e| e.to_string())?;
+            transaction.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references,image_attachment) VALUES(?1,?2,?3,?4,?5,?6,?7)", params![message.id,conversation.id,message.role,message.content,message.created_at,source_json,image_json]).map_err(|e| e.to_string())?;
         }
     }
     let existing: Vec<String> = {
@@ -763,8 +800,8 @@ fn export_workspace_record(connection: &Connection) -> Result<serde_json::Value,
         let metadata=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
         let mut output=Vec::new();
         for (id,title,project_id,updated_at) in metadata {
-            let mut stmt=connection.prepare("SELECT id,role,content,created_at,source_references FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e|e.to_string())?;
-            let rows=stmt.query_map(params![id],|r|{let raw:Option<String>=r.get(4)?;Ok(StoredMessage{id:r.get(0)?,role:r.get(1)?,content:r.get(2)?,created_at:r.get(3)?,source_references:raw.and_then(|v|serde_json::from_str(&v).ok())})}).map_err(|e|e.to_string())?;
+            let mut stmt=connection.prepare("SELECT id,role,content,created_at,source_references,image_attachment FROM messages WHERE conversation_id=?1 ORDER BY created_at,rowid").map_err(|e|e.to_string())?;
+            let rows=stmt.query_map(params![id],|r|{let raw:Option<String>=r.get(4)?;let image:Option<String>=r.get(5)?;Ok(StoredMessage{id:r.get(0)?,role:r.get(1)?,content:r.get(2)?,created_at:r.get(3)?,source_references:raw.and_then(|v|serde_json::from_str(&v).ok()),image_attachment:image.and_then(|v|serde_json::from_str(&v).ok())})}).map_err(|e|e.to_string())?;
             let messages=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
             output.push(StoredConversation{id,title,project_id,messages,updated_at});
         }
@@ -957,7 +994,9 @@ fn import_workspace_record(connection: &mut Connection, backup: serde_json::Valu
         tx.execute("INSERT INTO conversations(id,title,project_id,updated_at) VALUES(?1,?2,?3,?4)",params![conversation.id,conversation.title,conversation.project_id,conversation.updated_at]).map_err(|e|e.to_string())?;
         for message in conversation.messages {
             let refs=message.source_references.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
-            tx.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references) VALUES(?1,?2,?3,?4,?5,?6)",params![message.id,conversation.id,message.role,message.content,message.created_at,refs]).map_err(|e|e.to_string())?;
+            if let Some(image) = &message.image_attachment { validate_stored_image_attachment(image)?; }
+            let image=message.image_attachment.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
+            tx.execute("INSERT INTO messages(id,conversation_id,role,content,created_at,source_references,image_attachment) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![message.id,conversation.id,message.role,message.content,message.created_at,refs,image]).map_err(|e|e.to_string())?;
         }
     }
     for memory in &memories {
