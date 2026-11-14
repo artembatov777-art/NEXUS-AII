@@ -532,6 +532,25 @@ mod tests {
     }
 
     #[test]
+    fn batch_rename_persists_and_clears_its_recovery_journal() {
+        let (base, root, access) = fixture();
+        let journal = WorkspaceOperationJournal::open(&base.join("journal.sqlite")).expect("open operation journal");
+        let first = root.join("one.txt");
+        let second = root.join("two.md");
+        fs::write(&first, "first contents").expect("create first file");
+        fs::write(&second, "second contents").expect("create second file");
+        let result = rename_workspace_entries_batch_inner(vec![
+            WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "archived-one.txt".into() },
+            WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "archived-two.md".into() },
+        ], &access, Some(&journal)).expect("journalled batch rename");
+        assert_eq!(result.len(), 2);
+        assert_eq!(fs::read_to_string(root.join("archived-one.txt")).unwrap(), "first contents");
+        assert_eq!(fs::read_to_string(root.join("archived-two.md")).unwrap(), "second contents");
+        assert!(journal.recovery_status().expect("recovery status").is_none());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
     fn batch_rename_preflights_conflicts_without_changing_any_file() {
         let (base, root, access) = fixture();
         let first = root.join("one.txt");
