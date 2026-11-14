@@ -179,6 +179,24 @@ mod tests {
     }
 
 
+    #[cfg(unix)]
+    #[test]
+    fn content_search_never_reads_through_a_symbolic_link() {
+        use std::os::unix::fs::symlink;
+        let root = temporary_root("symlink-root");
+        let outside = temporary_root("symlink-outside");
+        let secret = outside.join("private.txt");
+        fs::write(&secret, "needle must not be indexed").expect("write outside file");
+        symlink(&secret, root.join("linked.txt")).expect("create file symlink");
+
+        let result = search_contents_in(&root, &root, "needle").expect("search approved root");
+        assert_eq!(result.total_matches, 0);
+        assert!(result.matches.is_empty());
+
+        fs::remove_dir_all(root).expect("cleanup approved root");
+        fs::remove_dir_all(outside).expect("cleanup outside root");
+    }
+
     #[test]
     fn counts_all_matches_while_retaining_only_the_first_hundred() {
         let root = temporary_root("result-limit");
