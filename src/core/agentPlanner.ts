@@ -19,7 +19,19 @@ export class AgentPlanner {
     if(!plan||plan.goal!==goal.trim()||!Array.isArray(plan.steps)||plan.steps.length>this.maxSteps)return err("validation","Planner returned an invalid plan or exceeded its step budget.");
     const allowed=new Set(tools.map(t=>t.id)),ids=new Set<string>(),completed=new Set<string>();
     for(const step of plan.steps){
-      if(!step||!/^[a-zA-Z0-9_-]{1,64}$/.test(step.id)||ids.has(step.id)||!allowed.has(step.toolId)||!step.purpose?.trim()||step.purpose.length>300||!Array.isArray(step.dependsOn))return err("validation","Plan contains an invalid or unavailable tool step.");
+      if(!step
+        ||typeof step.id!=="string"
+        ||!/^[a-zA-Z0-9_-]{1,64}$/.test(step.id)
+        ||ids.has(step.id)
+        ||typeof step.toolId!=="string"
+        ||!allowed.has(step.toolId)
+        ||typeof step.purpose!=="string"
+        ||!step.purpose.trim()
+        ||step.purpose.length>300
+        ||!Array.isArray(step.dependsOn)
+        ||!step.dependsOn.every(dep=>typeof dep==="string")) {
+        return err("validation","Plan contains an invalid or unavailable tool step.");
+      }
       ids.add(step.id);
       if(step.dependsOn.some(dep=>!completed.has(dep)||dep===step.id))return err("validation","Plan dependencies must reference earlier steps; cycles and forward references are rejected.");
       try{const encoded=JSON.stringify(step.input);if(typeof encoded!=="string"||new TextEncoder().encode(encoded).byteLength>64_000)return err("validation","Plan input exceeds 64 KB or is not JSON serializable.");}catch{return err("validation","Plan input is not JSON serializable.");}
