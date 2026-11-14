@@ -189,6 +189,11 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Enter between two and four distinct model IDs before comparing the dataset.");
       return;
     }
+    const unavailableModels = models.filter(model => !availableModels.includes(model));
+    if (unavailableModels.length) {
+      setError("Use only models discovered from the current provider. Not found: " + unavailableModels.join(", "));
+      return;
+    }
     const dataset = selectedDatasetRecord;
     const testSamples = dataset?.samples?.filter(sample => sample.split === "test") ?? [];
     if (!dataset || testSamples.length === 0 || testSamples.length > 1_000) {
@@ -249,6 +254,11 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
     if (models.length < 2 || models.length > 4) {
       setError("Enter between two and four distinct model IDs, separated by commas.");
+      return;
+    }
+    const unavailableModels = models.filter(model => !availableModels.includes(model));
+    if (unavailableModels.length) {
+      setError("Use only models discovered from the current provider. Not found: " + unavailableModels.join(", "));
       return;
     }
     if (!evaluationPrompt.trim()) {
