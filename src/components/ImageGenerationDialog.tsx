@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, LoaderCircle, X } from "lucide-react";
 import { ImageGenerationRouter, type GeneratedImage, type ImageAspectRatio, type ImageSize } from "../core/imageGeneration";
@@ -81,7 +82,7 @@ export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { a
     <section className="image-generation-dialog" role="dialog" aria-modal="true" aria-labelledby="image-generation-title">
       <header className="image-generation-header">
         <div><span className="eyebrow">NEXUS MULTIMODAL</span><h2 id="image-generation-title">Image generation</h2></div>
-        <button type="button" className="icon-btn" onClick={onClose} disabled={working} aria-label="Close image generation"><X size={18}/></button>
+        <button type="button" className="icon-btn" onClick={onClose} disabled={working} aria-label={t("Close image generation")}><X size={18}/></button>
       </header>
       <p className="image-generation-disclosure">Uses Gemini 3.1 Flash Image through the secured NEXUS server proxy. Your prompt and generated image are processed by Google. Do not send private or sensitive information.</p>
       <label className="image-generation-prompt">Describe the image
