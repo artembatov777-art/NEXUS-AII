@@ -43,6 +43,19 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     });
   }, [projects]);
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    void invoke<string[]>("list_workspace_directories").then(roots => {
+      if (!active) return;
+      setWorkspaceRoots(roots);
+      setSelectedWorkspaceRoot(current => roots.includes(current) ? current : roots[0] ?? "");
+    }).catch(cause => {
+      if (active) setError(cause instanceof Error ? cause.message : "Could not load approved workspace folders.");
+    });
+    return () => { active = false; };
+  }, []);
+
   async function refreshDocuments(targetProjectId = projectId) {
     if (!targetProjectId) { setDocuments([]); return; }
     const result = await repository.listDocuments(targetProjectId);
