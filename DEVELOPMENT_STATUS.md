@@ -55,7 +55,7 @@ Residual work: hostile parent-directory TOCTOU protection and durable recovery o
 
 OS credential-vault storage, default-deny runtime policy, per-action approval, bounded provider/MCP transports, redacted audit/trace records, transactional workspace backup/restore, CSP, and narrow Tauri capabilities are implemented.
 
-Remaining work includes integrated adversarial testing, owner-side credential-vault lifecycle checks, broader cross-module recovery, and independent security testing. SQLite, browser stores, checkpoints, and exported backups are not application-level encrypted; protect the device account/storage and treat backups as sensitive plaintext.
+Remaining work includes integrated adversarial testing, owner-side credential-vault lifecycle checks, broader cross-module recovery, and independent security testing. SQLite, browser stores, and checkpoints are not application-level encrypted. Exported backups use AES-256-GCM with PBKDF2-SHA256; the passphrase is never stored and cannot be recovered if lost.
 
 ## Phase VII — Testing & Release 1.0
 
