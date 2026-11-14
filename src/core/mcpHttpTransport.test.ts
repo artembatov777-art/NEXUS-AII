@@ -122,6 +122,15 @@ describe("McpHttpTransport", () => {
   });
 
 
+  it("rejects authentication headers until vault-backed MCP credentials exist", () => {
+    for (const key of ["Authorization", "authorization", "Proxy-Authorization", "X-Api-Key"]) {
+      expect(() => new McpHttpTransport({
+        endpoint: "https://mcp.example/tools",
+        headers: { [key]: "must-not-be-forwarded" }
+      })).toThrow(/managed/);
+    }
+  });
+
   it("prevents custom headers from replacing transport-owned fields", () => {
     expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "Content-Type": "text/plain" } })).toThrow(/managed/);
     expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "MCP-Session-Id": "attacker" } })).toThrow(/managed/);
