@@ -17,6 +17,24 @@ pub(crate) struct RenameEntry {
     pub(crate) destination: PathBuf,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryEntryDetails {
+    pub source: String,
+    pub destination: String,
+    pub source_state: String,
+    pub destination_state: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryOperationDetails {
+    pub operation_id: String,
+    pub valid: bool,
+    pub error: Option<String>,
+    pub entries: Vec<RecoveryEntryDetails>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RenameJournal {
@@ -121,6 +139,70 @@ impl WorkspaceOperationJournal {
         })
     }
 
+    pub fn recovery_details(&self, access: &WorkspaceAccess) -> Result<Vec<RecoveryOperationDetails>, String> {
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let mut statement = connection.prepare(
+            "SELECT operation_id,payload FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?1"
+        ).map_err(|error| format!("Could not inspect pending file operations: {error}"))?;
+        let rows = statement.query_map([MAX_JOURNALED_OPERATIONS as i64], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|error| format!("Could not read pending file operations: {error}"))?;
+        let pending = rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not decode pending file operations: {error}"))?;
+
+        Ok(pending.into_iter().map(|(operation_id, payload)| {
+            match serde_json::from_str::<RenameJournal>(&payload) {
+                Ok(journal) if journal.version == JOURNAL_VERSION
+                    && !journal.entries.is_empty()
+                    && journal.entries.len() <= MAX_JOURNALED_ENTRIES => {
+                    let entries = journal.entries.into_iter().map(|entry| RecoveryEntryDetails {
+                        source_state: describe_journaled_path(access, &entry.source),
+                        destination_state: describe_journaled_path(access, &entry.destination),
+                        source: entry.source.to_string_lossy().into_owned(),
+                        destination: entry.destination.to_string_lossy().into_owned(),
+                    }).collect();
+                    RecoveryOperationDetails {
+                        operation_id,
+                        valid: true,
+                        error: None,
+                        entries,
+                    }
+                }
+                _ => RecoveryOperationDetails {
+                    operation_id,
+                    valid: false,
+                    error: Some("This recovery record is invalid. Review it before clearing the record.".into()),
+                    entries: Vec::new(),
+                }
+            }
+        }).collect())
+    }
+
+    pub fn acknowledge_manual_resolution(&self, operation_id: &str) -> Result<(), String> {
+        if operation_id.trim().is_empty() || operation_id.len() > 128 {
+            return Err("The recovery operation identifier is invalid.".into());
+        }
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let deleted = connection.execute(
+            "DELETE FROM workspace_operation_journal WHERE operation_id=?1",
+            params![operation_id],
+        ).map_err(|error| format!("Could not clear the manually reconciled recovery record: {error}"))?;
+        if deleted == 0 {
+            return Err("The recovery record no longer exists. Refresh the File System panel.".into());
+        }
+        let remaining: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not verify remaining file recovery records.")?;
+        drop(connection);
+        if remaining == 0 {
+            self.set_recovery_error(None)?;
+        }
+        Ok(())
+    }
+
     pub fn recover(&self, access: &WorkspaceAccess) -> Result<(), String> {
         let pending = {
             let connection = self.connection.lock()
@@ -171,6 +253,32 @@ impl WorkspaceOperationJournal {
         *self.recovery_error.lock()
             .map_err(|_| "The file recovery status is unavailable.")? = message;
         Ok(())
+    }
+}
+
+fn describe_journaled_path(access: &WorkspaceAccess, path: &Path) -> String {
+    let Some(parent) = path.parent() else {
+        return "invalid path".into();
+    };
+    let Ok(root) = access.allowed_root_for(parent) else {
+        return "outside approved directory or unavailable".into();
+    };
+    let Ok(canonical_parent) = fs::canonicalize(parent) else {
+        return "parent directory unavailable".into();
+    };
+    if !canonical_parent.starts_with(&root) {
+        return "outside approved directory".into();
+    }
+    let Some(name) = path.file_name() else {
+        return "invalid path".into();
+    };
+    match fs::symlink_metadata(canonical_parent.join(name)) {
+        Ok(metadata) if metadata.file_type().is_symlink() => "link (not followed)".into(),
+        Ok(metadata) if metadata.is_file() => "regular file".into(),
+        Ok(metadata) if metadata.is_dir() => "directory".into(),
+        Ok(_) => "special entry".into(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing".into(),
+        Err(_) => "unavailable".into(),
     }
 }
 
@@ -227,12 +335,29 @@ pub fn get_workspace_operation_recovery_status(
 }
 
 #[tauri::command]
+pub fn get_workspace_operation_recovery_details(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    access: tauri::State<'_, WorkspaceAccess>,
+) -> Result<Vec<RecoveryOperationDetails>, String> {
+    journal.recovery_details(&access)
+}
+
+#[tauri::command]
 pub fn retry_workspace_operation_recovery(
     journal: tauri::State<'_, WorkspaceOperationJournal>,
     access: tauri::State<'_, WorkspaceAccess>,
 ) -> Result<(), String> {
     let _operation_guard = journal.lock_operation()?;
     journal.recover(&access)
+}
+
+#[tauri::command]
+pub fn acknowledge_workspace_operation_recovery(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    operation_id: String,
+) -> Result<(), String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.acknowledge_manual_resolution(&operation_id)
 }
 
 #[cfg(test)]
