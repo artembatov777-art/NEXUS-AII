@@ -25,6 +25,7 @@ import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
 import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
 import { resolveConversationProjectId } from "./lib/conversationProjectContext";
+import { getWorkspacePanelState, type WorkspacePanel } from "./lib/workspacePanels";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -570,6 +571,20 @@ export default function App() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not read clipboard."); }
   }
 
+  function openWorkspacePanel(panel: WorkspacePanel) {
+    const next = getWorkspacePanelState(panel);
+    setCommandPaletteOpen(next.commandPaletteOpen);
+    setSettingsOpen(next.settingsOpen);
+    setMemoryOpen(next.memoryOpen);
+    setGlobalSearchOpen(next.globalSearchOpen);
+    setAgentsOpen(next.agentsOpen);
+    setProjectsOpen(next.projectsOpen);
+    setKnowledgeOpen(next.knowledgeOpen);
+    setTrainingLabOpen(next.trainingLabOpen);
+    setFileSystemOpen(next.fileSystemOpen);
+    setToolsOpen(next.toolsOpen);
+  }
+
   const activeSection = commandPaletteOpen ? "Command palette" : settingsOpen ? "Models & providers" : memoryOpen ? "Memory" : globalSearchOpen ? "Search" : agentsOpen ? "Agents" : projectsOpen ? "Projects" : knowledgeOpen ? "Knowledge base" : trainingLabOpen ? "Training Lab" : fileSystemOpen ? "File system" : toolsOpen ? "Tools & MCP" : "Chat";
   const moduleOpen = activeSection !== "Chat";
 
@@ -579,17 +594,17 @@ export default function App() {
       <button className="new-chat" onClick={newChat} disabled={!conversationsReady}><Plus size={17}/> New conversation <span>⌘ K</span></button>
       <div className="nav-label">WORKSPACE</div>
       <button className={`nav-item ${!moduleOpen ? "selected" : ""}`} aria-current={!moduleOpen ? "page" : undefined} aria-label="Chat workspace" onClick={() => { setCommandPaletteOpen(false); setSettingsOpen(false); setMemoryOpen(false); setGlobalSearchOpen(false); setAgentsOpen(false); setProjectsOpen(false); setKnowledgeOpen(false); setTrainingLabOpen(false); setFileSystemOpen(false); setToolsOpen(false); setActiveId(null); setFocusMode(false); closeMobileNavigation(); }}><MessageSquare size={17}/> Chat <span className="nav-count">{conversations.length}</span></button>
-      <button className={`nav-item ${projectsOpen ? "selected" : ""}`} aria-current={projectsOpen ? "page" : undefined} onClick={() => { setProjectsOpen(true); closeMobileNavigation(); }}><FolderKanban size={17}/> Projects</button>
-      <button className={`nav-item ${memoryOpen ? "selected" : ""}`} aria-current={memoryOpen ? "page" : undefined} onClick={() => { setMemoryOpen(true); closeMobileNavigation(); }}><Sparkles size={17}/> Memory</button>
-      <button className={`nav-item ${knowledgeOpen ? "selected" : ""}`} aria-current={knowledgeOpen ? "page" : undefined} onClick={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}><BookOpen size={17}/> Knowledge base</button>
+      <button className={`nav-item ${projectsOpen ? "selected" : ""}`} aria-current={projectsOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("projects"); closeMobileNavigation(); }}><FolderKanban size={17}/> Projects</button>
+      <button className={`nav-item ${memoryOpen ? "selected" : ""}`} aria-current={memoryOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("memory"); closeMobileNavigation(); }}><Sparkles size={17}/> Memory</button>
+      <button className={`nav-item ${knowledgeOpen ? "selected" : ""}`} aria-current={knowledgeOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("knowledge"); closeMobileNavigation(); }}><BookOpen size={17}/> Knowledge base</button>
       <div className="nav-label nav-label-spaced">INTELLIGENCE</div>
-      <button className={`nav-item ${agentsOpen ? "selected" : ""}`} aria-current={agentsOpen ? "page" : undefined} onClick={() => { setAgentsOpen(true); closeMobileNavigation(); }}><Bot size={17}/> Agents <span className="nav-feature-dot"/></button>
-      <button className={`nav-item ${trainingLabOpen ? "selected" : ""}`} aria-current={trainingLabOpen ? "page" : undefined} onClick={() => { setTrainingLabOpen(true); closeMobileNavigation(); }}><FlaskConical size={17}/> Training Lab</button>
-      <button className={`nav-item ${toolsOpen ? "selected" : ""}`} aria-current={toolsOpen ? "page" : undefined} onClick={() => { setToolsOpen(true); closeMobileNavigation(); }}><Plug size={17}/> Tools & MCP</button>
+      <button className={`nav-item ${agentsOpen ? "selected" : ""}`} aria-current={agentsOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("agents"); closeMobileNavigation(); }}><Bot size={17}/> Agents <span className="nav-feature-dot"/></button>
+      <button className={`nav-item ${trainingLabOpen ? "selected" : ""}`} aria-current={trainingLabOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("training"); closeMobileNavigation(); }}><FlaskConical size={17}/> Training Lab</button>
+      <button className={`nav-item ${toolsOpen ? "selected" : ""}`} aria-current={toolsOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("tools"); closeMobileNavigation(); }}><Plug size={17}/> Tools & MCP</button>
       <div className="nav-label nav-label-spaced">SYSTEM</div>
-      <button className={`nav-item ${fileSystemOpen ? "selected" : ""}`} aria-current={fileSystemOpen ? "page" : undefined} onClick={() => { setFileSystemOpen(true); closeMobileNavigation(); }}><FolderOpen size={17}/> File system</button>
-      <button className={`nav-item ${settingsOpen ? "selected" : ""}`} aria-current={settingsOpen ? "page" : undefined} onClick={() => { setSettingsOpen(true); closeMobileNavigation(); }}><Cpu size={17}/> Models & providers</button>
-      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => { setGlobalSearchOpen(true); closeMobileNavigation(); }} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => {
+      <button className={`nav-item ${fileSystemOpen ? "selected" : ""}`} aria-current={fileSystemOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("files"); closeMobileNavigation(); }}><FolderOpen size={17}/> File system</button>
+      <button className={`nav-item ${settingsOpen ? "selected" : ""}`} aria-current={settingsOpen ? "page" : undefined} onClick={() => { openWorkspacePanel("settings"); closeMobileNavigation(); }}><Cpu size={17}/> Models & providers</button>
+      <div className="history-heading"><span>RECENT</span><div><button className="icon-btn" onClick={() => { openWorkspacePanel("search"); closeMobileNavigation(); }} title="Search all workspace data" aria-label="Search all workspace data"><Search size={14}/></button><button className="icon-btn" onClick={() => {
         if (!conversations.length) return;
         if (window.confirm("Delete all conversations? This cannot be undone.")) {
           setConversations([]);
@@ -601,12 +616,12 @@ export default function App() {
         {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); closeMobileNavigation(); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
         {conversations.filter(c => (c.projectId ?? "") === selectedProjectId).length === 0 && <p className="empty-history">No conversations in this workspace yet.</p>}
       </div>
-      <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => { setSettingsOpen(true); closeMobileNavigation(); }}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
+      <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => { openWorkspacePanel("settings"); closeMobileNavigation(); }}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
     {sidebarOpen && <button className="sidebar-scrim" onClick={dismissMobileNavigation} aria-label="Close navigation"/>}
 
     <main className="main-panel">
-      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><button type="button" className="model-pill" onClick={() => setSettingsOpen(true)} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot independently verify the provider's upstream processing route. Verify it before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); }} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><Settings2 size={18}/></button></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? "DESKTOP" : "WEB PREVIEW"}</div><button type="button" className="model-pill" onClick={() => openWorkspacePanel("settings")} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot independently verify the provider's upstream processing route. Verify it before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? "REMOTE" : "LOCAL*"} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("command")} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); }} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("settings")} aria-label="Settings"><Settings2 size={18}/></button></div></header>
       <section className="chat-area" data-home={active ? "false" : "true"}>
         <div className="chat-heading"><div className="eyebrow"><span/> PERSONAL AI ENVIRONMENT</div><div className="nexus-hero-core" aria-label={`NEXUS system core: ${busy ? "processing" : modelTestState === "passed" ? "connected" : "standby"}`}><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">NEXUS CORE <b>{busy ? "PROCESSING" : modelTestState === "passed" ? "CONNECTED" : "STANDBY"}</b></div><div className="core-label core-label-bottom">NEXUS AU <span>·</span> SYSTEM INTERFACE</div></div><h1>{active?.title ?? "Your intelligence. Connected."}</h1><p>Your models, tools and ideas. Connected in one workspace.</p>
           <div className="nexus-system-grid" aria-label="System overview">
@@ -626,14 +641,14 @@ export default function App() {
             workspaceReady={conversationsReady}
             busy={busy}
             recentActivity={[...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5).map(item => ({ id: item.id, title: item.title, updatedAt: item.updatedAt, messageCount: item.messages.length }))}
-            onOpenAgents={() => { setAgentsOpen(true); closeMobileNavigation(); }}
-            onOpenMemory={() => { setMemoryOpen(true); closeMobileNavigation(); }}
-            onOpenKnowledge={() => { setKnowledgeOpen(true); closeMobileNavigation(); }}
-            onOpenProjects={() => { setProjectsOpen(true); closeMobileNavigation(); }}
-            onOpenFiles={() => { setFileSystemOpen(true); closeMobileNavigation(); }}
-            onOpenTools={() => { setToolsOpen(true); closeMobileNavigation(); }}
-            onOpenTrainingLab={() => { setTrainingLabOpen(true); closeMobileNavigation(); }}
-            onOpenSettings={() => { setSettingsOpen(true); closeMobileNavigation(); }}
+            onOpenAgents={() => { openWorkspacePanel("agents"); closeMobileNavigation(); }}
+            onOpenMemory={() => { openWorkspacePanel("memory"); closeMobileNavigation(); }}
+            onOpenKnowledge={() => { openWorkspacePanel("knowledge"); closeMobileNavigation(); }}
+            onOpenProjects={() => { openWorkspacePanel("projects"); closeMobileNavigation(); }}
+            onOpenFiles={() => { openWorkspacePanel("files"); closeMobileNavigation(); }}
+            onOpenTools={() => { openWorkspacePanel("tools"); closeMobileNavigation(); }}
+            onOpenTrainingLab={() => { openWorkspacePanel("training"); closeMobileNavigation(); }}
+            onOpenSettings={() => { openWorkspacePanel("settings"); closeMobileNavigation(); }}
             onStartPlanning={() => { setDraft("Help me plan and break down my next task into clear steps."); setError(""); }}
           />}
           <label className="chat-project-context">Project context
@@ -655,31 +670,14 @@ export default function App() {
     </main>
 
     {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
-      setCommandPaletteOpen(false);
       if (id === "focus") { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
-      setGlobalSearchOpen(false);
-      setTrainingLabOpen(false);
-      setSettingsOpen(false);
-      setAgentsOpen(false);
-      setMemoryOpen(false);
-      setKnowledgeOpen(false);
-      setProjectsOpen(false);
-      setFileSystemOpen(false);
-      setToolsOpen(false);
-      if (id === "chat") { closeMobileNavigation(); return; }
-      if (id === "new-chat") { newChat(); return; }
-      if (id === "search") { setGlobalSearchOpen(true); closeMobileNavigation(); return; }
-      if (id === "models") setSettingsOpen(true);
-      if (id === "training") setTrainingLabOpen(true);
-      if (id === "agents") setAgentsOpen(true);
-      if (id === "memory") setMemoryOpen(true);
-      if (id === "knowledge") setKnowledgeOpen(true);
-      if (id === "projects") setProjectsOpen(true);
-      if (id === "files") setFileSystemOpen(true);
-      if (id === "tools") setToolsOpen(true);
+      if (id === "chat") { openWorkspacePanel("chat"); closeMobileNavigation(); return; }
+      if (id === "new-chat") { openWorkspacePanel("chat"); newChat(); return; }
+      const panelByCommand: Record<Exclude<NexusCommandId, "focus" | "chat" | "new-chat">, WorkspacePanel> = { search: "search", models: "settings", training: "training", agents: "agents", memory: "memory", knowledge: "knowledge", projects: "projects", files: "files", tools: "tools" };
+      openWorkspacePanel(panelByCommand[id as Exclude<NexusCommandId, "focus" | "chat" | "new-chat">]);
       closeMobileNavigation();
     }} />}
-    {globalSearchOpen && <GlobalSearchPanel conversations={conversations} projects={workspaceProjects} onClose={() => setGlobalSearchOpen(false)} onOpenConversation={conversation => { setSelectedProjectId(conversation.projectId ?? ""); setActiveId(conversation.id); setGlobalSearchOpen(false); setError(""); }} onOpenMemory={() => { setGlobalSearchOpen(false); setMemoryOpen(true); }} onOpenKnowledge={() => { setGlobalSearchOpen(false); setKnowledgeOpen(true); }} />}
+    {globalSearchOpen && <GlobalSearchPanel conversations={conversations} projects={workspaceProjects} onClose={() => setGlobalSearchOpen(false)} onOpenConversation={conversation => { setSelectedProjectId(conversation.projectId ?? ""); setActiveId(conversation.id); setGlobalSearchOpen(false); setError(""); }} onOpenMemory={() => openWorkspacePanel("memory")} onOpenKnowledge={() => openWorkspacePanel("knowledge")} />}
     {memoryOpen && <MemoryPanel onClose={() => setMemoryOpen(false)} />}
     {projectsOpen && <ProjectPanel onClose={() => { setProjectsOpen(false); void refreshProjects(); }} onDeleted={async () => { await refreshProjects(); setConversations(await loadConversations()); await reconcileSemanticIndex(); }} />}
     {knowledgeOpen && <KnowledgePanel onClose={() => setKnowledgeOpen(false)} />}
