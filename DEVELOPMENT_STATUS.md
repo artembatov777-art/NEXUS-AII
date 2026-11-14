@@ -6,7 +6,7 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`.
+- Latest source implementation commit: `f9ce7808e4affa547a777b2cca204f809b5180b5`.
 - Latest completed frontend Quality commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -17,10 +17,12 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43627930950`). Mobile Interface Preview passed on the same commit (run `43627931063`). Native cross-platform verification is pending (run `43627936468`).
+- Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43627930950`). Mobile Interface Preview passed on the same commit (run `43627931063`). Native cross-platform verification for the latest source/test changes is pending; the corrected filesystem test fixtures now persist canonical roots. The current native matrix is queued behind active package jobs.
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - A prior Windows/macOS native run exposed test fixtures persisting non-canonical temporary roots. Both filesystem fixture helpers now persist canonical roots, matching the production grant contract; the corrected cross-platform run is pending.
+- Workspace permission settings load only through a no-follow regular-file handle, reject hard-linked/symlinked settings files, cap input at 1 MiB and 32 roots, and discard non-canonical or retargeted roots. Regression tests cover symlink substitution, oversized settings, and excessive root lists.
+- ToolGateway validates AbortSignal shape before audit lookup or permission checks; missing or malformed cancellation signals fail closed. Audit history must be readable before a tool can execute, and malformed actor/run/trace identifiers are rejected before side effects.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 ## Phase I — Complete interface
@@ -90,12 +92,12 @@ Release acceptance still requires:
 
 ## Resume point
 
-- Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
+- Active phase: **Phase V — NEXUS File System**. Phase VI engineering criteria are recorded complete in `docs/ROADMAP.md`; return to Phase V residuals before proceeding to Phase VII, preserving the approved phase order.
 - Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
 - Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests). Mobile Interface Preview is in progress and native cross-platform verification remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
-- Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
-- Latest source implementation commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`; subsequent documentation-only commits may follow without changing that source baseline.
+- Next engineering block: finish Phase V parent-directory TOCTOU hardening and close the in-app recovery-conflict workflow. The File System panel supports path review, retry, and explicit manual-reconciliation acknowledgment; the owner must resolve conflicting paths without overwrite. Then proceed to Phase VII release acceptance.
+- Latest source implementation commit: `f9ce7808e4affa547a777b2cca204f809b5180b5`; subsequent test/documentation commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
