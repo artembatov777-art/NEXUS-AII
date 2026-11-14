@@ -125,7 +125,7 @@ export class McpHttpTransport implements McpTransport {
     };
     this.headers = { ...(options.headers ?? {}) };
     for (const [key, value] of Object.entries(this.headers)) {
-      if (/^(host|content-length|cookie|origin|content-type|accept|mcp-session-id|mcp-protocol-version)$/i.test(key)) {
+      if (/^(host|content-length|cookie|origin|content-type|accept|authorization|proxy-authorization|x-api-key|mcp-session-id|mcp-protocol-version)$/i.test(key)) {
         throw new Error(`Header "${key}" is managed by the MCP transport and cannot be overridden.`);
       }
       if (!key.trim() || /[\r\n]/.test(key) || typeof value !== "string" || /[\r\n]/.test(value)) {
