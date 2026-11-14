@@ -117,9 +117,9 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       </label>
       {items.length === 0 ? <div className="memory-empty">Create a project first. Knowledge is isolated by project.</div> : <>
         <div className="knowledge-import">
-          <div><strong><FileText size={15}/> Import a document</strong><p>TXT, Markdown, PDF and DOCX, up to 1 MB per file.</p></div>
+          <div><strong><FileText size={15}/> Import a document</strong><p>TXT, Markdown, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file.</p></div>
           <label className="primary-btn"><Upload size={14}/> {working ? "Processing…" : "Choose file"}
-            <input type="file" accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFile(e.target.files?.[0]); e.currentTarget.value = ""; }}/>
+            <input type="file" accept=".txt,.md,.csv,.json,.jsonl,.ndjson,.log,.yaml,.yml,.xml,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFile(e.target.files?.[0]); e.currentTarget.value = ""; }}/>
           </label>
         </div>
         <div className="knowledge-search">
@@ -138,7 +138,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       {status && <div className="knowledge-status">{status}</div>}
       {error && <div className="error-banner">{error}</div>}
       {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
-      <footer className="project-footnote">Stored in the desktop SQLite database (browser preview uses local storage). Imports support TXT, Markdown, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
+      <footer className="project-footnote">Stored in the desktop SQLite database (browser preview uses local storage). Imports support TXT, Markdown, CSV, JSON/JSONL, YAML, XML, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
     </section>
   </div>;
 }

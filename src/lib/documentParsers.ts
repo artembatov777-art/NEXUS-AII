@@ -11,9 +11,21 @@ const MAX_EXTRACTED_CHARACTERS = 1_000_000;
 export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFile> {
   if (file.size > MAX_FILE_BYTES) throw new Error("Files larger than 8 MB are not supported.");
   const name = file.name.toLocaleLowerCase();
-  if (name.endsWith(".txt") || name.endsWith(".md")) {
-    const content = await file.text();
-    if (content.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted text exceeds the 1 MB limit.");
+  if (/\\.(txt|md|csv|json|jsonl|ndjson|log|yaml|yml|xml)$/.test(name)) {
+    const raw = await file.text();
+    if (raw.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Extracted text exceeds the 1 MB limit.");
+    let content = raw;
+    if (name.endsWith(".json")) {
+      try { content = JSON.stringify(JSON.parse(raw), null, 2); }
+      catch { throw new Error("The selected JSON file is not valid JSON."); }
+    } else if (name.endsWith(".jsonl") || name.endsWith(".ndjson")) {
+      try {
+        content = raw.split(/\\r?\\n/).filter(line => line.trim()).map(line => JSON.stringify(JSON.parse(line))).join("\\n");
+      } catch {
+        throw new Error("The selected JSONL file contains an invalid JSON record.");
+      }
+    }
+    if (content.length > MAX_EXTRACTED_CHARACTERS) throw new Error("Normalized document text exceeds the 1 MB limit.");
     return { mediaType: name.endsWith(".md") ? "text/markdown" : "text/plain", content };
   }
   if (name.endsWith(".pdf")) {
@@ -45,5 +57,5 @@ export async function parseKnowledgeFile(file: File): Promise<ParsedKnowledgeFil
     if (!result.value.trim()) throw new Error("No readable text was found in this DOCX file.");
     return { mediaType: "text/plain", content: result.value };
   }
-  throw new Error("Unsupported file type. Choose TXT, Markdown, PDF, or DOCX.");
+  throw new Error("Unsupported file type. Choose TXT, Markdown, CSV, JSON/JSONL, YAML, XML, PDF, or DOCX.");
 }
