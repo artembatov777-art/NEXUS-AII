@@ -29,7 +29,7 @@ export function CommandPalette({ onClose, onRun }: { onClose: () => void; onRun:
 
   return <div className="modal-backdrop command-palette-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="command-palette" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
-      <header><div className="command-palette-title"><Command size={17}/><h2 id="command-palette-title">Command palette</h2><span>⌘ / CTRL + SHIFT + P</span></div><button className="icon-btn" onClick={onClose} aria-label={t("Close command palette")}><X size={17}/></button></header>
+      <header><div className="command-palette-title"><Command size={17}/><h2 id="command-palette-title">{t("Command palette")}</h2><span>⌘ / CTRL + SHIFT + P</span></div><button className="icon-btn" onClick={onClose} aria-label={t("Close command palette")}><X size={17}/></button></header>
       <label className="command-palette-search"><Search size={16}/><input autoFocus value={query} onChange={event => { setQuery(event.target.value); setActiveIndex(0); }} onKeyDown={event => {
         if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex(index => filtered.length ? (index + 1) % filtered.length : 0); }
         else if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex(index => filtered.length ? (index - 1 + filtered.length) % filtered.length : 0); }
@@ -37,9 +37,9 @@ export function CommandPalette({ onClose, onRun }: { onClose: () => void; onRun:
       }} placeholder={t("Search commands and modules…")} aria-label={t("Search commands")} aria-controls="command-palette-options" aria-activedescendant={filtered[activeIndex] ? `command-option-${filtered[activeIndex].id}` : undefined}/></label>
       <div className="command-palette-list" id="command-palette-options" role="listbox" aria-label={t("Available commands")}>
         {filtered.map((item, index) => { const Icon = item.icon; return <button id={`command-option-${item.id}`} key={item.id} role="option" aria-selected={activeIndex === index} className={activeIndex === index ? "is-active" : ""} onMouseEnter={() => setActiveIndex(index)} onClick={() => onRun(item.id)}><span className="command-palette-icon"><Icon size={16}/></span><span><strong>{t(item.title)}</strong><small>{t(item.description)}</small></span><kbd>↵</kbd></button>; })}
-        {filtered.length === 0 && <p className="command-palette-empty">No matching commands.</p>}
+        {filtered.length === 0 && <p className="command-palette-empty">{t("No matching commands.")}</p>}
       </div>
-      <footer><span><Activity size={12}/> NEXUS QUICK CONTROL</span><span>ESC TO CLOSE</span></footer>
+      <footer><span><Activity size={12}/> NEXUS QUICK CONTROL</span><span>{t("ESC TO CLOSE")}</span></footer>
     </section>
   </div>;
 }
