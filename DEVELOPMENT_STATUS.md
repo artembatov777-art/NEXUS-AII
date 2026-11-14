@@ -6,8 +6,8 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit with completed frontend/mobile CI: `c0191259b72c4ae411943cc29b8ee606ea5541d3`
-- Latest workflow configuration commit: `f42dc895034702a3dc15ca83396e5573bc6935f4`
+- Latest source implementation commit with completed frontend/mobile CI: `5f9f25ba657b2f07004bfcf21bb86538fd27dd50`
+- Latest workflow configuration commit: `92aafe70ffc9f8165a5e658bc866e9ca6e6337e7`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -15,10 +15,10 @@ Updated: 2026-11-14
 
 ## Verified automation evidence
 
-- Frontend Quality passed on `c0191259b72c4ae411943cc29b8ee606ea5541d3`: 66 test files, 462 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
+- Frontend Quality passed on `5f9f25ba657b2f07004bfcf21bb86538fd27dd50`: 68 test files, 473 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
 - Mobile Interface Preview build and deployment passed on the same source commit.
-- Native Windows/macOS/Linux tests and installer packaging are not yet confirmed on the latest branch head. The workflow now builds Windows NSIS/MSI, macOS DMG, and Linux AppImage/DEB packages and uploads them for manual smoke tests. A successful matrix result is still required.
-- Earlier native CI exposed an invalid Rust test fixture in the no-overwrite filesystem regression tests. The fixture was corrected to use the shared approved-root harness. A successful current native matrix remains required.
+- Native Windows/macOS/Linux Rust tests and installer packaging are being verified in the current cross-platform matrix. The workflow builds Windows NSIS/MSI, macOS DMG, and Linux AppImage/DEB packages and uploads them for manual smoke tests. Do not treat a queued or partial matrix as a pass.
+- Native filesystem permission snapshots now use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 
 ## Phase I — Complete interface
@@ -35,13 +35,13 @@ Live provider verification is intentionally deferred. It requires a running owne
 
 ## Phase III — Memory & Knowledge
 
-Inspectable memory create/revise/search/delete, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and encrypted workspace export/import are implemented. Chat uses persistent hybrid keyword/semantic memory retrieval with scope and project isolation. Memory and knowledge context is marked as untrusted reference data. Cancellation propagates through retrieval and background semantic-index reconciliation.
+Inspectable memory create/revise/search/delete, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and encrypted workspace export/import are implemented. Knowledge import supports text/Markdown, CSV, JSON/JSONL, YAML, XML, source/configuration files, PDF, and DOCX, with bounded batch import. Chat uses persistent hybrid keyword/semantic memory retrieval with scope and project isolation. Memory and knowledge context is marked as untrusted reference data. Cancellation propagates through retrieval and background semantic-index reconciliation.
 
 The first semantic memory use may download the local embedding model. If that model cannot load, keyword retrieval remains available. Owner-side multi-session persistence and real imported-document workflows remain part of final acceptance.
 
 ## Phase IV — Agents & Tools
 
-The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, and MCP HTTP transport are implemented. MCP requests and responses are bounded, JSON-RPC responses are correlated to request IDs, transport-owned session headers cannot be overridden, and ambiguous external outcomes require owner-confirmed reconciliation.
+The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, and MCP HTTP transport are implemented. Planned runs can include relevant profile memories, selected-project memories, and source-grounded project knowledge as untrusted reference context; cancellation propagates through memory and knowledge retrieval. MCP requests and responses are bounded, JSON-RPC responses are correlated to request IDs, transport-owned session headers cannot be overridden, and ambiguous external outcomes require owner-confirmed reconciliation.
 
 Automatic persisted input-bound result replay is intentionally not implemented: storing arbitrary tool outputs for replay could duplicate private data or unsafe side effects. Duplicate run/step execution is blocked instead. OAuth/bearer authentication and adversarial live-server tests remain open.
 
