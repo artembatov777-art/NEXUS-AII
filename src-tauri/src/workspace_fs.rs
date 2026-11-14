@@ -35,6 +35,31 @@ pub(crate) fn open_regular_file_readonly(path: &Path) -> Result<fs::File, String
     Ok(file)
 }
 
+/// Opens an existing regular file for checked in-place editing without following
+/// a final-component symlink or Windows reparse point.
+fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
+    let mut options = OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options.open(path)
+        .map_err(|error| format!("Could not open the approved file without following links: {error}"))?;
+    let metadata = file.metadata()
+        .map_err(|error| format!("Could not inspect the opened file safely: {error}"))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("NEXUS can edit regular files only, not links or special entries.".into());
+    }
+    Ok(file)
+}
+
 pub struct WorkspaceAccess {
     roots: Mutex<Vec<PathBuf>>,
     persistence_path: PathBuf,
@@ -327,25 +352,10 @@ fn write_workspace_file_inner(
 
             // Open once without following a final symlink. Compare and replace
             // through the same handle so a path swap cannot redirect the write.
-            let mut options = OpenOptions::new();
-            options.read(true).write(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::OpenOptionsExt;
-                options.custom_flags(0x0020_0000);
-            }
-            let mut file = options.open(&target)
+            let mut file = open_regular_file_readwrite(&target)
                 .map_err(|_| "The file changed or is no longer safely readable. Reload it before saving.".to_string())?;
             let opened_metadata = file.metadata()
                 .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
-            if !opened_metadata.is_file() || opened_metadata.file_type().is_symlink() {
-                return Err("NEXUS will not overwrite a link or non-file entry.".into());
-            }
             if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
                 return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
             }
@@ -467,6 +477,7 @@ mod tests {
         };
 
         assert!(open_regular_file_readonly(&link).is_err());
+        assert!(open_regular_file_readwrite(&link).is_err(), "checked edit open must reject final-component symlinks");
         let result = write_workspace_file_inner(link.to_str().unwrap(), "changed", None, &access);
         assert!(result.is_err(), "write must not follow a symlink target");
         assert_eq!(fs::read_to_string(&outside).unwrap(), "outside data");
