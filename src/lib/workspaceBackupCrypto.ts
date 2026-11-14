@@ -7,6 +7,12 @@ const MAX_PLAINTEXT_BYTES = 35_000_000;
 const MAX_CIPHERTEXT_BYTES = 50_000_000;
 const MIN_PASSPHRASE_LENGTH = 12;
 
+function backupAdditionalData(iterations: number): Uint8Array {
+  return new TextEncoder().encode(
+    `${BACKUP_FORMAT}\\0${BACKUP_SCHEMA_VERSION}\\0PBKDF2-SHA256\\0${iterations}\\0AES-256-GCM`
+  );
+}
+
 interface EncryptedWorkspaceBackup {
   format: typeof BACKUP_FORMAT;
   schemaVersion: typeof BACKUP_SCHEMA_VERSION;
@@ -75,7 +81,7 @@ export async function encryptWorkspaceBackup(value: unknown, passphrase: string)
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveBackupKey(passphrase, salt, PBKDF2_ITERATIONS);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: backupAdditionalData(PBKDF2_ITERATIONS) }, key, plaintext);
   const envelope: EncryptedWorkspaceBackup = {
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -101,7 +107,7 @@ export async function decryptWorkspaceBackup(value: unknown, passphrase: string)
       throw new Error("Encrypted backup metadata is invalid.");
     }
     const key = await deriveBackupKey(passphrase, salt, value.iterations);
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: backupAdditionalData(value.iterations) }, key, ciphertext);
     if (plaintext.byteLength > MAX_PLAINTEXT_BYTES) throw new Error("Decrypted backup exceeds the supported size.");
     return JSON.parse(new TextDecoder().decode(plaintext));
   } catch {
