@@ -259,7 +259,7 @@ export default function App() {
   // consistent close action across every module.
   useEffect(() => {
     const dialogOpen = commandPaletteOpen || settingsOpen || memoryOpen || globalSearchOpen || agentsOpen ||
-      projectsOpen || knowledgeOpen || trainingLabOpen || fileSystemOpen || toolsOpen;
+      projectsOpen || knowledgeOpen || trainingLabOpen || fileSystemOpen || toolsOpen || studioOpen;
     if (!dialogOpen) return;
 
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -286,6 +286,7 @@ export default function App() {
         else if (agentsOpen) setAgentsOpen(false);
         else if (fileSystemOpen) window.dispatchEvent(new Event("nexus-file-system-close-request"));
         else if (toolsOpen) setToolsOpen(false);
+        else if (studioOpen) setStudioOpen(false);
         else if (trainingLabOpen) setTrainingLabOpen(false);
         else if (knowledgeOpen) setKnowledgeOpen(false);
         else if (projectsOpen) setProjectsOpen(false);
@@ -308,7 +309,7 @@ export default function App() {
         }
       }
     };
-  }, [commandPaletteOpen, settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen]);
+  }, [commandPaletteOpen, settingsOpen, memoryOpen, globalSearchOpen, agentsOpen, projectsOpen, knowledgeOpen, trainingLabOpen, fileSystemOpen, toolsOpen, studioOpen]);
   function updateMessages(id: string, next: ChatMessage[]) {
     setConversations(current => current.map(c => c.id === id
       ? { ...c, messages: next, title: c.title === "New conversation" ? (next.find(m => m.role === "user")?.content.slice(0, 36) || c.title) : c.title, updatedAt: Date.now() }
