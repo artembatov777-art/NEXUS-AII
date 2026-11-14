@@ -781,6 +781,14 @@ const translations: Record<string, string> = {
   "LOCAL*": "ЛОКАЛЬНЫЙ*",
   "WEB PREVIEW": "ПРЕДПРОСМОТР В БРАУЗЕРЕ",
   "DESKTOP": "НАСТОЛЬНОЕ ПРИЛОЖЕНИЕ",
+  "ROUTE": "МАРШРУТ",
+  "CORE STATE": "СОСТОЯНИЕ ЯДРА",
+  "updated": "обновлено",
+  "UNTESTED": "НЕ ПРОВЕРЕНО",
+  "LOADING": "ЗАГРУЗКА",
+  "No provider key is configured": "Ключ провайдера не настроен",
+  "The provider endpoint has not been checked in this session.": "Адрес провайдера ещё не проверялся в этой сессии.",
+  "The selected model changed. Run a new generation test.": "Выбранная модель изменилась. Повтори проверку генерации.",
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
