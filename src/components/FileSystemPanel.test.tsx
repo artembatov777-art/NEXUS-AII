@@ -74,6 +74,41 @@ describe("FileSystemPanel native workspace access", () => {
     expect(container.textContent).toContain("Filesystem recovery completed");
   });
 
+  it("shows recovery paths and acknowledges manual reconciliation without changing files", async () => {
+    const rootPath = "/home/test/Documents";
+    const operation = {
+      operationId: "rename-123", valid: true, error: null,
+      entries: [{
+        source: rootPath + "/draft.txt", destination: rootPath + "/final.txt",
+        sourceState: "regular file", destinationState: "regular file"
+      }]
+    };
+    let acknowledged = false;
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_workspace_operation_recovery_status") return acknowledged ? null : "Both paths exist and need review.";
+      if (command === "get_workspace_operation_recovery_details") return acknowledged ? [] : [operation];
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      if (command === "acknowledge_workspace_operation_recovery") { acknowledged = true; return undefined; }
+      if (command === "record_tool_audit_event") return true;
+      return undefined;
+    });
+    await renderPanel();
+    expect(container.textContent).toContain("draft.txt");
+    expect(container.textContent).toContain("final.txt");
+    expect(container.textContent).toContain("regular file");
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const acknowledgeButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Confirm manual reconciliation");
+    await act(async () => { acknowledgeButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("acknowledge_workspace_operation_recovery", { operationId: "rename-123" });
+    expect(invokeMock).toHaveBeenCalledWith("record_tool_audit_event", expect.objectContaining({ event: expect.objectContaining({ toolId: "filesystem.recovery-manual-reconciliation" }) }));
+    expect(container.textContent).not.toContain("Filesystem recovery required");
+    expect(container.textContent).toContain("Manual reconciliation recorded");
+    expect(invokeMock.mock.calls.some(([command]) => command === "rename_workspace_entry" || command === "move_workspace_entry" || command === "move_workspace_entries_batch")).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
   it("moves selected files through one native journaled batch and records each move", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
@@ -537,8 +572,9 @@ describe("FileSystemPanel native workspace access", () => {
     const secondButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("other.txt"));
     await act(async () => { secondButton!.click(); });
     expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
-    expect(invokeMock.mock.calls.filter(([command]) => command !== "get_workspace_operation_recovery_status")).toHaveLength(4);
+    expect(invokeMock.mock.calls.filter(([command]) => command !== "get_workspace_operation_recovery_status" && command !== "get_workspace_operation_recovery_details")).toHaveLength(4);
     expect(invokeMock.mock.calls.filter(([command]) => command === "get_workspace_operation_recovery_status")).toHaveLength(2);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "get_workspace_operation_recovery_details")).toHaveLength(2);
     vi.unstubAllGlobals();
   });
 
