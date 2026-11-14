@@ -23,6 +23,32 @@ function constantTimeEqual(left, right) {
 }
 
 function readBody(req) {
+  // Vercel's Node runtime may parse JSON before invoking the function.
+  // Prefer that parsed value, but enforce the same byte limit as the raw-stream path.
+  if (req.body !== undefined) {
+    try {
+      if (Buffer.isBuffer(req.body)) {
+        if (req.body.byteLength > MAX_BODY_BYTES) {
+          return Promise.reject(Object.assign(new Error("Request body is too large."), { statusCode: 413 }));
+        }
+        return Promise.resolve(JSON.parse(req.body.toString("utf8")));
+      }
+      if (typeof req.body === "string") {
+        if (Buffer.byteLength(req.body, "utf8") > MAX_BODY_BYTES) {
+          return Promise.reject(Object.assign(new Error("Request body is too large."), { statusCode: 413 }));
+        }
+        return Promise.resolve(JSON.parse(req.body));
+      }
+      const serialized = JSON.stringify(req.body);
+      if (Buffer.byteLength(serialized, "utf8") > MAX_BODY_BYTES) {
+        return Promise.reject(Object.assign(new Error("Request body is too large."), { statusCode: 413 }));
+      }
+      return Promise.resolve(req.body);
+    } catch {
+      return Promise.reject(Object.assign(new Error("Request body must be valid JSON."), { statusCode: 400 }));
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let size = 0;
     let tooLarge = false;
