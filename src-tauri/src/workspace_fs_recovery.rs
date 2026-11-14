@@ -226,6 +226,15 @@ pub fn get_workspace_operation_recovery_status(
     journal.recovery_status()
 }
 
+#[tauri::command]
+pub fn retry_workspace_operation_recovery(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    access: tauri::State<'_, WorkspaceAccess>,
+) -> Result<(), String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.recover(&access)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
