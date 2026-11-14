@@ -33,8 +33,7 @@ describe("sendMessage AI Core integration", () => {
 
   it("keeps browser preview disconnected from the native model runtime", async () => {
     native.mockReturnValue(false);
-    const result = await sendMessage(settings, messages);
-    expect(result).toContain("Browser preview mode is active");
+    await expect(sendMessage(settings, messages)).rejects.toThrow(/Browser preview supports Gemini through the secured Vercel proxy/i);
     expect(createRouter).not.toHaveBeenCalled();
   });
 
