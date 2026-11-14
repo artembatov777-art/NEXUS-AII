@@ -58,7 +58,7 @@ describe("ToolGateway", () => {
     const result = await gateway.execute(
       "sample",
       { query: "x" },
-      { ...context(), traceId: "trace-1\\nforged" },
+      { ...context(), traceId: "trace-1\nforged" },
       "actor-1"
     );
     expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
