@@ -9,6 +9,7 @@ describe("generateGeminiImage", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(generateGeminiImage(" ", "token")).rejects.toThrow(/Prompt/);
     await expect(generateGeminiImage("A cat", " ")).rejects.toThrow(/access token/);
+    await expect(generateGeminiImage("A cat", "token")).rejects.toThrow(/remote image processing/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -18,24 +19,24 @@ describe("generateGeminiImage", () => {
       text: "Generated",
       model: "gemini-3.1-flash-image"
     }), { status: 200 })));
-    const result = await generateGeminiImage("  A quiet lake  ", "token", { aspectRatio: "16:9", imageSize: "2K" });
+    const result = await generateGeminiImage("  A quiet lake  ", "token", { aspectRatio: "16:9", imageSize: "2K", remoteConsent: true });
     expect(result).toMatchObject({ mimeType: "image/png", byteLength: 8, aspectRatio: "16:9", imageSize: "2K" });
     expect(fetch).toHaveBeenCalledWith("/api/gemini-image", expect.objectContaining({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer token" },
-      body: JSON.stringify({ prompt: "A quiet lake", aspectRatio: "16:9", imageSize: "2K" })
+      body: JSON.stringify({ prompt: "A quiet lake", aspectRatio: "16:9", imageSize: "2K", allowRemoteProcessing: true })
     }));
   });
 
   it("surfaces safe server errors without exposing credentials", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Gemini is temporarily unavailable." }), { status: 502 })));
-    await expect(generateGeminiImage("A landscape", "secret")).rejects.toThrow("Gemini is temporarily unavailable.");
+    await expect(generateGeminiImage("A landscape", "secret", { remoteConsent: true })).rejects.toThrow("Gemini is temporarily unavailable.");
   });
 
   it("rejects malformed or oversized image responses", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       image: { mimeType: "image/svg+xml", data: "PHN2Zz4=", byteLength: 6 }
     }), { status: 200 })));
-    await expect(generateGeminiImage("A landscape", "token")).rejects.toThrow(/invalid or oversized/);
+    await expect(generateGeminiImage("A landscape", "token", { remoteConsent: true })).rejects.toThrow(/invalid or oversized/);
   });
 });
