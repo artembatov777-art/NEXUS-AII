@@ -43,12 +43,12 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 The existing `src/core/multimodal.ts` is a policy-validation layer, not a provider-neutral image-generation implementation. A secured Gemini 3.1 Flash Image server endpoint and a chat-composer dialog have now been added on the working branch; the result is currently dialog-only and downloadable, not yet persisted in conversation history. The existing `VoiceControls` now includes a conversational mode on supported browser/WebView speech APIs; this is not a native/offline voice runtime. These distinctions must remain visible in the UI and release notes.
 
-- [ ] Add a provider-neutral image-generation contract and capability discovery; do not infer image-generation support from a text model's ID.
+- [x] Add a provider-neutral image-generation contract/router with explicit provider capability declarations and capability discovery; generation support is never inferred from a text model's ID.
 - [x] Add a secured Gemini 3.1 Flash Image server-side adapter and chat-composer dialog with explicit remote consent, allowlisted aspect ratios/resolutions, bounded response size, image-signature validation, and download. Quality CI and live provider verification are still pending.
 - [ ] Persist generated images in conversation history and support iterative image editing; current generated results are shown in the dialog and can be downloaded.
 - [x] Implement a real Gemini 3.1 Flash Image adapter with bounded prompt/output handling, clear provider attribution, and explicit remote-processing consent; Quality CI and live provider verification remain pending.
 - [x] Add a chat-composer image-generation control, preview the returned image, and support safe download without placing provider secrets in browser storage; conversation-history persistence remains a separate open item.
-- [ ] Add automated tests for unsupported providers, malformed image responses, size limits, cancellation, and remote-consent denial.
+- [x] Add automated tests for unsupported providers, malformed image responses, size limits, cancellation, remote-consent denial, and Gemini adapter capability mapping. The latest Quality run still needs a post-fix rerun.
 - [x] Add an explicit browser/WebView conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and return to listening. Automated and real-host verification remains pending.
 - [ ] Add a native/offline STT/TTS runtime and platform-specific permission/availability checks; browser/WebView APIs are not evidence of offline support.
 - [x] Keep one-shot push-to-talk available as a lower-permission alternative and disclose that browser/WebView speech services may process audio remotely.
