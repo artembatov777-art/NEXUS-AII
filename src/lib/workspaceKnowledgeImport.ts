@@ -27,7 +27,9 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 
 function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/g, "").toLocaleLowerCase("en-US");
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/g, "");
+  const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith("\\\\");
+  return isWindowsPath ? normalized.toLocaleLowerCase("en-US") : normalized;
 }
 
 function isWithinRoot(root: string, candidate: string): boolean {
