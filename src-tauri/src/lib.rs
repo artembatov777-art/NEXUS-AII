@@ -472,6 +472,47 @@ fn load_provider_credential(handle: &str, loopback: bool) -> Result<Option<Strin
     Ok(Some(key))
 }
 
+struct ProviderSecretRedactor {
+    secret: Option<String>,
+    pending: String,
+}
+
+impl ProviderSecretRedactor {
+    fn new(api_key: Option<&str>) -> Self {
+        Self {
+            secret: api_key.filter(|key| !key.is_empty()).map(str::to_owned),
+            pending: String::new(),
+        }
+    }
+
+    /// Redact across provider delta boundaries while retaining only the suffix
+    /// that could still become the beginning of a split credential.
+    fn push(&mut self, text: &str) -> String {
+        let Some(secret) = self.secret.as_deref() else {
+            return text.to_string();
+        };
+        self.pending.push_str(text);
+        let redacted = self.pending.replace(secret, "[redacted]");
+        let keep = secret.chars().count().saturating_sub(1);
+        let emit = redacted.chars().count().saturating_sub(keep);
+        let split = redacted.char_indices().nth(emit)
+            .map(|(index, _)| index)
+            .unwrap_or(redacted.len());
+        let output = redacted[..split].to_string();
+        self.pending = redacted[split..].to_string();
+        output
+    }
+
+    fn finish(&mut self) -> String {
+        let output = match self.secret.as_deref() {
+            Some(secret) => self.pending.replace(secret, "[redacted]"),
+            None => self.pending.clone(),
+        };
+        self.pending.clear();
+        output
+    }
+}
+
 fn redact_provider_secret(message: &str, api_key: Option<&str>) -> String {
     match api_key.filter(|key| !key.is_empty()) {
         Some(key) => message.replace(key, "[redacted]"),
@@ -603,6 +644,29 @@ mod payload_validation_tests {
         assert!(validate_generation_parameters(Some(2.1), None).is_err());
         assert!(validate_generation_parameters(None, Some(0)).is_err());
         assert!(validate_generation_parameters(None, Some(1_000_001)).is_err());
+    }
+
+    #[test]
+    fn provider_secret_redactor_masks_credentials_split_across_stream_chunks() {
+        let mut redactor = ProviderSecretRedactor::new(Some("super-secret-key"));
+        let output = [
+            redactor.push("Provider echoed: super-"),
+            redactor.push("secret-"),
+            redactor.push("key; continue safely."),
+            redactor.finish(),
+        ].concat();
+        assert_eq!(output, "Provider echoed: [redacted]; continue safely.");
+        assert!(!output.contains("super-secret-key"));
+    }
+
+    #[test]
+    fn provider_secret_redactor_preserves_normal_text_and_handles_no_key_mode() {
+        let mut with_key = ProviderSecretRedactor::new(Some("token"));
+        assert_eq!(with_key.push("ordinary output"), "ordinary out");
+        assert_eq!(with_key.finish(), "put");
+        let mut without_key = ProviderSecretRedactor::new(None);
+        assert_eq!(without_key.push("streamed text"), "streamed text");
+        assert_eq!(without_key.finish(), "");
     }
 
     #[test]
@@ -1355,13 +1419,17 @@ fn forward_sse_chunk(
     data: &str,
     finish_reason: &mut Option<String>,
     api_key: Option<&str>,
+    redactor: &mut ProviderSecretRedactor,
 ) -> Result<bool, String> {
     if data.trim() == "[DONE]" { return Ok(true); }
     let parsed = parse_sse_chunk(data).map_err(|error| redact_provider_secret(&error, api_key))?;
     if let Some(chunk) = parsed {
         if let Some(text) = chunk.text.filter(|value| !value.is_empty()) {
-            on_event.send(serde_json::json!({"type":"text_delta","text":text}))
-                .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+            let safe_text = redactor.push(&text);
+            if !safe_text.is_empty() {
+                on_event.send(serde_json::json!({"type":"text_delta","text":safe_text}))
+                    .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+            }
         }
         if chunk.input_tokens.is_some() || chunk.output_tokens.is_some() {
             on_event.send(serde_json::json!({
@@ -1375,6 +1443,18 @@ fn forward_sse_chunk(
         }
     }
     Ok(false)
+}
+
+fn flush_provider_secret_redactor(
+    on_event: &tauri::ipc::Channel<serde_json::Value>,
+    redactor: &mut ProviderSecretRedactor,
+) -> Result<(), String> {
+    let remaining = redactor.finish();
+    if !remaining.is_empty() {
+        on_event.send(serde_json::json!({"type":"text_delta","text":remaining}))
+            .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1494,6 +1574,7 @@ async fn send_chat_stream(
     let mut total=0usize;
     let mut completed=false;
     let mut finish_reason: Option<String> = None;
+    let mut secret_redactor = ProviderSecretRedactor::new(api_key.as_deref());
     loop {
         let next_chunk = tokio::select! {
             chunk = response.chunk() => chunk.map_err(|e| format!("Provider stream read failed: {e}"))?,
@@ -1514,7 +1595,8 @@ async fn send_chat_stream(
                 if !event_data.is_empty() {
                     let data=event_data.trim_end_matches('\n').to_string();
                     event_data.clear();
-                    if forward_sse_chunk(&on_event, &data, &mut finish_reason, api_key.as_deref())? {
+                    if forward_sse_chunk(&on_event, &data, &mut finish_reason, api_key.as_deref(), &mut secret_redactor)? {
+                        flush_provider_secret_redactor(&on_event, &mut secret_redactor)?;
                         on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
                             .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
                         completed=true;
@@ -1547,7 +1629,8 @@ async fn send_chat_stream(
             }
         }
         if !event_data.trim().is_empty() {
-            if forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, api_key.as_deref())? {
+            if forward_sse_chunk(&on_event, event_data.trim_end_matches('\n'), &mut finish_reason, api_key.as_deref(), &mut secret_redactor)? {
+                flush_provider_secret_redactor(&on_event, &mut secret_redactor)?;
                 on_event.send(serde_json::json!({"type":"completed","finishReason":finish_reason.as_deref().unwrap_or("unknown")}))
                     .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
                 completed = true;
@@ -1557,6 +1640,7 @@ async fn send_chat_stream(
         // a finish_reason. Accept that explicit terminal signal, never a bare EOF.
         if !completed {
             let terminal_reason = completion_reason_for_eof(finish_reason.as_deref())?;
+            flush_provider_secret_redactor(&on_event, &mut secret_redactor)?;
             on_event.send(serde_json::json!({"type":"completed","finishReason":terminal_reason}))
                 .map_err(|_| "The chat stream consumer disconnected.".to_string())?;
             completed = true;
