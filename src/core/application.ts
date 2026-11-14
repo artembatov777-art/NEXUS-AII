@@ -79,7 +79,8 @@ export class NexusApplication {
       if (assistantText.trim()) {
         const saved = await this.conversations.appendMessage(input.conversationId, {
           role: "assistant",
-          content: assistantText
+          content: assistantText,
+          ...(input.assistantMetadata ? { metadata: input.assistantMetadata } : {})
         });
         if (!saved.ok) {
           yield saved;
