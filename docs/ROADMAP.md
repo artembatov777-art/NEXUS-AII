@@ -87,7 +87,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
 - [x] Add bounded raster-image previews (PNG/JPEG/GIF/WebP/BMP, signature-checked, 4 MB cap, read-only) and batch file moves with explicit confirmation, no-overwrite behavior, per-file audit events, and rollback attempts on partial failure; component and Rust tests cover success, conflicts, rollback, invalid image signatures, and size limits.
 - [x] Add safe batch file rename with prefix/suffix patterns, extension preservation, same-directory scope, no-overwrite preflight, per-file audit events, rollback attempts, and component/Rust regression tests.
-- [x] Persist batch-rename intent in SQLite before the first filesystem mutation and recover interrupted batches on startup with no-overwrite rollback; ambiguous path states fail closed and remain visible in the File System panel.
+- [x] Persist batch-rename and batch-move intent in SQLite before the first filesystem mutation and recover interrupted batches on startup with no-overwrite rollback; ambiguous path states fail closed and remain visible in the File System panel.
 - [x] Refuse final-component symlink/reparse-point traversal for regular-file reads, image previews, and content search; create-new writes cannot truncate an existing destination. Existing-file writes use a checked handle and no-follow open flags.
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
