@@ -594,6 +594,43 @@ describe("FileSystemPanel native workspace access", () => {
     confirm.mockRestore();
   });
 
+  it("renames a raster image without attempting to read its binary bytes as text", async () => {
+    const rootPath = "/home/test/Pictures";
+    const oldPath = rootPath + "/diagram.png";
+    const newPath = rootPath + "/diagram-final.png";
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    let currentPath = oldPath;
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string; newName?: string }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{
+        name: currentPath.split("/").pop(), path: currentPath, kind: "file", sizeBytes: 8, modifiedAtMs: 0
+      }];
+      if (command === "read_workspace_image_preview") return { dataUrl, mediaType: "image/png", sizeBytes: 8 };
+      if (command === "rename_workspace_entry") { currentPath = newPath; return newPath; }
+      if (command === "record_tool_audit_event") return true;
+      if (command === "read_workspace_file") throw new Error("Binary image must not be read as text.");
+      return undefined;
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("diagram.png"));
+    await act(async () => { fileButton!.click(); });
+    const renameInput = container.querySelector<HTMLInputElement>('input[aria-label="New file name"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(renameInput, "diagram-final.png");
+      renameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const renameButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Rename");
+    await act(async () => { renameButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("rename_workspace_entry", { path: oldPath, newName: "diagram-final.png" });
+    expect(invokeMock).toHaveBeenCalledWith("read_workspace_image_preview", { path: newPath });
+    expect(invokeMock).not.toHaveBeenCalledWith("read_workspace_file", { path: newPath });
+    expect(container.querySelector(".file-image-preview img")?.src).toBe(dataUrl);
+    confirm.mockRestore();
+  });
+
   it("moves a selected file only after explicit confirmation", async () => {
     const rootPath = "C:\\\\Users\\\\Owner\\\\Documents";
     const oldPath = rootPath + "\\\\draft.txt";
