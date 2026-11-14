@@ -93,6 +93,7 @@ export function ProviderProfilesPanel({
     <label>Saved provider profiles
       <select aria-label="Saved provider profiles" value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
+        if (profile && isDirty && !window.confirm("Discard unsaved changes to the current provider profile and switch?")) return;
         setSelectedId(profile?.id ?? "");
         if (profile) {
           onSelect(profile.settings);
