@@ -147,16 +147,16 @@ impl WorkspaceOperationJournal {
         let connection = self.connection.lock()
             .map_err(|_| "The file operation journal is unavailable.")?;
         let mut statement = connection.prepare(
-            "SELECT operation_id,payload FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?1"
+            "SELECT operation_id,CASE WHEN length(CAST(payload AS BLOB)) <= ?1 THEN payload ELSE '' END,length(CAST(payload AS BLOB)) FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?2"
         ).map_err(|error| format!("Could not inspect pending file operations: {error}"))?;
-        let rows = statement.query_map([MAX_JOURNALED_OPERATIONS as i64], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        let rows = statement.query_map(params![MAX_JOURNAL_PAYLOAD_BYTES as i64, MAX_JOURNALED_OPERATIONS as i64], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
         }).map_err(|error| format!("Could not read pending file operations: {error}"))?;
         let pending = rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("Could not decode pending file operations: {error}"))?;
 
-        Ok(pending.into_iter().map(|(operation_id, payload)| {
-            let parsed = if payload.len() <= MAX_JOURNAL_PAYLOAD_BYTES {
+        Ok(pending.into_iter().map(|(operation_id, payload, payload_size)| {
+            let parsed = if payload_size <= MAX_JOURNAL_PAYLOAD_BYTES as i64 {
                 serde_json::from_str::<RenameJournal>(&payload).ok()
             } else {
                 None
@@ -217,10 +217,10 @@ impl WorkspaceOperationJournal {
             let connection = self.connection.lock()
                 .map_err(|_| "The file operation journal is unavailable.")?;
             let mut statement = connection.prepare(
-                "SELECT operation_id,payload FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?1"
+                "SELECT operation_id,CASE WHEN length(CAST(payload AS BLOB)) <= ?1 THEN payload ELSE '' END,length(CAST(payload AS BLOB)) FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?2"
             ).map_err(|error| format!("Could not inspect pending file operations: {error}"))?;
-            let rows = statement.query_map([MAX_JOURNALED_OPERATIONS as i64], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            let rows = statement.query_map(params![MAX_JOURNAL_PAYLOAD_BYTES as i64, MAX_JOURNALED_OPERATIONS as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
             }).map_err(|error| format!("Could not read pending file operations: {error}"))?;
             rows.collect::<Result<Vec<_>, _>>()
                 .map_err(|error| format!("Could not decode pending file operations: {error}"))?
@@ -232,8 +232,8 @@ impl WorkspaceOperationJournal {
             return Err(message);
         }
 
-        for (operation_id, payload) in pending {
-            if payload.len() > MAX_JOURNAL_PAYLOAD_BYTES {
+        for (operation_id, payload, payload_size) in pending {
+            if payload_size > MAX_JOURNAL_PAYLOAD_BYTES as i64 {
                 let message = "A pending file operation journal exceeds the recovery size limit and was preserved for manual review.".to_string();
                 self.set_recovery_error(Some(message.clone()))?;
                 return Err(message);
