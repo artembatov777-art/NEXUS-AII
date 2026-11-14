@@ -90,7 +90,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Persist batch-rename and batch-move intent in SQLite before the first filesystem mutation and recover interrupted batches on startup with no-overwrite rollback; ambiguous path states fail closed and remain visible in the File System panel.
 - [x] Refuse final-component symlink/reparse-point traversal for regular-file reads, image previews, and content search; create-new writes cannot truncate an existing destination. Existing-file writes use a checked handle and no-follow open flags.
 - [x] Add a visible retry action for interrupted-operation recovery after an owner resolves a path conflict in the file manager.
-- [ ] Add in-app conflict resolution for journal records that remain ambiguous after retry, and complete parent-directory TOCTOU hardening.
+- [x] Add in-app recovery review and explicit manual-reconciliation acknowledgment for journal records that remain ambiguous after retry. NEXUS never overwrites conflicting paths; the owner resolves the conflict in the OS file manager and confirms reconciliation in the File System panel.
+- [ ] Complete parent-directory TOCTOU hardening with directory-handle-relative operations and adversarial race tests.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
 - [x] Revalidate persisted approved roots at startup and discard grants if the canonical path changed or the root became a symlink/reparse point; regression coverage rejects a root replaced by an outside symlink.
