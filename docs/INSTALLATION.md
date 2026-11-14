@@ -45,7 +45,7 @@ Run only the command for the current operating system. For Linux, install the Ta
 3. Create a project before importing project knowledge.
 4. Grant the File System module access only to a disposable test folder at first.
 5. Use synthetic or public test data for the initial Memory, Knowledge, Agents, MCP, and Training Lab checks.
-6. Export a workspace backup before testing restore or destructive operations. Treat the backup as sensitive plaintext.
+6. Export a workspace backup before testing restore or destructive operations. Exports are AES-256-GCM encrypted with a passphrase you choose. Keep both the file and passphrase private; NEXUS cannot recover a lost passphrase.
 
 ## Provider setup
 
