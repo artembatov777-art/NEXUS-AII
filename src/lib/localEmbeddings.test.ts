@@ -42,6 +42,18 @@ describe("LocalTransformerEmbeddingProvider", () => {
     expect(result).toEqual({ ok: true, value: [[0.25, 0.75], [1.25, 0.75]] });
   });
 
+  it("returns cancellation when the signal is aborted during model inference", async () => {
+    const controller = new AbortController();
+    const provider = new LocalTransformerEmbeddingProvider(async () =>
+      async texts => {
+        controller.abort();
+        return { tolist: () => texts.map(() => [1, 0]) };
+      }
+    );
+    const result = await provider.embed(["hello"], controller.signal);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+  });
+
   it("rejects malformed or non-finite tensor output", async () => {
     const provider = new LocalTransformerEmbeddingProvider(async () =>
       async () => ({ tolist: () => [[Number.NaN]] })
