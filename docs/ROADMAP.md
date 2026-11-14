@@ -41,18 +41,20 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 ### Required multimodal and voice capabilities
 
-The existing `src/core/multimodal.ts` is a policy-validation layer, not a provider-neutral image-generation implementation. A secured Gemini 3.1 Flash Image server endpoint and a chat-composer dialog have now been added on the working branch; the result is currently dialog-only and downloadable, not yet persisted in conversation history. The existing `VoiceControls` now includes a conversational mode on supported browser/WebView speech APIs; this is not a native/offline voice runtime. These distinctions must remain visible in the UI and release notes.
+The existing `src/core/multimodal.ts` is a policy-validation layer, not a provider-neutral image-generation implementation. A provider-neutral image router, secured Gemini 3.1 Flash Image server endpoint, and chat-composer dialog are implemented. Generated image data is now attached to assistant messages and round-tripped through browser/native conversation storage; iterative image editing and live provider verification remain open. `VoiceControls` includes a conversational mode on supported browser/WebView speech APIs; this is not a native/offline voice runtime. These distinctions must remain visible in the UI and release notes.
 
 - [x] Add a provider-neutral image-generation contract/router with explicit provider capability declarations and capability discovery; generation support is never inferred from a text model's ID.
 - [x] Add a secured Gemini 3.1 Flash Image server-side adapter and chat-composer dialog with explicit remote consent, allowlisted aspect ratios/resolutions, bounded response size, image-signature validation, and download. Quality CI and live provider verification are still pending.
-- [ ] Persist generated images in conversation history and support iterative image editing; current generated results are shown in the dialog and can be downloaded.
+- [x] Persist generated images as validated message attachments in conversation history and round-trip them through browser/native conversation storage; automated storage/repository tests cover the attachment lifecycle.
+- [ ] Support iterative image editing from an existing generated or user-selected image; the current provider route supports text-to-image generation only.
 - [x] Implement a real Gemini 3.1 Flash Image adapter with bounded prompt/output handling, clear provider attribution, and explicit remote-processing consent; Quality CI and live provider verification remain pending.
 - [x] Add a chat-composer image-generation control, preview the returned image, and support safe download without placing provider secrets in browser storage; conversation-history persistence remains a separate open item.
 - [x] Add automated tests for unsupported providers, malformed image responses, size limits, cancellation, remote-consent denial, and Gemini adapter capability mapping. The latest Quality run still needs a post-fix rerun.
 - [x] Add an explicit browser/WebView conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and return to listening. Automated and real-host verification remains pending.
 - [ ] Add a native/offline STT/TTS runtime and platform-specific permission/availability checks; browser/WebView APIs are not evidence of offline support.
 - [x] Keep one-shot push-to-talk available as a lower-permission alternative and disclose that browser/WebView speech services may process audio remotely.
-- [ ] Test voice-mode lifecycle, duplicate submission prevention, permission denial, unsupported hosts, interruption, and cleanup on navigation/unmount.
+- [x] Add voice-mode regression tests for duplicate transcript submission, permission denial, stopping a conversation, and cleanup on unmount.
+- [ ] Add interruption and unsupported-host integration coverage on actual browser/WebView targets; automated unit coverage and real-host verification remain incomplete.
 - [x] Explicitly document that browser/WebView speech services are host-dependent and do not claim offline/native voice.
 
 
