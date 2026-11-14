@@ -1,12 +1,12 @@
 # NEXUS AU Development Status
 
-Updated: 2026-11-14
+Updated: 2026-11-15
 
 ## Repository state
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `278c88c3e2c9a327b510b51a2874250f948f978a` (Vercel request-body parsing hardening).
+- Latest source implementation commit: `474fd7f1d9c910b62701131f0c85d160d3ca486b` (ordinary-chat execution boundary and regression coverage). Latest branch head: `a9207ab4108a55b7d9292f4d64c9a987ae2f6e6e` (roadmap reconciliation).
 - Latest completed frontend Quality commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -25,6 +25,15 @@ Updated: 2026-11-14
 - ToolGateway validates AbortSignal shape before audit lookup or permission checks; missing or malformed cancellation signals fail closed. Audit history must be readable before a tool can execute, and malformed actor/run/trace identifiers are rejected before side effects.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
+## Current working-session changes (2026-11-15)
+
+- Fixed long-prompt memory retrieval: the hybrid retriever now bounds its search query to 500 characters instead of failing context assembly when a chat message is longer. A regression test covers the bounded query.
+- Added an explicit execution-evidence boundary to ordinary chat requests. The text-only chat path must not claim to have run code, accessed a filesystem, created files, browsed the web, or completed external actions without a real host tool result. This addresses the earlier browser-chat behavior that described filesystem operations without verifiable tool execution.
+- Added a secured Gemini 3.1 Flash Image server endpoint and a chat-composer image-generation dialog. It requires explicit per-request remote-processing consent, keeps the Google API key server-side, restricts model/options, checks image signatures, bounds the response size, and supports preview/download. Generated images are not yet persisted in conversation history; the control is enabled only for the hosted Gemini proxy profile with a NEXUS access token.
+- Added a browser/WebView voice-conversation mode that submits recognized speech through the ordinary chat path, speaks completed answers, supports interruption, and returns to listening. One-shot voice input remains available. This relies on host speech APIs and is not offline/native STT/TTS.
+- Frontend Quality on commit `e9d0c5f9463453e02fed37178990036c9a1283bf` ran 76 test files / 539 tests: 537 passed and 2 failed (one outdated voice callback assertion and one image-proxy test missing the required consent field). Both test defects were corrected in later commits, and additional voice/system-prompt tests were added. A post-fix Quality run has not yet been observed for the current branch head. The current Vercel status is pending; no deployment success is claimed.
+- The last confirmed successful frontend Quality baseline remains `da4a19b8f624c32c8266b45db97bd538a88dec9b`; it predates the current working-session source changes. Do not treat that result as verification of the current head.
+
 ## Phase I — Complete interface
 
 The desktop workspace, restrained JARVIS-inspired visual system, responsive layouts, chat/history, command palette, global search, projects, memory, knowledge, agents, tools/MCP, file system, Training Lab, and provider settings are implemented. Heavy modules are lazy-loaded. Mobile preview is isolated behind `?demo=1` and does not contact a model or native filesystem.
@@ -118,4 +127,4 @@ Do not mark the project complete until all seven phase exit criteria and owner-s
 - Added Vitest coverage for the serverless Gemini proxy: method and bearer-token rejection, message validation, server-side API-key forwarding, normalized upstream errors, output usage mapping, and message-size limits.
 - Fixed request parsing for Vercel's Node runtime: use its pre-parsed `req.body` when present, enforce the same 64 KiB limit, and retain bounded raw-stream parsing for runtimes that do not pre-parse JSON.
 - Corrected the deployment guide's example model so it matches the endpoint allowlist.
-- The proxy is not wired into the public browser/mobile demo. The NEXUS access token must never be embedded in the Vite bundle; enabling a browser client requires an explicit, memory-only owner token entry and a same-origin Vercel deployment. These changes require fresh CI and deployed endpoint verification before being called complete.
+- The isolated mobile demo remains disconnected from AI providers. The regular hosted browser chat now exposes image generation only when the configured provider is the same-origin `/api/gemini` proxy and a NEXUS access token is present in UI memory; the token is never embedded in the Vite bundle. The image route and UI require fresh Quality CI and deployed endpoint verification before being called complete.
