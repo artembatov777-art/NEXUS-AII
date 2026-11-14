@@ -206,17 +206,6 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
     return invoke<KnowledgeChunk[]>("load_knowledge_chunks");
   }
 
-  private async persist(chunks: KnowledgeChunk[]): Promise<Result<void>> {
-    if (!isTauri()) return this.local.add(chunks);
-    try {
-      await this.ensureMigrated();
-      await invoke("save_knowledge_chunks", { chunks });
-      return ok(undefined);
-    } catch (error) {
-      return failure(error, "Could not persist project knowledge.");
-    }
-  }
-
   async add(chunks: KnowledgeChunk[]): Promise<Result<void>> {
     if (!isTauri()) return this.local.add(chunks);
     try {
