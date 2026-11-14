@@ -356,7 +356,7 @@ export function VoiceControls({
       {speaking ? <VolumeX size={15}/> : <Volume2 size={15}/>}<span>{speaking ? "Stop reading" : "Read response"}</span>
     </button>
     {interim && <small aria-live="polite">{interim}</small>}
-    {error && <small role="status">{error}</small>}
+    {error && <small role="status">{t(error)}</small>}
     <small className="voice-note">Voice conversation automatically sends recognized speech to the selected AI provider and reads the answer aloud. Speech recognition may use an online service provided by the browser or desktop WebView. Do not dictate sensitive information unless you trust that service; offline support depends on the host system.</small>
   </div>;
 }
