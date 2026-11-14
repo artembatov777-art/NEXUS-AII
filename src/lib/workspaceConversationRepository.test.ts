@@ -19,6 +19,22 @@ describe("WorkspaceConversationRepository",()=>{
     expect((await repository.save(item)).ok).toBe(true);
     expect(await repository.get(item.id)).toMatchObject({ok:true,value:{projectId:"project-1",messages:[{content:"Remember this",metadata:{sourceReferences:[{documentId:"doc-1",page:4}]}}]}});
   });
+  it("round-trips generated image attachment metadata", async () => {
+    const repository = new WorkspaceConversationRepository(new MemoryStorage());
+    const item = sample("conversation-image", "Generated image");
+    item.messages[0]!.metadata = {
+      imageAttachment: {
+        mimeType: "image/png", data: "iVBORw0KGgo=", byteLength: 8,
+        model: "gemini-3.1-flash-image", aspectRatio: "16:9", imageSize: "1K"
+      }
+    };
+    expect((await repository.save(item)).ok).toBe(true);
+    expect(await repository.get(item.id)).toMatchObject({
+      ok: true,
+      value: { messages: [{ metadata: { imageAttachment: { model: "gemini-3.1-flash-image", aspectRatio: "16:9" } } }] }
+    });
+  });
+
   it("serializes concurrent upserts without losing conversations",async()=>{
     const repository=new WorkspaceConversationRepository(new MemoryStorage());
     const results=await Promise.all([repository.save(sample("conversation-a","A")),repository.save(sample("conversation-b","B"))]);
