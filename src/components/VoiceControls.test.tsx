@@ -78,7 +78,11 @@ describe("VoiceControls", () => {
     const instance = FakeRecognition.latest;
     expect(instance).not.toBeNull();
     const result = Object.assign([{ transcript: "send this to NEXUS" }], { isFinal: true });
-    act(() => instance?.onresult?.({ resultIndex: 0, results: [result] }));
+    act(() => {
+      instance?.onresult?.({ resultIndex: 0, results: [result] });
+      instance?.onresult?.({ resultIndex: 0, results: [result] });
+    });
+    expect(onTranscript).toHaveBeenCalledTimes(1);
     expect(onTranscript).toHaveBeenCalledWith("send this to NEXUS", true);
   });
 
