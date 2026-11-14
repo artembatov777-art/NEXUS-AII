@@ -7,7 +7,7 @@ import type { AgentRunId } from "./agents";
 describe("GatewayAgentToolExecutor", () => {
   it("routes agent tool calls through permissions and audit", async () => {
     const permissions = { authorize: vi.fn().mockResolvedValue("allow") };
-    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([])) };
     const gateway = new ToolGateway(permissions, audit, { now: () => 100 });
     const execute = vi.fn().mockResolvedValue(ok({ title: "result" }));
     gateway.register({
