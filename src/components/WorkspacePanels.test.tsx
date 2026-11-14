@@ -3,6 +3,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LanguageProvider } from "../lib/i18n";
 import { FileSystemPanel } from "./FileSystemPanel";
 import { ToolsPanel } from "./ToolsPanel";
 
@@ -13,7 +14,7 @@ let onClose: ReturnType<typeof vi.fn<() => void>>;
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 function mount(node: ReactNode) {
-  act(() => root.render(node));
+  act(() => root.render(<LanguageProvider>{node}</LanguageProvider>));
 }
 
 function buttonContaining(label: string): HTMLButtonElement {
@@ -39,6 +40,8 @@ function clickBackdrop(selector: string) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
+  window.localStorage.setItem("nexus-au:language:v1", "en");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
