@@ -1,6 +1,7 @@
 mod workspace_fs;
 mod workspace_fs_search;
 mod workspace_fs_ops;
+mod workspace_fs_recovery;
 use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashMap, HashSet};
@@ -2088,10 +2089,17 @@ pub fn run() {
             migrate_database(&mut connection)?;
             app.manage(AppDatabase(Mutex::new(connection)));
             app.manage(ActiveChatStreams::default());
-            app.manage(workspace_fs::WorkspaceAccess::load(data_dir.join("allowed-workspace-directories.json")));
+            let workspace_access = workspace_fs::WorkspaceAccess::load(data_dir.join("allowed-workspace-directories.json"));
+            let operation_journal = workspace_fs_recovery::WorkspaceOperationJournal::open(&data_dir.join("nexus-au.sqlite"))
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            // Roll back any batch rename interrupted by a crash before exposing filesystem commands.
+            // If recovery encounters ambiguity, keep the journal and fail closed for future batch renames.
+            let _ = operation_journal.recover(&workspace_access);
+            app.manage(workspace_access);
+            app.manage(operation_journal);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, save_training_dataset, list_training_datasets, save_training_experiment, list_training_experiments, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard, workspace_fs::list_workspace_directories, workspace_fs::grant_workspace_directory, workspace_fs::revoke_workspace_directory, workspace_fs::list_workspace_entries, workspace_fs::read_workspace_file, workspace_fs::write_workspace_file, workspace_fs::write_workspace_file_checked, workspace_fs::create_workspace_directory, workspace_fs::search_workspace_entries, workspace_fs_search::search_workspace_contents, workspace_fs_ops::rename_workspace_entry, workspace_fs_ops::rename_workspace_entries_batch, workspace_fs_ops::move_workspace_entry, workspace_fs_ops::read_workspace_image_preview])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, save_training_dataset, list_training_datasets, save_training_experiment, list_training_experiments, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard, workspace_fs::list_workspace_directories, workspace_fs::grant_workspace_directory, workspace_fs::revoke_workspace_directory, workspace_fs::list_workspace_entries, workspace_fs::read_workspace_file, workspace_fs::write_workspace_file, workspace_fs::write_workspace_file_checked, workspace_fs::create_workspace_directory, workspace_fs::search_workspace_entries, workspace_fs_search::search_workspace_contents, workspace_fs_ops::rename_workspace_entry, workspace_fs_ops::rename_workspace_entries_batch, workspace_fs_recovery::get_workspace_operation_recovery_status, workspace_fs_ops::move_workspace_entry, workspace_fs_ops::read_workspace_image_preview])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
