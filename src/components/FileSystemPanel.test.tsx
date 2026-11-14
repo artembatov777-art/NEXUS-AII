@@ -218,7 +218,7 @@ describe("FileSystemPanel native workspace access", () => {
     const imagePath = rootPath + "/broken.png";
     const textPath = rootPath + "/notes.txt";
     isTauriMock.mockReturnValue(true);
-    invokeMock.mockImplementation(async (command: string, args?: { path?: string }) => {
+    invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_workspace_directories") return [rootPath];
       if (command === "list_workspace_entries") return [
         { name: "notes.txt", path: textPath, kind: "file", sizeBytes: 5, modifiedAtMs: 0 },
