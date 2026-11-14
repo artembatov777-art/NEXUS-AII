@@ -50,6 +50,8 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState("");
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [renamePrefix, setRenamePrefix] = useState("");
+  const [renameSuffix, setRenameSuffix] = useState("");
   const [preview, setPreview] = useState("");
   const [imagePreview, setImagePreview] = useState<WorkspaceImagePreview | null>(null);
   const [draft, setDraft] = useState("");
@@ -382,6 +384,62 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     }
   }
 
+  async function bulkRenameSelected() {
+    if (!selectedPaths.length || !confirmDiscardDraft("rename the selected files")) return;
+    const prefix = renamePrefix;
+    const suffix = renameSuffix;
+    if (!prefix.trim() && !suffix.trim()) {
+      setError("Enter a prefix or suffix before renaming files.");
+      return;
+    }
+    const entriesToRename = selectedPaths.map(path => {
+      const name = path.split(/[\\\\/]/).pop() ?? path;
+      const extensionIndex = name.lastIndexOf(".");
+      const hasExtension = extensionIndex > 0;
+      const stem = hasExtension ? name.slice(0, extensionIndex) : name;
+      const extension = hasExtension ? name.slice(extensionIndex) : "";
+      return { path, newName: prefix + stem + suffix + extension };
+    });
+    const targets = entriesToRename.map(entry => entry.newName.toLocaleLowerCase());
+    if (new Set(targets).size !== targets.length) {
+      setError("The rename pattern creates duplicate file names. Change the prefix or suffix.");
+      return;
+    }
+    if (entriesToRename.some(entry => !entry.newName.trim() || entry.newName.length > 255)) {
+      setError("The generated file names must contain 1 to 255 characters.");
+      return;
+    }
+    if (!window.confirm("Rename " + entriesToRename.length + " selected files? File extensions are preserved. Existing files will not be overwritten. If a rename fails, NEXUS will try to restore earlier names.")) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const renamedPaths = await invoke<string[]>("rename_workspace_entries_batch", { entries: entriesToRename });
+      let auditFailures = 0;
+      for (const _entry of entriesToRename) {
+        if (!(await recordFilesystemAudit("rename"))) auditFailures += 1;
+      }
+      if (selectedPath) {
+        const selectedIndex = entriesToRename.findIndex(entry => entry.path === selectedPath);
+        if (selectedIndex >= 0) {
+          setSelectedPath(renamedPaths[selectedIndex] ?? "");
+          setRenameName(entriesToRename[selectedIndex].newName);
+        }
+      }
+      setSelectedPaths([]);
+      setRenamePrefix("");
+      setRenameSuffix("");
+      setNotice("Renamed " + renamedPaths.length + " files." + (auditFailures ? " " + auditFailures + " audit entr" + (auditFailures === 1 ? "y could" : "ies could") + " not be saved." : ""));
+      await refresh(currentPath, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      await refresh(currentPath, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createEntry(kind: "file" | "directory") {
     if (!confirmDiscardDraft("create a new entry and refresh the file list")) return;
     const name = newName.trim();
@@ -465,7 +523,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
-            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
+            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || (!renamePrefix && !renameSuffix)}>Rename selected</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
             <div className="file-list" role="list" aria-label="Workspace files">
               {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
                 const name = match.path.split(/[\\/]/).pop() ?? match.path;
