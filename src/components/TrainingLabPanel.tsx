@@ -10,7 +10,7 @@ import { runModelComparison as executeModelComparison, summarizeModelComparison 
 import { formatTrainingDatasetSplitIds, parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
 
-const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
+const splitIds = (value: string) => value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
 
 export function TrainingLabPanel({ onClose, provider, availableModels }: { onClose: () => void; provider: ProviderSettings; availableModels: string[] }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
