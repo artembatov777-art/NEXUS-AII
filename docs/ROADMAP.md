@@ -77,6 +77,7 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 - [x] Import supported text/code files recursively from explicitly approved workspace roots into project knowledge, with depth/file/byte limits, path containment checks, sensitive-directory exclusions, and clear provider-transfer consent.
 - [x] Add reliable indexing, rebuild, and recovery behavior: startup reconciliation, bounded batches, corrupt-row cleanup, cancellation, and resumable repair.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
+- [x] Bound long chat prompts to the memory retriever's 500-character query limit so oversized user messages do not fail profile/project memory retrieval; regression coverage verifies the bounded query.
 - [x] Test privacy boundaries, project-scoped retrieval quality, source citations, and native/browser persistence.
 - [x] Serialize legacy project migration across repository instances and wait for migration before native project mutations; append knowledge through incremental ID-based SQLite upserts to avoid stale-snapshot resurrection.
 
