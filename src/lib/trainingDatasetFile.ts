@@ -34,6 +34,7 @@ export function parseTrainingDatasetFile(text: string): DatasetSample[] {
       throw new Error("Each row requires id, input, expectedOutput, and split (train, validation, or test).");
     }
     const id = item.id.trim();
+    if (id !== item.id || /[\u0000-\u001f\u007f,]/.test(id)) throw new Error("Dataset sample IDs cannot contain whitespace padding, control characters, or commas.");
     if (ids.has(id)) throw new Error(`Duplicate dataset sample ID: ${id}`);
     ids.add(id);
     contentBytes += new TextEncoder().encode(id + item.input + item.expectedOutput).byteLength;
@@ -46,6 +47,10 @@ export function parseTrainingDatasetFile(text: string): DatasetSample[] {
     throw new Error("Dataset must include at least one train, validation, and test sample.");
   }
   return samples;
+}
+
+export function formatTrainingDatasetSplitIds(samples: DatasetSample[], split: DatasetSample["split"]): string {
+  return samples.filter(sample => sample.split === split).map(sample => sample.id).join("\n");
 }
 
 export function serializeTrainingDatasetSamples(samples: DatasetSample[]): string {

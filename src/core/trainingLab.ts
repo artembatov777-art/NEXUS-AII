@@ -103,6 +103,11 @@ function boundedText(value: unknown, max: number): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= max;
 }
 
+function validSampleId(value: unknown): value is string {
+  return boundedText(value, 160) && value.trim() === value &&
+    !/[\u0000-\u001f\u007f,]/.test(value);
+}
+
 function uniqueStrings(values: unknown, maxItems: number, maxLength: number): values is string[] {
   return Array.isArray(values) && values.length <= maxItems &&
     values.every(value => boundedText(value, maxLength)) &&
@@ -126,7 +131,8 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
   const { train, validation, test } = manifest.splits;
   if (!uniqueStrings(train, MAX_SPLIT_ITEMS, 160) || train.length === 0 ||
       !uniqueStrings(validation, MAX_SPLIT_ITEMS, 160) || validation.length === 0 ||
-      !uniqueStrings(test, MAX_SPLIT_ITEMS, 160) || test.length === 0) return false;
+      !uniqueStrings(test, MAX_SPLIT_ITEMS, 160) || test.length === 0 ||
+      [...train, ...validation, ...test].some(id => !validSampleId(id))) return false;
 
   const allIds = [...train, ...validation, ...test];
   if (new Set(allIds).size !== allIds.length) return false;
@@ -139,7 +145,7 @@ export function validateDatasetManifest(value: unknown): value is DatasetManifes
   const sampleIds = new Set<string>();
   let totalBytes = 0;
   for (const sample of manifest.samples) {
-    if (!sample || !boundedText(sample.id, 160) ||
+    if (!sample || !validSampleId(sample.id) ||
         !["train", "validation", "test"].includes(sample.split) ||
         !boundedText(sample.input, 12_000) || !boundedText(sample.expectedOutput, 12_000) ||
         sampleIds.has(sample.id) || splitById.get(sample.id) !== sample.split) return false;

@@ -7,7 +7,7 @@ import { sendMessage } from "../lib/ai";
 import { runDatasetEvaluation as executeDatasetEvaluation } from "../lib/datasetEvaluationRunner";
 import { runDatasetModelComparison } from "../lib/datasetModelComparison";
 import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
-import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
+import { formatTrainingDatasetSplitIds, parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
 
 const splitIds = (value: string) => [...new Set(value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
@@ -304,9 +304,9 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       if (file.size > 1_000_000) throw new Error("Dataset file exceeds the 1 MB import limit.");
       const samples = parseTrainingDatasetFile(await file.text());
       setImportedSamples(samples);
-      setTrainIds(samples.filter(sample => sample.split === "train").map(sample => sample.id).join("\\n"));
-      setValidationIds(samples.filter(sample => sample.split === "validation").map(sample => sample.id).join("\\n"));
-      setTestIds(samples.filter(sample => sample.split === "test").map(sample => sample.id).join("\\n"));
+      setTrainIds(formatTrainingDatasetSplitIds(samples, "train"));
+      setValidationIds(formatTrainingDatasetSplitIds(samples, "validation"));
+      setTestIds(formatTrainingDatasetSplitIds(samples, "test"));
       setSourceReference("file:" + file.name);
       setStatus(`Imported ${samples.length} samples: ${samples.filter(sample => sample.split === "train").length} train, ${samples.filter(sample => sample.split === "validation").length} validation, ${samples.filter(sample => sample.split === "test").length} test. Review privacy, license, and consent metadata before saving.`);
     } catch (cause) {

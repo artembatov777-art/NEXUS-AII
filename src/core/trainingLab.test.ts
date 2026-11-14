@@ -110,6 +110,15 @@ describe("Training Lab governance", () => {
     expect(validateDatasetManifest(withSamples)).toBe(true);
   });
 
+  it("rejects sample IDs that cannot be represented safely in the split editor", () => {
+    for (const id of [" leading", "trailing ", "two\nlines", "comma,id", "control\u0001"]) {
+      expect(validateDatasetManifest({
+        ...manifest,
+        splits: { train: [id], validation: ["validation"], test: ["test"] }
+      })).toBe(false);
+    }
+  });
+
   it("rejects imported samples assigned to the wrong split or missing sample IDs", () => {
     const withSamples: DatasetManifest = {
       ...manifest,

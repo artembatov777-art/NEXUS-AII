@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "./trainingDatasetFile";
+import { formatTrainingDatasetSplitIds, parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "./trainingDatasetFile";
 
 const rows = [
   { id: "a", split: "train", input: "prompt", expectedOutput: "answer" },
@@ -17,6 +17,24 @@ describe("training dataset file format", () => {
   it("normalizes surrounding whitespace in sample IDs before split matching", () => {
     const input = rows.map(row => JSON.stringify({ ...row, id: ` ${row.id} ` })).join("\n");
     expect(parseTrainingDatasetFile(input).map(sample => sample.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("formats imported split IDs as real editor lines", () => {
+    const samples = parseTrainingDatasetFile(rows.map(row => JSON.stringify(row)).join("\n"));
+    expect(formatTrainingDatasetSplitIds(samples, "train")).toBe("a");
+    expect(formatTrainingDatasetSplitIds(samples, "validation")).toBe("b");
+    expect(formatTrainingDatasetSplitIds(samples, "test")).toBe("c");
+    expect(formatTrainingDatasetSplitIds([
+      { ...samples[0], id: "first" },
+      { ...samples[0], id: "second" }
+    ], "train")).toBe("first\nsecond");
+  });
+
+  it("rejects IDs that break the split editor's newline/comma format", () => {
+    for (const id of ["two\nlines", "comma,id", " padded "]) {
+      const data = rows.map((row, index) => JSON.stringify({ ...row, id: index === 0 ? id : row.id })).join("\n");
+      expect(() => parseTrainingDatasetFile(data)).toThrow(/sample IDs/i);
+    }
   });
 
   it("accepts a JSON array export", () => {

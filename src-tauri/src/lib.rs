@@ -1795,7 +1795,8 @@ fn validate_training_dataset_payload(value: &serde_json::Value) -> Result<(Strin
         let mut local = HashSet::new();
         for item in values {
             let sample_id = item.as_str().ok_or_else(|| "Training sample IDs must be strings.".to_string())?;
-            if sample_id.trim().is_empty() || sample_id.len() > 160
+            if sample_id.trim().is_empty() || sample_id.trim() != sample_id || sample_id.len() > 160
+                || sample_id.chars().any(char::is_control) || sample_id.contains(',')
                 || !local.insert(sample_id.to_string()) || !all_ids.insert(sample_id.to_string()) {
                 return Err("Training dataset splits must contain unique, disjoint sample IDs.".into());
             }
@@ -1817,7 +1818,9 @@ fn validate_training_dataset_payload(value: &serde_json::Value) -> Result<(Strin
                 .ok_or_else(|| "Training sample input is required.".to_string())?;
             let expected = sample.get("expectedOutput").and_then(serde_json::Value::as_str)
                 .ok_or_else(|| "Training sample expected output is required.".to_string())?;
-            if sample_id.trim().is_empty() || sample_id.len() > 160 || input.trim().is_empty() || input.len() > 12_000
+            if sample_id.trim().is_empty() || sample_id.trim() != sample_id || sample_id.len() > 160
+                || sample_id.chars().any(char::is_control) || sample_id.contains(',')
+                || input.trim().is_empty() || input.len() > 12_000
                 || expected.trim().is_empty() || expected.len() > 12_000
                 || !["train", "validation", "test"].contains(&split)
                 || !all_ids.contains(sample_id) || !sample_ids.insert(sample_id.to_string()) {
@@ -2011,6 +2014,11 @@ mod database_tests {
             "splits":{"train":["a"],"validation":["b"],"test":["c"]}
         });
         assert!(validate_training_dataset_payload(&valid).is_ok());
+        let mut unsafe_id = valid.clone();
+        unsafe_id["splits"]["train"] = serde_json::json!(["bad\nid"]);
+        assert!(validate_training_dataset_payload(&unsafe_id).is_err());
+        unsafe_id["splits"]["train"] = serde_json::json!(["bad,id"]);
+        assert!(validate_training_dataset_payload(&unsafe_id).is_err());
         let mut overlap = valid.clone();
         overlap["splits"]["test"] = serde_json::json!(["a"]);
         assert!(validate_training_dataset_payload(&overlap).is_err());
