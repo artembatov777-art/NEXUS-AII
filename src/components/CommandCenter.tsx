@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { Activity, ArrowUpRight, BookOpen, Bot, Command, Cpu, FlaskConical, FolderKanban, FolderOpen, MemoryStick, Plug, Settings2, ShieldCheck, Sparkles, Zap } from "lucide-react";
 
 function formatActivityTime(timestamp: number): string {
@@ -43,7 +44,7 @@ export function CommandCenter(props: CommandCenterProps) {
     { label: "Tools & MCP", detail: "External capabilities", icon: Plug, action: onOpenTools, code: "06" },
     { label: "Training Lab", detail: "Evaluation experiments", icon: FlaskConical, action: onOpenTrainingLab, code: "07" }
   ];
-  return <section className="command-center" aria-label="NEXUS command center">
+  return <section className="command-center" aria-label={t("NEXUS command center")}>
     <div className="deck-heading">
       <div><span className="command-kicker"><Activity size={12}/> NEXUS / COMMAND DECK</span><h2>System overview<span className="deck-heading-index">01 — 04</span></h2><p>One control surface for your intelligence layer, workspace and tools.</p></div>
       <button className="deck-configure" onClick={onOpenSettings}><Settings2 size={15}/> Configure core <ArrowUpRight size={13}/></button>
@@ -64,11 +65,11 @@ export function CommandCenter(props: CommandCenterProps) {
         <div className="deck-briefing-mark"><Command size={22}/><span>READY FOR INPUT</span></div>
         <h4>Turn an idea into a plan.</h4><p>Break a goal into steps, identify dependencies and prepare a bounded workflow.</p>
         <button className="deck-plan-button" onClick={onStartPlanning}><Zap size={14}/> Draft a plan <ArrowUpRight size={13}/></button>
-        <button className="deck-settings-link" onClick={onOpenSettings} aria-label="Open model settings"><Cpu size={14}/> Open model configuration</button>
+        <button className="deck-settings-link" onClick={onOpenSettings} aria-label={t("Open model settings")}><Cpu size={14}/> Open model configuration</button>
       </aside>
     </div>
     <div className="deck-bottom">
-      <section className="command-monitor" aria-label="System monitor">
+      <section className="command-monitor" aria-label={t("System monitor")}>
         <div className="deck-section-heading"><div><span>SYSTEM MONITOR</span><h3>Live status</h3></div><small>SESSION HEALTH</small></div>
         <div className="command-monitor-grid">
           <article data-health={workspaceReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Workspace storage</strong><small>{workspaceReady ? "Conversation data loaded" : "Loading workspace data"}</small></div><b>{workspaceReady ? "READY" : "LOADING"}</b></article>
@@ -77,7 +78,7 @@ export function CommandCenter(props: CommandCenterProps) {
           <article data-health={providerReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>Model generation</strong><small>{providerReady ? "Generation test passed" : "Generation not verified"}</small></div><b>{providerReady ? "VERIFIED" : "UNTESTED"}</b></article>
         </div>
       </section>
-      <section className="command-activity" aria-label="Recent workspace activity">
+      <section className="command-activity" aria-label={t("Recent workspace activity")}>
         <div className="deck-section-heading"><div><span>WORKSPACE TIMELINE</span><h3>Recent saved activity</h3></div><small>{recentActivity.length} ITEMS</small></div>
         {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · updated {formatActivityTime(item.updatedAt)}</small></div></li>)}</ol> : <p>No activity recorded yet. Start a conversation to populate the timeline.</p>}
       </section>
