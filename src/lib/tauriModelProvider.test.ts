@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { createOllamaProviderProfile, createOmniRouteProviderProfile, createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
+import { createOllamaProviderProfile, createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -13,7 +13,7 @@ const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
 describe("TauriModelProvider", () => {
-  it("discovers models independently across multiple registered provider profiles", async () => {
+  it("discovers models independently across local and direct cloud provider profiles", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
       if (command !== "list_provider_models") return Promise.resolve(true);
@@ -22,7 +22,7 @@ describe("TauriModelProvider", () => {
     });
     const router = createTauriModelRouterForProfiles([
       { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "", inferenceLocation: "local", credentialHandle: "none" } },
-      { id: "nexus.omniroute", settings: { baseUrl: "https://gateway.example/v1", model: "", inferenceLocation: "remote", credentialHandle: "default" } }
+      { id: "nexus.cloud", settings: { baseUrl: "https://gateway.example/v1", model: "", inferenceLocation: "remote", credentialHandle: "default" } }
     ]);
     if (!router) throw new Error("Expected native model router.");
     const result = await router.listModels();
@@ -30,8 +30,8 @@ describe("TauriModelProvider", () => {
       ok: true,
       value: [
         { id: "qwen-local", providerId: "nexus.ollama", declaredLocation: "local" },
-        { id: "cloud-a", providerId: "nexus.omniroute", declaredLocation: "remote" },
-        { id: "cloud-b", providerId: "nexus.omniroute", declaredLocation: "remote" }
+        { id: "cloud-a", providerId: "nexus.cloud", declaredLocation: "remote" },
+        { id: "cloud-b", providerId: "nexus.cloud", declaredLocation: "remote" }
       ]
     });
     expect(mockedInvoke).toHaveBeenCalledTimes(2);
@@ -48,31 +48,15 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it("prepares OmniRoute only from an owner-supplied HTTPS endpoint without connecting", () => {
-    expect(createOmniRouteProviderProfile("https://gateway.example/v1", "cloud-model")).toEqual({
-      id: "nexus.omniroute",
-      settings: {
-        baseUrl: "https://gateway.example/v1", model: "cloud-model",
-        inferenceLocation: "remote", credentialHandle: "default"
-      }
-    });
-    expect(createOmniRouteProviderProfile("http://127.0.0.1:20128/v1", "local-gateway-model")).toMatchObject({
-      id: "nexus.omniroute",
-      settings: { baseUrl: "http://127.0.0.1:20128/v1", inferenceLocation: "remote" }
-    });
-    expect(() => createOmniRouteProviderProfile("http://gateway.example/v1", "cloud-model")).toThrow(/HTTPS|loopback/i);
-    expect(mockedInvoke).not.toHaveBeenCalled();
-  });
-
   it("registers independent compatible provider profiles without connecting them", () => {
     mockedIsTauri.mockReturnValue(true);
     const router = createTauriModelRouterForProfiles([
       { id: "nexus.ollama", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen", inferenceLocation: "local", credentialHandle: "none" } },
-      { id: "nexus.omniroute", settings: { baseUrl: "https://gateway.example/v1", model: "cloud-model", inferenceLocation: "remote", credentialHandle: "default" } }
+      { id: "nexus.cloud", settings: { baseUrl: "https://gateway.example/v1", model: "cloud-model", inferenceLocation: "remote", credentialHandle: "default" } }
     ]);
     expect(router).not.toBeNull();
     expect(router?.getProvider("nexus.ollama").ok).toBe(true);
-    expect(router?.getProvider("nexus.omniroute").ok).toBe(true);
+    expect(router?.getProvider("nexus.cloud").ok).toBe(true);
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
@@ -89,37 +73,6 @@ describe("TauriModelProvider", () => {
   });
 
   beforeEach(() => { mockedInvoke.mockReset(); mockedIsTauri.mockReset(); });
-
-
-  it("discovers model catalogs independently for prepared Ollama and OmniRoute profiles", async () => {
-    mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockImplementation((command, args) => {
-      if (command !== "list_provider_models") return Promise.resolve(true);
-      const credentialHandle = (args as { credentialHandle: string }).credentialHandle;
-      return Promise.resolve(credentialHandle === "none" ? ["qwen-local"] : ["cloud-a", "cloud-b"]);
-    });
-    const router = createTauriModelRouterForProfiles([
-      createOllamaProviderProfile("qwen-local"),
-      createOmniRouteProviderProfile("https://gateway.example/v1", "cloud-a")
-    ]);
-    if (!router) throw new Error("Expected native profile router.");
-    const catalog = await router.listModels();
-    expect(catalog).toMatchObject({
-      ok: true,
-      value: [
-        { providerId: "nexus.ollama", id: "qwen-local", declaredLocation: "local" },
-        { providerId: "nexus.omniroute", id: "cloud-a", declaredLocation: "remote" },
-        { providerId: "nexus.omniroute", id: "cloud-b", declaredLocation: "remote" }
-      ]
-    });
-    expect(mockedInvoke).toHaveBeenCalledTimes(2);
-    expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
-      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none"
-    });
-    expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
-      baseUrl: "https://gateway.example/v1", credentialHandle: "default"
-    });
-  });
 
 
   it("can stream a model selected from discovery when a prepared profile starts without a model ID", async () => {
@@ -160,7 +113,7 @@ describe("TauriModelProvider", () => {
   });
 
 
-  it("streams another discovered model from a profile that had an initial model selection", async () => {
+  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
       if (command === "list_provider_models") return Promise.resolve(["model-a", "model-b"]);
@@ -173,13 +126,13 @@ describe("TauriModelProvider", () => {
       return Promise.resolve(true);
     });
     const router = createTauriModelRouterForProfiles([{
-      id: "nexus.omniroute",
+      id: "nexus.cloud",
       settings: { baseUrl: "https://gateway.example/v1", model: "model-a", inferenceLocation: "remote", credentialHandle: "default" }
     }]);
     if (!router) throw new Error("Expected native profile router.");
     expect(await router.listModels()).toMatchObject({ ok: true, value: [{ id: "model-a" }, { id: "model-b" }] });
     const events = [];
-    for await (const event of router.stream("nexus.omniroute", {
+    for await (const event of router.stream("nexus.cloud", {
       model: "model-b", messages: [{ role: "user", content: "switch" }]
     })) events.push(event);
     expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
