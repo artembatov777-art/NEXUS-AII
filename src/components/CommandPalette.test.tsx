@@ -32,6 +32,11 @@ describe("NEXUS command palette", () => {
     expect(container.textContent).not.toContain("Agent center");
   });
 
+  it("describes only the active direct provider options", () => {
+    expect(container.textContent).toContain("Configure compatible cloud and Ollama providers");
+    expect(container.textContent).not.toContain("OmniRoute");
+  });
+
   it("exposes new conversation and global search as commands", () => {
     expect(container.textContent).toContain("New conversation");
     expect(container.textContent).toContain("Global search");
