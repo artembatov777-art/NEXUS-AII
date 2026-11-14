@@ -5,6 +5,14 @@ import type { ModelMessage } from "../core/model";
 const message = (role: ModelMessage["role"], content: string): ModelMessage => ({ role, content });
 
 describe("prepareConversationRequest", () => {
+  it("states that ordinary chat cannot claim unexecuted tool actions", () => {
+    const prepared = prepareConversationRequest([message("user", "Create a file in the sandbox.")]);
+    expect(prepared.messages[0]?.role).toBe("system");
+    expect(prepared.messages[0]?.content).toContain("no callable tools are attached");
+    expect(prepared.messages[0]?.content).toContain("Never invent tool names, command output, file paths");
+    expect(prepared.messages[0]?.content).toContain("Report an action as completed only when a real host tool result confirms success.");
+  });
+
   it("keeps the newest contiguous history within the model message-count limit", () => {
     const history = Array.from({ length: 140 }, (_, index) => message(index % 2 ? "assistant" : "user", "turn-" + index));
     const prepared = prepareConversationRequest(history);
