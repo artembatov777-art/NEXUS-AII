@@ -17,6 +17,7 @@
 
 - The supported credential handles are `default` (generic cloud-provider profile) and `ollama` (additional provider profile); the no-key profile is reported as `not_required` and is restricted to loopback endpoints. The webview never receives a previously stored secret.
 - Provider keys are written to the OS credential vault, not SQLite, localStorage, workspace backups, or agent checkpoints.
+- Owner-approved private Training Lab datasets require an explicit transfer confirmation before test inputs are sent to any configured provider. The warning states that a loopback/local-declared endpoint may still forward data remotely; expected outputs remain local. This is a user-consent safeguard, not proof of the provider's upstream route.
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
 - Provider keys are redacted from provider error excerpts.
