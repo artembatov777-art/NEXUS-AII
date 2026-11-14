@@ -45,6 +45,27 @@ describe("multimodal processing policy", () => {
     })).toMatchObject({ allowed: false, reason: expect.stringMatching(/size limit/) });
   });
 
+  it("rejects malformed model capability declarations without throwing", () => {
+    expect(evaluateMultimodalPolicy({
+      ...base,
+      model: { ...base.model, modalities: undefined as unknown as Modality[] }
+    })).toMatchObject({ allowed: false, reason: expect.stringMatching(/capability declaration/) });
+  });
+
+  it("rejects malformed attachment entries without throwing", () => {
+    expect(evaluateMultimodalPolicy({
+      ...base,
+      attachments: [null as unknown as MultimodalRequestPolicy["attachments"][number]]
+    })).toMatchObject({ allowed: false });
+  });
+
+  it("requires an explicit boolean for remote-processing consent", () => {
+    expect(evaluateMultimodalPolicy({
+      ...base,
+      allowRemoteProcessing: undefined as unknown as boolean
+    })).toMatchObject({ allowed: false, reason: expect.stringMatching(/consent must be explicit/) });
+  });
+
   it("rejects undeclared attachment modalities", () => {
     expect(evaluateMultimodalPolicy({
       ...base,
