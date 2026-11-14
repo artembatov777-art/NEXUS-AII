@@ -149,17 +149,34 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     if (!this.database) {
       const pending = new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(DATABASE, 1);
+        let settled = false;
         request.onupgradeneeded = () => {
           const db = request.result;
           if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
         };
         request.onsuccess = () => {
           const db = request.result;
+          // An onblocked request can later succeed after another tab closes.
+          // The caller has already received a rejection, so close this late
+          // connection instead of leaking an unused database handle.
+          if (settled) {
+            db.close();
+            return;
+          }
+          settled = true;
           db.onversionchange = () => { db.close(); this.database = undefined; };
           resolve(db);
         };
-        request.onerror = () => reject(request.error ?? new Error("Could not open vector database."));
-        request.onblocked = () => reject(new Error("Vector database upgrade is blocked by another open tab."));
+        request.onerror = () => {
+          if (settled) return;
+          settled = true;
+          reject(request.error ?? new Error("Could not open vector database."));
+        };
+        request.onblocked = () => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("Vector database upgrade is blocked by another open tab."));
+        };
       });
       this.database = pending.catch(error => { this.database = undefined; throw error; });
     }

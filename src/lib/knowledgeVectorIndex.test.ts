@@ -1,5 +1,32 @@
-import { describe, expect, it } from "vitest";
-import { cosineSimilarity, LOCAL_EMBEDDING_MODEL_ID, normalizeVectorRows, planVectorReconciliation, rankKnowledgeVectorRows, vectorStorageKey } from "./knowledgeVectorIndex";
+import { describe, expect, it, vi } from "vitest";
+import { cosineSimilarity, IndexedDbKnowledgeVectorIndex, LOCAL_EMBEDDING_MODEL_ID, normalizeVectorRows, planVectorReconciliation, rankKnowledgeVectorRows, vectorStorageKey } from "./knowledgeVectorIndex";
+
+describe("IndexedDB connection lifecycle", () => {
+  it("closes a database connection if a previously blocked open request succeeds late", async () => {
+    const request = {
+      onupgradeneeded: null as ((event: IDBVersionChangeEvent) => void) | null,
+      onsuccess: null as ((event: Event) => void) | null,
+      onerror: null as ((event: Event) => void) | null,
+      onblocked: null as ((event: Event) => void) | null,
+      result: null as unknown as IDBDatabase,
+      error: null
+    } as IDBOpenDBRequest;
+    const open = vi.fn(() => request);
+    vi.stubGlobal("indexedDB", { open });
+    try {
+      const index = new IndexedDbKnowledgeVectorIndex();
+      const pending = index.hasProject("project-1");
+      request.onblocked?.(new Event("blocked"));
+      await expect(pending).rejects.toThrow(/blocked by another open tab/i);
+      const close = vi.fn();
+      request.result = { close } as unknown as IDBDatabase;
+      request.onsuccess?.(new Event("success"));
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("knowledge vector index similarity", () => {
   it("scores identical normalized vectors at one", () => {
