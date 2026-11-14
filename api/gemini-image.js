@@ -1,3 +1,5 @@
+export const config = { maxDuration: 60 };
+
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_PROMPT_CHARS = 2_000;
 const MODEL = "gemini-3.1-flash-image";
@@ -70,6 +72,8 @@ export default async function handler(req, res) {
   let body;
   try { body = await readBody(req); }
   catch (error) { return sendJson(res, error.statusCode || 400, { error: error.message || "Invalid request." }); }
+
+  if (body?.allowRemoteProcessing !== true) return sendJson(res, 400, { error: "Explicit approval for remote image processing is required." });
 
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (!prompt || prompt.length > MAX_PROMPT_CHARS) {
