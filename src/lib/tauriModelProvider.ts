@@ -71,12 +71,20 @@ class TauriModelProvider implements ModelProvider {
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
     if (!isValidModelId(request.model)) throw new Error("Requested model ID is invalid.");
-    const configuredModel = this.settings.model.trim();
-    if (configuredModel && request.model !== configuredModel && !this.discoveredModels.has(request.model)) {
-      throw new Error("Requested model is neither the configured model nor a discovered model for this provider.");
+    // A configured model name is only a preference, not proof that the provider
+    // actually serves it. Discover before the first generation request.
+    if (!this.discoveredModels.has(request.model)) {
+      const catalog = await this.listModels();
+      if (request.signal?.aborted) throw new Error("Model request was cancelled.");
+      if (!catalog.ok) {
+        throw Object.assign(new Error(catalog.error.message), {
+          code: catalog.error.code,
+          retryable: catalog.error.retryable
+        });
+      }
     }
-    if (!configuredModel && !this.discoveredModels.has(request.model)) {
-      throw new Error("Discover the provider model catalog before selecting a model for this profile.");
+    if (!this.discoveredModels.has(request.model)) {
+      throw new Error("Requested model is not present in the provider's discovered catalog.");
     }
     if (request.messages.some(message => message.role === "tool")) {
       throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
