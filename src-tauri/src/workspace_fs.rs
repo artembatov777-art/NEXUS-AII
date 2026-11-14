@@ -1,13 +1,39 @@
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
 
 const MAX_ALLOWED_ROOTS: usize = 32;
 const MAX_DIRECTORY_ENTRIES: usize = 500;
+
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Opens only a regular file and refuses to follow a final-component symlink/reparse point.
+/// The caller must still validate the canonical parent against an approved root.
+pub(crate) fn open_regular_file_readonly(path: &Path) -> Result<fs::File, String> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: open the reparse point itself, never its target.
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options.open(path)
+        .map_err(|error| format!("Could not open a regular file without following links: {error}"))?;
+    let metadata = file.metadata().map_err(|error| format!("Could not inspect the opened file: {error}"))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("NEXUS can open regular files only, not links or special entries.".into());
+    }
+    Ok(file)
+}
 
 pub struct WorkspaceAccess {
     roots: Mutex<Vec<PathBuf>>,
@@ -245,12 +271,11 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
     if !canonical.starts_with(&root) {
         return Err("The requested file is outside the allowed directory.".into());
     }
-    let metadata = fs::metadata(&canonical).map_err(|e| format!("Could not inspect file: {e}"))?;
-    if !metadata.is_file() { return Err("Only regular files can be opened.".into()); }
+    let file = open_regular_file_readonly(&canonical)?;
+    let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
     if metadata.len() > MAX_TEXT_FILE_BYTES {
         return Err("This file is larger than the 2 MB preview limit.".into());
     }
-    let file = fs::File::open(&canonical).map_err(|e| format!("Could not read file: {e}"))?;
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut bytes)
         .map_err(|e| format!("Could not read file: {e}"))?;
@@ -272,25 +297,63 @@ fn write_workspace_file_inner(
     if expected_content.map_or(false, |expected| expected.len() as u64 > MAX_TEXT_FILE_BYTES) {
         return Err("The expected file snapshot exceeds the 2 MB edit limit.".into());
     }
-    let target = PathBuf::from(path);
-    let parent = target.parent().ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
+
+    let requested = PathBuf::from(path);
+    let parent = requested.parent()
+        .ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
     let root = access.ensure_new_path_allowed(parent)?;
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Could not resolve the target directory: {error}"))?;
+    if !canonical_parent.starts_with(&root) {
+        return Err("The target directory is outside the allowed workspace.".into());
+    }
+    let name = requested.file_name()
+        .ok_or_else(|| "The file must have a valid name.".to_string())?;
+    let target = canonical_parent.join(name);
+
     match fs::symlink_metadata(&target) {
         Ok(metadata) => {
             if metadata.file_type().is_symlink() || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
-            let existing = fs::canonicalize(&target).map_err(|e| format!("Could not resolve existing file: {e}"))?;
-            if !existing.starts_with(&root) { return Err("The target file is outside the allowed directory.".into()); }
+            let existing = fs::canonicalize(&target)
+                .map_err(|error| format!("Could not resolve existing file: {error}"))?;
+            if !existing.starts_with(&root) {
+                return Err("The target file is outside the allowed directory.".into());
+            }
+
+            // Open once without following a final symlink. Compare and replace
+            // through the same handle so a path swap cannot redirect the write.
+            let mut options = OpenOptions::new();
+            options.read(true).write(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::OpenOptionsExt;
+                options.custom_flags(0x0020_0000);
+            }
+            let mut file = options.open(&target)
+                .map_err(|_| "The file changed or is no longer safely readable. Reload it before saving.".to_string())?;
+            let opened_metadata = file.metadata()
+                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+            if !opened_metadata.is_file() || opened_metadata.file_type().is_symlink() {
+                return Err("NEXUS will not overwrite a link or non-file entry.".into());
+            }
+            if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
+                return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+            }
+
             if let Some(expected) = expected_content {
-                if metadata.len() > MAX_TEXT_FILE_BYTES {
-                    return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+                let mut current_bytes = Vec::with_capacity(opened_metadata.len() as usize);
+                {
+                    let mut limited = (&mut file).take(MAX_TEXT_FILE_BYTES + 1);
+                    limited.read_to_end(&mut current_bytes)
+                        .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
                 }
-                let mut current_bytes = Vec::with_capacity(metadata.len() as usize);
-                let current_file = fs::File::open(&target)
-                    .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
-                current_file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut current_bytes)
-                    .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
                 if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
                     return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
                 }
@@ -300,18 +363,36 @@ fn write_workspace_file_inner(
                     return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
                 }
             }
+            file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
+            file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
+            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             if expected_content.is_some() {
                 return Err("File was removed or moved outside NEXUS since it was opened. Your draft is preserved.".into());
             }
+            // create_new is atomic and refuses to replace a path that appeared
+            // after the preflight check.
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::OpenOptionsExt;
+                options.custom_flags(0x0020_0000);
+            }
+            let mut file = options.open(&target)
+                .map_err(|error| format!("Could not create file without replacing an existing entry: {error}"))?;
+            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
         }
-        Err(error) => return Err(format!("Could not inspect the target file: {error}")),
+        Err(error) => Err(format!("Could not inspect the target file: {error}")),
     }
-    let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&target)
-        .map_err(|e| format!("Could not write file: {e}"))?;
-    file.write_all(content.as_bytes()).map_err(|e| format!("Could not save file: {e}"))?;
-    file.sync_all().map_err(|e| format!("Could not flush file: {e}"))
 }
 
 #[tauri::command]
