@@ -1,11 +1,10 @@
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 12_000;
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 const ALLOWED_MODELS = new Set([
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-pro"
+  "gemini-3.1-flash-lite",
+  "gemini-3.8-flash"
 ]);
 
 function sendJson(res, status, payload) {
@@ -26,17 +25,22 @@ function constantTimeEqual(left, right) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
+    let tooLarge = false;
     const chunks = [];
     req.on("data", chunk => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(Object.assign(new Error("Request body is too large."), { statusCode: 413 }));
-        req.destroy();
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
-      chunks.push(chunk);
+      if (!tooLarge) chunks.push(chunk);
     });
     req.on("end", () => {
+      if (tooLarge) {
+        reject(Object.assign(new Error("Request body is too large."), { statusCode: 413 }));
+        return;
+      }
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
