@@ -150,6 +150,22 @@ describe("conversation workspace storage", () => {
     expect(loaded[0]?.messages[0]?.imageAttachment).toBeUndefined();
   });
 
+  it("rejects browser conversation saves that exceed the generated-image storage budget", async () => {
+    const storage = new MemoryStorage();
+    const oversized: Conversation = {
+      ...base,
+      messages: [{
+        id: "large-image", role: "assistant", content: "Generated image", createdAt: 11,
+        imageAttachment: {
+          mimeType: "image/png", data: "A".repeat(4_400_001), byteLength: 3_300_000,
+          model: "gemini-3.1-flash-image", aspectRatio: "1:1", imageSize: "1K"
+        }
+      }]
+    };
+    await expect(saveConversations([oversized], storage)).rejects.toThrow("browser storage budget");
+    expect(storage.getItem("nexus-au:conversations:v2")).toBeNull();
+  });
+
   it("migrates legacy conversations without losing their content", async () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:conversations:v1", JSON.stringify([{ ...base, projectId: undefined }]));
