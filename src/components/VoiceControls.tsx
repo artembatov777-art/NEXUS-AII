@@ -95,6 +95,7 @@ export function VoiceControls({
         }
         setInterim(partialText);
         if (finalText.trim()) {
+          if (conversationModeRef.current && waitingForResponseRef.current) return;
           waitingForResponseRef.current = conversationModeRef.current;
           if (conversationModeRef.current) lastSpokenTextRef.current = textToSpeak;
           onTranscriptRef.current(finalText.trim(), conversationModeRef.current);
