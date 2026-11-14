@@ -137,12 +137,13 @@ export default function App() {
     if (!knowledgeOpen && semanticIndexStarted.current) return;
     semanticIndexStarted.current = true;
     let active = true;
-    void reconcileSemanticIndex(() => active).catch(cause => {
+    const controller = new AbortController();
+    void reconcileSemanticIndex(() => active, controller.signal).catch(cause => {
       if (active) setError(cause instanceof Error
         ? "Semantic index maintenance failed. Lexical knowledge search remains available. " + cause.message
         : "Semantic index maintenance failed. Lexical knowledge search remains available.");
     });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [knowledgeOpen, knowledgeRepository, embeddings, vectors]);
 
 
@@ -305,7 +306,7 @@ export default function App() {
     try {
       const contextParts: string[] = [];
       const contextWarnings: string[] = [];
-      const remembered = await memoryService.search(text, "profile", 5);
+      const remembered = await memoryService.search(text, "profile", 5, undefined, controller.signal);
       if (!remembered.ok) contextWarnings.push(`Saved profile memory unavailable: ${remembered.error.message}`);
       else if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
       let sourceReferences: import("./types").ChatSourceReference[] = [];
@@ -315,8 +316,8 @@ export default function App() {
       const conversationProjectId = resolveConversationProjectId(target);
       if (conversationProjectId) {
         const [retrieved, projectMemories] = await Promise.all([
-          knowledgeService.retrieve(text, conversationProjectId, 6),
-          memoryService.search(text, "project", 5, conversationProjectId)
+          knowledgeService.retrieve(text, conversationProjectId, 6, controller.signal),
+          memoryService.search(text, "project", 5, conversationProjectId, controller.signal)
         ]);
         if (!retrieved.ok) contextWarnings.push(`Project knowledge unavailable: ${retrieved.error.message}`);
         else {
@@ -511,8 +512,8 @@ export default function App() {
   }
 
 
-  async function reconcileSemanticIndex(isActive: () => boolean = () => true) {
-    const result = await reconcileKnowledgeIndex(knowledgeRepository, vectors, embeddings, isActive, 16);
+  async function reconcileSemanticIndex(isActive: () => boolean = () => true, signal?: AbortSignal) {
+    const result = await reconcileKnowledgeIndex(knowledgeRepository, vectors, embeddings, isActive, 16, signal);
     if (!result.ok && result.error.code !== "cancelled") throw new Error(result.error.message);
   }
   async function exportWorkspaceBackup() {
