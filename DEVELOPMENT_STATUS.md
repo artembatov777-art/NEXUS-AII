@@ -37,10 +37,10 @@ Updated: 2026-11-15
 
 ## Additional work in the current continuation
 
-- Generated images are now persisted as assistant-message attachments in conversation history, rendered inline in the chat, and round-tripped through the existing browser/native conversation storage adapter. Storage validation checks MIME type, base64 shape/decoded byte length, metadata bounds, and a 3.2 MB decoded payload ceiling. Storage and repository regression tests were added. Iterative image editing is not implemented.
+- Generated images are now persisted as assistant-message attachments in conversation history, rendered inline in the chat, and round-tripped through the existing browser/native conversation storage adapter. Storage validation checks MIME type, base64 shape/decoded byte length, metadata bounds, and a 3.2 MB decoded payload ceiling. Browser history also has an aggregate 4.4 MB image-data budget with an explicit save error instead of silently exhausting local storage. Storage and repository regression tests were added. Iterative image editing is not implemented.
 - Voice regression coverage now includes duplicate final-transcript suppression, explicit microphone permission denial, ending a voice conversation, and aborting active recognition on unmount. Real browser/WebView compatibility, interruption behavior, and offline/native STT/TTS remain unverified.
 - Additional image and voice changes are committed on `feat/nexus-core-architecture`. No CI result for the latest continuation commits has been observed; the previous Quality failure was an outdated AI generation-check expectation and the test assertion was updated afterward. Do not claim the latest branch head passes CI until a fresh run completes.
-- Vercel status for the most recently inspected commit was pending. No hosted deployment success is claimed.
+- Vercel status for commit `41287b0589f682bd30e034780a2196912de92623` was `failure`, with the status URL identifying a Vercel build-rate-limit/upgrade page. This is an infrastructure limit, not a passing deployment. No hosted deployment success is claimed.
 
 ## Phase I — Complete interface
 
