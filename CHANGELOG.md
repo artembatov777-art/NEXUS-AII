@@ -19,12 +19,21 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Batch file renames and bulk file moves now persist a SQLite recovery journal before mutation and automatically attempt safe rollback after an interrupted application session; ambiguous paths fail closed and are surfaced in the File System panel.
 
 ### Verification
+- The last observed Frontend Quality run on commit `09007f7dd2ccb7682d55083a5d31da5d52dee209` reported 548 passed / 1 failed across 78 files; the failure was an outdated AI generation-check assertion and the assertion was updated afterward. No post-fix Quality result is available for the current branch head.
+- The current PR head's Vercel check reports a build-rate-limit/upgrade failure. This is not a successful deployment and does not establish whether the latest source builds.
 - Commit `ae4276e`: frontend Quality passed with 52 test files / 311 tests; `npm audit --audit-level=high` reported 0 vulnerabilities.
 - Commit `ae4276e`: Mobile Interface Preview build and deployment passed.
 - Commit `ae4276e`: Native Windows/macOS/Linux matrix passed, including Rust tests and native executable builds. Subsequent conflict-snapshot and draft-recovery changes are not covered by that run and require fresh CI.
 - Commit `f06625cdc9c3165e3ea4ca93f21ae69354135c0d`: fresh Frontend Quality passed with 69 test files / 485 tests, TypeScript/Vite production build, and npm audit reporting 0 vulnerabilities. Native cross-platform verification for this revision remains pending.
 
 ### Added
+- Provider-neutral image-generation router with explicit capability discovery, bounded prompts/results, cancellation, and remote-processing consent.
+- Secured Gemini 3.1 Flash Image adapter and chat-composer generation dialog with preview and download.
+- Generated images persist as assistant-message attachments in chat history, render inline, and round-trip through browser storage, native SQLite schema v10, and encrypted workspace backups.
+- Browser image history enforces an aggregate storage budget; native and browser persistence validate MIME type, canonical base64 padding, decoded size, and image metadata.
+- Conversational voice mode for supported browser/WebView speech APIs, including automatic speech submission, spoken responses, interruption controls, and return-to-listening behavior.
+- Regression coverage for duplicate voice transcript suppression, microphone permission denial, voice-session shutdown/unmount cleanup, and image attachment storage.
+
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
 - Resumable agent registry exposes metadata-only descriptors, and the Control Center displays registered agent limits plus checkpointed final preview output.
 - Editable local agent profile with validated execution budgets, local persistence, and versioned runtime replacement; active/waiting runs block profile changes.
