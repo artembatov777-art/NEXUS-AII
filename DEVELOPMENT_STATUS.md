@@ -51,7 +51,7 @@ The later commits include documentation and provider-profile UX/test changes. CI
 - Training Lab model comparison now preserves successful model outputs when one provider fails; cancellation remains global.
 - Actual model-weight training, LoRA execution, and checkpoint/artifact management are not implemented yet.
 - Provider profiles support multiple saved endpoint configurations without storing API keys; the UI confirms profile deletion and protects unsaved changes when switching profiles. Regression tests were added, but these latest tests have not yet been confirmed by CI.
-- The File System panel supports bounded raster-image previews and batch file moves with rollback attempts; component and Rust tests cover the current implementation. The roadmap distinguishes this from broader bulk organization still outstanding.
+- The File System panel supports bounded raster-image previews, batch file moves, and batch file renaming with prefix/suffix patterns, extension preservation, same-directory scope, no-overwrite preflight, per-file audit events, and rollback attempts. Component and Rust regression tests cover the new batch-rename paths; current-head CI must confirm them.
 - Owner-approved private Training Lab datasets now require explicit transfer confirmation regardless of the declared provider route. The warning explains that a local/loopback endpoint may still forward requests remotely; expected outputs remain local. A core policy regression test was added, but current-head CI has not yet been verified.
 
 ### Voice
