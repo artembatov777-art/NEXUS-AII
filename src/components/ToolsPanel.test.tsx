@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LanguageProvider } from "../lib/i18n";
 
 const { runtime, createRuntime } = vi.hoisted(() => {
   const runtime = {
@@ -21,6 +22,14 @@ import { ToolsPanel } from "./ToolsPanel";
 
 let container: HTMLDivElement;
 let root: Root;
+
+function renderInEnglish(node: ReactNode) {
+  act(() => root.render(<LanguageProvider>{node}</LanguageProvider>));
+}
+
+async function renderInEnglishAsync(node: ReactNode) {
+  await renderInEnglishAsync(<LanguageProvider>{node}</LanguageProvider>); });
+}
 const onClose = vi.fn();
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -31,6 +40,7 @@ function inputValue(element: HTMLInputElement, value: string) {
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.localStorage.setItem("nexus-au:language:v1", "en");
   vi.clearAllMocks();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -41,7 +51,7 @@ afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 describe("ToolsPanel MCP management", () => {
   it("saves a secure endpoint, initializes a session, discovers tools and shows live status", async () => {
-    await act(async () => { root.render(<ToolsPanel onClose={onClose} />); });
+    await act(async () => { root.render(<ToolsPanel onClose={onClose} />);
     inputValue(container.querySelector<HTMLInputElement>('[aria-label="MCP server name"]')!, "Demo server");
     inputValue(container.querySelector<HTMLInputElement>('[aria-label="MCP endpoint URL"]')!, "https://mcp.example.com/rpc");
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Save & connect"))!.click(); });
@@ -54,7 +64,7 @@ describe("ToolsPanel MCP management", () => {
 
   it("disconnects and removes a saved endpoint", async () => {
     window.localStorage.setItem("nexus-au:mcp-servers:v1", JSON.stringify([{ id: "demo-server", name: "Demo server", endpoint: "https://mcp.example.com/rpc" }]));
-    await act(async () => { root.render(<ToolsPanel onClose={onClose} />); });
+    await renderInEnglishAsync(<ToolsPanel onClose={onClose} />);
     expect(runtime.connectMcpHttp).toHaveBeenCalled();
     await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Remove Demo server"]')!.click(); });
     expect(runtime.mcpClient.disconnect).toHaveBeenCalledWith("demo-server");
@@ -63,7 +73,7 @@ describe("ToolsPanel MCP management", () => {
 
   it("reconnects by replacing the existing session instead of failing as a duplicate", async () => {
     window.localStorage.setItem("nexus-au:mcp-servers:v1", JSON.stringify([{ id: "demo-server", name: "Demo server", endpoint: "https://mcp.example.com/rpc" }]));
-    await act(async () => { root.render(<ToolsPanel onClose={onClose} />); });
+    await renderInEnglishAsync(<ToolsPanel onClose={onClose} />);
     await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Reconnect Demo server"]')!.click(); });
     expect(runtime.mcpClient.disconnect).toHaveBeenCalledWith("demo-server");
     expect(runtime.connectMcpHttp).toHaveBeenCalledTimes(2);
