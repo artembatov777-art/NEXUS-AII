@@ -17,6 +17,14 @@ describe("knowledge retrieval",()=>{
   const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture");
   expect(result.ok&&result.value[0].record.id).toBe("lex");
  });
+ it("propagates cancellation instead of silently returning lexical-only memory results",async()=>{
+  const records=[rec("lex")];const repository:MemorySearchRepository={search:async()=>ok(records),getByIds:async()=>ok(records)};
+  const controller=new AbortController();
+  const embeddings:EmbeddingProvider={embed:async()=>{controller.abort();return {ok:false,error:{code:"cancelled",message:"cancelled",retryable:false}};}};
+  const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},search:async()=>[]};
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture","all",5,controller.signal);
+  expect(result).toMatchObject({ok:false,error:{code:"cancelled"}});
+ });
  it("never returns semantic matches from another project",async()=>{
   const chunks=[
    {id:"same-project",documentId:"d1",projectId:"p1",text:"Allowed project content",sourceLabel:"allowed.md"},
