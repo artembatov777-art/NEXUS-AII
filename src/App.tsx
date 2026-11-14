@@ -820,6 +820,7 @@ export default function App() {
       onOpenAgents={() => openWorkspacePanel("agents")}
       onOpenFiles={() => openWorkspacePanel("files")}
       onOpenTools={() => openWorkspacePanel("tools")}
+      onOpenKnowledge={() => openWorkspacePanel("knowledge")}
       onOpenChat={() => openWorkspacePanel("chat")}
     /></Suspense>}
     {agentsOpen && <Suspense fallback={moduleLoadingFallback}><AgentControlCenter key={`${provider.baseUrl}|${provider.model}|${provider.credentialHandle ?? "default"}|${provider.inferenceLocation}|${hasProviderKey}|${localNoAuth}`} onClose={() => setAgentsOpen(false)} providerSettings={provider} hasProviderKey={hasProviderKey || localNoAuth} projectId={selectedProjectId || undefined} /></Suspense>}
