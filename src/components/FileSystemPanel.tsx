@@ -125,6 +125,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   async function searchFiles() {
     const query = searchQuery.trim();
     if (!currentPath || !query) return;
+    if (!confirmDiscardDraft("search files")) return;
     setBusy(true);
     setError("");
     setSelectedPath("");

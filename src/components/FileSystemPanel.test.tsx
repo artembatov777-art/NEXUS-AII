@@ -142,6 +142,45 @@ describe("FileSystemPanel native workspace access", () => {
     expect(Array.from(container.querySelectorAll("button")).some(button => button.textContent?.includes("Move selected"))).toBe(false);
   });
 
+  it("preserves an unsaved draft when the owner cancels a file search", async () => {
+    const rootPath = "/home/test/Documents";
+    const filePath = rootPath + "/notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "notes.txt", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }
+      ];
+      if (command === "read_workspace_file") return "original";
+      return undefined;
+    });
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("notes.txt"));
+    await act(async () => { fileButton!.click(); });
+    const editButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Edit file"));
+    await act(async () => { editButton!.click(); });
+    const editor = container.querySelector<HTMLTextAreaElement>("textarea.file-editor")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, "unsaved draft");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search approved folders"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(searchInput, "needle");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const searchButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Search"));
+    await act(async () => { searchButton!.click(); });
+
+    expect(confirm).toHaveBeenCalledWith("You have unsaved file edits. Discard them and search files?");
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
+    expect(invokeMock).not.toHaveBeenCalledWith("search_workspace_entries", expect.anything());
+    confirm.mockRestore();
+  });
+
   it("does not pretend browser preview can access local folders", async () => {
     await renderPanel();
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();
