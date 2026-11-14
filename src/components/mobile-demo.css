@@ -600,3 +600,5 @@
     transition-duration: .01ms !important;
   }
 }
+
+.demo-language-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#c8cede;font-size:12px}.demo-language-setting select{min-width:112px;background:#101722;border:1px solid #354154;border-radius:8px;padding:9px 10px;color:#f0f2f8;font:inherit}.demo-language-setting select:focus{outline:2px solid #816bb7;outline-offset:2px}
