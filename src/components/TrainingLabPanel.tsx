@@ -4,7 +4,7 @@ import { extractNumericExperimentMetrics, requiresExplicitDatasetTransferConfirm
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
-import { runDatasetEvaluation } from "../lib/datasetEvaluationRunner";
+import { runDatasetEvaluation as executeDatasetEvaluation } from "../lib/datasetEvaluationRunner";
 import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
 import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
@@ -148,7 +148,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setError("");
     setStatus(`Evaluating ${testSamples.length} held-out test samples with ${provider.model}. Expected outputs remain local.`);
     try {
-      const evaluation = await runDatasetEvaluation(testSamples, async (sample, signal) =>
+      const evaluation = await executeDatasetEvaluation(testSamples, async (sample, signal) =>
         sendMessage(provider, [{
           id: crypto.randomUUID(),
           role: "user",
