@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { err, ok } from "./result";
-import { ImageGenerationRouter, type ImageGenerationProvider } from "./imageGeneration";
+import { ImageGenerationRouter, type ImageGenerationProvider, type ImageGenerationRequest, type GeneratedImage } from "./imageGeneration";
 
 const capabilities = {
   id: "test-image",
@@ -20,7 +20,7 @@ const output = {
   aspectRatio: "1:1" as const,
   imageSize: "1K" as const
 };
-const provider = (generate = vi.fn(async () => ok(output))): ImageGenerationProvider => ({
+const provider = (generate: ImageGenerationProvider["generate"] = async () => ok(output)): ImageGenerationProvider => ({
   capabilities: { ...capabilities, aspectRatios: [...capabilities.aspectRatios], imageSizes: [...capabilities.imageSizes] },
   generate
 });
@@ -47,7 +47,7 @@ describe("ImageGenerationRouter", () => {
   });
 
   it("routes supported requests and trims prompts", async () => {
-    const generate = vi.fn(async (request) => ok({ ...output, aspectRatio: request.aspectRatio, imageSize: request.imageSize }));
+    const generate: ImageGenerationProvider["generate"] = vi.fn(async (request: ImageGenerationRequest) => ok({ ...output, aspectRatio: request.aspectRatio, imageSize: request.imageSize }));
     const router = new ImageGenerationRouter();
     router.register(provider(generate));
     const result = await router.generate("test-image", {
@@ -63,7 +63,7 @@ describe("ImageGenerationRouter", () => {
       prompt: "A lake", aspectRatio: "1:1", imageSize: "1K", allowRemoteProcessing: true
     });
     expect(missing).toMatchObject({ ok: false, error: { code: "provider_unavailable" } });
-    const generate = vi.fn(async () => ok({ ...output, mimeType: "image/svg+xml" } as never));
+    const generate: ImageGenerationProvider["generate"] = vi.fn(async () => ok({ ...output, mimeType: "image/svg+xml" } as unknown as GeneratedImage));
     router.register(provider(generate));
     const unsupported = await router.generate("test-image", {
       prompt: "A lake", aspectRatio: "9:16", imageSize: "1K", allowRemoteProcessing: true
