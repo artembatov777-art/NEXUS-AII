@@ -71,6 +71,33 @@ describe("LocalStorageMemoryRepository", () => {
     expect(results.ok && results.value[0].id).toBe(specific.id);
   });
 
+  it("rejects malformed memory records before they can poison local storage", async () => {
+    const storage = new FakeStorage();
+    const repository = new LocalStorageMemoryRepository(storage);
+    const invalid = [
+      record({ id: "" as MemoryRecord["id"] }),
+      record({ content: " ".repeat(10) }),
+      record({ category: "unknown" as MemoryRecord["category"] }),
+      record({ scope: "project", projectId: undefined }),
+      record({ scope: "profile", projectId: "unexpected-project" }),
+      record({ tags: ["duplicate", "duplicate"] }),
+      record({ source: { type: "unknown" as MemoryRecord["source"]["type"], label: "source" } })
+    ];
+    for (const item of invalid) {
+      expect(await repository.save(item)).toMatchObject({ ok: false, error: { code: "validation" } });
+    }
+    expect(storage.getItem("nexus-au:memory:v1")).toBeNull();
+  });
+
+  it("rejects corrupted records with invalid nested metadata when reading storage", async () => {
+    const storage = new FakeStorage();
+    storage.values.set("nexus-au:memory:v1", JSON.stringify([
+      { ...record(), source: { type: "unknown", label: "bad" } }
+    ]));
+    const result = await new LocalStorageMemoryRepository(storage).list("all", 10);
+    expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
+  });
+
   it("does not silently accept corrupted stored data", async () => {
     const storage = new FakeStorage();
     storage.values.set("nexus-au:memory:v1", "{broken");

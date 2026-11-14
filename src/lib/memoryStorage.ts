@@ -9,18 +9,28 @@ export interface StorageLike {
 const MEMORY_STORAGE_KEY = "nexus-au:memory:v1";
 
 function isMemoryRecord(value: unknown): value is MemoryRecord {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Partial<MemoryRecord>;
-  return typeof record.id === "string" &&
-    typeof record.content === "string" &&
-    typeof record.category === "string" &&
-    typeof record.scope === "string" &&
-    typeof record.createdAt === "number" &&
-    typeof record.updatedAt === "number" &&
-    record.schemaVersion === 1 &&
-    Array.isArray(record.tags) &&
-    !!record.source &&
-    typeof record.source.label === "string";
+  const source = record.source;
+  const validId = (item: unknown): item is string =>
+    typeof item === "string" && item.trim().length > 0 && item.length <= 160 &&
+    !/[\\u0000-\\u001f\\u007f]/.test(item);
+  if (!validId(record.id) || typeof record.content !== "string" ||
+      !record.content.trim() || record.content.length > 4_000 ||
+      !["preference", "goal", "fact", "workflow", "project"].includes(record.category ?? "") ||
+      !["profile", "project", "conversation"].includes(record.scope ?? "") ||
+      !Number.isFinite(record.createdAt) || !Number.isFinite(record.updatedAt) ||
+      (record.createdAt ?? -1) < 0 || (record.updatedAt ?? -1) < (record.createdAt ?? 0) ||
+      record.schemaVersion !== 1 || !Array.isArray(record.tags) ||
+      record.tags.length > 20 || record.tags.some(tag =>
+        typeof tag !== "string" || !tag.trim() || tag.length > 80
+      ) || new Set(record.tags).size !== record.tags.length ||
+      !source || typeof source !== "object" || Array.isArray(source) ||
+      !["user_confirmed", "conversation", "import"].includes(source.type ?? "") ||
+      typeof source.label !== "string" || !source.label.trim() || source.label.length > 160 ||
+      (source.referenceId !== undefined && !validId(source.referenceId))) return false;
+  if (record.scope === "project") return validId(record.projectId);
+  return record.projectId === undefined;
 }
 
 function tokenize(value: string): string[] {
@@ -121,6 +131,7 @@ export class LocalStorageMemoryRepository implements MemoryRepository {
   }
 
   async save(record: MemoryRecord): Promise<Result<void>> {
+    if (!isMemoryRecord(record)) return err("validation", "Memory record failed schema validation.");
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
     const next = loaded.value.filter(item => item.id !== record.id);
