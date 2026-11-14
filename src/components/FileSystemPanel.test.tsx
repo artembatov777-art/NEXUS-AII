@@ -70,6 +70,52 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renames selected files as a batch, preserves extensions, and audits each file", async () => {
+    const rootPath = "/home/test/Documents";
+    let names = ["one.txt", "two.md"];
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string, args?: { entries?: Array<{ path: string; newName: string }> }) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return names.map(name => ({
+        name, path: rootPath + "/" + name, kind: "file", sizeBytes: 10, modifiedAtMs: 0
+      }));
+      if (command === "rename_workspace_entries_batch") {
+        const entries = args?.entries ?? [];
+        names = entries.map(entry => entry.newName);
+        return entries.map(entry => rootPath + "/" + entry.newName);
+      }
+      if (command === "record_tool_audit_event") return true;
+      return undefined;
+    });
+    await renderPanel();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    for (const name of names) {
+      const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Select ' + name + ' for bulk move"]')!;
+      await act(async () => { checkbox.click(); });
+    }
+    const prefix = container.querySelector<HTMLInputElement>('[aria-label="Bulk rename prefix"]')!;
+    const suffix = container.querySelector<HTMLInputElement>('[aria-label="Bulk rename suffix"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(prefix, "archived-");
+      prefix.dispatchEvent(new Event("input", { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(suffix, "-old");
+      suffix.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const renameButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Rename selected"));
+    await act(async () => { renameButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("rename_workspace_entries_batch", {
+      entries: [
+        { path: rootPath + "/one.txt", newName: "archived-one-old.txt" },
+        { path: rootPath + "/two.md", newName: "archived-two-old.md" }
+      ]
+    });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "record_tool_audit_event")).toHaveLength(2);
+    expect(container.textContent).toContain("Renamed 2 files.");
+    expect(container.textContent).toContain("archived-one-old.txt");
+    expect(container.textContent).toContain("archived-two-old.md");
+    vi.unstubAllGlobals();
+  });
+
   it("rolls back earlier batch moves when a later file conflicts", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
