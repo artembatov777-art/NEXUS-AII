@@ -106,7 +106,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
         return;
       }
       const totalMb = (scan.totalBytes / (1024 * 1024)).toFixed(1);
-      if (!window.confirm(`Import ${scan.files.length} text files (${totalMb} MB) from this already-approved folder into the selected project knowledge base? Files remain on disk; NEXUS reads only supported text formats. Continue?`)) {
+      if (!window.confirm(`Import ${scan.files.length} text files (${totalMb} MB) from this already-approved folder into the selected project knowledge base? Files remain on disk, but their text is copied into local knowledge storage and relevant passages may later be sent to your configured model provider during chat. NEXUS reads only supported text formats. Continue?`)) {
         setStatus("Workspace import cancelled.");
         return;
       }
@@ -168,7 +168,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section className="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title">
       <header className="memory-header">
-        <div><div className="eyebrow">PROJECT KNOWLEDGE</div><h2 id="knowledge-title"><BookOpen size={21}/> Knowledge base</h2><p>Import text documents and retrieve passages with source references.</p></div>
+        <div><div className="eyebrow">PROJECT KNOWLEDGE</div><h2 id="knowledge-title"><BookOpen size={21}/> Knowledge base</h2><p>Import project documents and retrieve passages with source references. Imported text stays in local project storage; relevant passages may be sent with your chat to the configured model provider.</p></div>
         <button className="icon-btn" onClick={onClose} aria-label="Close knowledge"><X size={18}/></button>
       </header>
       <label className="knowledge-project">Project
@@ -178,7 +178,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       </label>
       {items.length === 0 ? <div className="memory-empty">Create a project first. Knowledge is isolated by project.</div> : <>
         <div className="knowledge-import">
-          <div><strong><FileText size={15}/> Import documents</strong><p>TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file.</p></div>
+          <div><strong><FileText size={15}/> Import documents</strong><p>TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file. Relevant passages may be sent to your configured model provider during chat.</p></div>
           <label className="primary-btn"><Upload size={14}/> {working ? "Processing…" : "Choose file"}
             <input type="file" multiple accept=".txt,.md,.mdx,.csv,.json,.jsonl,.ndjson,.log,.yaml,.yml,.xml,.ts,.tsx,.js,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.hpp,.cs,.rb,.php,.sh,.ps1,.sql,.toml,.ini,.conf,.properties,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFiles(e.currentTarget.files); e.currentTarget.value = ""; }}/>
           </label>
