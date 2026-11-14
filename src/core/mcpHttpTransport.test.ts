@@ -112,12 +112,20 @@ describe("McpHttpTransport", () => {
       { jsonrpc: "1.0", id: 1, result: {} },
       { jsonrpc: "2.0", id: 2, result: {} },
       { jsonrpc: "2.0", id: 1 },
-      { jsonrpc: "2.0", id: 1, result: {}, error: { code: -1, message: "bad" } }
+      { jsonrpc: "2.0", id: 1, result: {}, error: { code: -1, message: "bad" } },
+      { jsonrpc: "2.0", id: 1, result: {}, error: "malformed" }
     ]) {
       const fetcher = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } }));
       const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
       await expect(transport.request({ jsonrpc: "2.0", id: 1, method: "ping" }, new AbortController().signal)).rejects.toThrow(/JSON-RPC/);
     }
+  });
+
+
+  it("prevents custom headers from replacing transport-owned fields", () => {
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "Content-Type": "text/plain" } })).toThrow(/managed/);
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "MCP-Session-Id": "attacker" } })).toThrow(/managed/);
+    expect(() => new McpHttpTransport({ endpoint: "https://mcp.example/tools", headers: { "X-Test": "safe\\r\\nInjected: yes" } })).toThrow(/invalid/);
   });
 
   it("rejects duplicate, malformed, oversized and uncorrelated SSE frames", () => {

@@ -20,11 +20,12 @@ function isCorrelatedRpcResponse(value: unknown, expectedId: number): value is M
   const response = value as Record<string, unknown>;
   if (response.jsonrpc !== "2.0" || response.id !== expectedId) return false;
   const hasResult = Object.prototype.hasOwnProperty.call(response, "result");
+  const hasError = Object.prototype.hasOwnProperty.call(response, "error");
   const error = response.error;
   const hasValidError = !!error && typeof error === "object" && !Array.isArray(error) &&
     Number.isInteger((error as Record<string, unknown>).code) &&
     typeof (error as Record<string, unknown>).message === "string";
-  return hasResult !== hasValidError;
+  return hasResult ? !hasError : hasError && hasValidError;
 }
 
 async function readBoundedText(response: Response): Promise<string> {
