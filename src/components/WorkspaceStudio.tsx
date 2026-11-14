@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, AudioLines, Bot, Check, Clock3, FileSearch, Focus, GitBranch, Inbox, Plus, ShieldCheck, Sparkles, Trash2, Workflow, X } from "lucide-react";
+import { Activity, ArrowRight, AudioLines, BookOpen, Bot, Check, Clock3, FileSearch, Focus, GitBranch, Inbox, Plus, ShieldCheck, Sparkles, Trash2, Workflow, X } from "lucide-react";
 import type { Conversation } from "../types";
 import type { WorkspaceProject } from "../core/projects";
 import { t } from "../lib/i18n";
@@ -7,11 +7,9 @@ import { t } from "../lib/i18n";
 type InboxItem = { id: string; title: string; body: string; createdAt: number; done: boolean };
 type GraphNode = { id: string; label: string; kind: "idea" | "project" | "conversation" };
 type WorkflowDraft = { id: string; name: string; steps: string[]; completed: number[] };
-type GraphEdge = { id: string; from: string; to: string };
 const INBOX_KEY = "nexus-au:studio-inbox:v1";
 const GRAPH_KEY = "nexus-au:studio-graph:v1";
 const WORKFLOW_KEY = "nexus-au:studio-workflows:v1";
-const GRAPH_EDGE_KEY = "nexus-au:studio-graph-edges:v1";
 const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `nx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function readList<T>(key: string, validate: (value: unknown) => value is T): T[] {
@@ -31,7 +29,6 @@ const isInboxItem = (value: unknown): value is InboxItem => !!value && typeof va
 const isGraphNode = (value: unknown): value is GraphNode => !!value && typeof value === "object" &&
   typeof (value as GraphNode).id === "string" && typeof (value as GraphNode).label === "string" &&
   ["idea", "project", "conversation"].includes((value as GraphNode).kind);
-const isGraphEdge = (value: unknown): value is GraphEdge => !!value && typeof value === "object" && typeof (value as GraphEdge).id === "string" && typeof (value as GraphEdge).from === "string" && typeof (value as GraphEdge).to === "string" && (value as GraphEdge).from !== (value as GraphEdge).to;
 const isWorkflow = (value: unknown): value is WorkflowDraft => !!value && typeof value === "object" &&
   typeof (value as WorkflowDraft).id === "string" && typeof (value as WorkflowDraft).name === "string" &&
   Array.isArray((value as WorkflowDraft).steps) && (value as WorkflowDraft).steps.length <= 30 &&
@@ -60,9 +57,6 @@ export function WorkspaceStudio(props: Props) {
   const [inbox, setInbox] = useState<InboxItem[]>(() => readList(INBOX_KEY, isInboxItem));
   const [nodes, setNodes] = useState<GraphNode[]>(() => readList(GRAPH_KEY, isGraphNode));
   const [workflows, setWorkflows] = useState<WorkflowDraft[]>(() => readList(WORKFLOW_KEY, isWorkflow));
-  const [edges, setEdges] = useState<GraphEdge[]>(() => readList(GRAPH_EDGE_KEY, isGraphEdge));
-  const [edgeFrom, setEdgeFrom] = useState("");
-  const [edgeTo, setEdgeTo] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [nodeLabel, setNodeLabel] = useState("");
@@ -75,7 +69,6 @@ export function WorkspaceStudio(props: Props) {
   useEffect(() => { if (!saveList(INBOX_KEY, inbox)) setStorageWarning(t("Browser storage is unavailable or full.")); }, [inbox]);
   useEffect(() => { if (!saveList(GRAPH_KEY, nodes)) setStorageWarning(t("Browser storage is unavailable or full.")); }, [nodes]);
   useEffect(() => { if (!saveList(WORKFLOW_KEY, workflows)) setStorageWarning(t("Browser storage is unavailable or full.")); }, [workflows]);
-  useEffect(() => { if (!saveList(GRAPH_EDGE_KEY, edges)) setStorageWarning(t("Browser storage is unavailable or full.")); }, [edges]);
 
   const analytics = useMemo(() => {
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -84,8 +77,6 @@ export function WorkspaceStudio(props: Props) {
     const projectConversations = conversations.filter(item => !!item.projectId).length;
     return { recent: recent.length, messages, projectConversations, projects: projects.length, total: conversations.length };
   }, [conversations, projects.length, now]);
-
-  const contextNodes = useMemo(() => [...projects.map(item => ({ id: `project:${item.id}`, label: item.name, kind: "project" as const })), ...conversations.slice(0, 12).map(item => ({ id: `conversation:${item.id}`, label: item.title, kind: "conversation" as const })), ...nodes], [projects, conversations, nodes]);
 
   const briefing = useMemo(() => {
     const latest = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
@@ -105,10 +96,6 @@ export function WorkspaceStudio(props: Props) {
     if (!label) return;
     setNodes(current => [...current, { id: makeId(), label, kind: "idea" }].slice(-200));
     setNodeLabel("");
-  }
-  function addGraphEdge() {
-    if (!edgeFrom || !edgeTo || edgeFrom === edgeTo || edges.some(edge => edge.from === edgeFrom && edge.to === edgeTo)) return;
-    setEdges(current => [...current, { id: makeId(), from: edgeFrom, to: edgeTo }].slice(-500));
   }
   function addWorkflow() {
     const name = workflowName.trim().slice(0, 100);
@@ -131,7 +118,7 @@ export function WorkspaceStudio(props: Props) {
   ];
   function activate(id: string) {
     if (id === "inbox" || id === "graph" || id === "workflows") setActiveTab(id);
-    else if (id === "focus") { props.onClose(); props.onToggleFocus(); }
+    else if (id === "focus") props.onToggleFocus();
     else if (id === "agents") props.onOpenAgents();
     else if (id === "files") props.onOpenFiles();
     else if (id === "voice") props.onOpenChat();
@@ -205,10 +192,8 @@ export function WorkspaceStudio(props: Props) {
         <p>{t("Add concepts and see how they relate to the workspace. Existing projects and conversations are shown as context nodes.")}</p>
         <div className="studio-form studio-inline-form"><input aria-label={t("New knowledge node")} value={nodeLabel} onChange={event => setNodeLabel(event.target.value)} placeholder={t("Add a concept or idea")}/><button className="primary-btn" onClick={addGraphNode} disabled={!nodeLabel.trim()}><Plus size={15}/> {t("Add node")}</button></div>
         <div className="studio-graph">
-          {contextNodes.map(node => <article key={node.id} data-kind={node.kind}><span/><strong>{node.label}</strong><small>{t(node.kind)}</small>{node.kind === "idea" && <button onClick={() => setNodes(current => current.filter(item => item.id !== node.id))} aria-label={t("Remove node")}><X size={13}/></button>}</article>)}
+          {[...projects.map(item => ({ id: `project:${item.id}`, label: item.name, kind: "project" as const })), ...conversations.slice(0, 12).map(item => ({ id: `conversation:${item.id}`, label: item.title, kind: "conversation" as const })), ...nodes].map(node => <article key={node.id} data-kind={node.kind}><span/><strong>{node.label}</strong><small>{t(node.kind)}</small>{node.kind === "idea" && <button onClick={() => setNodes(current => current.filter(item => item.id !== node.id))} aria-label={t("Remove node")}><X size={13}/></button>}</article>)}
         </div>
-        <div className="studio-edge-builder"><select aria-label={t("Relationship source")} value={edgeFrom} onChange={event => setEdgeFrom(event.target.value)}><option value="">{t("Choose first node")}</option>{contextNodes.map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select aria-label={t("Relationship target")} value={edgeTo} onChange={event => setEdgeTo(event.target.value)}><option value="">{t("Choose related node")}</option>{contextNodes.map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select><button className="secondary-btn" onClick={addGraphEdge} disabled={!edgeFrom || !edgeTo || edgeFrom === edgeTo}>{t("Connect nodes")}</button></div>
-        <div className="studio-edge-list">{edges.map(edge => { const from = contextNodes.find(node => node.id === edge.from); const to = contextNodes.find(node => node.id === edge.to); return from && to ? <article key={edge.id}><span>{from.label}</span><ArrowRight size={13}/><span>{to.label}</span><button onClick={() => setEdges(current => current.filter(item => item.id !== edge.id))} aria-label={t("Remove relationship")}><X size={13}/></button></article> : null; })}</div>
         <button className="secondary-btn" onClick={props.onOpenKnowledge}>{t("Open full knowledge base")}</button>
         <p className="studio-note">{t("Workspace context is read-only here; personal idea nodes are saved locally on this device.")}</p>
       </section>}

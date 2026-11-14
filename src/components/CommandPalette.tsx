@@ -2,7 +2,7 @@ import { t } from "../lib/i18n";
 import { useMemo, useState } from "react";
 import { Activity, BookOpen, Bot, Command, Cpu, FlaskConical, Focus, FolderKanban, FolderOpen, MemoryStick, MessageSquarePlus, Plug, Search, Sparkles, X } from "lucide-react";
 
-export type NexusCommandId = "chat" | "new-chat" | "search" | "agents" | "memory" | "knowledge" | "projects" | "files" | "tools" | "studio" | "models" | "training" | "focus";
+export type NexusCommandId = "chat" | "new-chat" | "search" | "agents" | "memory" | "knowledge" | "projects" | "files" | "tools" | "models" | "training" | "focus";
 
 const commands: Array<{ id: NexusCommandId; title: string; description: string; keywords: string; icon: typeof Command }> = [
   { id: "chat", title: "Open chat", description: "Return to the main conversation", keywords: "conversation workspace assistant", icon: Sparkles },
@@ -14,7 +14,6 @@ const commands: Array<{ id: NexusCommandId; title: string; description: string; 
   { id: "projects", title: "Projects", description: "Organize workspaces", keywords: "workspace", icon: FolderKanban },
   { id: "files", title: "File system", description: "Open permitted files and folders", keywords: "windows files folders", icon: FolderOpen },
   { id: "tools", title: "Tools & MCP", description: "Review connected capabilities", keywords: "integrations plugins", icon: Plug },
-  { id: "studio", title: "NEXUS Studio", description: "Open your briefing, inbox, workflows and analytics", keywords: "daily briefing notes knowledge graph focus analytics guardian", icon: Sparkles },
   { id: "models", title: "Models & providers", description: "Configure compatible cloud and Ollama providers", keywords: "AI inference provider", icon: Cpu },
   { id: "training", title: "Training Lab", description: "Explore datasets and model evaluations", keywords: "experiments evaluation datasets", icon: FlaskConical },
   { id: "focus", title: "Toggle Focus Mode", description: "Hide navigation for distraction-free work", keywords: "minimal fullscreen", icon: Focus }

@@ -116,7 +116,7 @@ describe("mobile interface preview interactions", () => {
     expect(container.textContent).toContain("ШЛЮЗ ИНСТРУМЕНТОВ");
 
     act(() => buttonContaining("Ещё").click());
-    act(() => buttonContaining("Training Lab").click());
+    act(() => buttonContaining("Учебная лаборатория").click());
     expect(container.textContent).toContain("РАЗРАБОТКА МОДЕЛЕЙ");
 
     act(() => buttonContaining("Ещё").click());

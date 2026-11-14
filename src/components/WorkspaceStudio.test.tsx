@@ -63,7 +63,7 @@ describe("NEXUS Studio", () => {
   it("routes connected features to their real modules", () => {
     click("Agent Command Center");
     expect(actions.onOpenAgents).toHaveBeenCalledOnce();
-    click("NEXUS Studio");
+    click("Overview");
     click("Smart File Intelligence");
     expect(actions.onOpenFiles).toHaveBeenCalledOnce();
   });
