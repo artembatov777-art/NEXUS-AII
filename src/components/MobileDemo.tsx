@@ -61,7 +61,7 @@ export function MobileDemo() {
       <header className="demo-topbar">
         <div className="demo-brand">
           <div className="demo-brand-mark"><Sparkles size={19}/></div>
-          <div><strong>NEXUS</strong><span>PERSONAL AI SYSTEM</span></div>
+          <div><strong>{t("NEXUS")}</strong><span>{t("PERSONAL AI SYSTEM")}</span></div>
         </div>
         <button className="demo-round-button" aria-label={t("Уведомления")} onClick={() => setNotice(t("Уведомлений пока нет."))}><Bell size={18}/></button>
       </header>
@@ -99,7 +99,7 @@ export function MobileDemo() {
         {tab === "projects" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>{t("YOUR WORKSPACE")}</span><h2>{t("Твои проекты")}</h2></div><button aria-label={t("Создать проект")} onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-search"><Search size={16}/><input aria-label={t("Поиск проектов")} value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder={t("Поиск проектов...")}/></div>
-          {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>{t("ACTIVE PROJECT")}</span><h3>NEXUS AU</h3><p>{t("Персональная AI-экосистема")}</p><small>{t("Интерфейсный прототип · демонстрационные данные")}</small></article>}
+          {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>{t("ACTIVE PROJECT")}</span><h3>{t("NEXUS AU")}</h3><p>{t("Персональная AI-экосистема")}</p><small>{t("Интерфейсный прототип · демонстрационные данные")}</small></article>}
           {t("Личное развитие").toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>{t("PERSONAL")}</span><h3>{t("Личное развитие")}</h3><p>{t("Цели, навыки и планы")}</p><small>{t("4 заметки")}</small></article>}
           {"База знаний".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card green"><div className="demo-project-icon"><BookOpen size={19}/></div><span>{t("LEARNING")}</span><h3>{t("База знаний")}</h3><p>{t("Материалы и исследования")}</p><small>{t("12 материалов")}</small></article>}
           {!["NEXUS AU", "Личное развитие", "База знаний"].some(name => name.toLowerCase().includes(projectQuery.trim().toLowerCase())) && <p className="demo-empty-search">{t("Проекты не найдены.")}</p>}
@@ -109,15 +109,15 @@ export function MobileDemo() {
           <div className="demo-section-heading"><div><span>{t("PERSONAL CONTEXT")}</span><h2>{t("Память NEXUS")}</h2></div><button aria-label={t("Добавить память")} onClick={() => setNotice("Управление памятью появится в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-memory-summary"><Brain size={21}/><div><strong>{t("Контекст владельца")}</strong><span>{t("Демонстрационные записи")}</span></div><b>08</b></div>
           <div className="demo-memory-group"><span>{t("ПРЕДПОЧТЕНИЯ")}</span><article><Sparkles size={16}/><div><strong>{t("Стиль общения")}</strong><p>{t("Прямые ответы, конкретика и аргументы.")}</p></div></article><article><BookOpen size={16}/><div><strong>{t("Обучение")}</strong><p>{t("Структурированные объяснения и примеры.")}</p></div></article></div>
-          <div className="demo-memory-group"><span>{t("ПРОЕКТЫ И ЦЕЛИ")}</span><article><FolderKanban size={16}/><div><strong>NEXUS AU</strong><p>{t("Развитие личной AI-экосистемы.")}</p></div></article><article><Zap size={16}/><div><strong>{t("Долгосрочные цели")}</strong><p>{t("Навыки, самостоятельность и развитие.")}</p></div></article></div>
+          <div className="demo-memory-group"><span>{t("ПРОЕКТЫ И ЦЕЛИ")}</span><article><FolderKanban size={16}/><div><strong>{t("NEXUS AU")}</strong><p>{t("Развитие личной AI-экосистемы.")}</p></div></article><article><Zap size={16}/><div><strong>{t("Долгосрочные цели")}</strong><p>{t("Навыки, самостоятельность и развитие.")}</p></div></article></div>
           <div className="demo-safe-note"><ShieldCheck size={16}/> {t("В рабочей версии память будет доступна для просмотра и управления.")}</div>
         </div>}
 
         {tab === "knowledge" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>{t("PROJECT KNOWLEDGE")}</span><h2>{t("База знаний")}</h2></div><BookOpen size={21}/></div>
-          <div className="demo-module-card"><span>{t("ACTIVE PROJECT")}</span><strong>NEXUS AU</strong><small>{t("Материалы и заметки проекта")}</small></div>
+          <div className="demo-module-card"><span>{t("ACTIVE PROJECT")}</span><strong>{t("NEXUS AU")}</strong><small>{t("Материалы и заметки проекта")}</small></div>
           <div className="demo-search demo-knowledge-search"><Search size={16}/><input aria-label={t("Поиск по базе знаний")} value={knowledgeQuery} onChange={event => { setKnowledgeQuery(event.target.value); setKnowledgeSearched(false); }} placeholder={t("Поиск по документам...")}/><button onClick={() => setKnowledgeSearched(true)} disabled={!knowledgeQuery.trim()}>{t("Найти")}</button></div>
-          <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ARCHITECTURE.md</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></button>
+          <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>{t("ARCHITECTURE.md")}</strong><small>Архитектура системы · 12.8 KB</small></div><ChevronRight size={16}/></button>
           <button className="demo-document-row" onClick={() => setNotice("В preview доступна только демонстрационная карточка документа.")}><FileText size={18}/><div><strong>ROADMAP.md</strong><small>План разработки · 8.6 KB</small></div><ChevronRight size={16}/></button>
           {knowledgeSearched && <div className="demo-safe-note"><Search size={15}/> {t("Демо-поиск по запросу «")}{knowledgeQuery}{t("». Реальные документы пока не индексируются в мобильном preview.")}</div>}
           <div className="demo-safe-note"><ShieldCheck size={16}/> {t("Источники и поиск будут связаны с проектами в рабочей версии.")}</div>
@@ -150,10 +150,10 @@ export function MobileDemo() {
 
         {tab === "training" && <div className="demo-section">
           <div className="demo-section-heading"><div><span>{t("MODEL DEVELOPMENT")}</span><h2>{t("Training Lab")}</h2></div><FlaskConical size={21}/></div>
-          <div className="demo-stat-grid"><div><span>DATASETS</span><strong>03</strong></div><div><span>EXPERIMENTS</span><strong>02</strong></div><div><span>MODELS</span><strong>00</strong></div></div>
+          <div className="demo-stat-grid"><div><span>{t("DATASETS")}</span><strong>03</strong></div><div><span>{t("EXPERIMENTS")}</span><strong>02</strong></div><div><span>{t("MODELS")}</span><strong>00</strong></div></div>
           <div className="demo-module-card"><span>{t("DATA GOVERNANCE")}</span><strong>{t("Наборы данных")}</strong><small>{t("Лицензия, происхождение, согласие и разделение train / validation / test")}</small></div>
-          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись набора данных.")}><Database size={18}/><div><strong>Baseline dataset</strong><small>{t("Synthetic · CC0 · v1")}</small></div><ChevronRight size={16}/></button>
-          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись оценки модели.")}><Activity size={18}/><div><strong>Evaluation baseline</strong><small>{t("Детерминированная проверка")}</small></div><ChevronRight size={16}/></button>
+          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись набора данных.")}><Database size={18}/><div><strong>{t("Baseline dataset")}</strong><small>{t("Synthetic · CC0 · v1")}</small></div><ChevronRight size={16}/></button>
+          <button className="demo-document-row" onClick={() => setNotice("Это демонстрационная запись оценки модели.")}><Activity size={18}/><div><strong>{t("Evaluation baseline")}</strong><small>{t("Детерминированная проверка")}</small></div><ChevronRight size={16}/></button>
           <button className="demo-primary-action" onClick={() => setNotice("Training Lab preview: запуск обучения и изменение весов модели недоступны.")}>{t("Открыть эксперименты")}</button>
           <div className="demo-safe-note"><ShieldCheck size={16}/> {t("Личные переписки и файлы не добавляются в датасеты автоматически.")}</div>
         </div>}
