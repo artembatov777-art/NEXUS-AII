@@ -38,6 +38,47 @@ describe("sendMessage AI Core integration", () => {
     expect(createRouter).not.toHaveBeenCalled();
   });
 
+  it("sends browser chat through the Vercel Gemini proxy without exposing the Gemini key", async () => {
+    native.mockReturnValue(false);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      text: "Gemini response",
+      usage: { inputTokens: 9, outputTokens: 3 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const deltas: string[] = [];
+    const usage: Array<{ inputTokens?: number; outputTokens?: number }> = [];
+
+    const result = await sendMessage(
+      { ...settings, baseUrl: "/api/gemini", model: "gemini-3.1-flash-lite" },
+      messages,
+      "Approved project reference",
+      value => deltas.push(value),
+      undefined,
+      value => usage.push(value),
+      undefined,
+      "session-only-token"
+    );
+
+    expect(result).toBe("Gemini response");
+    expect(deltas).toEqual(["Gemini response"]);
+    expect(usage).toEqual([{ inputTokens: 9, outputTokens: 3 }]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/gemini", expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer session-only-token" }),
+      body: expect.stringContaining('"systemInstruction"')
+    }));
+    expect(fetchMock.mock.calls[0][1]?.body).not.toContain("AIza");
+    expect(createRouter).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("requires the separate NEXUS proxy token in browser mode", async () => {
+    native.mockReturnValue(false);
+    await expect(sendMessage({ ...settings, baseUrl: "/api/gemini" }, messages))
+      .rejects.toThrow(/NEXUS access token/i);
+    expect(createRouter).not.toHaveBeenCalled();
+  });
+
   it("routes chat through ModelRouter and forwards retrieved context and streamed text", async () => {
     native.mockReturnValue(true);
     const events: ModelEvent[] = [
