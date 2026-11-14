@@ -1,5 +1,5 @@
 export type ImageAspectRatio = "1:1" | "3:2" | "2:3" | "4:3" | "3:4" | "5:4" | "4:5" | "16:9" | "9:16" | "21:9";
-export type ImageSize = "1K" | "2K" | "4K";
+export type ImageSize = "1K" | "2K";
 
 export interface GeneratedImage {
   mimeType: "image/png" | "image/jpeg" | "image/webp";
@@ -59,8 +59,8 @@ export async function generateGeminiImage(
   const image = result.image;
   if (!image || !["image/png", "image/jpeg", "image/webp"].includes(image.mimeType ?? "") ||
       typeof image.data !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data) ||
-      !Number.isSafeInteger(image.byteLength) || (image.byteLength ?? 0) <= 0 || (image.byteLength ?? 0) > 9 * 1024 * 1024 ||
-      image.data.length > 12_000_000) {
+      !Number.isSafeInteger(image.byteLength) || (image.byteLength ?? 0) <= 0 || (image.byteLength ?? 0) > 3_200_000 ||
+      image.data.length > 4_300_000) {
     throw new Error("Image service returned an invalid or oversized image.");
   }
   return {
