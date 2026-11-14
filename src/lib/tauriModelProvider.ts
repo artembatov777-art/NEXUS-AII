@@ -71,6 +71,9 @@ class TauriModelProvider implements ModelProvider {
     const endpointError = providerEndpointError(this.settings.baseUrl);
     if (endpointError) throw new Error(endpointError);
     if (!isValidModelId(request.model)) throw new Error("Requested model ID is invalid.");
+    if (request.messages.some(message => message.role === "tool")) {
+      throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
+    }
     // A configured model name is only a preference, not proof that the provider
     // actually serves it. Discover before the first generation request.
     if (!this.discoveredModels.has(request.model)) {
@@ -84,10 +87,7 @@ class TauriModelProvider implements ModelProvider {
       }
     }
     if (!this.discoveredModels.has(request.model)) {
-      throw new Error("Requested model is not present in the provider's discovered catalog.");
-    }
-    if (request.messages.some(message => message.role === "tool")) {
-      throw new Error("Tool-role messages are not supported by the native provider adapter yet.");
+      throw new Error("Requested model is not present in the discovered provider catalog.");
     }
     const channel = new Channel<{ type: "text_delta" | "usage" | "completed"; text?: string; finishReason?: string; inputTokens?: number; outputTokens?: number }>();
     const streamId = crypto.randomUUID();
