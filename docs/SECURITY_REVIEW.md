@@ -21,6 +21,7 @@
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
 - Provider keys are redacted from provider error excerpts.
+- Provider keys are also redacted from successful non-streaming model output and streamed text deltas. The streaming redactor retains a bounded suffix so a credential split across separate SSE content events is not emitted in fragments; regression tests cover split-delta and non-streaming cases.
 - Legacy shared credential handles (`default` and `ollama`) remain supported. New saved cloud profiles receive unique, fixed-format OS-vault handles; up to 16 endpoint profiles can be stored, with one active endpoint selected at a time. Automated key rotation and credential recovery UX are not implemented.
 
 ### Agent and tool execution
@@ -49,8 +50,10 @@
 - Dedicated saved cloud profiles use a strict, generated per-profile credential handle; the native host validates its exact format before keyring access. Legacy shared handles remain supported, and deleting a dedicated profile also deletes its associated vault entry.
 - Workspace permission snapshots are written through a unique `create_new` temporary file rather than a predictable truncating path; Unix temp files use mode `0600` and `O_NOFOLLOW|O_CLOEXEC`. A regression test verifies that a pre-existing symlink at the former predictable temp path is not followed.
 - Regular-file reads, content search, image previews, and checked writes open the final path component without following symlinks/reparse points and reject files with multiple hard links. New-file creation uses atomic create-new semantics. File moves and renames use platform-specific atomic no-replace operations, so a destination created after preflight is not overwritten. Hostile parent-directory TOCTOU races and interrupted multi-file rollback remain residual risks.
+- Move, rename, and batch-rename source resolution now canonicalize the approved parent directory while keeping the final source component unresolved; this prevents canonicalization from following a swapped final-component symlink to a different file. Regression coverage rejects existing final-component symlinks. Parent-directory TOCTOU races remain a separate residual risk.
 - Provider credentials are excluded from backups.
 - SQLite files, browser localStorage/IndexedDB, and agent checkpoints are not application-level encrypted. Exported workspace backups now use AES-256-GCM with PBKDF2-SHA256 passphrase derivation; lost passphrases cannot be recovered. Protect the OS account and device storage.
+- Newly exported encrypted backups use schema version 2 and bind the format, schema version, KDF, iteration count, and cipher identifiers as AES-GCM additional authenticated data. The importer retains read support for schema version 1 backups created before metadata authentication; regression tests cover metadata tampering and legacy import.
 
 ### Webview policy
 
