@@ -6,7 +6,7 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `fc45336ecf0388ef18847d4387a707eeb0973558`.
+- Latest source implementation commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`.
 - Latest completed frontend Quality commit: `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -17,7 +17,7 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Fresh Quality and Native desktop workflows were triggered for `fc45336ecf0388ef18847d4387a707eeb0973558` (run IDs `43625614445` and `43625614403`); both were pending at the last check. The prior Quality run on `173725260ca45416539de323d01bcdac0cccf730` passed.
+- Latest frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` (73 test files / 509 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43626198833`). The Mobile Interface Preview build and deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632` (run `43626108715`). Native desktop verification for `623dbe37c2189f4b412db0689c6f0f3eff36921b` is still pending (run `43626198813`).
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
@@ -56,7 +56,7 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 
 ## Phase VI — Security & Integration
 - Tool execution timeouts are now explicitly non-retryable because an executor may ignore cancellation and finish an external side effect after the caller times out; the durable `started`/`failed` audit trail keeps the step available for owner reconciliation. Regression coverage exercises an executor that ignores its abort signal.
-- Filesystem recovery journal payloads are limited to 1 MiB when written and before JSON deserialization. Oversized or malformed records remain preserved for manual review, block recovery/mutations, and are surfaced as invalid in recovery details. A cross-platform regression test verifies fail-closed behavior and record preservation; CI for this change is pending.
+- Filesystem recovery journal payloads are limited to 1 MiB when written and before JSON deserialization. Recovery and inspection SQL checks the BLOB byte length before transferring payload text into Rust, so oversized records are not loaded for parsing. Oversized or malformed records remain preserved for manual review, block recovery/mutations, and are surfaced as invalid in recovery details. Regression tests cover oversized persisted records, multibyte UTF-8 sizing, and rejection of oversized serialized writes.
 
 Additional source hardening is now present on the working branch, with fresh CI verification pending:
 - Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
@@ -70,7 +70,7 @@ SQLite, browser stores, and checkpoints are not application-level encrypted. Rem
 
 ## Phase VII — Testing & Release 1.0
 
-Frontend Quality passed on `173725260ca45416539de323d01bcdac0cccf730`; the latest filesystem recovery hardening commit `fc45336ecf0388ef18847d4387a707eeb0973558` has fresh Quality and Native workflows pending. Native Rust tests and package generation still need a successful cross-platform CI result. No signed public release has been produced.
+Frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` (73 test files / 509 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632`. Native Windows/macOS/Linux tests and package generation for the current source commit remain pending. No signed public release has been produced.
 
 Release acceptance still requires:
 - Successful current Windows/macOS/Linux Rust tests and native package builds.
@@ -85,10 +85,10 @@ Release acceptance still requires:
 
 - Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
 - Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
-- Frontend Quality and Mobile Interface Preview passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`. Native cross-platform verification for the latest source changes remains pending.
+- Frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` and Mobile Interface Preview deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632`. Native cross-platform verification for the latest source changes remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
 - Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
-- Latest source implementation commit: `fc45336ecf0388ef18847d4387a707eeb0973558`; subsequent documentation-only commits may follow without changing that source baseline.
+- Latest source implementation commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`; subsequent documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
