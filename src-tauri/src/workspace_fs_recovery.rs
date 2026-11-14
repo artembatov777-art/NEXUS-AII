@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const JOURNAL_VERSION: u32 = 1;
@@ -26,6 +26,7 @@ struct RenameJournal {
 
 pub struct WorkspaceOperationJournal {
     connection: Mutex<Connection>,
+    operation_lock: Mutex<()>,
     recovery_error: Mutex<Option<String>>,
 }
 
@@ -42,8 +43,14 @@ impl WorkspaceOperationJournal {
         ).map_err(|error| format!("Could not initialize the workspace operation journal: {error}"))?;
         Ok(Self {
             connection: Mutex::new(connection),
+            operation_lock: Mutex::new(()),
             recovery_error: Mutex::new(None),
         })
+    }
+
+    pub(crate) fn lock_operation(&self) -> Result<MutexGuard<'_, ()>, String> {
+        self.operation_lock.lock()
+            .map_err(|_| "The filesystem operation lock is unavailable.".into())
     }
 
     pub(crate) fn begin(&self, entries: &[RenameEntry]) -> Result<String, String> {
