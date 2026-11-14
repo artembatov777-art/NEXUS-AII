@@ -80,6 +80,7 @@ export function ProviderProfilesPanel({
 
   function deleteSelected() {
     if (!selectedProfile) return;
+    if (!window.confirm(`Delete saved provider profile "${selectedProfile.label}"? Its API key remains in the OS credential vault.`)) return;
     const next = removeProviderProfile(profiles, selectedProfile.id);
     if (!next.ok) {
       setStatus(next.error.message);
