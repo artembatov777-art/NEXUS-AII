@@ -37,7 +37,11 @@ export class HybridMemoryRetriever {
     const lexical = await this.repository.search(normalized, scope, Math.min(100, limit * 5), projectId);
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     if (!lexical.ok) return lexical;
-    const lexicalFallback = () => ok(lexical.value.slice(0, limit).map((record, index) => ({
+    const lexicalRecords = lexical.value.filter(record =>
+      (scope === "all" || record.scope === scope) &&
+      (scope !== "project" || record.projectId === projectId)
+    );
+    const lexicalFallback = () => ok(lexicalRecords.slice(0, limit).map((record, index) => ({
       record, score: 1 / (index + 1), lexicalScore: 1 / (index + 1), semanticScore: 0
     })));
     if (!this.embeddings || !this.vectors) return lexicalFallback();
@@ -73,7 +77,7 @@ export class HybridMemoryRetriever {
     const semantic = await this.vectors.search(vector, scope, Math.min(100, limit * 5), projectId);
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     const semanticScores = new Map(semantic.map(item => [item.id, Math.max(0, Math.min(1, item.score))]));
-    const ids = [...new Set([...lexical.value.map(record => record.id), ...semanticScores.keys()])];
+    const ids = [...new Set([...lexicalRecords.map(record => record.id), ...semanticScores.keys()])];
     const loaded = await this.repository.getByIds(ids);
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     if (!loaded.ok) return loaded;
@@ -81,7 +85,7 @@ export class HybridMemoryRetriever {
       (scope === "all" || record.scope === scope) &&
       (scope !== "project" || record.projectId === projectId)
     );
-    const lexicalScores = new Map(lexical.value.map((record, index) => [record.id, 1 / (index + 1)]));
+    const lexicalScores = new Map(lexicalRecords.map((record, index) => [record.id, 1 / (index + 1)]));
     const lexicalMax = Math.max(1, ...lexicalScores.values());
     const ranked = scoped.map(record => {
       const lexicalScore = (lexicalScores.get(record.id) ?? 0) / lexicalMax;
