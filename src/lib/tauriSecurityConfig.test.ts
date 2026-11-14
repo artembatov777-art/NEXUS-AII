@@ -9,10 +9,11 @@ const capabilities = JSON.parse(readFileSync(new URL("../../src-tauri/capabiliti
 };
 
 function parseCsp(value: string): Map<string, string[]> {
-  return new Map(value.split(";").map(directive => {
-    const [name, ...sources] = directive.trim().split(/\\s+/u);
-    return [name, sources];
-  }));
+  const entries = value.split(";").map((directive): [string, string[]] => {
+    const [name, ...sources] = directive.trim().split(/\s+/u);
+    return [name ?? "", sources];
+  });
+  return new Map(entries);
 }
 
 describe("Tauri desktop security boundary", () => {
