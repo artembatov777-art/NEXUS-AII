@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { AgentPlanner } from "./agentPlanner";
+import { AgentPlanner, type AgentPlan } from "./agentPlanner";
 import { ok } from "./result";
 const tools = [{ id: "notes.search", version: "1", description: "Search", requiredPermissions: ["memory:read" as const], risk: "low" as const, timeoutMs: 1000, source: "builtin" as const, tags: [] }];
 describe("AgentPlanner", () => {
@@ -67,6 +67,28 @@ describe("AgentPlanner", () => {
     const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [{ id: "s1", toolId: "unknown", purpose: "bad", input: {}, dependsOn: [] }] }) });
     expect(await planner.plan("Do task", tools, new AbortController().signal)).toMatchObject({ ok: false, error: { code: "validation" } });
   });
+  it("returns a validation error for malformed planner field types instead of throwing", async () => {
+    const planner = new AgentPlanner({
+      createPlan: async ({ goal }) => ok({
+        goal,
+        steps: [{ id: "s1", toolId: "notes.search", purpose: 42, input: {}, dependsOn: [] }]
+      } as unknown as AgentPlan)
+    });
+    await expect(planner.plan("Search notes", tools, new AbortController().signal))
+      .resolves.toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
+  it("rejects non-string dependency identifiers from model output", async () => {
+    const planner = new AgentPlanner({
+      createPlan: async ({ goal }) => ok({
+        goal,
+        steps: [{ id: "s1", toolId: "notes.search", purpose: "Search", input: {}, dependsOn: [7] }]
+      } as unknown as AgentPlan)
+    });
+    await expect(planner.plan("Search notes", tools, new AbortController().signal))
+      .resolves.toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("rejects forward dependencies", async () => {
     const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [{ id: "a", toolId: "notes.search", purpose: "bad dependency", input: {}, dependsOn: ["b"] }] }) });
     expect(await planner.plan("x", tools, new AbortController().signal)).toMatchObject({ ok: false, error: { code: "validation" } });
