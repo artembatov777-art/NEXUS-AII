@@ -60,6 +60,24 @@ describe("ProviderProfilesPanel", () => {
     expect(raw).toContain("127.0.0.1:11434");
   });
 
+  it("does not switch profiles when the current profile has unsaved changes and the owner cancels", async () => {
+    saveProviderProfiles([
+      { id: "nexus.cloud", label: "Cloud", settings: cloudSettings },
+      { id: "nexus.local", label: "Local", settings: localSettings }
+    ]);
+    const changedSettings = { ...cloudSettings, model: "unsaved-model-change" };
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={changedSettings} onSelect={onSelect}/>); });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    const select = container.querySelector<HTMLSelectElement>('[aria-label="Saved provider profiles"]')!;
+    await act(async () => {
+      select.value = "nexus.local";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles)
+      .toHaveLength(2);
+  });
+
   it("keeps a saved profile when deletion is cancelled", async () => {
     saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings: cloudSettings }]);
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect}/>); });
