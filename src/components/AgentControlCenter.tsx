@@ -15,6 +15,10 @@ import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefiniti
 import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
 import { loadMcpServerConfigs } from "../lib/mcpServerStorage";
 import { canUseAgentProvider } from "../lib/agentProviderAvailability";
+import { HybridMemoryRetriever } from "../core/knowledge";
+import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
+import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
+import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
 
 const THREAD_ID = "nexus-agent-control-center";
 
@@ -76,6 +80,11 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
     }
   }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation]);
+  const memoryRetriever = useMemo(() => new HybridMemoryRetriever(
+    new WorkspaceMemoryRepository(window.localStorage),
+    new LocalTransformerEmbeddingProvider(),
+    new IndexedDbMemoryVectorIndex()
+  ), []);
   const [task, setTask] = useState("");
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
@@ -220,13 +229,13 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     try {
       addFeed("Retrieving relevant saved profile and project context…");
       const contextWarnings: string[] = [];
-      const memories = await runtime.memoryService.search(goal, "profile", 4);
+      const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
       const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.category}; source: ${item.source.label}] ${item.content}`) : [];
       if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
       if (projectId) {
         const [knowledge, projectMemories] = await Promise.all([
           runtime.knowledgeService.retrieve(goal, projectId, 4),
-          runtime.memoryService.search(goal, "project", 3, projectId)
+          memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
         ]);
         if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
         else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
