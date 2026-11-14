@@ -106,6 +106,42 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("clears bulk file selections before switching to search results", async () => {
+    const rootPath = "/home/test/Documents";
+    const filePath = rootPath + "/one.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [
+        { name: "one.txt", path: filePath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 }
+      ];
+      if (command === "search_workspace_contents") return {
+        matches: [{ path: filePath, lineNumber: 1, preview: "needle" }],
+        totalMatches: 1, scannedFiles: 1, truncated: false
+      };
+      return undefined;
+    });
+    await renderPanel();
+    const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Select one.txt for bulk move"]')!;
+    await act(async () => { checkbox.click(); });
+    expect(container.textContent).toContain("1 of 100 files selected");
+
+    const contentMode = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Text content");
+    await act(async () => { contentMode!.click(); });
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search approved folders"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(searchInput, "needle");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const searchButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Search"));
+    await act(async () => { searchButton!.click(); });
+
+    expect(invokeMock).toHaveBeenCalledWith("search_workspace_contents", { path: rootPath, query: "needle" });
+    expect(container.textContent).not.toContain("1 of 100 files selected");
+    expect(Array.from(container.querySelectorAll("button")).some(button => button.textContent?.includes("Move selected"))).toBe(false);
+  });
+
   it("does not pretend browser preview can access local folders", async () => {
     await renderPanel();
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();

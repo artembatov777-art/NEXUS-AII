@@ -128,6 +128,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     setSelectedPath("");
+    setSelectedPaths([]);
     setPreview("");
     setDraft("");
     setEditing(false);
