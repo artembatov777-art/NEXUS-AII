@@ -910,6 +910,14 @@ const translations: Record<string, string> = {
   "TEXT CONTENT · MAX 2 MB": "ТЕКСТОВОЕ СОДЕРЖИМОЕ · ДО 2 МБ",
   "EXECUTION MODE": "РЕЖИМ ВЫПОЛНЕНИЯ",
   "REQUIRED PERMISSION": "НЕОБХОДИМОЕ РАЗРЕШЕНИЕ",
+  "Source: {record.source.label}": "Источник: {record.source.label}",
+  "Updated": "Обновлено",
+  "REFERENCE": "СПРАВОЧНАЯ ИНФОРМАЦИЯ",
+  "Recovery record {operation.operationId}": "Запись восстановления {operation.operationId}",
+  "Review {operation.entries.length} recorded path pair(s)": "Проверить записанные пары путей: {operation.entries.length}",
+  "Original path · {entry.sourceState}": "Исходный путь · {entry.sourceState}",
+  "Recorded destination · {entry.destinationState}": "Сохранённое место назначения · {entry.destinationState}",
+  "Line {match.lineNumber}": "Строка {match.lineNumber}",
 };
 let activeLanguage: NexusLanguage = "ru";
 const reverseTranslations = Object.fromEntries(Object.entries(translations).filter(([source, translated]) => !/[А-Яа-яЁё]/.test(source) && /[А-Яа-яЁё]/.test(translated)).map(([english, russian]) => [russian, english]));
