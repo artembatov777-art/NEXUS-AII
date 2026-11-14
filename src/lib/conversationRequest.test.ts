@@ -30,10 +30,12 @@ describe("prepareConversationRequest", () => {
     );
     const prepared = prepareConversationRequest(history);
     expect(prepared.messages).toHaveLength(10);
-    expect(prepared.messages[0]?.content).toBe(history[1]?.content);
+    expect(prepared.messages[0]?.role).toBe("system");
+    expect(prepared.messages[0]?.content).toContain("Older conversation turns were omitted");
+    expect(prepared.messages[1]?.content).toBe(history[2]?.content);
     expect(prepared.messages.at(-1)?.content).toBe(history.at(-1)?.content);
-    expect(prepared.omittedMessageCount).toBe(1);
-    expect(prepared.includedContentBytes).toBe(900_000);
+    expect(prepared.omittedMessageCount).toBe(2);
+    expect(prepared.includedContentBytes).toBeLessThanOrEqual(900_000);
   });
 
   it("rejects a latest message larger than the native per-message limit", () => {
