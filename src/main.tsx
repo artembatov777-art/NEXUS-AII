@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { LanguageProvider } from "./lib/i18n";
+import { LanguageProvider, t } from "./lib/i18n";
 const App = lazy(() => import("./App"));
 const MobileDemo = lazy(() => import("./components/MobileDemo").then(module => ({ default: module.MobileDemo })));
 import "./styles.css";
@@ -13,7 +13,7 @@ const isMobileDemo = new URLSearchParams(window.location.search).get("demo") ===
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <LanguageProvider>
-    <Suspense fallback={<div role="status" style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#070b12", color: "#79c7e8", fontFamily: "sans-serif", fontSize: "10px", letterSpacing: ".2em" }}>INITIALIZING NEXUS AU</div>}>
+    <Suspense fallback={<div role="status" style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#070b12", color: "#79c7e8", fontFamily: "sans-serif", fontSize: "10px", letterSpacing: ".2em" }}>{t("INITIALIZING NEXUS AU")}</div>}>
       {isMobileDemo ? <MobileDemo /> : <App />}
     </Suspense>
     </LanguageProvider>
