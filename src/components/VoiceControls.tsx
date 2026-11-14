@@ -1,4 +1,4 @@
-import { t } from "../lib/i18n";
+import { t, useLanguage } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 
@@ -26,12 +26,12 @@ interface SpeechWindow extends Window {
 function recognitionErrorMessage(code: string): string {
   switch (code) {
     case "not-allowed":
-    case "service-not-allowed": return "Microphone access was denied. Check this app's microphone permission.";
-    case "audio-capture": return "No usable microphone was found.";
-    case "network": return "The speech service is unavailable. Check your connection and try again.";
-    case "no-speech": return "No speech was detected. Voice conversation was stopped.";
-    case "aborted": return "Voice input was cancelled.";
-    default: return "Speech recognition failed. Try another language or input method.";
+    case "service-not-allowed": return t("Microphone access was denied. Check this app's microphone permission.");
+    case "audio-capture": return t("No usable microphone was found.");
+    case "network": return t("The speech service is unavailable. Check your connection and try again.");
+    case "no-speech": return t("No speech was detected. Voice conversation was stopped.");
+    case "aborted": return t("Voice input was cancelled.");
+    default: return t("Speech recognition failed. Try another language or input method.");
   }
 }
 
@@ -44,14 +44,13 @@ export function VoiceControls({
   textToSpeak: string;
   isGenerating?: boolean;
 }) {
+  const { language: interfaceLanguage } = useLanguage();
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [conversationMode, setConversationMode] = useState(false);
   const [error, setError] = useState("");
   const [interim, setInterim] = useState("");
-  const [language, setLanguage] = useState(() =>
-    typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("ru") ? "ru-RU" : "en-US"
-  );
+  const [language, setLanguage] = useState(() => interfaceLanguage === "ru" ? "ru-RU" : "en-US");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceName, setVoiceName] = useState("");
   const recognition = useRef<Recognition | null>(null);
@@ -64,6 +63,7 @@ export function VoiceControls({
   const lastSpokenTextRef = useRef("");
 
   onTranscriptRef.current = onTranscript;
+  useEffect(() => { setLanguage(interfaceLanguage === "ru" ? "ru-RU" : "en-US"); }, [interfaceLanguage]);
   generatingRef.current = isGenerating;
   speakingRef.current = speaking;
 
@@ -72,7 +72,7 @@ export function VoiceControls({
     const host = window as SpeechWindow;
     const Constructor = host.SpeechRecognition ?? host.webkitSpeechRecognition;
     if (!Constructor) {
-      setError("Speech recognition is not supported by this browser or desktop WebView.");
+      setError(t("Speech recognition is not supported by this browser or desktop WebView."));
       conversationModeRef.current = false;
       setConversationMode(false);
       return;
@@ -128,7 +128,7 @@ export function VoiceControls({
     } catch {
       recognition.current = null;
       setListening(false);
-      setError("Could not start voice input. Check microphone permission and browser support.");
+      setError(t("Could not start voice input. Check microphone permission and browser support."));
       conversationModeRef.current = false;
       setConversationMode(false);
     }
@@ -136,7 +136,7 @@ export function VoiceControls({
 
   function speakText(value: string, resumeConversation: boolean) {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setError("Text-to-speech is not supported by this browser or desktop WebView.");
+      setError(t("Text-to-speech is not supported by this browser or desktop WebView."));
       if (resumeConversation) {
         conversationModeRef.current = false;
         setConversationMode(false);
@@ -176,7 +176,7 @@ export function VoiceControls({
         utterance.current = null;
         speakingRef.current = false;
         setSpeaking(false);
-        setError("Text-to-speech failed or was interrupted.");
+        setError(t("Text-to-speech failed or was interrupted."));
         if (resumeConversation) {
           conversationModeRef.current = false;
           setConversationMode(false);
@@ -207,15 +207,15 @@ export function VoiceControls({
       return;
     }
     if (isGenerating) {
-      setError("Wait for the current response to finish before starting voice conversation.");
+      setError(t("Wait for the current response to finish before starting voice conversation."));
       return;
     }
     if (!(window as SpeechWindow).SpeechRecognition && !(window as SpeechWindow).webkitSpeechRecognition) {
-      setError("Speech recognition is not supported by this browser or desktop WebView.");
+      setError(t("Speech recognition is not supported by this browser or desktop WebView."));
       return;
     }
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setError("Text-to-speech is not supported by this browser or desktop WebView.");
+      setError(t("Text-to-speech is not supported by this browser or desktop WebView."));
       return;
     }
     conversationModeRef.current = true;
@@ -236,7 +236,7 @@ export function VoiceControls({
     const host = window as SpeechWindow;
     const Constructor = host.SpeechRecognition ?? host.webkitSpeechRecognition;
     if (!Constructor) {
-      setError("Speech recognition is not supported by this browser or desktop WebView.");
+      setError(t("Speech recognition is not supported by this browser or desktop WebView."));
       return;
     }
     conversationModeRef.current = false;
@@ -276,7 +276,7 @@ export function VoiceControls({
       recognition.current = null;
       setListening(false);
       setInterim("");
-      setError("Could not start voice input. Check microphone permission and browser support.");
+      setError(t("Could not start voice input. Check microphone permission and browser support."));
     }
   }
 
