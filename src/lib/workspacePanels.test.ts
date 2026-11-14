@@ -3,7 +3,7 @@ import { getWorkspacePanelState, type WorkspacePanel } from "./workspacePanels";
 
 const panels: WorkspacePanel[] = [
   "chat", "command", "settings", "memory", "search",
-  "agents", "projects", "knowledge", "training", "files", "tools"
+  "agents", "projects", "knowledge", "training", "files", "tools", "studio"
 ];
 
 describe("workspace panel routing", () => {
@@ -20,7 +20,8 @@ describe("workspace panel routing", () => {
       knowledge: "knowledgeOpen",
       training: "trainingLabOpen",
       files: "fileSystemOpen",
-      tools: "toolsOpen"
+      tools: "toolsOpen",
+      studio: "studioOpen"
     } as const)[panel as Exclude<WorkspacePanel, "chat">];
 
     if (panel === "chat") {
