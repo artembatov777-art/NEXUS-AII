@@ -426,3 +426,17 @@ button:disabled { cursor: not-allowed; }
   .agent-runtime-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tools-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Keep the mobile workspace inside Safari's dynamic viewport as browser chrome changes. */
+@supports (height: 100dvh) {
+  @media (max-width: 640px) {
+    .app-shell {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
+    .main-panel,
+    .chat-area {
+      min-height: 0;
+    }
+  }
+}
