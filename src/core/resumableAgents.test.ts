@@ -88,9 +88,10 @@ describe("ResumableAgentRuntime", () => {
       { runId: () => runId }, { now: () => 1_000 });
     runtime.register({ ...makeDefinition(), step });
     const events = await collect(runtime.start(agentId, 0, "thread-cancel-step", controller.signal));
-    expect(events.map(event => event.type)).toEqual(["failed"]);
-    expect(step).not.toHaveBeenCalled();
-    expect(await service.get(runId)).toMatchObject({ ok: true, value: null });
+    expect(events.map(event => event.type)).toEqual(["started", "failed"]);
+    expect(step).toHaveBeenCalledOnce();
+    const saved = await service.get(runId);
+    expect(saved).toMatchObject({ ok: true, value: { status: "cancelled", state: { payload: { count: 0 }, steps: 0 } } });
   });
 
   it("continues after a consumer/process interruption without replaying completed steps", async () => {
