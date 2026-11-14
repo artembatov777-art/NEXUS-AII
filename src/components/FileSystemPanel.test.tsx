@@ -49,25 +49,25 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_workspace_operation_recovery_status");
   });
 
-  it("moves selected files as a batch and records each move", async () => {
+  it("moves selected files through one native journaled batch and records each move", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
     const paths = [rootPath + "/one.txt", rootPath + "/two.txt"];
     const moved = new Set<string>();
     isTauriMock.mockReturnValue(true);
     openMock.mockResolvedValue(destination);
-    invokeMock.mockImplementation(async (command: string, args?: { path?: string; destinationDirectory?: string }) => {
+    invokeMock.mockImplementation(async (command: string, args?: { entries?: Array<{ path: string; destinationDirectory: string }> }) => {
       if (command === "list_workspace_directories") return [rootPath];
       if (command === "list_workspace_entries") return [
         { name: "one.txt", path: paths[0], kind: "file", sizeBytes: 10, modifiedAtMs: 0 },
         { name: "two.txt", path: paths[1], kind: "file", sizeBytes: 10, modifiedAtMs: 0 }
       ].filter(entry => !moved.has(entry.path));
-      if (command === "move_workspace_entry") {
-        const source = args?.path ?? "";
-        const target = (args?.destinationDirectory ?? "") + "/" + source.split("/").pop();
-        moved.add(source);
-        return target;
+      if (command === "move_workspace_entries_batch") {
+        const entries = args?.entries ?? [];
+        entries.forEach(entry => moved.add(entry.path));
+        return entries.map(entry => entry.destinationDirectory + "/" + entry.path.split("/").pop());
       }
+      if (command === "record_tool_audit_event") return true;
       return undefined;
     });
     await renderPanel();
@@ -79,7 +79,11 @@ describe("FileSystemPanel native workspace access", () => {
     const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Move selected"));
     await act(async () => { moveButton!.click(); });
     expect(openMock).toHaveBeenCalledWith({ directory: true, multiple: false, title: "Choose destination folder" });
-    expect(invokeMock.mock.calls.filter(([command]) => command === "move_workspace_entry")).toHaveLength(2);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "move_workspace_entries_batch")).toHaveLength(1);
+    expect(invokeMock).toHaveBeenCalledWith("move_workspace_entries_batch", {
+      entries: paths.map(path => ({ path, destinationDirectory: destination }))
+    });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "record_tool_audit_event")).toHaveLength(2);
     expect(container.textContent).toContain("Moved 2 files.");
     expect(container.querySelector('input[aria-label="Select one.txt for bulk move"]')).toBeNull();
     vi.unstubAllGlobals();
@@ -163,12 +167,11 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rolls back earlier batch moves when a later file conflicts", async () => {
+  it("surfaces a durable recovery warning when a native batch move cannot roll back", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
     const firstPath = rootPath + "/one.txt";
     const secondPath = rootPath + "/two.txt";
-    let moveCalls = 0;
     isTauriMock.mockReturnValue(true);
     openMock.mockResolvedValue(destination);
     invokeMock.mockImplementation(async (command: string) => {
@@ -177,12 +180,10 @@ describe("FileSystemPanel native workspace access", () => {
         { name: "one.txt", path: firstPath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 },
         { name: "two.txt", path: secondPath, kind: "file", sizeBytes: 10, modifiedAtMs: 0 }
       ];
-      if (command === "move_workspace_entry") {
-        moveCalls += 1;
-        if (moveCalls === 2) throw new Error("Destination already exists");
-        if (moveCalls === 1) return destination + "/one.txt";
-        return firstPath;
+      if (command === "move_workspace_entries_batch") {
+        throw new Error("Batch move failed and rollback was incomplete. Review these files manually: one.txt");
       }
+      if (command === "get_workspace_operation_recovery_status") return "Automatic recovery stopped; manual review is required.";
       return undefined;
     });
     await renderPanel();
@@ -193,9 +194,9 @@ describe("FileSystemPanel native workspace access", () => {
     }
     const moveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Move selected"));
     await act(async () => { moveButton!.click(); });
-    expect(moveCalls).toBe(3);
-    expect(container.textContent).toContain("Bulk move failed; previously moved files were restored.");
-    expect(container.textContent).not.toContain("rollback was incomplete");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "move_workspace_entries_batch")).toHaveLength(1);
+    expect(container.textContent).toContain("Automatic recovery stopped");
+    expect(container.textContent).toContain("Batch move failed and rollback was incomplete");
     vi.unstubAllGlobals();
   });
 
