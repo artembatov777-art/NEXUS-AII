@@ -47,7 +47,7 @@ export function CommandCenter(props: CommandCenterProps) {
   ];
   return <section className="command-center" aria-label={t("NEXUS command center")}>
     <div className="deck-heading">
-      <div><span className="command-kicker"><Activity size={12}/> NEXUS / COMMAND DECK</span><h2>{t("System overview")}<span className="deck-heading-index">01 — 04</span></h2><p>{t("One control surface for your intelligence layer, workspace and tools.")}</p></div>
+      <div><span className="command-kicker"><Activity size={12}/> {t("NEXUS / COMMAND DECK")}</span><h2>{t("System overview")}<span className="deck-heading-index">01 — 04</span></h2><p>{t("One control surface for your intelligence layer, workspace and tools.")}</p></div>
       <button className="deck-configure" onClick={onOpenSettings}><Settings2 size={15}/> {t("Configure core")} <ArrowUpRight size={13}/></button>
     </div>
     <section className={"deck-core " + (busy ? "is-processing" : providerReady ? "is-connected" : "is-standby")} aria-label={"NEXUS AI Core status: " + status.toLowerCase()}>
@@ -58,7 +58,7 @@ export function CommandCenter(props: CommandCenterProps) {
     </section>
     <div className="deck-workspace">
       <section className="deck-tools">
-        <div className="deck-section-heading"><div><span>{t("WORKSPACE MODULES")}</span><h3>{t("Launch a subsystem")}</h3></div><small>07 MODULES</small></div>
+        <div className="deck-section-heading"><div><span>{t("WORKSPACE MODULES")}</span><h3>{t("Launch a subsystem")}</h3></div><small>{t("07 MODULES")}</small></div>
         <div className="deck-tool-grid">{tools.map(item => { const Icon = item.icon; return <button className="deck-tool" key={item.code} onClick={item.action}><span className="deck-tool-code">{item.code}</span><span className="deck-tool-icon"><Icon size={18}/></span><span className="deck-tool-copy"><strong>{t(item.label)}</strong><small>{t(item.detail)}</small></span><ArrowUpRight className="deck-tool-arrow" size={14}/></button>; })}</div>
       </section>
       <aside className="deck-briefing">
@@ -74,13 +74,13 @@ export function CommandCenter(props: CommandCenterProps) {
         <div className="deck-section-heading"><div><span>{t("SYSTEM MONITOR")}</span><h3>{t("Live status")}</h3></div><small>{t("SESSION HEALTH")}</small></div>
         <div className="command-monitor-grid">
           <article data-health={workspaceReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>{t("Workspace storage")}</strong><small>{workspaceReady ? t("Conversation data loaded") : t("Loading workspace data")}</small></div><b>{workspaceReady ? t("READY") : t("LOADING")}</b></article>
-          <article data-health={providerConnection === "reachable" ? "good" : providerConnection === "failed" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>{t("Provider endpoint")}</strong><small>{providerConnection === "reachable" ? t("Endpoint responded") : providerConnection === "failed" ? t("Last endpoint check failed") : providerConnection === "checking" ? t("Checking endpoint") : t("Not checked this session")}</small></div><b>{providerConnection.toUpperCase()}</b></article>
+          <article data-health={providerConnection === "reachable" ? "good" : providerConnection === "failed" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>{t("Provider endpoint")}</strong><small>{providerConnection === "reachable" ? t("Endpoint responded") : providerConnection === "failed" ? t("Last endpoint check failed") : providerConnection === "checking" ? t("Checking endpoint") : t("Not checked this session")}</small></div><b>{t(providerConnection.toUpperCase())}</b></article>
           <article data-health={credentialVault === "available" || credentialVault === "not_required" ? "good" : credentialVault === "unavailable" ? "bad" : "pending"}><span className="command-health-dot"/><div><strong>{t("Credential vault")}</strong><small>{credentialVault === "available" ? t("OS vault available") : credentialVault === "not_required" ? t("No key required for loopback profile") : credentialVault === "browser" ? t("Native vault unavailable in browser preview") : credentialVault === "missing" ? t("No provider key saved") : credentialVault === "unavailable" ? t("OS vault unavailable") : t("Checking vault")}</small></div><b>{credentialVault === "not_required" ? t("NOT REQUIRED") : t(credentialVault.toUpperCase())}</b></article>
           <article data-health={providerReady ? "good" : "pending"}><span className="command-health-dot"/><div><strong>{t("Model generation")}</strong><small>{providerReady ? t("Generation test passed") : t("Generation not verified")}</small></div><b>{providerReady ? t("VERIFIED") : t("UNTESTED")}</b></article>
         </div>
       </section>
       <section className="command-activity" aria-label={t("Recent workspace activity")}>
-        <div className="deck-section-heading"><div><span>{t("WORKSPACE TIMELINE")}</span><h3>{t("Recent saved activity")}</h3></div><small>{recentActivity.length} ITEMS</small></div>
+        <div className="deck-section-heading"><div><span>{t("WORKSPACE TIMELINE")}</span><h3>{t("Recent saved activity")}</h3></div><small>{recentActivity.length} {t("ITEMS")}</small></div>
         {recentActivity.length ? <ol>{recentActivity.map(item => <li key={item.id}><span className="command-activity-dot"/><div><strong>{item.title}</strong><small>{item.messageCount} messages · {t("updated")} {formatActivityTime(item.updatedAt, language)}</small></div></li>)}</ol> : <p>{t("No activity recorded yet. Start a conversation to populate the timeline.")}</p>}
       </section>
     </div>
