@@ -143,7 +143,7 @@ describe("ResumableAgentRuntime", () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const agentPermissions = { authorize: vi.fn().mockResolvedValue("allow") };
     const toolPermissions = { authorize: vi.fn().mockResolvedValue("allow") };
-    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([])) };
     const gateway = new ToolGateway(toolPermissions, audit, { now: () => 3_000 });
     const toolExecute = vi.fn().mockResolvedValue(ok({ note: "found" }));
     gateway.register({
