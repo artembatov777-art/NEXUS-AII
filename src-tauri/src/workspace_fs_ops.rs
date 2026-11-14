@@ -105,6 +105,49 @@ fn validate_entry_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Atomically moves an entry only when the destination does not exist.
+fn rename_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let source = CString::new(source.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Source path contains a null byte."))?;
+        let destination = CString::new(destination.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination path contains a null byte."))?;
+        let result = unsafe {
+            libc::renameat2(libc::AT_FDCWD, source.as_ptr(), libc::AT_FDCWD, destination.as_ptr(), libc::RENAME_NOREPLACE)
+        };
+        if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let source = CString::new(source.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Source path contains a null byte."))?;
+        let destination = CString::new(destination.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination path contains a null byte."))?;
+        let result = unsafe { libc::renamex_np(source.as_ptr(), destination.as_ptr(), libc::RENAME_EXCL) };
+        if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let source: Vec<u16> = source.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let destination: Vec<u16> = destination.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe {
+            windows_sys::Win32::Storage::FileSystem::MoveFileW(source.as_ptr(), destination.as_ptr())
+        };
+        if result == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        let _ = (source, destination);
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Atomic no-replace moves are unsupported on this platform."))
+    }
+}
+
 fn relocate_entry(
     access: &WorkspaceAccess,
     source_path: &Path,
@@ -155,8 +198,8 @@ fn relocate_entry(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(format!("Could not verify the destination path: {error}")),
     }
-    fs::rename(&source, &target)
-        .map_err(|error| format!("Could not move the entry. The source and destination may be on different volumes or the entry may be in use: {error}"))?;
+    rename_no_replace(&source, &target)
+        .map_err(|error| format!("Could not move the entry without replacing an existing destination. The source and destination may be on different volumes or the entry may be in use: {error}"))?;
     Ok(target.to_string_lossy().into_owned())
 }
 
@@ -309,6 +352,38 @@ mod tests {
             .expect("write permissions");
         let access = WorkspaceAccess::load(permissions);
         (base, root, access)
+    }
+
+    #[test]
+    fn no_replace_move_preserves_an_existing_file_destination() {
+        let root = temporary_root("no-replace-file");
+        let source = root.join("source.txt");
+        let destination = root.join("destination.txt");
+        fs::write(&source, "source contents").expect("write source");
+        fs::write(&destination, "destination contents").expect("write destination");
+
+        let result = rename_no_replace(&source, &destination);
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(&source).expect("read source"), "source contents");
+        assert_eq!(fs::read_to_string(&destination).expect("read destination"), "destination contents");
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn no_replace_move_preserves_an_existing_directory_destination() {
+        let root = temporary_root("no-replace-directory");
+        let source = root.join("source");
+        let destination = root.join("destination");
+        fs::create_dir(&source).expect("create source directory");
+        fs::create_dir(&destination).expect("create destination directory");
+        fs::write(source.join("source.txt"), "source").expect("write source child");
+        fs::write(destination.join("destination.txt"), "destination").expect("write destination child");
+
+        let result = rename_no_replace(&source, &destination);
+        assert!(result.is_err());
+        assert!(source.join("source.txt").exists());
+        assert!(destination.join("destination.txt").exists());
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]
