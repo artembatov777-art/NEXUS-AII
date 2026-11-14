@@ -87,6 +87,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const controller = useRef<AbortController | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
+  const agentProviderReady = canUseAgentProvider(providerSettings, hasProviderKey) && !!providerSettings.model.trim();
   const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, providerSettings.model]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
@@ -349,7 +350,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             </div>
             <label className="agent-task-label" htmlFor="agent-task">Task input</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
-            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!hasProviderKey || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow ? "Create a model plan and execute registered tools through the permission-gated runtime" : "Save a provider API key in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
