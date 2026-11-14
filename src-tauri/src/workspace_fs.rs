@@ -68,8 +68,16 @@ fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
-        if metadata.number_of_links() > 1 {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
+        let mut information: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        // The stable std MetadataExt::number_of_links API is not available on
+        // Windows; query the same link count from the already-open file handle.
+        let queried = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) };
+        if queried == 0 {
+            return Err("NEXUS could not verify whether the file has external hard links.".into());
+        }
+        if information.nNumberOfLinks > 1 {
             return Err("NEXUS will not edit a hard-linked file because another path may expose the same data.".into());
         }
     }
