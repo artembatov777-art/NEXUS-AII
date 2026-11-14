@@ -107,7 +107,8 @@ export class MemoryService {
     return this.repository.list(scope, limit, projectId);
   }
 
-  async search(query: string, scope: MemoryScope = "all", limit = 10, projectId?: string): Promise<Result<MemoryRecord[]>> {
+  async search(query: string, scope: MemoryScope = "all", limit = 10, projectId?: string, signal?: AbortSignal): Promise<Result<MemoryRecord[]>> {
+    if (signal?.aborted) return err("cancelled", "Memory search was cancelled.");
     const normalized = query.trim();
     if (!normalized) return err("validation", "Memory search query cannot be empty.");
     if (normalized.length > 500) return err("validation", "Memory search query is too long.");
@@ -115,7 +116,9 @@ export class MemoryService {
       return err("validation", "Memory search limit must be between 1 and 50.");
     }
     if (scope === "project" && !projectId?.trim()) return err("validation", "Project-scoped memory search requires a project ID.");
-    return this.repository.search(normalized, scope, limit, projectId);
+    const result = await this.repository.search(normalized, scope, limit, projectId);
+    if (signal?.aborted) return err("cancelled", "Memory search was cancelled.");
+    return result;
   }
 
   async revise(id: MemoryId, changes: Partial<Pick<MemoryRecord, "content" | "category" | "scope" | "projectId" | "tags" | "source">>): Promise<Result<MemoryRecord>> {
