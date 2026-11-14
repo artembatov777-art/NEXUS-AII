@@ -59,21 +59,36 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
     } finally { setWorking(false); }
   }
 
-  async function importFile(file?: File) {
-    if (!file || !projectId || working) return;
-    setWorking(true); setError(""); setStatus("Parsing document and preparing local semantic index. First use downloads the embedding model.");
+  async function importFiles(fileList?: FileList | null) {
+    if (!fileList || !projectId || working) return;
+    const selected = Array.from(fileList).slice(0, 20);
+    const skipped = Math.max(0, fileList.length - selected.length);
+    setWorking(true); setError(""); setStatus(`Preparing ${selected.length} document(s) for project indexing…`);
+    const imported: string[] = [];
+    const failures: string[] = [];
     try {
-      const parsed = await parseKnowledgeFile(file);
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(projectId + ":" + file.name.toLocaleLowerCase()));
-      const documentId = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
-      const result = await ingestion.ingest({
-        id: documentId, projectId, fileName: file.name,
-        mediaType: parsed.mediaType, content: parsed.content, pages: parsed.pages
-      });
-      if (!result.ok) setError(result.error.message);
-      else { setStatus(`Imported ${result.value.fileName}: ${result.value.chunkCount} chunks. ${result.value.semanticIndexed ? "Local semantic index ready." : "Lexical search ready; semantic indexing unavailable."}`); await refreshDocuments(projectId); }
+      for (let index = 0; index < selected.length; index += 1) {
+        const file = selected[index];
+        setStatus(`Importing ${index + 1}/${selected.length}: ${file.name}`);
+        try {
+          const parsed = await parseKnowledgeFile(file);
+          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(projectId + ":" + file.name.toLocaleLowerCase()));
+          const documentId = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
+          const result = await ingestion.ingest({
+            id: documentId, projectId, fileName: file.name,
+            mediaType: parsed.mediaType, content: parsed.content, pages: parsed.pages
+          });
+          if (!result.ok) failures.push(file.name + ": " + result.error.message);
+          else imported.push(`${result.value.fileName} (${result.value.chunkCount} chunks)`);
+        } catch (cause) {
+          failures.push(file.name + ": " + (cause instanceof Error ? cause.message : "Could not read this file."));
+        }
+      }
+      await refreshDocuments(projectId);
+      setStatus(`Imported ${imported.length}/${selected.length} document(s). ${skipped ? `${skipped} extra file(s) were skipped by the 20-file batch limit. ` : ""}${imported.length ? imported.join("; ") : "No documents were imported."}`);
+      if (failures.length) setError(failures.slice(0, 8).join("\\n") + (failures.length > 8 ? `\\n…and ${failures.length - 8} more error(s).` : ""));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not read this file.");
+      setError(cause instanceof Error ? cause.message : "Document batch import failed.");
     } finally { setWorking(false); }
   }
 
@@ -117,9 +132,9 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
       </label>
       {items.length === 0 ? <div className="memory-empty">Create a project first. Knowledge is isolated by project.</div> : <>
         <div className="knowledge-import">
-          <div><strong><FileText size={15}/> Import a document</strong><p>TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file.</p></div>
+          <div><strong><FileText size={15}/> Import documents</strong><p>TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF and DOCX, up to 8 MB per file.</p></div>
           <label className="primary-btn"><Upload size={14}/> {working ? "Processing…" : "Choose file"}
-            <input type="file" accept=".txt,.md,.mdx,.csv,.json,.jsonl,.ndjson,.log,.yaml,.yml,.xml,.ts,.tsx,.js,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.hpp,.cs,.rb,.php,.sh,.ps1,.sql,.toml,.ini,.conf,.properties,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFile(e.target.files?.[0]); e.currentTarget.value = ""; }}/>
+            <input type="file" multiple accept=".txt,.md,.mdx,.csv,.json,.jsonl,.ndjson,.log,.yaml,.yml,.xml,.ts,.tsx,.js,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.hpp,.cs,.rb,.php,.sh,.ps1,.sql,.toml,.ini,.conf,.properties,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={working} onChange={e => { void importFiles(e.currentTarget.files); e.currentTarget.value = ""; }}/>
           </label>
         </div>
         <div className="knowledge-search">
