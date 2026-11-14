@@ -18,27 +18,62 @@ function isNativeDesktop(): boolean {
  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+const projectMigrations = new WeakMap<StorageLike, Promise<void>>();
+
 export class WorkspaceProjectRepository implements ProjectRepository {
  private readonly local: LocalStorageProjectRepository;
- constructor(storage: StorageLike) { this.local = new LocalStorageProjectRepository(storage); }
+ private migration?: Promise<void>;
+
+ constructor(private readonly storage: StorageLike) {
+  this.local = new LocalStorageProjectRepository(storage);
+ }
+
+ /** Coordinate one legacy import across every panel/service sharing this storage. */
+ private async ensureMigrated(): Promise<void> {
+  if (!isNativeDesktop()) return;
+  if (!this.migration) {
+   let pending = projectMigrations.get(this.storage);
+   if (!pending) {
+    pending = (async () => {
+     const native = await invoke<WorkspaceProject[]>("load_projects");
+     const legacy = await this.local.list(true);
+     if (!legacy.ok) throw new Error(legacy.error.message);
+     const existing = new Set(native.map(project => project.id));
+     for (const project of legacy.value) {
+      if (!existing.has(project.id)) await invoke("save_project", { project });
+     }
+     // Clear only after all imports succeed; otherwise the next call can retry.
+     this.local.clearLegacy();
+    })();
+    projectMigrations.set(this.storage, pending);
+    void pending.catch(() => {
+     if (projectMigrations.get(this.storage) === pending) projectMigrations.delete(this.storage);
+    });
+   }
+   this.migration = pending.catch(error => {
+    this.migration = undefined;
+    throw error;
+   });
+  }
+  await this.migration;
+ }
+
+ private async all(): Promise<WorkspaceProject[]> {
+  if (!isNativeDesktop()) {
+   const local = await this.local.list(true);
+   if (!local.ok) throw new Error(local.error.message);
+   return local.value;
+  }
+  await this.ensureMigrated();
+  // Read the live native snapshot after migration; never cache mutable records.
+  return invoke<WorkspaceProject[]>("load_projects");
+ }
 
  async list(includeArchived: boolean): Promise<Result<WorkspaceProject[]>> {
-  if (!isNativeDesktop()) return this.local.list(includeArchived);
   try {
-   const projects = await invoke<WorkspaceProject[]>("load_projects");
-   const legacy = await this.local.list(true);
-   if (!legacy.ok) return legacy;
-   const existing = new Set(projects.map(project => project.id));
-   // A partially completed migration is resumed on the next read. Native
-   // records win when an ID already exists, preserving newer native edits.
-   for (const project of legacy.value) {
-    if (!existing.has(project.id)) await invoke("save_project", { project });
-   }
-   // Keep one authoritative copy. Otherwise deleting a native project would
-   // cause the stale localStorage copy to recreate it on the next launch.
-   this.local.clearLegacy();
-   const merged = [...projects, ...legacy.value.filter(project => !existing.has(project.id))];
-   return ok(merged.filter(project => includeArchived || !project.archived).sort((a,b) => b.updatedAt-a.updatedAt));
+   const projects = await this.all();
+   return ok(projects.filter(project => includeArchived || !project.archived)
+    .sort((a, b) => b.updatedAt - a.updatedAt));
   } catch (error) {
    return err("storage_failed", error instanceof Error ? error.message : "Could not load native projects.", true);
   }
@@ -46,13 +81,23 @@ export class WorkspaceProjectRepository implements ProjectRepository {
 
  async save(project: WorkspaceProject): Promise<Result<void>> {
   if (!isNativeDesktop()) return this.local.save(project);
-  try { await invoke("save_project", { project }); return ok(undefined); }
-  catch (error) { return err("storage_failed", error instanceof Error ? error.message : "Could not save native project.", true); }
+  try {
+   await this.ensureMigrated();
+   await invoke("save_project", { project });
+   return ok(undefined);
+  } catch (error) {
+   return err("storage_failed", error instanceof Error ? error.message : "Could not save native project.", true);
+  }
  }
 
  async delete(id: ProjectId): Promise<Result<void>> {
   if (!isNativeDesktop()) return this.local.delete(id);
-  try { await invoke("delete_project", { id }); return ok(undefined); }
-  catch (error) { return err("storage_failed", error instanceof Error ? error.message : "Could not delete native project.", true); }
+  try {
+   await this.ensureMigrated();
+   await invoke("delete_project", { id });
+   return ok(undefined);
+  } catch (error) {
+   return err("storage_failed", error instanceof Error ? error.message : "Could not delete native project.", true);
+  }
  }
 }
