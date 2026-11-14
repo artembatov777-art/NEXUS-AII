@@ -39,10 +39,14 @@ export async function runDatasetModelComparison(
           onProgress: (completed, total) => options.onProgress?.(model, completed, total)
         }
       );
+      const summary = scoreDatasetEvaluation(samples, evaluation.outputs);
+      if (summary.completedCases === 0 && evaluation.failures.length > 0) {
+        return { model, status: "rejected" as const, error: evaluation.failures[0].message };
+      }
       return {
         model,
         status: "fulfilled" as const,
-        summary: scoreDatasetEvaluation(samples, evaluation.outputs),
+        summary,
         failures: evaluation.failures
       };
     } catch (cause) {
