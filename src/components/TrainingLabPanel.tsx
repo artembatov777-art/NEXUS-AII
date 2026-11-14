@@ -5,7 +5,7 @@ import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
 import { runDatasetEvaluation as executeDatasetEvaluation } from "../lib/datasetEvaluationRunner";
-import { runDatasetModelComparison } from "../lib/datasetModelComparison";
+import { runDatasetModelComparison, validateComparisonModelSelection } from "../lib/datasetModelComparison";
 import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
 import { formatTrainingDatasetSplitIds, parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
@@ -185,15 +185,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       return;
     }
     const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
-    if (models.length < 2 || models.length > 4) {
-      setError("Enter between two and four distinct model IDs before comparing the dataset.");
-      return;
-    }
-    const unavailableModels = models.filter(model => !availableModels.includes(model));
-    if (unavailableModels.length) {
-      setError("Use only models discovered from the current provider. Not found: " + unavailableModels.join(", "));
-      return;
-    }
+    const modelSelectionError = validateComparisonModelSelection(models, availableModels);
+    if (modelSelectionError) { setError(modelSelectionError); return; }
     const dataset = selectedDatasetRecord;
     const testSamples = dataset?.samples?.filter(sample => sample.split === "test") ?? [];
     if (!dataset || testSamples.length === 0 || testSamples.length > 1_000) {
@@ -252,15 +245,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       return;
     }
     const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
-    if (models.length < 2 || models.length > 4) {
-      setError("Enter between two and four distinct model IDs, separated by commas.");
-      return;
-    }
-    const unavailableModels = models.filter(model => !availableModels.includes(model));
-    if (unavailableModels.length) {
-      setError("Use only models discovered from the current provider. Not found: " + unavailableModels.join(", "));
-      return;
-    }
+    const modelSelectionError = validateComparisonModelSelection(models, availableModels);
+    if (modelSelectionError) { setError(modelSelectionError); return; }
     if (!evaluationPrompt.trim()) {
       setError("Add an evaluation prompt before comparing models.");
       return;

@@ -2,6 +2,20 @@ import type { DatasetSample, DatasetEvaluationSummary } from "../core/trainingLa
 import { scoreDatasetEvaluation } from "../core/trainingLab";
 import { runDatasetEvaluation, type DatasetEvaluationFailure } from "./datasetEvaluationRunner";
 
+/** Rejects duplicate, malformed, or undiscovered model IDs before any provider request is sent. */
+export function validateComparisonModelSelection(models: string[], availableModels: string[]): string | null {
+  if (!Array.isArray(models) || models.length < 2 || models.length > 4) {
+    return "Enter between two and four model IDs before comparing.";
+  }
+  const normalized = models.map(model => typeof model === "string" ? model.trim() : "");
+  if (normalized.some(model => !model || model.length > 160) || new Set(normalized).size !== normalized.length) {
+    return "Model IDs must be valid, distinct values no longer than 160 characters.";
+  }
+  const available = new Set(availableModels);
+  const missing = normalized.filter(model => !available.has(model));
+  return missing.length ? "Use only models discovered from the current provider. Not found: " + missing.join(", ") : null;
+}
+
 export type DatasetModelComparisonOutcome =
   | { model: string; status: "fulfilled"; summary: DatasetEvaluationSummary; failures: DatasetEvaluationFailure[] }
   | { model: string; status: "rejected"; error: string };

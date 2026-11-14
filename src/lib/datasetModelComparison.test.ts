@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runDatasetModelComparison } from "./datasetModelComparison";
+import { runDatasetModelComparison, validateComparisonModelSelection } from "./datasetModelComparison";
 import type { DatasetSample } from "../core/trainingLab";
 
 const dataset: DatasetSample[] = [
@@ -8,6 +8,14 @@ const dataset: DatasetSample[] = [
 ];
 
 describe("runDatasetModelComparison", () => {
+  it("validates discovered model IDs without silently deduplicating input", () => {
+    expect(validateComparisonModelSelection(["model-a", "model-b"], ["model-a", "model-b"])).toBeNull();
+    expect(validateComparisonModelSelection(["model-a", "model-a"], ["model-a", "model-b"])).toMatch(/distinct/);
+    expect(validateComparisonModelSelection(["model-a", "missing"], ["model-a", "model-b"])).toMatch(/discovered/);
+    expect(validateComparisonModelSelection(["model-a"], ["model-a"])).toMatch(/two and four/);
+    expect(validateComparisonModelSelection(["x".repeat(161), "model-b"], ["x".repeat(161), "model-b"])).toMatch(/160 characters/);
+  });
+
   it("compares all models on the same held-out cases and scores independently", async () => {
     const result = await runDatasetModelComparison(["model-a", "model-b"], dataset, async (model, sample) => {
       if (model === "model-a") return sample.id === "test-a" ? "4" : "Paris";
