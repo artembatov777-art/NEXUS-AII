@@ -6,18 +6,21 @@ import { parseKnowledgeFile } from "../lib/documentParsers";
 import { KnowledgeRetrievalService, type KnowledgeCitation } from "../core/knowledge";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
 import { WorkspaceKnowledgeRepository, type KnowledgeDocumentSummary } from "../lib/nativeRepositories";
-import { WorkspaceProjectRepository } from "../lib/projectStorage";
+import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "../lib/projectStorage";
+import { LocalStorageKnowledgeRepository } from "../lib/knowledgeStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "../lib/knowledgeVectorIndex";
 import { collectWorkspaceKnowledgeFiles } from "../lib/workspaceKnowledgeImport";
 
 export function KnowledgePanel({ onClose }: { onClose: () => void }) {
   const projects = useMemo(() => new ProjectService(
-    new WorkspaceProjectRepository(window.localStorage),
+    isTauri() ? new WorkspaceProjectRepository(window.localStorage) : new LocalStorageProjectRepository(window.localStorage),
     () => crypto.randomUUID() as ProjectId,
     () => Date.now()
   ), []);
-  const repository = useMemo(() => new WorkspaceKnowledgeRepository(window.localStorage), []);
+  const repository = useMemo(() => isTauri()
+    ? new WorkspaceKnowledgeRepository(window.localStorage)
+    : new LocalStorageKnowledgeRepository(window.localStorage), []);
   const embeddings = useMemo(() => new LocalTransformerEmbeddingProvider(), []);
   const vectors = useMemo(() => new IndexedDbKnowledgeVectorIndex(), []);
   const ingestion = useMemo(() => new DocumentIngestionService(repository, {}, embeddings, vectors), [repository, embeddings, vectors]);
