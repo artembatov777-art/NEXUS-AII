@@ -57,6 +57,42 @@ describe("ResumableAgentRuntime", () => {
     expect(runtime.list()[0]).not.toHaveProperty("createState");
   });
 
+  it("does not create a checkpoint when cancellation arrives during initial state creation", async () => {
+    const storage = new FakeStorage();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(storage));
+    const controller = new AbortController();
+    const runtime = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 });
+    const step = vi.fn(async (state: JsonValue) => ({ state, done: true }));
+    runtime.register({
+      ...makeDefinition(),
+      createState: () => { controller.abort(); return { count: 0 }; },
+      step
+    });
+    const events = await collect(runtime.start(agentId, 0, "thread-cancel-create", controller.signal));
+    expect(events).toEqual([{ type: "failed", runId, message: "Agent run was cancelled before checkpoint creation." }]);
+    expect(step).not.toHaveBeenCalled();
+    expect(await service.get(runId)).toMatchObject({ ok: true, value: null });
+  });
+
+  it("does not commit a step result if cancellation arrives as the step resolves", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const controller = new AbortController();
+    const step = vi.fn(async (_state: JsonValue) => {
+      controller.abort();
+      return { state: { count: 1 }, done: true, output: "must not be emitted" };
+    });
+    const runtime = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 });
+    runtime.register({ ...makeDefinition(), step });
+    const events = await collect(runtime.start(agentId, 0, "thread-cancel-step", controller.signal));
+    expect(events.map(event => event.type)).toEqual(["failed"]);
+    expect(step).not.toHaveBeenCalled();
+    expect(await service.get(runId)).toMatchObject({ ok: true, value: null });
+  });
+
   it("continues after a consumer/process interruption without replaying completed steps", async () => {
     const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
     const firstRuntime = makeRuntime(service);

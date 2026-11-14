@@ -95,6 +95,7 @@ export class ResumableAgentRuntime {
     let payload: JsonValue;
     try { payload = agent.createState(input); }
     catch { yield { type: "failed", runId, message: "Agent could not create its initial state." }; return; }
+    if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled before checkpoint creation." }; return; }
 
     const now = this.clock.now();
     const initial: AgentCheckpoint = { schemaVersion: 1, runId, agentId, threadId, sequence: 1,
@@ -199,7 +200,8 @@ export class ResumableAgentRuntime {
     const runId = checkpoint.runId as AgentRunId;
     const controller = new AbortController();
     const onAbort = () => controller.abort();
-    externalSignal?.addEventListener("abort", onAbort, { once: true });
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener("abort", onAbort, { once: true });
     let state = initialState;
     let sequence = checkpoint.sequence;
     let steps = completedSteps;
@@ -213,6 +215,7 @@ export class ResumableAgentRuntime {
         const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort",
           () => reject(new Error(timedOut ? "Agent timed out." : "Agent was cancelled.")), { once: true }));
         const result = await Promise.race([agent.step(state, { runId, step: steps + 1, signal: controller.signal, tools: this.tools }), abort]);
+        if (controller.signal.aborted) throw new Error(timedOut ? "Agent timed out." : "Agent was cancelled.");
         if (result.output !== undefined && result.output.length > 20_000) throw new Error("Agent output exceeded the 20,000 character limit.");
         if (result.progress !== undefined && (!result.progress.trim() || result.progress.length > 200)) throw new Error("Progress labels must contain 1 to 200 characters.");
         state = result.state;
