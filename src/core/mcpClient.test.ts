@@ -7,7 +7,7 @@ import type { McpRequest, McpResponse, McpTransport } from "./mcpClient";
 
 const gateway = () => new ToolGateway(
   { authorize: async () => "allow" },
-  { record: async () => ok(undefined) },
+  { record: async () => ok(undefined), list: async () => ok([]) },
   { now: () => 1 }
 );
 const initializeResult = () => ({
