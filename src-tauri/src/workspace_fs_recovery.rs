@@ -520,7 +520,7 @@ mod tests {
         journal.acknowledge_manual_resolution(&first).expect("acknowledge first operation");
         assert!(journal.recovery_status().expect("status").is_some());
         assert!(journal.ensure_ready().is_err());
-        journal.acknowledge_manual_resolution(&second).expect("acknowledge second operation");
+        journal.acknowledge_manual_resolution(second).expect("acknowledge second operation");
         assert!(journal.recovery_status().expect("status").is_none());
         assert!(journal.ensure_ready().is_ok());
         drop(journal);
