@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { Brain, Plus, Search, Trash2, X, Pencil, Check, Download } from "lucide-react";
 import { MemoryService, type MemoryCategory, type MemoryRecord, type MemoryScope, type MemoryId } from "../core/memory";
 import { HybridMemoryRetriever } from "../core/knowledge";
 import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
+import { LocalStorageMemoryRepository } from "../lib/memoryStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "../core/projects";
-import { WorkspaceProjectRepository } from "../lib/projectStorage";
+import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "../lib/projectStorage";
 
 interface MemoryPanelProps {
   onClose: () => void;
 }
 
 export function MemoryPanel({ onClose }: MemoryPanelProps) {
-  const memoryRepository = useMemo(() => new WorkspaceMemoryRepository(window.localStorage), []);
+  const memoryRepository = useMemo(() => isTauri()
+    ? new WorkspaceMemoryRepository(window.localStorage)
+    : new LocalStorageMemoryRepository(window.localStorage), []);
   const service = useMemo(() => new MemoryService(
     memoryRepository,
     { memoryId: () => crypto.randomUUID() as MemoryId },
@@ -33,7 +37,11 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [searching, setSearching] = useState(false);
-  const projects = useMemo(() => new ProjectService(new WorkspaceProjectRepository(window.localStorage), () => crypto.randomUUID() as ProjectId, () => Date.now()), []);
+  const projects = useMemo(() => new ProjectService(
+    isTauri() ? new WorkspaceProjectRepository(window.localStorage) : new LocalStorageProjectRepository(window.localStorage),
+    () => crypto.randomUUID() as ProjectId,
+    () => Date.now()
+  ), []);
   const [projectOptions, setProjectOptions] = useState<WorkspaceProject[]>([]);
   const [projectId, setProjectId] = useState("");
   const [editing, setEditing] = useState<MemoryRecord | null>(null);
