@@ -6,8 +6,8 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `0a8fb0d9a93fee49624d2b336aec462638488a36`.
-- Latest completed frontend Quality commit: `0a8fb0d9a93fee49624d2b336aec462638488a36`
+- Latest source implementation commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`.
+- Latest completed frontend Quality commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -17,9 +17,10 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Frontend Quality passed on `0a8fb0d9a93fee49624d2b336aec462638488a36` (73 test files / 516 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43627647251`). Mobile Interface Preview for the same commit is in progress (run `43627647193`). Native cross-platform verification is pending (run `43627647209`).
+- Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43627930950`). Mobile Interface Preview passed on the same commit (run `43627931063`). Native cross-platform verification is pending (run `43627936468`).
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
+- A prior Windows/macOS native run exposed test fixtures persisting non-canonical temporary roots. Both filesystem fixture helpers now persist canonical roots, matching the production grant contract; the corrected cross-platform run is pending.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 ## Phase I — Complete interface
@@ -43,7 +44,7 @@ The first semantic memory use may download the local embedding model. If that mo
 
 ## Phase IV — Agents & Tools
 
-The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, and MCP HTTP transport are implemented. ToolGateway now fails closed when its audit sink cannot verify prior execution history, and rejects malformed actor/run/trace identifiers before permission checks or side effects. Planned runs can include relevant profile memories, selected-project memories, and source-grounded project knowledge as untrusted reference context; cancellation propagates through memory and knowledge retrieval. MCP requests and responses are bounded, JSON-RPC responses are correlated to request IDs, transport-owned session headers cannot be overridden, and ambiguous external outcomes require owner-confirmed reconciliation.
+The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, and MCP HTTP transport are implemented. ToolGateway now fails closed when its audit sink cannot verify prior execution history, and rejects malformed actor/run/trace identifiers or malformed cancellation signals before permission checks or side effects. Regression tests cover missing audit readers, control characters, and malformed/missing AbortSignal objects. Planned runs can include relevant profile memories, selected-project memories, and source-grounded project knowledge as untrusted reference context; cancellation propagates through memory and knowledge retrieval. MCP requests and responses are bounded, JSON-RPC responses are correlated to request IDs, transport-owned session headers cannot be overridden, and ambiguous external outcomes require owner-confirmed reconciliation.
 
 Automatic persisted input-bound result replay is intentionally not implemented: storing arbitrary tool outputs for replay could duplicate private data or unsafe side effects. Duplicate run/step execution is blocked instead. OAuth/bearer authentication and adversarial live-server tests remain open.
 
@@ -64,7 +65,7 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 - Agent, Memory, and Knowledge panels now explicitly select browser-backed repositories in web preview and native SQLite repositories in the desktop shell, keeping the preview functional without invoking unavailable native commands.
 - Native macOS tests exposed non-canonical temporary roots in filesystem test fixtures; both filesystem fixture helpers now persist canonical roots, matching the production permission-grant contract. The corrected cross-platform native run is pending.
 
-Additional source hardening is now present on the working branch. Frontend Quality passed on `0a8fb0d9a93fee49624d2b336aec462638488a36`; Mobile Interface Preview is in progress and native cross-platform verification remains pending:
+Additional source hardening is now present on the working branch. Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b`; Mobile Interface Preview passed and native cross-platform verification remains pending:
 - Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
 - Provider API keys are redacted from successful non-streaming output and streamed text, including when a key is split across SSE deltas.
 - File move/rename source paths resolve the approved parent directory without canonicalizing the final component, preventing symlink-target substitution during source resolution.
@@ -76,7 +77,7 @@ SQLite, browser stores, and checkpoints are not application-level encrypted. Rem
 
 ## Phase VII — Testing & Release 1.0
 
-Frontend Quality passed on `0a8fb0d9a93fee49624d2b336aec462638488a36` (73 test files / 516 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview for the same commit is in progress. Native Windows/macOS/Linux tests and package generation for the current source changes remain pending. No signed public release has been produced.
+Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview passed on the same commit. Native Windows/macOS/Linux tests and package generation for the current source changes remain pending. No signed public release has been produced.
 
 Release acceptance still requires:
 - Successful current Windows/macOS/Linux Rust tests and native package builds.
@@ -91,10 +92,10 @@ Release acceptance still requires:
 
 - Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
 - Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
-- Frontend Quality passed on `0a8fb0d9a93fee49624d2b336aec462638488a36` (73 test files / 516 tests). Mobile Interface Preview is in progress and native cross-platform verification remains pending.
+- Frontend Quality passed on `da4a19b8f624c32c8266b45db97bd538a88dec9b` (73 test files / 517 tests). Mobile Interface Preview is in progress and native cross-platform verification remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
 - Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
-- Latest source implementation commit: `0a8fb0d9a93fee49624d2b336aec462638488a36`; subsequent documentation-only commits may follow without changing that source baseline.
+- Latest source implementation commit: `da4a19b8f624c32c8266b45db97bd538a88dec9b`; subsequent documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
