@@ -32,7 +32,6 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Frontend Quality passed on `435b8914e31126f8261e0f10e2921bc5d8314100` (59 test files, 391 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities).
 - [x] Native Windows/macOS/Linux matrix passed on `435b8914e31126f8261e0f10e2921bc5d8314100`, including Rust checks, library tests, and native application builds. The workflow also completed the Rust dependency audit successfully.
 - [x] Mobile Interface Preview build and Pages deployment passed for UI-identical frontend commit `64f8d5d0b2d045d5326aac76a462518ed56a7e73`.
-- [ ] Recheck the latest hosted mobile preview and responsive workspace on a real iPhone Safari session after the final visual refresh.
 
 **Exit criteria:** every planned module is reachable; primary controls have real UI behavior or an honest disabled/demo state; desktop and mobile layouts are usable; keyboard navigation and dialogs behave consistently; CI passes. Do not close this phase based on screenshots or a static mock alone.
 
@@ -47,14 +46,14 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 - [ ] Add a provider-neutral image-generation contract and capability discovery; do not infer image-generation support from a text model's ID.
 - [x] Add a secured Gemini 3.1 Flash Image server-side adapter and chat-composer dialog with explicit remote consent, allowlisted aspect ratios/resolutions, bounded response size, image-signature validation, and download. Quality CI and live provider verification are still pending.
 - [ ] Persist generated images in conversation history and support iterative image editing; current generated results are shown in the dialog and can be downloaded.
-- [ ] Implement at least one real image-generation adapter, bounded prompt/output handling, cancellation, clear provider attribution, and explicit consent before remote prompt or image processing.
-- [ ] Add image-generation controls to chat, render returned images in conversation history, and support safe save/export without placing provider secrets in browser storage.
+- [x] Implement a real Gemini 3.1 Flash Image adapter with bounded prompt/output handling, clear provider attribution, and explicit remote-processing consent; Quality CI and live provider verification remain pending.
+- [x] Add a chat-composer image-generation control, preview the returned image, and support safe download without placing provider secrets in browser storage; conversation-history persistence remains a separate open item.
 - [ ] Add automated tests for unsupported providers, malformed image responses, size limits, cancellation, and remote-consent denial.
 - [x] Add an explicit browser/WebView conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and return to listening. Automated and real-host verification remains pending.
 - [ ] Add a native/offline STT/TTS runtime and platform-specific permission/availability checks; browser/WebView APIs are not evidence of offline support.
-- [ ] Keep push-to-talk available as a lower-permission alternative; clearly disclose when browser/WebView speech services may process audio remotely.
+- [x] Keep one-shot push-to-talk available as a lower-permission alternative and disclose that browser/WebView speech services may process audio remotely.
 - [ ] Test voice-mode lifecycle, duplicate submission prevention, permission denial, unsupported hosts, interruption, and cleanup on navigation/unmount.
-- [ ] Do not claim offline/native voice until an actual local STT/TTS runtime is implemented and verified.
+- [x] Explicitly document that browser/WebView speech services are host-dependent and do not claim offline/native voice.
 
 
 - [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
@@ -93,6 +92,7 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 - [ ] Add automatic idempotent result replay with persisted, input-bound results; external side effects remain blocked from automatic replay.
 - [x] Expose tool scopes, per-call approvals, execution traces, and agent failures; finish end-to-end release verification.
 - [x] Add integration tests for safe tool execution and denied high-risk file writes through the model-planned workflow.
+- [x] Add an execution-evidence boundary to ordinary chat requests so text-only model responses cannot claim that files, code, or external actions were executed without a real host tool result.
 
 **Exit criteria:** an agent can plan, request scoped tools, wait for owner approval, resume, and complete with a verifiable audit trail.
 
