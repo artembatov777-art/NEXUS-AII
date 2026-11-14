@@ -197,7 +197,7 @@ export default function App() {
       }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "p" && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="dialog"]'))) {
         event.preventDefault();
-        setCommandPaletteOpen(value => !value);
+        openWorkspacePanel(commandPaletteOpen ? "chat" : "command");
         return;
       }
       if (!matchesNewConversationShortcut(event)) return;
@@ -206,7 +206,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleKeyboardShortcut);
     return () => window.removeEventListener("keydown", handleKeyboardShortcut);
-  }, [conversationsReady, selectedProjectId, sidebarOpen]);
+  }, [conversationsReady, selectedProjectId, sidebarOpen, commandPaletteOpen]);
 
   // Keep keyboard focus inside the active workspace dialog and make Escape a
   // consistent close action across every module.
@@ -670,7 +670,7 @@ export default function App() {
     </main>
 
     {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
-      if (id === "focus") { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
+      if (id === "focus") { openWorkspacePanel("chat"); setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
       if (id === "chat") { openWorkspacePanel("chat"); closeMobileNavigation(); return; }
       if (id === "new-chat") { openWorkspacePanel("chat"); newChat(); return; }
       const panelByCommand: Record<Exclude<NexusCommandId, "focus" | "chat" | "new-chat">, WorkspacePanel> = { search: "search", models: "settings", training: "training", agents: "agents", memory: "memory", knowledge: "knowledge", projects: "projects", files: "files", tools: "tools" };
