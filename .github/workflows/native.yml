@@ -1,0 +1,92 @@
+name: Native desktop quality
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Keep the active cross-platform build alive while newer commits queue.
+  # GitHub retains only the latest pending run for this concurrency group.
+  cancel-in-progress: false
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libdbus-1-dev
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run build
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      - name: Build Windows installers
+        if: runner.os == 'Windows'
+        run: npm run tauri build -- --bundles "nsis,msi"
+      - name: Build macOS disk image
+        if: runner.os == 'macOS'
+        run: npm run tauri build -- --bundles "dmg"
+      - name: Build Linux packages
+        if: runner.os == 'Linux'
+        run: npm run tauri build -- --bundles "appimage,deb"
+      - name: Upload native installer packages for manual smoke tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-au-installers-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+  update-rust-lockfile:
+    needs: native
+    if: github.ref == 'refs/heads/feat/nexus-core-architecture' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve patched rusqlite and SQLite versions
+        run: cargo update --manifest-path src-tauri/Cargo.toml -p rusqlite --precise 0.42.0
+      - name: Commit updated Rust lockfile on the working branch
+        run: |
+          git add src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Rust lockfile is already current."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Update rusqlite to patched SQLite runtime"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+  rust-security-audit:
+    needs: update-rust-lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/nexus-core-architecture
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Rust dependency advisories
+        run: cargo audit --file src-tauri/Cargo.lock

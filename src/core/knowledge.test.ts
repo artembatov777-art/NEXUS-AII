@@ -1,0 +1,103 @@
+import {describe,it,expect} from "vitest";
+import {HybridMemoryRetriever,KnowledgeRetrievalService,type MemorySearchRepository,type EmbeddingProvider,type VectorMemoryIndex,type KnowledgeRepository} from "./knowledge";
+import {ok} from "./result";
+import type {MemoryRecord} from "./memory";
+const rec=(id:string):MemoryRecord=>({id:id as MemoryRecord["id"],content:"Project architecture notes",category:"project",scope:"project",source:{type:"import",label:"design.pdf",referenceId:"doc-1"},tags:["architecture"],createdAt:1,updatedAt:1,schemaVersion:1});
+describe("knowledge retrieval",()=>{
+ it("combines lexical and semantic results with explicit citations",async()=>{
+  const records=[rec("lex"),rec("semantic")];const repository:MemorySearchRepository={search:async()=>ok([records[0]]),getByIds:async ids=>ok(records.filter(r=>ids.includes(r.id)))};
+  const embeddings:EmbeddingProvider={embed:async()=>ok([[1,0]])};const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},search:async()=>[{id:"semantic",score:.99}]};
+  const ranked=await new HybridMemoryRetriever(repository,embeddings,vectors).search("design systems","all",5);
+  expect(ranked.ok&&ranked.value[0].record.id).toBe("semantic");
+ });
+ it("does not download or invoke embeddings when no memories exist",async()=>{
+  const repository:MemorySearchRepository={
+   search:async()=>ok([]),getByIds:async()=>ok([]),exportAll:async()=>ok([])
+  };
+  let calls=0;
+  const embeddings:EmbeddingProvider={embed:async()=>{calls+=1;return ok([[1,0]]);}};
+  const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},reconcile:async()=>[],search:async()=>[]};
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("query");
+  expect(result).toEqual({ok:true,value:[]});
+  expect(calls).toBe(0);
+ });
+ it("falls back to lexical retrieval when embeddings fail",async()=>{
+  const records=[rec("lex")];const repository:MemorySearchRepository={search:async()=>ok(records),getByIds:async()=>ok(records)};
+  const embeddings:EmbeddingProvider={embed:async()=>({ok:false,error:{code:"provider_unavailable",message:"offline",retryable:true}})};
+  const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},search:async()=>[]};
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture");
+  expect(result.ok&&result.value[0].record.id).toBe("lex");
+ });
+ it("enforces memory scope boundaries even if the repository returns unrelated records",async()=>{
+  const allowed={...rec("allowed"),scope:"project" as const,projectId:"project-a"};
+  const privateRecord={...rec("private"),scope:"project" as const,projectId:"project-b"};
+  const repository:MemorySearchRepository={
+   search:async()=>ok([allowed,privateRecord]),
+   getByIds:async ids=>ok([allowed,privateRecord].filter(record=>ids.includes(record.id)))
+  };
+  const result=await new HybridMemoryRetriever(repository).search("architecture","project",5,undefined,"project-a");
+  expect(result).toMatchObject({ok:true,value:[{record:{id:"allowed"}}]});
+ });
+ it("propagates cancellation instead of silently returning lexical-only memory results",async()=>{
+  const records=[rec("lex")];const repository:MemorySearchRepository={search:async()=>ok(records),getByIds:async()=>ok(records)};
+  const controller=new AbortController();
+  const embeddings:EmbeddingProvider={embed:async()=>{controller.abort();return {ok:false,error:{code:"cancelled",message:"cancelled",retryable:false}};}};
+  const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},search:async()=>[]};
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture","all",5,controller.signal);
+  expect(result).toMatchObject({ok:false,error:{code:"cancelled"}});
+ });
+ it("reconciles persistent semantic vectors before retrieving approved memories",async()=>{
+  const records=[
+   {...rec("lex"),scope:"profile" as const},
+   {...rec("semantic"),scope:"profile" as const}
+  ];
+  const repository:MemorySearchRepository={
+   search:async()=>ok([records[0]]),
+   getByIds:async ids=>ok(records.filter(record=>ids.includes(record.id))),
+   exportAll:async()=>ok(records)
+  };
+  const indexed=new Map<string,number[]>();
+  const vectors:VectorMemoryIndex={
+   upsert:async(record,vector)=>{indexed.set(record.id,vector);},
+   remove:async id=>{indexed.delete(id);},
+   reconcile:async all=>all.filter(record=>!indexed.has(record.id)),
+   search:async()=>[{id:"semantic",score:.98}]
+  };
+  const embeddings:EmbeddingProvider={
+   embed:async texts=>ok(texts.map(text=>text==="semantic query"?[1,0]:[0,1]))
+  };
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("semantic query","profile",5);
+  expect(indexed.size).toBe(2);
+  expect(result.ok&&result.value[0].record.id).toBe("semantic");
+ });
+ it("never returns semantic matches from another project",async()=>{
+  const chunks=[
+   {id:"same-project",documentId:"d1",projectId:"p1",text:"Allowed project content",sourceLabel:"allowed.md"},
+   {id:"other-project",documentId:"d2",projectId:"p2",text:"Private unrelated project content",sourceLabel:"private.md"}
+  ];
+  const repository:KnowledgeRepository={
+   add:async()=>ok(undefined),removeDocument:async()=>ok(undefined),
+   search:async(_query,projectId)=>ok(chunks.filter(chunk=>chunk.projectId===projectId)),
+   getByIds:async ids=>ok(chunks.filter(chunk=>ids.includes(chunk.id)))
+  };
+  const embeddings:EmbeddingProvider={embed:async()=>ok([[1,0]])};
+  const vectors={
+   upsert:async()=>{},remove:async()=>{},search:async()=>[
+    {id:"same-project",score:.8},{id:"other-project",score:.99}
+   ],removeDocument:async()=>{},hasProject:async()=>true
+  };
+  const result=await new KnowledgeRetrievalService(repository,embeddings,vectors).retrieve("project content","p1");
+  expect(result.ok).toBe(true);
+  if(result.ok){
+   expect(result.value.context).toContain("Allowed project content");
+   expect(result.value.context).not.toContain("Private unrelated project content");
+   expect(result.value.citations.map(citation=>citation.documentId)).toEqual(["d1"]);
+  }
+ });
+ it("returns knowledge citations alongside retrieved context",async()=>{
+  const repository:KnowledgeRepository={add:async()=>ok(undefined),removeDocument:async()=>ok(undefined),search:async()=>ok([{id:"c1",documentId:"d1",projectId:"p1",text:"Architecture decisions",sourceLabel:"design.pdf",page:4,section:"Core"}])};
+  const result=await new KnowledgeRetrievalService(repository).retrieve("architecture","p1");
+  expect(result.ok&&result.value.citations[0]).toMatchObject({documentId:"d1",page:4,sourceLabel:"design.pdf"});
+  expect(result.ok&&result.value.context).toContain("page 4");
+ });
+});

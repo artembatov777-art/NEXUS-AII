@@ -1,0 +1,271 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { err, ok, type Result } from "../core/result";
+import type { ToolDefinition } from "../core/tools";
+import type { ToolRegistry } from "../core/toolRegistry";
+
+type WorkspaceEntry = {
+  name: string;
+  path: string;
+  kind: "directory" | "file" | "other";
+  sizeBytes: number;
+  modifiedAtMs: number | null;
+};
+
+type PathInput = { path: string };
+type WriteInput = { path: string; content: string };
+type SearchInput = { path: string; query: string };
+type RenameInput = { path: string; newName: string };
+type MoveInput = { path: string; destinationDirectory: string };
+
+const MAX_PATH_LENGTH = 4096;
+const MAX_TOOL_TEXT_BYTES = 48_000;
+const MAX_LIST_ENTRIES = 10;
+const MAX_SERIALIZED_OUTPUT_BYTES = 60_000;
+
+function validPathInput(input: unknown): Result<PathInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      typeof (input as Record<string, unknown>).path !== "string") {
+    return err("validation", "A workspace path is required.");
+  }
+  const path = (input as { path: string }).path;
+  if (!path.trim() || path.length > MAX_PATH_LENGTH) return err("validation", "Workspace path must contain 1 to 4,096 characters.");
+  return ok({ path });
+}
+
+function validSearchInput(input: unknown): Result<SearchInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A workspace path and search query are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
+      typeof record.query !== "string" || !record.query.trim() || record.query.length > 256) {
+    return err("validation", "Workspace path or search query is invalid.");
+  }
+  return ok({ path: record.path, query: record.query.trim() });
+}
+
+function validRenameInput(input: unknown): Result<RenameInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A file path and new name are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
+      typeof record.newName !== "string" || !record.newName.trim() || new TextEncoder().encode(record.newName).byteLength > 255 || record.path.length + record.newName.length + 4 > MAX_PATH_LENGTH ||
+      record.newName === "." || record.newName === ".." || /[\\/:*?"<>|]/.test(record.newName) ||
+      /[\u0000-\u001f\u007f]/.test(record.newName) || /[. ]$/.test(record.newName)) {
+    return err("validation", "File path or new name is invalid.");
+  }
+  return ok({ path: record.path, newName: record.newName });
+}
+
+function validMoveInput(input: unknown): Result<MoveInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A source path and destination directory are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || typeof record.destinationDirectory !== "string" ||
+      !record.destinationDirectory.trim() || record.path.length + record.destinationDirectory.length + 4 > MAX_PATH_LENGTH) {
+    return err("validation", "Source and destination paths are invalid or exceed the combined path limit.");
+  }
+  return ok({ path: record.path, destinationDirectory: record.destinationDirectory });
+}
+
+function validWriteInput(input: unknown): Result<WriteInput> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("validation", "A file path and text content are required.");
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || !record.path.trim() || record.path.length > MAX_PATH_LENGTH ||
+      typeof record.content !== "string" || new TextEncoder().encode(record.content).byteLength > MAX_TOOL_TEXT_BYTES) {
+    return err("validation", "File path is invalid or content exceeds the 48 KB agent-write limit.");
+  }
+  return ok({ path: record.path, content: record.content });
+}
+
+function failure(cause: unknown, fallback: string): Result<never> {
+  return err("tool_failed", cause instanceof Error ? cause.message : fallback);
+}
+
+function ensureNative(): Result<void> {
+  return isTauri() ? ok(undefined) : err("permission_denied", "Workspace tools are available only in the NEXUS desktop app.");
+}
+
+/** Registers narrowly scoped filesystem tools. Native Rust commands remain the final access-control boundary. */
+export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
+  const nativeCheck = ensureNative();
+  const definitions: ToolDefinition<any, any>[] = [
+    {
+      id: "workspace.list",
+      version: "1.0.0",
+      description: "List files and folders inside a directory explicitly approved by the owner. Input: {path}.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "low",
+      timeoutMs: 15_000,
+      validateInput: validPathInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace listing was cancelled.");
+        try {
+          const entries = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
+          if (context.signal.aborted) return err("cancelled", "Workspace listing was cancelled.");
+          let visible = entries.slice(0, MAX_LIST_ENTRIES);
+          while (visible.length > 0 && new TextEncoder().encode(JSON.stringify({
+            path, entries: visible, totalEntries: entries.length, truncated: visible.length < entries.length
+          })).byteLength > MAX_SERIALIZED_OUTPUT_BYTES) visible = visible.slice(0, -1);
+          return ok({ path, entries: visible, totalEntries: entries.length, truncated: visible.length < entries.length });
+        } catch (cause) { return failure(cause, "Could not list the approved workspace directory."); }
+      }
+    },
+    {
+      id: "workspace.search",
+      version: "1.0.0",
+      description: "Search file and folder names recursively inside an explicitly approved directory. Input: {path,query}. Search is bounded by depth and entry limits.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "low",
+      timeoutMs: 15_000,
+      validateInput: validSearchInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path, query }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace search was cancelled.");
+        try {
+          const entries = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path, query });
+          if (context.signal.aborted) return err("cancelled", "Workspace search was cancelled.");
+          return ok({ path, query, entries: entries.slice(0, 10), matchedEntries: entries.length, truncated: entries.length > 10 });
+        } catch (cause) { return failure(cause, "Could not search the approved workspace directory."); }
+      }
+    },
+    {
+      id: "workspace.search_content",
+      version: "1.0.0",
+      description: "Search text content in UTF-8 files inside an explicitly approved directory. Skips binary files and common generated/dependency folders; bounded by file, size, depth and result limits. Input: {path,query}.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "low",
+      timeoutMs: 30_000,
+      validateInput: validSearchInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path, query }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace content search was cancelled.");
+        try {
+          const result = await invoke<{ matches: { path: string; lineNumber: number; preview: string }[]; totalMatches: number; scannedFiles: number; truncated: boolean }>("search_workspace_contents", { path, query });
+          if (context.signal.aborted) return err("cancelled", "Workspace content search was cancelled.");
+          const matches = result.matches.slice(0, 20);
+          return ok({ path, query, matches, totalMatches: result.totalMatches, scannedFiles: result.scannedFiles, truncated: result.truncated || result.matches.length > 20 });
+        } catch (cause) { return failure(cause, "Could not search text content in the approved workspace directory."); }
+      }
+    },
+    {
+      id: "workspace.read",
+      version: "1.0.0",
+      description: "Read a UTF-8 text file inside an explicitly approved directory. Input: {path}. Output is capped at 48 KB.",
+      requiredPermissions: ["filesystem:read:selected"],
+      risk: "medium",
+      timeoutMs: 15_000,
+      validateInput: validPathInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace read was cancelled.");
+        try {
+          const content = await invoke<string>("read_workspace_file", { path });
+          if (context.signal.aborted) return err("cancelled", "Workspace read was cancelled.");
+          const maxContentBytes = new TextEncoder().encode(content).byteLength;
+          let low = 0;
+          let high = Math.min(content.length, MAX_TOOL_TEXT_BYTES);
+          let best = 0;
+          while (low <= high) {
+            let middle = Math.floor((low + high) / 2);
+            const candidate = content.slice(0, middle);
+            const output = { path, content: candidate, truncated: middle < content.length, totalCharacters: content.length };
+            const size = new TextEncoder().encode(JSON.stringify(output)).byteLength;
+            if (size <= MAX_SERIALIZED_OUTPUT_BYTES) {
+              best = middle;
+              low = middle + 1;
+            } else {
+              high = middle - 1;
+            }
+          }
+          if (best > 0 && best < content.length) {
+            const code = content.charCodeAt(best - 1);
+            if (code >= 0xD800 && code <= 0xDBFF) best -= 1;
+          }
+          const bounded = content.slice(0, best);
+          return ok({ path, content: bounded, truncated: best < content.length || maxContentBytes > MAX_TOOL_TEXT_BYTES, totalCharacters: content.length });
+        } catch (cause) { return failure(cause, "Could not read the approved workspace file."); }
+      }
+    },
+    {
+      id: "workspace.write",
+      version: "1.0.0",
+      description: "Create a new UTF-8 text file inside an explicitly approved directory. Input: {path,content}, maximum 48 KB. Refuses to overwrite any existing file or directory.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "high",
+      timeoutMs: 15_000,
+      validateInput: validWriteInput,
+      resourceForInput: input => {
+        const preview = JSON.stringify(input.content.slice(0, 1200));
+        return `${input.path}\nContent preview: ${preview}${input.content.length > 1200 ? " … [truncated]" : ""}`;
+      },
+      execute: async ({ path, content }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Workspace write was cancelled.");
+        try {
+          await invoke("write_workspace_file", { path, content });
+          return ok({ path, saved: true, bytes: new TextEncoder().encode(content).byteLength });
+        } catch (cause) { return failure(cause, "Could not write the approved workspace file."); }
+      }
+    },
+    {
+      id: "workspace.mkdir",
+      version: "1.0.0",
+      description: "Create a new directory inside an explicitly approved workspace directory. Input: {path}.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "medium",
+      timeoutMs: 15_000,
+      validateInput: validPathInput,
+      resourceForInput: input => input.path,
+      execute: async ({ path }, context) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        if (context.signal.aborted) return err("cancelled", "Directory creation was cancelled.");
+        try {
+          await invoke("create_workspace_directory", { path });
+          return ok({ path, created: true });
+        } catch (cause) { return failure(cause, "Could not create the approved workspace directory."); }
+      }
+    },
+    {
+      id: "workspace.rename",
+      version: "1.0.0",
+      description: "Rename a regular file or directory inside an owner-approved workspace root. Input: {path,newName}. Never overwrites an existing destination.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "high",
+      timeoutMs: 15_000,
+      validateInput: validRenameInput,
+      resourceForInput: input => `${input.path} -> ${input.newName}`,
+      execute: async ({ path, newName }) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        try {
+          const renamedPath = await invoke<string>("rename_workspace_entry", { path, newName });
+          return ok({ previousPath: path, path: renamedPath, renamed: true });
+        } catch (cause) { return failure(cause, "Could not rename the approved workspace entry."); }
+      }
+    },
+    {
+      id: "workspace.move",
+      version: "1.0.0",
+      description: "Move a regular file or directory to another folder inside the same owner-approved root. Input: {path,destinationDirectory}. Never overwrites an existing destination.",
+      requiredPermissions: ["filesystem:write:selected"],
+      risk: "high",
+      timeoutMs: 15_000,
+      validateInput: validMoveInput,
+      resourceForInput: input => `${input.path} -> ${input.destinationDirectory}`,
+      execute: async ({ path, destinationDirectory }) => {
+        if (!nativeCheck.ok) return nativeCheck;
+        try {
+          const movedPath = await invoke<string>("move_workspace_entry", { path, destinationDirectory });
+          return ok({ previousPath: path, path: movedPath, moved: true });
+        } catch (cause) { return failure(cause, "Could not move the approved workspace entry."); }
+      }
+    },
+  ];
+
+  for (const definition of definitions) {
+    const registered = registry.register(definition, "builtin", ["filesystem", "workspace", "desktop"]);
+    if (!registered.ok) return registered;
+  }
+  return ok(undefined);
+}

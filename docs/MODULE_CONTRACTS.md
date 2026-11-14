@@ -1,0 +1,371 @@
+# NEXUS AU — Module Contracts
+
+This document defines the first stable boundaries between modules. It is intentionally implementation-oriented but does not bind the project to one database or AI provider.
+
+## 1. Dependency rules
+
+Allowed dependency direction:
+
+```text
+UI -> Application -> Domain
+Infrastructure -> Domain interfaces
+Tauri host -> Application facade + Infrastructure
+```
+
+Forbidden:
+- Domain importing React, Tauri, HTTP clients, SQLite, or provider SDKs.
+- UI calling provider endpoints directly with secrets.
+- Agents bypassing the Tool Gateway.
+- Tools invoking other tools without runtime policy checks.
+- Storage implementations leaking database-specific records into domain types.
+
+## 2. Shared result types
+
+Use discriminated unions rather than throwing arbitrary strings across module boundaries.
+
+```ts
+export type AppErrorCode =
+  | "validation"
+  | "authentication"
+  | "permission_denied"
+  | "provider_unavailable"
+  | "rate_limited"
+  | "timeout"
+  | "cancelled"
+  | "tool_failed"
+  | "storage_failed"
+  | "internal";
+
+export type Result<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: AppError };
+
+export interface AppError {
+  code: AppErrorCode;
+  message: string;
+  retryable: boolean;
+  traceId?: string;
+}
+```
+
+Errors must not contain credentials or raw secret-bearing headers.
+
+## 3. Model provider port
+
+```ts
+export interface ModelMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  name?: string;
+  toolCallId?: string;
+}
+
+export interface ModelRequest {
+  model: string;
+  messages: ModelMessage[];
+  temperature?: number;
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
+}
+
+export type ModelEvent =
+  | { type: "text_delta"; text: string }
+  | { type: "usage"; inputTokens?: number; outputTokens?: number }
+  | { type: "completed"; finishReason?: string };
+
+export interface ModelProvider {
+  readonly id: string;
+  listModels(): Promise<Result<ModelDescriptor[]>>;
+  stream(request: ModelRequest): AsyncIterable<ModelEvent>;
+}
+```
+
+Provider adapters normalize vendor-specific payloads. The application layer must not know the provider's HTTP response shape.
+
+## 4. Repository ports
+
+```ts
+export interface ConversationRepository {
+  list(): Promise<Result<ConversationSummary[]>>;
+  get(id: string): Promise<Result<Conversation | null>>;
+  save(conversation: Conversation): Promise<Result<void>>;
+  delete(id: string): Promise<Result<void>>;
+}
+
+export type MemoryScope = "all" | "profile" | "project" | "conversation";
+
+export interface MemoryRecord {
+  id: string;
+  content: string;
+  category: "preference" | "goal" | "fact" | "workflow" | "project";
+  scope: Exclude<MemoryScope, "all">;
+  source: {
+    type: "user_confirmed" | "conversation" | "import";
+    referenceId?: string;
+    label: string;
+  };
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  schemaVersion: 1;
+}
+
+export interface MemoryRepository {
+  search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
+  save(record: MemoryRecord): Promise<Result<void>>;
+  delete(id: string): Promise<Result<void>>;
+}
+```
+
+Implementations may be LocalStorage (temporary preview) or SQLite (desktop). The domain-facing contract remains stable.
+
+## 5. Permission port
+
+```ts
+export type PermissionScope =
+  | "conversation:read"
+  | "memory:read"
+  | "memory:write"
+  | "filesystem:read:selected"
+  | "filesystem:write:selected"
+  | "browser:read"
+  | "browser:interact"
+  | "github:read"
+  | "github:write";
+
+export interface PermissionRequest {
+  actorId: string;
+  scope: PermissionScope;
+  resource?: string;
+  reason: string;
+  risk: "low" | "medium" | "high";
+}
+
+export interface PermissionService {
+  authorize(request: PermissionRequest): Promise<"allow" | "deny" | "ask_user">;
+}
+```
+
+Default-deny is required for filesystem writes, browser interaction, GitHub writes, shell execution, and other externally visible actions.
+
+## 6. Tool contract
+
+```ts
+export interface ToolDefinition<Input = unknown, Output = unknown> {
+  id: string;
+  version: string;
+  description: string;
+  inputSchema: unknown;
+  requiredPermissions: PermissionScope[];
+  risk: "low" | "medium" | "high";
+  execute(input: Input, context: ToolExecutionContext): Promise<Result<Output>>;
+}
+
+export interface ToolExecutionContext {
+  traceId: string;
+  runId: string;
+  signal: AbortSignal;
+}
+```
+
+Tool inputs and outputs must be size-limited and schema-validated. Tool descriptions and results are untrusted data.
+
+## 7. Agent contract
+
+```ts
+export interface AgentDefinition<Input = unknown, Output = unknown> {
+  id: string;
+  version: string;
+  description: string;
+  allowedTools: string[];
+  maxSteps: number;
+  timeoutMs: number;
+  run(input: Input, context: AgentContext): Promise<Result<Output>>;
+}
+```
+
+AgentContext exposes only approved application services and the Tool Gateway. It must not expose unrestricted network, shell, or filesystem APIs.
+
+## 8. Event contract
+
+All long-running operations emit lifecycle events:
+- operation.started
+- operation.progress
+- operation.waiting_for_approval
+- operation.completed
+- operation.failed
+- operation.cancelled
+
+Events include traceId and runId where applicable. UI rendering must be driven by these events, not by polling arbitrary internal state.
+
+## 9. Versioning
+
+- Public module contracts are versioned.
+- Persisted records include schemaVersion.
+- Breaking changes require a migration and a note in CHANGELOG.
+- Prefer additive changes; avoid renaming serialized fields casually.
+
+
+## 10. Bounded agent runtime
+
+The first runtime implementation lives in `src/core/agents.ts`. It is provider-neutral and does not import UI, Tauri, model SDKs, or infrastructure adapters.
+
+```ts
+export interface AgentDefinition<Input = unknown> {
+  id: AgentId;
+  version: string;
+  name: string;
+  description: string;
+  requiredPermissions: AgentPermission[];
+  maxSteps: number;
+  timeoutMs: number;
+  execute(input: Input, context: AgentContext): AsyncIterable<AgentOutputEvent>;
+}
+
+export interface AgentContext {
+  runId: AgentRunId;
+  signal: AbortSignal;
+  checkpoint(label: string): void;
+}
+```
+
+Runtime guarantees and current limits:
+- Registration validates identity, version, step budget (1–100), and timeout (1–600 seconds).
+- Required permissions are checked before agent execution; errors fail closed.
+- `ask_user` emits a waiting-for-approval event and stops. Resuming an approval is not implemented yet.
+- Execution has cancellation, a timeout signal, a bounded step/checkpoint budget, and a 20,000-character per-output limit.
+- Agents receive no direct filesystem, shell, browser, or network APIs.
+- This is a single-agent execution primitive, not yet a planner, multi-agent orchestrator, or tool gateway.
+- Agent code must call `context.checkpoint(label)` before each meaningful unit of work. Progress events also consume a step unless they immediately report the same label as the preceding explicit checkpoint; that logical step is counted once.
+
+Future tool execution must go through a separate permission-enforcing Tool Gateway. Never pass raw host capabilities into an agent.
+
+
+## 11. Tool Gateway
+
+The first gateway implementation lives in `src/core/tools.ts`.
+
+- Tool definitions declare required permission scopes, risk, timeout, input validation, and execution.
+- Inputs and outputs must be JSON-serializable and no larger than 64 KB.
+- Permission checks run before execution. `deny`, `ask_user`, and permission-service errors all fail closed.
+- An audit `started` event must persist before the tool is allowed to execute.
+- Execution receives an abort signal and is bounded by a per-tool timeout.
+- Tools are discoverable through metadata only; implementation functions are not exposed.
+- The gateway is not yet connected to agents, MCP, UI approval flows, or a persistent audit store. The current audit sink is an injected port.
+
+
+## 12. Agent checkpoint contract
+
+The checkpoint contract lives in `src/core/agentCheckpoints.ts`.
+
+- Snapshots are schema-versioned and scoped by run, agent, and thread identifiers.
+- Each update increments a monotonic sequence by exactly one; the first sequence is 1.
+- Repository writes use compare-and-swap against the previously observed sequence to reject stale writers.
+- Creation time and run identity are immutable. Terminal states cannot be overwritten.
+- State is JSON data capped at 256 KB. Approval metadata is valid only while the run is waiting for approval.
+- The LocalStorage adapter is a browser-preview persistence adapter, not a substitute for encrypted desktop storage or SQLite.
+- The checkpoint service and preview adapter are wired into the serializable step runtime in `src/core/resumableAgents.ts`. This runtime can continue persisted JSON state after restart; the legacy async-generator AgentRuntime remains separate.
+
+
+## 13. Tool audit persistence
+
+The preview adapter in `src/lib/toolAuditStorage.ts` implements the injected `ToolAuditSink` port.
+
+- Events are append-only through the adapter API and include tool, run, trace, status, timestamp, and optional bounded detail.
+- The adapter validates records on read and write, retains the newest 5,000 events, and limits serialized storage to 4 MB.
+- `list({ runId, limit })` supports bounded inspection without exposing mutation.
+- This adapter uses browser `localStorage` and is **preview-only**: it is neither encrypted nor tamper-proof, and it does not provide atomic multi-tab transactions.
+- Production desktop storage must move to a native transactional repository before tools with real side effects are enabled.
+
+If a tool returns successfully but the completion audit cannot be persisted, the gateway returns `side_effect_completed_audit_failed`. Callers must not automatically retry: the side effect may already have happened. Reconciliation and operation-level idempotency remain required.
+
+
+## 14. Agent-to-tool bridge
+
+`src/core/agentToolBridge.ts` provides `GatewayAgentToolExecutor`, an adapter from resumable agent steps to the Tool Gateway.
+
+- The host composition root supplies the actor identity; an agent cannot select its own identity.
+- Each call is forwarded to `ToolGateway.execute`, so tool input validation, per-tool permissions, audit-start persistence, timeout, cancellation, and output limits remain enforced.
+- The step context exposes only the executor port, not raw host APIs or the gateway's internal registry.
+- If the host does not configure an executor, the runtime's default executor denies calls.
+- This bridge is composed by `src/lib/nexusRuntime.ts` for the browser preview runtime. The desktop/native composition root and user-facing approval flow are still pending.
+
+
+## 15. One-time agent approval grants
+
+`src/core/agentApprovals.ts` provides an in-memory host-side approval authority.
+
+- A grant can be issued only while the matching checkpoint is waiting for approval.
+- The grant is bound to one run, agent, and exact permission scope.
+- The runtime consumes the opaque grant once before transitioning the checkpoint back to running.
+- Forged, mismatched, replayed, or unknown grants fail closed.
+- Grants are intentionally ephemeral. After an app restart, the user must review and approve the still-pending request again; durable approval UI and native storage are not implemented.
+
+
+## 16. Local runtime composition
+
+`src/lib/nexusRuntime.ts` is the composition root for the browser-preview agent vertical slice.
+
+- It constructs the checkpoint repository/service, Tool Gateway, LocalStorage audit sink, host-bound agent tool executor, in-memory approval authority, and resumable agent runtime from one options object.
+- Agent and tool permission decisions are supplied through separate methods on a host-owned `NexusPermissionPolicy`. If no policy is supplied, both paths deny by default.
+- The actor identity is supplied by the host and validated before construction; it is never accepted from agent input.
+- `issueApproval(runId)` is a host-only operation and must be called only as the result of an explicit user approval interaction. The returned opaque grant is one-time and bound by the approval authority.
+- `createBrowserNexusRuntime` is a convenience factory over `window.localStorage`; it is not a production security boundary.
+
+This composition root is intentionally a preview adapter. Browser localStorage is readable and mutable by same-origin scripts, has quota and multi-tab race limitations, and does not provide encryption or transactional durability. Do not enable sensitive real-world tools on this adapter. Before production desktop use, replace persistence with native transactional storage, add OS-backed credential storage, and connect approval decisions to a real UI.
+
+## 17. Tool Registry, MCP, planning, coordination, and traces
+
+- `ToolRegistry` is the metadata catalog; all actual invocations still pass through `ToolGateway`. Registry metadata never exposes executor functions.
+- `McpClient` accepts a transport port. `McpHttpTransport` is the browser HTTP(S) adapter; imported remote tools are wrapped as local Tool Gateway definitions and validated by `BasicMcpSchemaAdapter` unless a stricter host adapter is supplied.
+- MCP permission scopes and risk levels are supplied by the host during import. Do not infer permissions from untrusted server descriptions.
+- `ModelRouterPlanner` turns a selected provider response into a candidate plan. `AgentPlanner` treats that output as untrusted and validates tool IDs, dependency order, step count, and JSON input size before returning it.
+- `MultiAgentCoordinator` delegates each step through `ResumableAgentTaskExecutor`, asks the host policy for authorization, pauses on `ask_user`, and resumes only when the host policy subsequently allows the action. Pending coordinator state is in-memory.
+- `LocalStorageTraceSink` persists bounded trace events for preview use and strips sensitive-looking attribute keys. It is not a tamper-proof audit ledger.
+- The runtime composition root exposes `connectMcpHttp`, `discoverAndImportMcpTools`, `createPlanner`, `createCoordinator`, and `traceSink`. A model router is optional and must be explicitly injected.
+
+## 18. Memory and Knowledge retrieval
+
+- Memory writes require explicit user confirmation. Revision preserves original creation time and source provenance.
+- `HybridMemoryRetriever` accepts an optional embedding provider and vector index. Without them it uses the existing offline lexical search. Embedding failure falls back to lexical retrieval; malformed vectors fail validation.
+- Knowledge retrieval is project-scoped and returns both context text and structured citations. Retrieved content is untrusted data and must never be treated as system/developer instructions.
+- LocalStorage knowledge persistence is a preview adapter, not a durable document database. It enforces bounded chunk sizes/counts but does not parse source documents.
+
+## 19. Projects and voice
+
+- Project metadata is local and versioned. Archiving hides a project from the default list; it does not delete associated data.
+- Browser/WebView speech recognition is optional and host-dependent. Microphone access starts only after a user click; speech recognition may use OS/browser services and is not guaranteed to be offline.
+- TTS uses the host speech synthesis implementation. Both features must remain optional and degrade gracefully when unsupported.
+
+
+## 20. NEXUS AI Core and model registry — target contract
+
+This is a target contract direction, not a claim that these interfaces or adapters already exist in production code.
+
+A model descriptor identifies model ID, display name, version, runtime kind (local or remote), source, license, artifact format, quantization, capabilities, maximum context, and estimated memory requirements.
+
+Model capabilities explicitly declare streaming, tool calling, structured output, vision, audio input, and audio output. Callers must check capabilities rather than assuming every model supports every feature.
+
+The model runtime currently exposes model discovery, catalog status, health checks, inference, streaming, and cancellation through a provider-neutral contract. The native adapter connects directly to configured OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints; the initial local target is an Ollama-compatible endpoint. Process lifecycle management, model downloads, unload controls, and resource reporting are not yet claimed as implemented. During final integration, OmniRoute will be added as an optional adapter behind the same contract. Runtime-specific details remain inside adapters. The application layer depends only on stable domain contracts.
+
+The model policy selects an explicitly configured model from a local runtime or direct cloud-provider endpoint. Every response records the active model ID, runtime adapter, and owner-declared processing location. OmniRoute is deferred until final integration as an optional provider adapter; local and direct-cloud operation must remain possible without it.
+
+## 21. Model artifacts and experiment records — target
+
+A model artifact record identifies model ID/version, source checkpoint, license, tokenizer/config revisions, weight or adapter hashes, quantization, supported runtime, and evaluation report.
+
+A dataset manifest identifies source provenance, license/permission basis, transformations, filtering, deduplication, and train/validation/test split assignment. Private workspace data is excluded by default; owner approval and explicit curation are required before it can enter a training dataset.
+
+An experiment record captures code revision, configuration, seed, hardware, dataset manifest, parent checkpoint, output artifact, logs, and evaluation results. A model version is not promoted merely because a training job completed.
+
+## 22. Personal owner profile
+
+The default deployment has one primary owner. Tenant isolation, public registration, subscription billing, and public quota management are not baseline product requirements.
+
+Owner profile, local settings, permissions, and model preferences remain private application state. Any future shared-access or multi-user feature requires a separate architecture decision and threat-model review.
+
+## 23. Training-data boundary
+
+Normal conversation, memory retrieval, and agent execution do not automatically update model weights. Runtime memory and model training are separate systems with separate controls.
+
+The training pipeline may consume only explicitly curated datasets with documented provenance and permission status. Every experiment must be reproducible and evaluated against held-out data. Fine-tuning, retrieval, prompting, and foundation-model pretraining must be described accurately and separately.

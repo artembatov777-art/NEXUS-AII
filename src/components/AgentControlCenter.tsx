@@ -1,0 +1,450 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, Sparkles, X } from "lucide-react";
+import type { AgentCheckpoint } from "../core/agentCheckpoints";
+import type { AgentRunId } from "../core/agents";
+import type { ProviderSettings } from "../types";
+import type { ToolAuditEvent } from "../core/tools";
+import type { AmbiguousToolStep } from "../core/toolReconciliation";
+import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
+import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
+import type { ResumableAgentEvent } from "../core/resumableAgents";
+import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
+import { registerWorkspaceTools } from "../lib/workspaceTools";
+import { BUILT_IN_AGENT_CATALOG, BUILT_IN_AGENT_IDS, createLocalWorkflowDefinition, registerBuiltInAgentSuite } from "../lib/agentCatalog";
+import { DEFAULT_AGENT_PROFILE, loadAgentProfile, saveAgentProfile, validateAgentProfile, type AgentProfile } from "../lib/agentProfile";
+import { loadMcpServerConfigs } from "../lib/mcpServerStorage";
+import { canUseAgentProvider } from "../lib/agentProviderAvailability";
+import { HybridMemoryRetriever } from "../core/knowledge";
+import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
+import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
+import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
+
+const THREAD_ID = "nexus-agent-control-center";
+
+type RuntimeBundle = ReturnType<typeof createWorkspaceNexusRuntime>;
+type RuntimeState = { runtime: RuntimeBundle | null; error: string; profile: AgentProfile | null };
+type FeedItem = { id: number; tone: "normal" | "success" | "warning" | "error"; text: string };
+
+function taskFromCheckpoint(checkpoint: AgentCheckpoint): string {
+  if (!checkpoint.state || typeof checkpoint.state !== "object" || Array.isArray(checkpoint.state) || !("payload" in checkpoint.state)) return "Task details unavailable";
+  const payload = checkpoint.state.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("task" in payload) || typeof payload.task !== "string") return "Task details unavailable";
+  return payload.task;
+}
+
+function savedOutputFromCheckpoint(checkpoint: AgentCheckpoint): string | null {
+  if (!checkpoint.state || typeof checkpoint.state !== "object" || Array.isArray(checkpoint.state) || !("payload" in checkpoint.state)) return null;
+  const payload = checkpoint.state.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("preview" in payload) || typeof payload.preview !== "string") return null;
+  return payload.preview;
+}
+
+function statusLabel(status: AgentCheckpoint["status"]): string {
+  const labels: Record<AgentCheckpoint["status"], string> = {
+    running: "Running",
+    waiting_for_approval: "Waiting for approval",
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled"
+  };
+  return labels[status];
+}
+
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string }) {
+  const runtimeState = useMemo<RuntimeState>(() => {
+    try {
+      const loadedProfile = loadAgentProfile(window.localStorage);
+      if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
+      const models = canUseAgentProvider(providerSettings, hasProviderKey) ? createTauriModelRouter(providerSettings) : null;
+      const runtime = createWorkspaceNexusRuntime("local-user", {
+        authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
+        authorizeTool: async ({ scope, resource, reason }) => {
+          if (scope === "mcp:execute") {
+            return window.confirm(`Allow execution of this MCP tool?\n\n${resource}\n\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
+          }
+          if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
+            const toolId = reason.match(/Tool "([^"]+)"/)?.[1] ?? "";
+            const actions: Record<string, string> = {
+              "workspace.list": "list entries in this folder",
+              "workspace.search": "search file and folder names",
+              "workspace.search_content": "search text inside approved files",
+              "workspace.read": "read this file",
+              "workspace.write": "create a new file",
+              "workspace.mkdir": "create a new folder",
+              "workspace.rename": "rename this entry",
+              "workspace.move": "move this entry"
+            };
+            const action = actions[toolId] ?? (scope === "filesystem:read:selected" ? "read this workspace location" : "change this workspace entry");
+            const readNotes: Record<string, string> = {
+              "workspace.list": "Only directory entries inside the approved folder are listed.",
+              "workspace.search": "Only names inside the approved folder are searched.",
+              "workspace.search_content": "Text content is read only from supported regular files inside the approved folder.",
+              "workspace.read": "Only the selected regular text file is read."
+            };
+            const reviewNote = scope === "filesystem:read:selected"
+              ? readNotes[toolId] ?? "The agent will only read inside the approved workspace."
+              : toolId === "workspace.write"
+                ? "The file is created only when the destination does not already exist. Review the content preview."
+                : "The operation is limited to the approved workspace and will not replace an existing destination.";
+            return window.confirm(`Allow the NEXUS agent to ${action}?\n\n${resource}\n\n${reviewNote}\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
+          }
+          return "deny";
+        }
+      }, models ?? undefined);
+      const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
+      if (!registered.ok) throw new Error(registered.error.message);
+      const workspaceTools = registerWorkspaceTools(runtime.toolRegistry);
+      if (!workspaceTools.ok) throw new Error(workspaceTools.error.message);
+      return { runtime, error: "", profile: loadedProfile.value };
+    } catch (cause) {
+      return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
+    }
+  }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation]);
+  const memoryRetriever = useMemo(() => new HybridMemoryRetriever(
+    new WorkspaceMemoryRepository(window.localStorage),
+    new LocalTransformerEmbeddingProvider(),
+    new IndexedDbMemoryVectorIndex()
+  ), []);
+  const [task, setTask] = useState("");
+  const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
+  const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
+  const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
+  const [ambiguousToolSteps, setAmbiguousToolSteps] = useState<AmbiguousToolStep[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const controller = useRef<AbortController | null>(null);
+  const feedSequence = useRef(0);
+  const runtime = runtimeState.runtime;
+  const agentProviderReady = canUseAgentProvider(providerSettings, hasProviderKey) && !!providerSettings.model.trim();
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, providerSettings.model, THREAD_ID + "-planned", ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, providerSettings.model]);
+  const registeredAgents = runtime?.agentRuntime.list() ?? [];
+  const runningCount = checkpoints.filter(item => item.status === "running").length;
+  const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
+  const completedCount = checkpoints.filter(item => item.status === "completed").length;
+  const failedCount = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").length;
+
+  const addFeed = useCallback((text: string, tone: FeedItem["tone"] = "normal") => {
+    feedSequence.current += 1;
+    setFeed(current => [...current, { id: feedSequence.current, text, tone }].slice(-80));
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!runtime) return;
+    const [result, audit] = await Promise.all([
+      runtime.checkpointService.listByThread(THREAD_ID, 50),
+      runtime.auditSink.list({ limit: 30 })
+    ]);
+    if (result.ok) {
+      setCheckpoints(result.value);
+      const terminalRuns = result.value.filter(item => item.status === "failed" || item.status === "cancelled");
+      const reconciliationResults = await Promise.all(terminalRuns.map(item =>
+        runtime.toolReconciliationService.listAmbiguous(item.runId)
+      ));
+      setAmbiguousToolSteps(reconciliationResults.flatMap(item => item.ok ? item.value : []));
+    } else addFeed(result.error.message, "error");
+    if (audit.ok) setAuditEvents(audit.value);
+    else addFeed(audit.error.message, "error");
+  }, [runtime, addFeed]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!runtime) return;
+    const controller = new AbortController();
+    void (async () => {
+      const saved = loadMcpServerConfigs(window.localStorage);
+      if (!saved.ok) { addFeed(saved.error.message, "error"); return; }
+      for (const server of saved.value) {
+        if (controller.signal.aborted) break;
+        const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, controller.signal);
+        if (!connected.ok) { addFeed(`MCP ${server.name}: ${connected.error.message}`, "warning"); continue; }
+        if (controller.signal.aborted) { await runtime.mcpClient.disconnect(server.id); break; }
+        const imported = await runtime.discoverAndImportMcpTools(server.id, controller.signal, {
+          permissions: ["mcp:execute"], risk: "high", timeoutMs: 30_000
+        });
+        if (!imported.ok) addFeed(`MCP ${server.name}: ${imported.error.message}`, "warning");
+        else addFeed(`MCP ${server.name}: discovered ${imported.value.discovered}, imported ${imported.value.imported.length}, rejected ${imported.value.rejected.length} tool(s).`, "success");
+      }
+    })();
+    return () => {
+      controller.abort();
+      void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
+    };
+  }, [runtime, addFeed]);
+  useEffect(() => () => { controller.current?.abort(); }, []);
+
+  async function consume(events: AsyncIterable<ResumableAgentEvent>) {
+    for await (const event of events) {
+      if (runtime) {
+        const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
+        await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
+      }
+      if (event.type === "started") {
+        setActiveRunId(event.runId);
+        addFeed("Agent run started: " + event.runId);
+      } else if (event.type === "progress") {
+        addFeed("Step " + event.step + "/" + event.maxSteps + ": " + event.label);
+      } else if (event.type === "output") {
+        addFeed(event.content, "success");
+      } else if (event.type === "waiting_for_approval") {
+        addFeed("Approval required: " + event.permission, "warning");
+      } else if (event.type === "completed") {
+        addFeed("Run completed in " + event.steps + " step(s).", "success");
+      } else if (event.type === "failed") {
+        addFeed(event.message, "error");
+      }
+    }
+    await refresh();
+  }
+
+  async function runAction(action: () => AsyncIterable<ResumableAgentEvent>) {
+    if (!runtime || busy) return;
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setBusy(true);
+    try {
+      await consume(action());
+    } catch (cause) {
+      addFeed(cause instanceof Error ? cause.message : "Agent execution failed.", "error");
+      await refresh();
+    } finally {
+      controller.current = null;
+      setBusy(false);
+      setActiveRunId(null);
+      await refresh();
+    }
+  }
+
+  function saveProfile() {
+    if (!runtime || busy) return;
+    if (checkpoints.some(item => item.status === "running" || item.status === "waiting_for_approval")) {
+      addFeed("Finish or reject active runs before changing the agent version.", "warning");
+      return;
+    }
+    const next: AgentProfile = { ...profile, name: profile.name.trim(), revision: profile.revision + 1, updatedAt: Date.now() };
+    const validation = validateAgentProfile(next);
+    if (validation) { addFeed(validation, "error"); return; }
+    const replaced = runtime.agentRuntime.replace(createLocalWorkflowDefinition(next));
+    if (!replaced.ok) { addFeed(replaced.error.message, "error"); return; }
+    const saved = saveAgentProfile(window.localStorage, next);
+    if (!saved.ok) {
+      runtime.agentRuntime.replace(createLocalWorkflowDefinition(profile));
+      addFeed(saved.error.message, "error");
+      return;
+    }
+    setProfile(next);
+    addFeed("Agent profile saved as version 1." + next.revision + ".0.", "success");
+  }
+
+  async function startPlannedWorkflow() {
+    if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
+    const goal = task.trim();
+    const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
+    if (!window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
+    setTask("");
+    setFeed([]);
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setBusy(true);
+    try {
+      addFeed("Retrieving relevant saved profile and project context…");
+      const contextWarnings: string[] = [];
+      const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
+      const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`) : [];
+      if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
+      if (projectId) {
+        const [knowledge, projectMemories] = await Promise.all([
+          runtime.knowledgeService.retrieve(goal, projectId, 4, nextController.signal),
+          memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
+        ]);
+        if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
+        else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
+        if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
+        else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`));
+      }
+      if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
+      const referenceContext = contextParts.join("\n\n").slice(0, 12_000);
+      addFeed("Sending the task and approved reference context to the configured model planner…");
+      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
+      if (!planned.ok) {
+        addFeed("Planning failed: " + planned.error.message, "error");
+        return;
+      }
+      addFeed("Validated plan: " + planned.value.steps.length + " bounded tool step(s).", "success");
+      const coordinationId = crypto.randomUUID() as AgentRunId;
+      setActiveRunId(coordinationId);
+      for await (const event of plannedWorkflow.run(planned.value, coordinationId, nextController.signal)) {
+        if (event.type === "started") addFeed("Planned workflow started: " + event.runId);
+        else if (event.type === "agent_started") addFeed("Executing step " + event.step + " with " + event.agentId + "…");
+        else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
+        else if (event.type === "waiting_for_approval") addFeed("Approval required for step " + event.step + ".", "warning");
+        else if (event.type === "completed") addFeed(event.detail ?? "Planned workflow completed.", "success");
+        else if (event.type === "failed") addFeed(event.detail ?? "Planned workflow failed.", "error");
+      }
+      await refresh();
+    } catch (cause) {
+      addFeed(cause instanceof Error ? cause.message : "Planned workflow failed.", "error");
+      await refresh();
+    } finally {
+      controller.current = null;
+      setBusy(false);
+      setActiveRunId(null);
+      await refresh();
+    }
+  }
+
+  function startAgent() {
+    if (!runtime || !task.trim() || task.trim().length > 1_000) return;
+    const input = task.trim();
+    setTask("");
+    setFeed([]);
+    void runAction(() => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, THREAD_ID, controller.current?.signal));
+  }
+
+  function approve(checkpoint: AgentCheckpoint) {
+    if (!runtime) return;
+    void runAction(async function* () {
+      const grant = await runtime.issueApproval(checkpoint.runId as AgentRunId);
+      if (!grant.ok) {
+        yield { type: "failed", runId: checkpoint.runId as AgentRunId, message: grant.error.message } as ResumableAgentEvent;
+        return;
+      }
+      yield* runtime.agentRuntime.resume(checkpoint.runId as AgentRunId, grant.value, controller.current?.signal);
+    });
+  }
+
+  async function reject(checkpoint: AgentCheckpoint) {
+    if (!runtime || checkpoint.status !== "waiting_for_approval") return;
+    const rejected: AgentCheckpoint = {
+      ...checkpoint,
+      sequence: checkpoint.sequence + 1,
+      status: "failed",
+      updatedAt: Date.now()
+    };
+    delete rejected.pendingApproval;
+    const result = await runtime.checkpointService.persist(rejected);
+    if (!result.ok) addFeed(result.error.message, "error");
+    else addFeed("Approval rejected. The run was closed without executing the tool.", "warning");
+    await refresh();
+  }
+
+  function continueRun(checkpoint: AgentCheckpoint) {
+    if (!runtime) return;
+    void runAction(() => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, controller.current?.signal));
+  }
+
+  async function reconcileToolStep(step: AmbiguousToolStep) {
+    if (!runtime || busy) return;
+    const confirmed = window.confirm(
+      "This tool step may have timed out or been cancelled after its external operation began. Verify in the external system whether it completed or is still running. Marking it reconciled only blocks retries; it does not stop an operation already in progress. Continue?"
+    );
+    if (!confirmed) return;
+    const result = await runtime.toolReconciliationService.reconcile(
+      step.runId, step.toolId, step.traceId, true
+    );
+    if (!result.ok) addFeed(result.error.message, "error");
+    else addFeed(`Manually reconciled ${step.toolId}. No tool was rerun.`, "success");
+    await refresh();
+  }
+
+  return <div className="agent-backdrop" role="dialog" aria-modal="true" aria-labelledby="agent-center-title">
+    <section className="agent-center">
+      <header className="agent-center-header">
+        <div className="agent-center-title">
+          <div className="agent-center-icon"><Bot size={20}/></div>
+          <div><div className="eyebrow">NEXUS AU / CONTROL PLANE</div><h2 id="agent-center-title">Agent Control Center</h2><p>Bounded execution, explicit approvals, checkpoints and audit.</p></div>
+        </div>
+        <button className="icon-btn" onClick={onClose} aria-label="Close agent control center"><X size={18}/></button>
+      </header>
+
+      {runtimeState.error && <div className="agent-error"><AlertTriangle size={16}/>{runtimeState.error}</div>}
+
+      <section className="agent-runtime-strip" aria-label="Agent runtime overview">
+        <article><span className="agent-runtime-mark"/><div><strong>{registeredAgents.length}</strong><small>Registered agents</small></div></article>
+        <article data-state="running"><span className="agent-runtime-mark"/><div><strong>{runningCount}</strong><small>Running</small></div></article>
+        <article data-state="approval"><span className="agent-runtime-mark"/><div><strong>{pendingApprovalCount}</strong><small>Awaiting approval</small></div></article>
+        <article data-state="completed"><span className="agent-runtime-mark"/><div><strong>{completedCount}</strong><small>Completed</small></div></article>
+        <article data-state="failed"><span className="agent-runtime-mark"/><div><strong>{failedCount}</strong><small>Failed / cancelled</small></div></article>
+      </section>
+
+      <div className="agent-center-grid">
+        <section className="agent-main-column">
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENTS · {registeredAgents.length}</span><h3>{registeredAgents[0]?.name ?? BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">LOCAL DEMO</span></div>
+            <p>{registeredAgents[0]?.description ?? BUILT_IN_AGENT_CATALOG[0].description}</p>
+            <div className="agent-metadata">
+              <span><Activity size={13}/> {registeredAgents[0]?.maxSteps ?? 3} max steps</span>
+              <span><Clock3 size={13}/> {Math.round((registeredAgents[0]?.timeoutMs ?? 15_000) / 1_000)} sec limit</span>
+              <span><Shield size={13}/> {(registeredAgents[0]?.requiredPermissions ?? []).join(", ") || "No permissions"}</span>
+            </div>
+            <label className="agent-task-label" htmlFor="agent-task">Task input</label>
+            <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
+          </article>
+
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">AGENT CONFIGURATION</span><h3>Profile settings</h3></div><span className="agent-local-tag">V1.{profile.revision}.0</span></div>
+            <label className="agent-task-label" htmlFor="agent-name">Display name</label>
+            <input id="agent-name" className="agent-profile-input" value={profile.name} maxLength={80} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))}/>
+            <div className="agent-profile-fields">
+              <label>Maximum steps<input type="number" min={1} max={20} value={profile.maxSteps} onChange={event => setProfile(current => ({ ...current, maxSteps: Number(event.target.value) }))}/></label>
+              <label>Timeout (seconds)<input type="number" min={1} max={60} value={Math.round(profile.timeoutMs / 1_000)} onChange={event => setProfile(current => ({ ...current, timeoutMs: Number(event.target.value) * 1_000 }))}/></label>
+            </div>
+            <div className="agent-form-footer"><span>Permission requirement stays fixed: tool:execute</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={saveProfile}>Save profile</button></div>
+            <div className="agent-disclaimer">Changing the profile creates a new agent version. Finish or reject active runs first; older checkpoints cannot resume on a different version.</div>
+          </article>
+
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">LIVE EXECUTION</span><h3>Run event stream</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
+            {feed.length === 0 ? <div className="agent-empty">Start a run to inspect progress, approval handoffs and output.</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{item.text}</pre></div>)}</div>}
+            {busy && <button className="agent-danger-button" onClick={() => controller.current?.abort()}><X size={13}/> Cancel active run</button>}
+            {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
+          </article>
+        </section>
+
+        <aside className="agent-side-column">
+          <article className="agent-card agent-approval-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">HUMAN IN THE LOOP</span><h3>Approval queue</h3></div><span className="agent-count">{checkpoints.filter(item => item.status === "waiting_for_approval").length}</span></div>
+            {checkpoints.filter(item => item.status === "waiting_for_approval").length === 0 ? <div className="agent-empty">No pending approvals.</div> :
+              checkpoints.filter(item => item.status === "waiting_for_approval").map(checkpoint => <div className="agent-approval-item" key={checkpoint.runId}>
+                <strong>{checkpoint.pendingApproval?.permission}</strong><p>{taskFromCheckpoint(checkpoint)}</p><small>Run {checkpoint.runId}</small>
+                <div className="agent-approval-actions"><button onClick={() => approve(checkpoint)} disabled={busy}><Check size={13}/> Approve once</button><button onClick={() => void reject(checkpoint)} disabled={busy}>Reject</button></div>
+              </div>)}
+          </article>
+
+          <article className="agent-card">
+            <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED CHECKPOINTS</span><h3>Run history</h3></div><span className="agent-count">{checkpoints.length}</span></div>
+            {checkpoints.length === 0 ? <div className="agent-empty">No saved runs yet.</div> :
+              <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
+                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
+                <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
+                {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>View saved result</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
+                {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>Continue checkpoint</button>}
+              </div>)}</div>}
+          </article>
+
+          <article className="agent-card">
+            {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
+              <div className="agent-card-heading"><div><span className="agent-kicker">OWNER REVIEW REQUIRED</span><h3>Ambiguous tool outcomes</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
+              <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
+              {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
+                <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
+                <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>Mark manually reconciled</button>
+              </div>)}
+            </div>}
+            <div className="agent-card-heading"><div><span className="agent-kicker">TOOL GATEWAY</span><h3>Recent tool audit</h3></div><span className="agent-count">{auditEvents.length}</span></div>
+            {auditEvents.length === 0 ? <div className="agent-empty">No tool executions have been recorded.</div> :
+              <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
+                <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
+                <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
+              </div>)}</div>}
+            <div className="agent-disclaimer">Audit entries show tool identity and execution state. Raw tool inputs and provider credentials are not displayed here.</div>
+          </article>
+        </aside>
+      </div>
+      <footer className="agent-center-footer"><span>{isTauri() ? "Storage: native SQLite checkpoints, audit and traces" : "Storage: browser localStorage preview"} · approval grants: one-time</span><span>Default-deny tool policy</span></footer>
+    </section>
+  </div>;
+}

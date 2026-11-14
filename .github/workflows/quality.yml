@@ -1,0 +1,30 @@
+name: Quality
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Let the active validation finish; only the newest pending revision is retained.
+  cancel-in-progress: false
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Audit npm dependency advisories
+        run: npm audit --audit-level=high
+      - run: npm run test
+      - run: npm run build

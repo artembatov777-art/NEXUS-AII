@@ -1,0 +1,351 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>(),
+  isTauriMock: vi.fn<() => boolean>(() => false)
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+  isTauri: isTauriMock
+}));
+
+import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository, tokenizeKnowledgeTerms } from "./nativeRepositories";
+import { LocalStorageMemoryRepository, type StorageLike } from "./memoryStorage";
+import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
+import type { MemoryRecord } from "../core/memory";
+import type { KnowledgeChunk } from "../core/knowledge";
+
+beforeEach(() => {
+  invokeMock.mockReset();
+  isTauriMock.mockReturnValue(false);
+});
+
+class FakeStorage implements StorageLike {
+  private values = new Map<string, string>();
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string) { this.values.set(key, value); }
+}
+
+function memory(id: string, content: string, projectId?: string): MemoryRecord {
+  return {
+    id: id as MemoryRecord["id"],
+    content,
+    category: "fact",
+    scope: projectId ? "project" : "profile",
+    ...(projectId ? { projectId } : {}),
+    source: { type: "user_confirmed", label: "Manual" },
+    tags: ["test"],
+    createdAt: 1,
+    updatedAt: 1,
+    schemaVersion: 1
+  };
+}
+
+describe("WorkspaceMemoryRepository browser fallback", () => {
+  it("searches and exports the complete memory set instead of truncating at 200", async () => {
+    const storage = new FakeStorage();
+    const seed = new LocalStorageMemoryRepository(storage);
+    for (let index = 0; index < 250; index += 1) {
+      const result = await seed.save(memory(`memory-${index}`, `Archive entry ${index}`));
+      expect(result.ok).toBe(true);
+    }
+
+    const repository = new WorkspaceMemoryRepository(storage);
+    const found = await repository.search("249", "all", 10);
+    const exported = await repository.exportAll();
+
+    expect(found.ok && found.value.map(record => record.id)).toEqual(["memory-249"]);
+    expect(exported.ok && exported.value).toHaveLength(250);
+  });
+
+
+  it("refreshes native snapshots across repository instances and observes external updates", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const record = args?.record as MemoryRecord;
+        nativeRecords.set(record.id, record);
+        return undefined;
+      }
+      if (command === "delete_memory") {
+        nativeRecords.delete(String(args?.id));
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const firstPanel = new WorkspaceMemoryRepository(storage);
+    const secondPanel = new WorkspaceMemoryRepository(storage);
+
+    const initial = await firstPanel.list("all", 50);
+    expect(initial.ok && initial.value).toEqual([]);
+
+    const created = await secondPanel.save(memory("shared-native", "Created in another panel"));
+    expect(created.ok).toBe(true);
+
+    const afterCreate = await firstPanel.list("all", 50);
+    expect(afterCreate.ok && afterCreate.value.map(record => record.id)).toContain("shared-native");
+
+    const removed = await secondPanel.delete("shared-native" as MemoryRecord["id"]);
+    expect(removed.ok).toBe(true);
+
+    const afterDelete = await firstPanel.list("all", 50);
+    expect(afterDelete.ok && afterDelete.value.map(record => record.id)).not.toContain("shared-native");
+  });
+
+  it("coordinates legacy memory migration across simultaneous panel repositories", async () => {
+    isTauriMock.mockReturnValue(true);
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageMemoryRepository(storage);
+    await legacy.save(memory("legacy-once", "Imported exactly once"));
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const record = args?.record as MemoryRecord;
+        nativeRecords.set(record.id, record);
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+    const first = new WorkspaceMemoryRepository(storage);
+    const second = new WorkspaceMemoryRepository(storage);
+    const [firstResult, secondResult] = await Promise.all([
+      first.list("all", 10), second.list("all", 10)
+    ]);
+    expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    // One load belongs to the shared migration; each repository then reads
+    // the live native snapshot independently instead of caching stale data.
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_memories")).toHaveLength(3);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "save_memory")).toHaveLength(1);
+  });
+
+  it("loads selected memory IDs from the current native snapshot", async () => {
+    isTauriMock.mockReturnValue(true);
+    const records = [memory("one", "First memory"), memory("two", "Second memory")];
+    invokeMock.mockImplementation(async command => {
+      if (command === "load_memories") return records;
+      throw new Error("Unexpected native command: " + command);
+    });
+    const repository = new WorkspaceMemoryRepository(new FakeStorage());
+    const selected = await repository.getByIds(["two"]);
+    expect(selected).toMatchObject({ ok: true, value: [{ id: "two", content: "Second memory" }] });
+    expect(await repository.getByIds(["missing"])).toMatchObject({ ok: true, value: [] });
+  });
+
+  it("does not resurrect a native memory deleted after legacy migration", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeRecords = new Map<string, MemoryRecord>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_memories") return [...nativeRecords.values()];
+      if (command === "save_memory") {
+        const item = args?.record as MemoryRecord;
+        nativeRecords.set(item.id, item);
+        return undefined;
+      }
+      if (command === "delete_memory") {
+        nativeRecords.delete(String(args?.id));
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageMemoryRepository(storage);
+    await legacy.save(memory("legacy-memory", "A migrated memory"));
+    const migrated = new WorkspaceMemoryRepository(storage);
+    const beforeDelete = await migrated.list("all", 10);
+    expect(beforeDelete.ok && beforeDelete.value.map(item => item.id)).toEqual(["legacy-memory"]);
+
+    await migrated.delete("legacy-memory" as MemoryRecord["id"]);
+    const reopened = new WorkspaceMemoryRepository(storage);
+    const afterDelete = await reopened.list("all", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+
+  it("keeps project memory search isolated and refuses an unscoped project listing", async () => {
+    const storage = new FakeStorage();
+    const seed = new LocalStorageMemoryRepository(storage);
+    await seed.save(memory("project-one", "Private architecture note", "p1"));
+    await seed.save(memory("project-two", "Private architecture note", "p2"));
+
+    const repository = new WorkspaceMemoryRepository(storage);
+    const scoped = await repository.search("private architecture", "project", 10, "p1");
+    const unscoped = await repository.list("project", 10);
+
+    expect(scoped.ok && scoped.value.map(record => record.id)).toEqual(["project-one"]);
+    expect(unscoped.ok && unscoped.value).toEqual([]);
+  });
+});
+
+
+describe("WorkspaceKnowledgeRepository native freshness", () => {
+  it("does not resurrect a native knowledge document deleted after legacy migration", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "delete_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageKnowledgeRepository(storage);
+    await legacy.add([{
+      id: "legacy-chunk", documentId: "legacy-doc", projectId: "project-1",
+      text: "Legacy knowledge content", sourceLabel: "legacy.md"
+    }]);
+    const migrated = new WorkspaceKnowledgeRepository(storage);
+    const beforeDelete = await migrated.search("Legacy knowledge", "project-1", 10);
+    expect(beforeDelete.ok && beforeDelete.value.map(item => item.id)).toEqual(["legacy-chunk"]);
+
+    await migrated.removeDocument("legacy-doc", "project-1");
+    const reopened = new WorkspaceKnowledgeRepository(storage);
+    const afterDelete = await reopened.search("Legacy knowledge", "project-1", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+
+  it("coordinates legacy knowledge migration across simultaneous panel repositories", async () => {
+    isTauriMock.mockReturnValue(true);
+    const storage = new FakeStorage();
+    const legacy = new LocalStorageKnowledgeRepository(storage);
+    const chunk: KnowledgeChunk = {
+      id: "legacy-once", documentId: "legacy-doc", projectId: "project-1",
+      text: "Imported exactly once", sourceLabel: "legacy.md"
+    };
+    await legacy.add([chunk]);
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+    const first = new WorkspaceKnowledgeRepository(storage);
+    const second = new WorkspaceKnowledgeRepository(storage);
+    const [firstResult, secondResult] = await Promise.all([
+      first.search("Imported", "project-1", 10), second.search("Imported", "project-1", 10)
+    ]);
+    expect(firstResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    expect(secondResult).toMatchObject({ ok: true, value: [{ id: "legacy-once" }] });
+    // One load belongs to the shared migration; each repository then reads
+    // the live native snapshot independently instead of caching stale data.
+    expect(invokeMock.mock.calls.filter(([command]) => command === "load_knowledge_chunks")).toHaveLength(3);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks")).toHaveLength(1);
+  });
+
+  it("upserts only newly added chunks instead of rewriting a stale native snapshot", async () => {
+    isTauriMock.mockReturnValue(true);
+    const existing: KnowledgeChunk = {
+      id: "existing-chunk", documentId: "existing-doc", projectId: "project-1",
+      text: "Keep this concurrently stored document", sourceLabel: "existing.md"
+    };
+    const added: KnowledgeChunk = {
+      id: "new-chunk", documentId: "new-doc", projectId: "project-1",
+      text: "Add this independent document", sourceLabel: "new.md"
+    };
+    const nativeChunks = new Map<string, KnowledgeChunk>([[existing.id, existing]]);
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const repository = new WorkspaceKnowledgeRepository(new FakeStorage());
+    expect((await repository.add([added])).ok).toBe(true);
+    const writes = invokeMock.mock.calls.filter(([command]) => command === "save_knowledge_chunks");
+    expect(writes).toHaveLength(1);
+    expect(writes[0][1]).toEqual({ chunks: [added] });
+    expect([...nativeChunks.values()].map(chunk => chunk.id).sort()).toEqual(["existing-chunk", "new-chunk"]);
+  });
+
+  it("exposes document imports, replacements, and deletions across repository instances", async () => {
+    isTauriMock.mockReturnValue(true);
+    const nativeChunks = new Map<string, KnowledgeChunk>();
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "load_knowledge_chunks") return [...nativeChunks.values()];
+      if (command === "save_knowledge_chunks") {
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "replace_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        for (const chunk of args?.chunks as KnowledgeChunk[]) nativeChunks.set(chunk.id, chunk);
+        return undefined;
+      }
+      if (command === "delete_knowledge_document") {
+        const documentId = String(args?.documentId);
+        const projectId = String(args?.projectId);
+        for (const [id, chunk] of nativeChunks) {
+          if (chunk.documentId === documentId && chunk.projectId === projectId) nativeChunks.delete(id);
+        }
+        return undefined;
+      }
+      throw new Error("Unexpected native command: " + command);
+    });
+
+    const storage = new FakeStorage();
+    const chatServiceRepository = new WorkspaceKnowledgeRepository(storage);
+    const knowledgePanelRepository = new WorkspaceKnowledgeRepository(storage);
+    const original: KnowledgeChunk = {
+      id: "chunk-v1",
+      documentId: "doc-1",
+      projectId: "project-1",
+      text: "The architecture uses a modular monolith.",
+      sourceLabel: "architecture.md"
+    };
+
+    const added = await knowledgePanelRepository.add([original]);
+    expect(added.ok).toBe(true);
+    const visibleToChat = await chatServiceRepository.search("modular monolith", "project-1", 10);
+    expect(visibleToChat.ok && visibleToChat.value.map(chunk => chunk.id)).toEqual(["chunk-v1"]);
+
+    const replacement: KnowledgeChunk = {
+      ...original,
+      id: "chunk-v2",
+      text: "The updated architecture uses isolated module contracts."
+    };
+    const replaced = await knowledgePanelRepository.replaceDocument("doc-1", "project-1", [replacement]);
+    expect(replaced.ok).toBe(true);
+    const oldSearch = await chatServiceRepository.search("modular monolith", "project-1", 10);
+    const newSearch = await chatServiceRepository.search("isolated module contracts", "project-1", 10);
+    expect(oldSearch.ok && oldSearch.value).toEqual([]);
+    expect(newSearch.ok && newSearch.value.map(chunk => chunk.id)).toEqual(["chunk-v2"]);
+
+    const removed = await knowledgePanelRepository.removeDocument("doc-1", "project-1");
+    expect(removed.ok).toBe(true);
+    const afterDelete = await chatServiceRepository.search("isolated module contracts", "project-1", 10);
+    expect(afterDelete.ok && afterDelete.value).toEqual([]);
+  });
+});
+
+describe("native knowledge query tokenization", () => {
+  it("recognizes Cyrillic and Latin terms without splitting Unicode letters", () => {
+    expect(tokenizeKnowledgeTerms("Архитектура NEXUS память 2026")).toEqual(["архитектура", "nexus", "память", "2026"]);
+  });
+});

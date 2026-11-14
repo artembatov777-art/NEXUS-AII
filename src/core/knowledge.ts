@@ -1,0 +1,236 @@
+import type { MemoryRecord, MemoryScope } from "./memory";
+import type { Result } from "./result";
+import { err, ok } from "./result";
+
+export interface EmbeddingProvider {
+  embed(texts: string[], signal?: AbortSignal): Promise<Result<number[][]>>;
+}
+export interface VectorMemoryIndex {
+  upsert(record: MemoryRecord, vector: number[]): Promise<void>;
+  remove(id: string): Promise<void>;
+  search(vector: number[], scope: MemoryScope, limit: number, projectId?: string): Promise<Array<{ id: string; score: number }>>;
+  reconcile?(records: MemoryRecord[]): Promise<MemoryRecord[]>;
+}
+export interface MemorySearchRepository {
+  search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
+  getByIds(ids: string[]): Promise<Result<MemoryRecord[]>>;
+  exportAll?(): Promise<Result<MemoryRecord[]>>;
+}
+export interface RankedMemory { record: MemoryRecord; score: number; lexicalScore: number; semanticScore: number; }
+
+/** Hybrid retrieval: lexical recall remains available offline; embeddings add semantic recall when configured. */
+export class HybridMemoryRetriever {
+  constructor(
+    private readonly repository: MemorySearchRepository,
+    private readonly embeddings?: EmbeddingProvider,
+    private readonly vectors?: VectorMemoryIndex,
+    private readonly semanticWeight = 0.55
+  ) {
+    if (semanticWeight < 0 || semanticWeight > 1) throw new Error("semanticWeight must be between 0 and 1");
+  }
+
+  async search(query: string, scope: MemoryScope = "all", limit = 10, signal?: AbortSignal, projectId?: string): Promise<Result<RankedMemory[]>> {
+    const normalized = query.trim();
+    if (!normalized || normalized.length > 500 || !Number.isInteger(limit) || limit < 1 || limit > 50 ||
+        (scope === "project" && !projectId?.trim())) return err("validation", "Memory search query, scope, project, or result limit is invalid.");
+    if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    const lexical = await this.repository.search(normalized, scope, Math.min(100, limit * 5), projectId);
+    if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    if (!lexical.ok) return lexical;
+    const lexicalRecords = lexical.value.filter(record =>
+      (scope === "all" || record.scope === scope) &&
+      (scope !== "project" || record.projectId === projectId)
+    );
+    const lexicalFallback = () => ok(lexicalRecords.slice(0, limit).map((record, index) => ({
+      record, score: 1 / (index + 1), lexicalScore: 1 / (index + 1), semanticScore: 0
+    })));
+    if (!this.embeddings || !this.vectors) return lexicalFallback();
+
+    // Keep the persistent semantic index aligned with authoritative memory records.
+    if (this.repository.exportAll && this.vectors.reconcile) {
+      try {
+        const all = await this.repository.exportAll();
+        if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+        if (!all.ok || all.value.length > 1_000) return lexicalFallback();
+        if (all.value.length === 0) return lexicalFallback();
+        const missing = await this.vectors.reconcile(all.value);
+        for (let offset = 0; offset < missing.length; offset += 16) {
+          if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+          const batch = missing.slice(offset, offset + 16);
+          const embeddedBatch = await this.embeddings.embed(batch.map(record => record.content), signal);
+          if (signal?.aborted || (!embeddedBatch.ok && embeddedBatch.error.code === "cancelled")) return err("cancelled", "Memory retrieval was cancelled.");
+          if (!embeddedBatch.ok || embeddedBatch.value.length !== batch.length ||
+              embeddedBatch.value.some(vector => !Array.isArray(vector) || !vector.length || vector.some(value => !Number.isFinite(value)))) return lexicalFallback();
+          await Promise.all(batch.map((record, index) => this.vectors!.upsert(record, embeddedBatch.value[index])));
+        }
+      } catch {
+        if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+        return lexicalFallback();
+      }
+    }
+
+    const embedded = await this.embeddings.embed([normalized], signal);
+    if (signal?.aborted || (!embedded.ok && embedded.error.code === "cancelled")) return err("cancelled", "Memory retrieval was cancelled.");
+    if (!embedded.ok) return lexicalFallback();
+    const vector = embedded.value[0];
+    if (!vector || vector.length === 0 || vector.some(value => !Number.isFinite(value))) return err("validation", "Embedding provider returned an invalid vector.");
+    const semantic = await this.vectors.search(vector, scope, Math.min(100, limit * 5), projectId);
+    if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    const semanticScores = new Map(semantic.map(item => [item.id, Math.max(0, Math.min(1, item.score))]));
+    const ids = [...new Set([...lexicalRecords.map(record => record.id), ...semanticScores.keys()])];
+    const loaded = await this.repository.getByIds(ids);
+    if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    if (!loaded.ok) return loaded;
+    const scoped = loaded.value.filter(record =>
+      (scope === "all" || record.scope === scope) &&
+      (scope !== "project" || record.projectId === projectId)
+    );
+    const lexicalScores = new Map(lexicalRecords.map((record, index) => [record.id, 1 / (index + 1)]));
+    const lexicalMax = Math.max(1, ...lexicalScores.values());
+    const ranked = scoped.map(record => {
+      const lexicalScore = (lexicalScores.get(record.id) ?? 0) / lexicalMax;
+      const semanticScore = semanticScores.get(record.id) ?? 0;
+      const score = lexicalScore * (1 - this.semanticWeight) + semanticScore * this.semanticWeight;
+      return { record, score, lexicalScore, semanticScore };
+    }).filter(item => item.score > 0).sort((a, b) => b.score - a.score || b.record.updatedAt - a.record.updatedAt);
+    return ok(ranked.slice(0, limit));
+  }
+}
+
+export interface KnowledgeChunk {
+  id: string;
+  documentId: string;
+  projectId: string;
+  text: string;
+  sourceLabel: string;
+  page?: number;
+  section?: string;
+}
+export interface KnowledgeRepository {
+  add(chunks: KnowledgeChunk[]): Promise<Result<void>>;
+  exportAll?(): Promise<Result<KnowledgeChunk[]>>;
+  replaceDocument?(documentId: string, projectId: string, chunks: KnowledgeChunk[]): Promise<Result<void>>;
+  getByIds?(ids: string[]): Promise<Result<KnowledgeChunk[]>>;
+  search(query: string, projectId: string, limit: number): Promise<Result<KnowledgeChunk[]>>;
+  searchAll?(query: string, limit: number): Promise<Result<KnowledgeChunk[]>>;
+  removeDocument(documentId: string, projectId: string): Promise<Result<void>>;
+}
+export interface KnowledgeVectorIndex {
+  upsert(chunk: KnowledgeChunk, vector: number[]): Promise<void>;
+  removeDocument(documentId: string, projectId: string): Promise<void>;
+  search(vector: number[], projectId: string, limit: number): Promise<Array<{ id: string; score: number }>>;
+  hasProject?(projectId: string): Promise<boolean>;
+  removeProject?(projectId: string): Promise<void>;
+  reconcile?(chunks: KnowledgeChunk[]): Promise<KnowledgeChunk[]>;
+}
+
+export interface KnowledgeIndexReconciliationSummary {
+  totalChunks: number;
+  indexedChunks: number;
+  remainingChunks: number;
+}
+
+/** Rebuilds missing semantic vectors in bounded batches; partial work is safe to resume. */
+export async function reconcileKnowledgeIndex(
+  repository: Pick<KnowledgeRepository, "exportAll">,
+  vectors: KnowledgeVectorIndex,
+  embeddings: EmbeddingProvider,
+  isActive: () => boolean = () => true,
+  batchSize = 16,
+  signal?: AbortSignal
+): Promise<Result<KnowledgeIndexReconciliationSummary>> {
+  if (!repository.exportAll || !vectors.reconcile ||
+      !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 64) {
+    return err("validation", "Semantic index reconciliation is not configured correctly.");
+  }
+  let chunks: KnowledgeChunk[];
+  let missing: KnowledgeChunk[];
+  try {
+    const loaded = await repository.exportAll();
+    if (!loaded.ok) return loaded;
+    chunks = loaded.value;
+    if (!isActive() || signal?.aborted) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    missing = await vectors.reconcile(chunks);
+  } catch (cause) {
+    return err("storage_failed", cause instanceof Error ? cause.message : "Could not inspect the semantic index.");
+  }
+  let indexedChunks = 0;
+  for (let offset = 0; offset < missing.length; offset += batchSize) {
+    if (!isActive() || signal?.aborted) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    const batch = missing.slice(offset, offset + batchSize);
+    let embedded: Result<number[][]>;
+    try {
+      embedded = await embeddings.embed(batch.map(chunk => chunk.text), signal);
+    } catch (cause) {
+      return err("provider_unavailable", cause instanceof Error ? cause.message : "Embedding provider failed.", true);
+    }
+    if (signal?.aborted || (!embedded.ok && embedded.error.code === "cancelled")) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    if (!embedded.ok) return embedded;
+    if (!Array.isArray(embedded.value) || embedded.value.length !== batch.length || embedded.value.some(vector =>
+      !Array.isArray(vector) || vector.length === 0 || vector.some(value => !Number.isFinite(value))
+    )) {
+      return err("validation", "Embedding provider returned an invalid vector batch.");
+    }
+    if (!isActive() || signal?.aborted) return err("cancelled", "Semantic index reconciliation was cancelled.");
+    try {
+      await Promise.all(batch.map((chunk, index) => vectors.upsert(chunk, embedded.value[index])));
+    } catch (cause) {
+      return err("storage_failed", cause instanceof Error ? cause.message : "Could not persist semantic index vectors.");
+    }
+    indexedChunks += batch.length;
+  }
+  if (!isActive() || signal?.aborted) return err("cancelled", "Semantic index reconciliation was cancelled.");
+  return ok({
+    totalChunks: chunks.length,
+    indexedChunks,
+    remainingChunks: missing.length - indexedChunks
+  });
+}
+
+export interface KnowledgeCitation { documentId: string; sourceLabel: string; page?: number; section?: string; chunkId: string; }
+export interface RetrievedKnowledge { context: string; citations: KnowledgeCitation[]; }
+/** RAG context builder returns explicit provenance; it never treats retrieved text as instructions. */
+export class KnowledgeRetrievalService {
+  constructor(private readonly repository: KnowledgeRepository, private readonly embeddings?: EmbeddingProvider, private readonly vectors?: KnowledgeVectorIndex) {}
+  async retrieve(query: string, projectId: string, limit = 8, signal?: AbortSignal): Promise<Result<RetrievedKnowledge>> {
+    if (!query.trim() || !projectId.trim() || !Number.isInteger(limit) || limit < 1 || limit > 20) return err("validation", "Knowledge query, project, or limit is invalid.");
+    if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+    const found = await this.repository.search(query, projectId, Math.min(100, limit * 4));
+    if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+    if (!found.ok) return found;
+    let selected = found.value.slice(0, limit);
+    if (this.embeddings && this.vectors && this.repository.getByIds) {
+      try {
+        const hasProjectIndex = !this.vectors.hasProject || await this.vectors.hasProject(projectId);
+        if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+        if (hasProjectIndex) {
+          const embedded = await this.embeddings.embed([query], signal);
+          if (signal?.aborted || (!embedded.ok && embedded.error.code === "cancelled")) return err("cancelled", "Knowledge retrieval was cancelled.");
+          if (embedded.ok && embedded.value[0]?.length) {
+            const semantic = await this.vectors.search(embedded.value[0], projectId, Math.min(100, limit * 4));
+            if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+            const lexicalScores = new Map(found.value.map((chunk, index) => [chunk.id, 1 / (index + 1)]));
+            const semanticScores = new Map(semantic.map(item => [item.id, Math.max(0, Math.min(1, item.score))]));
+            const ids = [...new Set([...lexicalScores.keys(), ...semanticScores.keys()])];
+            const loaded = await this.repository.getByIds(ids);
+            if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+            if (loaded.ok) {
+              const chunks = loaded.value.filter(chunk => chunk.projectId === projectId);
+              const lexicalMax = Math.max(1, ...lexicalScores.values());
+              selected = chunks.map(chunk => ({ chunk, score: 0.4 * ((lexicalScores.get(chunk.id) ?? 0) / lexicalMax) + 0.6 * (semanticScores.get(chunk.id) ?? 0) }))
+                .filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map(item => item.chunk);
+            }
+          }
+        }
+      } catch {
+        if (signal?.aborted) return err("cancelled", "Knowledge retrieval was cancelled.");
+        // Lexical retrieval remains available if the local model or index is unavailable.
+      }
+    }
+    return ok({
+      context: selected.map((chunk, index) => `[Source ${index + 1}: ${chunk.sourceLabel}${chunk.page ? `, page ${chunk.page}` : ""}]
+${chunk.text}`).join("\n\n"),
+      citations: selected.map(chunk => ({ documentId: chunk.documentId, sourceLabel: chunk.sourceLabel, page: chunk.page, section: chunk.section, chunkId: chunk.id }))
+    });
+  }
+}

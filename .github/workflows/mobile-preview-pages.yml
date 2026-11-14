@@ -1,0 +1,61 @@
+name: Mobile Interface Preview
+
+on:
+  push:
+    branches: [feat/nexus-core-architecture]
+    paths:
+      - "src/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - ".github/workflows/mobile-preview-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: mobile-preview-pages
+  # Let the active validation finish; only the newest pending revision is retained.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Build static preview
+        run: npm run build:pages
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: nexus-mobile-preview
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

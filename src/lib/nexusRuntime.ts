@@ -1,0 +1,212 @@
+import type { AgentId, AgentPermission, AgentPermissionService, AgentRunId, AgentClock, AgentIdFactory } from "../core/agents";
+import type { AgentCheckpointRepository } from "../core/agentCheckpoints";
+import { isTauri } from "@tauri-apps/api/core";
+import { AgentCheckpointService } from "../core/agentCheckpoints";
+import { InMemoryAgentApprovalAuthority, type AgentApprovalIdFactory } from "../core/agentApprovals";
+import { GatewayAgentToolExecutor } from "../core/agentToolBridge";
+import { ResumableAgentRuntime } from "../core/resumableAgents";
+import { err, type Result } from "../core/result";
+import { ToolGateway, type PermissionRequest, type PermissionService, type ToolClock } from "../core/tools";
+import { LocalStorageAgentCheckpointRepository } from "./agentCheckpointStorage";
+import { NativeAgentCheckpointRepository } from "./nativeAgentCheckpointRepository";
+import { LocalStorageToolAuditSink } from "./toolAuditStorage";
+import { NativeToolAuditSink, NativeTraceSink } from "./nativeEventRepositories";
+import type { ToolAuditEvent, ToolAuditSink } from "../core/tools";
+import type { TraceSink } from "../core/observability";
+import type { StorageLike } from "./memoryStorage";
+import { ToolRegistry } from "../core/toolRegistry";
+import { McpClient } from "../core/mcpClient";
+import { McpHttpTransport } from "../core/mcpHttpTransport";
+import type { PermissionScope, ToolRisk } from "../core/tools";
+import { AgentPlanner, type ValidatedPlan } from "../core/agentPlanner";
+import { ModelRouterPlanner } from "../core/modelPlanner";
+import { MultiAgentCoordinator, type CoordinationEvent } from "../core/multiAgentCoordinator";
+import { ResumableAgentTaskExecutor } from "../core/resumableAgentExecutor";
+import { LocalStorageTraceSink } from "./traceStorage";
+import type { ModelRouter } from "../core/model";
+import { MemoryService, type MemoryId } from "../core/memory";
+import { HybridMemoryRetriever, KnowledgeRetrievalService } from "../core/knowledge";
+import { ProjectService, type ProjectId } from "../core/projects";
+import { LocalStorageMemoryRepository } from "./memoryStorage";
+import { WorkspaceMemoryRepository, WorkspaceKnowledgeRepository } from "./nativeRepositories";
+import { LocalStorageProjectRepository, WorkspaceProjectRepository } from "./projectStorage";
+import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
+import { DocumentIngestionService } from "../core/documentIngestion";
+import { createToolInvocationAgent, TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
+import { ToolReconciliationService } from "../core/toolReconciliation";
+
+export interface NexusPermissionPolicy {
+  authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
+  authorizeTool(request: PermissionRequest): Promise<"allow" | "deny" | "ask_user">;
+}
+
+export interface NexusRuntimeIds extends AgentIdFactory, AgentApprovalIdFactory {}
+
+export interface NexusAuditSink extends ToolAuditSink {
+  list(options?: { runId?: string; limit?: number }): Promise<Result<ToolAuditEvent[]>>;
+}
+
+export interface NexusRuntimeOptions {
+  storage: StorageLike;
+  actorId: string;
+  permissions?: NexusPermissionPolicy;
+  ids?: NexusRuntimeIds;
+  clock?: AgentClock & ToolClock;
+  models?: ModelRouter;
+  checkpointRepository?: AgentCheckpointRepository;
+  auditSink?: NexusAuditSink;
+  traceSink?: TraceSink;
+}
+
+const denyByDefault: NexusPermissionPolicy = {
+  authorizeAgent: async () => "deny",
+  authorizeTool: async () => "deny"
+};
+const systemClock: AgentClock & ToolClock = { now: () => Date.now() };
+
+function createIds(): NexusRuntimeIds {
+  const randomId = (prefix: string) => {
+    if (!globalThis.crypto?.randomUUID) throw new Error("A cryptographically secure UUID source is required.");
+    return `${prefix}_${globalThis.crypto.randomUUID()}`;
+  };
+  return {
+    runId: () => randomId("run") as AgentRunId,
+    approvalId: () => randomId("approval")
+  };
+}
+
+class AgentPermissionAdapter implements AgentPermissionService {
+  constructor(private readonly policy: NexusPermissionPolicy) {}
+  authorize(input: { agentId: AgentId; permission: AgentPermission; reason: string }) {
+    return this.policy.authorizeAgent(input);
+  }
+}
+class ToolPermissionAdapter implements PermissionService {
+  constructor(private readonly policy: NexusPermissionPolicy) {}
+  authorize(request: PermissionRequest) { return this.policy.authorizeTool(request); }
+}
+
+/**
+ * Composition root for the local preview runtime.
+ * Browser localStorage checkpoints/audit are not a security boundary; desktop
+ * checkpoint persistence uses native SQLite, while audit/trace adapters remain preview-grade.
+ */
+export function createNexusRuntime(options: NexusRuntimeOptions) {
+  if (!options.actorId.trim() || options.actorId.length > 160) {
+    throw new Error("A valid host actor identity is required.");
+  }
+  const ids = options.ids ?? createIds();
+  const clock = options.clock ?? systemClock;
+  const policy = options.permissions ?? denyByDefault;
+  const checkpointRepository = options.checkpointRepository ?? new LocalStorageAgentCheckpointRepository(options.storage);
+  const checkpointService = new AgentCheckpointService(checkpointRepository);
+  const auditSink = options.auditSink ?? new LocalStorageToolAuditSink(options.storage);
+  const toolReconciliationService = new ToolReconciliationService(auditSink, checkpointRepository);
+  const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
+  const toolRegistry = new ToolRegistry(toolGateway);
+  const mcpClient = new McpClient(toolRegistry, toolGateway);
+  const traceSink = options.traceSink ?? new LocalStorageTraceSink(options.storage);
+  // The desktop agent runtime must share the same SQLite-backed records as the UI.
+  // Browser preview keeps its isolated localStorage adapters.
+  const memoryRepository = isTauri()
+    ? new WorkspaceMemoryRepository(options.storage)
+    : new LocalStorageMemoryRepository(options.storage);
+  const memoryService = new MemoryService(memoryRepository, { memoryId: () => ids.runId().replace("run_", "memory_") as MemoryId }, clock);
+  const memoryRetriever = new HybridMemoryRetriever(memoryRepository);
+  const projectRepository = isTauri()
+    ? new WorkspaceProjectRepository(options.storage)
+    : new LocalStorageProjectRepository(options.storage);
+  const projectService = new ProjectService(projectRepository, () => ids.runId().replace("run_", "project_") as ProjectId, clock.now);
+  const knowledgeRepository = isTauri()
+    ? new WorkspaceKnowledgeRepository(options.storage)
+    : new LocalStorageKnowledgeRepository(options.storage);
+  const knowledgeService = new KnowledgeRetrievalService(knowledgeRepository);
+  const documentIngestionService = new DocumentIngestionService(knowledgeRepository);
+  const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
+  const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
+  const agentRuntime = new ResumableAgentRuntime(
+    checkpointService, new AgentPermissionAdapter(policy), ids, clock, agentToolExecutor, approvalAuthority
+  );
+  const createCoordinator = (threadId = "nexus-multi-agent") => new MultiAgentCoordinator(
+    new ResumableAgentTaskExecutor(agentRuntime, threadId),
+    { authorize: async (agentId, reason) => policy.authorizeAgent({ agentId, permission: "tool:execute", reason }) },
+    traceSink, clock, 12
+  );
+
+  return {
+    agentRuntime,
+    toolGateway,
+    toolRegistry,
+    mcpClient,
+    traceSink,
+    memoryService,
+    memoryRetriever,
+    projectService,
+    knowledgeRepository,
+    knowledgeService,
+    documentIngestionService,
+    connectMcpHttp: (input: { id: string; name: string; version: string; endpoint: string }, signal: AbortSignal) =>
+      mcpClient.connect({ ...input, transport: new McpHttpTransport({ endpoint: input.endpoint }) }, signal),
+    discoverAndImportMcpTools: (serverId: string, signal: AbortSignal, defaults: { permissions: PermissionScope[]; risk: ToolRisk; timeoutMs: number }) =>
+      mcpClient.discoverAndImport(serverId, signal, defaults),
+    createPlanner: (providerId: string, model: string) => options.models
+      ? new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model))
+      : null,
+    createCoordinator,
+    /**
+     * Creates one model-backed workflow whose plan is validated against the live
+     * Tool Registry and whose steps execute via ResumableAgentRuntime + Tool Gateway.
+     * Approval-waiting coordination must be resumed on this same workflow instance.
+     */
+    createAgentWorkflow: (providerId: string, model: string, threadId = "nexus-planned-workflow", allowedToolIds?: string[]) => {
+      if (!options.models) return null;
+      if (!agentRuntime.list().some(agent => agent.id === TOOL_INVOCATION_AGENT_ID)) {
+        const registered = agentRuntime.register(createToolInvocationAgent());
+        if (!registered.ok) throw new Error(registered.error.message);
+      }
+      const planner = new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model));
+      const coordinator = createCoordinator(threadId);
+      return {
+        plan: async (goal: string, signal: AbortSignal, referenceContext?: string): Promise<Result<ValidatedPlan>> => {
+          const available = toolRegistry.search("", 100);
+          if (!available.ok) return available;
+          const allowed = allowedToolIds ? new Set(allowedToolIds) : null;
+          const tools = allowed ? available.value.filter(tool => allowed.has(tool.id) || (allowed.has("mcp.*") && tool.id.startsWith("mcp."))) : available.value;
+          if (allowed && tools.length === 0) return err("validation", "No tools allowed for this workflow are registered.");
+          return planner.plan(goal, tools, signal, referenceContext);
+        },
+        run: (plan: ValidatedPlan, runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => {
+          const assignments = Object.fromEntries(plan.steps.map(step => [step.id, TOOL_INVOCATION_AGENT_ID])) as Record<string, AgentId>;
+          return coordinator.run(runId, plan, assignments, signal);
+        },
+        resume: (runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => coordinator.resume(runId, signal)
+      };
+    },
+    checkpointService,
+    checkpointRepository,
+    toolReconciliationService,
+    auditSink,
+    approvalAuthority,
+    /** Call only in response to an explicit user approval action in the UI. */
+    issueApproval: (runId: AgentRunId): Promise<Result<string>> => approvalAuthority.issue(runId)
+  };
+}
+
+export function createWorkspaceNexusRuntime(actorId: string, permissions?: NexusPermissionPolicy, models?: ModelRouter): ReturnType<typeof createNexusRuntime> {
+  if (typeof window === "undefined") throw new Error("Workspace storage is unavailable in this environment.");
+  return createNexusRuntime({
+    storage: window.localStorage, actorId, permissions, models,
+    ...(isTauri() ? {
+      checkpointRepository: new NativeAgentCheckpointRepository(),
+      auditSink: new NativeToolAuditSink(),
+      traceSink: new NativeTraceSink()
+    } : {})
+  });
+}
+export function createBrowserNexusRuntime(actorId: string, permissions?: NexusPermissionPolicy, models?: ModelRouter): ReturnType<typeof createNexusRuntime> {
+  if (typeof window === "undefined") throw new Error("Browser storage is unavailable in this environment.");
+  try { return createNexusRuntime({ storage: window.localStorage, actorId, permissions, models }); }
+  catch (cause) { if (cause instanceof Error) throw cause; throw new Error("Could not initialize the browser runtime."); }
+}
+export const denyNexusOperation = (message = "No permission policy was configured."): Result<never> =>
+  err("permission_denied", message);

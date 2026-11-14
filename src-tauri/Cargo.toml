@@ -1,0 +1,33 @@
+[package]
+name = "nexus-au"
+version = "0.2.0"
+description = "NEXUS AU personal AI workspace"
+authors = ["NEXUS AU contributors"]
+edition = "2021"
+
+[lib]
+name = "nexus_au_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "time"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.42.0", features = ["bundled"] }
+libc = "0.2"
+arboard = "3.6"
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["sync-secret-service"] }
