@@ -11,11 +11,9 @@ export async function sendMessage(
   onDelta?: (text: string) => void,
   signal?: AbortSignal,
   onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void,
-  generation?: { temperature?: number; maxOutputTokens?: number }
+  generation?: { temperature?: number; maxOutputTokens?: number },
+  gatewayToken?: string
 ): Promise<string> {
-  if (!isTauri()) {
-    return "Browser preview mode is active. The NEXUS AU interface and local conversation history work here, but AI requests need the native Tauri backend. Open the desktop app to connect your provider securely. No API key was sent or stored by this preview.";
-  }
   if (signal?.aborted) throw new Error("Model request was cancelled.");
   if (!settings.baseUrl.trim() || !settings.model.trim()) {
     throw new Error("Configure the provider URL and model first.");
@@ -26,6 +24,43 @@ export async function sendMessage(
     knowledgeContext
   );
   const requestMessages: ModelMessage[] = prepared.messages;
+
+  if (!isTauri()) {
+    if (settings.baseUrl !== "/api/gemini") {
+      throw new Error("Browser preview supports Gemini through the secured Vercel proxy only. Select “Use Gemini on Vercel” in provider settings.");
+    }
+    if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token from Vercel settings. This is separate from your Gemini API key.");
+    const systemMessage = requestMessages.find(message => message.role === "system");
+    const turns = requestMessages.filter(message => message.role !== "system");
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${gatewayToken.trim()}`
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        messages: turns,
+        ...(systemMessage ? { systemInstruction: systemMessage.content } : {}),
+        ...(generation?.temperature !== undefined ? { temperature: generation.temperature } : {}),
+        ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {})
+      }),
+      signal
+    });
+    const payload = await response.json().catch(() => ({})) as {
+      text?: string;
+      usage?: { inputTokens?: number | null; outputTokens?: number | null };
+      error?: string;
+    };
+    if (!response.ok) throw new Error(payload.error || `Gemini proxy request failed (HTTP ${response.status}).`);
+    if (typeof payload.text !== "string" || !payload.text.trim()) throw new Error("Gemini returned an empty response.");
+    onUsage?.({
+      ...(typeof payload.usage?.inputTokens === "number" ? { inputTokens: payload.usage.inputTokens } : {}),
+      ...(typeof payload.usage?.outputTokens === "number" ? { outputTokens: payload.usage.outputTokens } : {})
+    });
+    onDelta?.(payload.text);
+    return payload.text;
+  }
 
   const router = createTauriModelRouter(settings);
   if (!router) throw new Error("The native model runtime is unavailable.");
@@ -63,7 +98,8 @@ export interface ProviderGenerationCheck {
 /** Sends a small, context-free prompt to verify actual generation, not just /models reachability. */
 export async function testProviderGeneration(
   settings: ProviderSettings,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  gatewayToken?: string
 ): Promise<ProviderGenerationCheck> {
   const usage: { value: ProviderGenerationCheck["usage"] } = { value: null };
   const response = await sendMessage(
@@ -78,7 +114,8 @@ export async function testProviderGeneration(
     undefined,
     signal,
     value => { usage.value = value; },
-    { temperature: 0, maxOutputTokens: 16 }
+    { temperature: 0, maxOutputTokens: 16 },
+    gatewayToken
   );
   return { response, usage: usage.value };
 }
