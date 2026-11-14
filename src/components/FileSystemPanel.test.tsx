@@ -508,7 +508,8 @@ describe("FileSystemPanel native workspace access", () => {
     const secondButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("other.txt"));
     await act(async () => { secondButton!.click(); });
     expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value).toBe("unsaved draft");
-    expect(invokeMock).toHaveBeenCalledTimes(4);
+    expect(invokeMock.mock.calls.filter(([command]) => command !== "get_workspace_operation_recovery_status")).toHaveLength(4);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "get_workspace_operation_recovery_status")).toHaveLength(2);
     vi.unstubAllGlobals();
   });
 
