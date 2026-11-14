@@ -299,17 +299,22 @@ export function VoiceControls({
   }
 
   useEffect(() => {
-    if ("speechSynthesis" in window) {
-      const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
+    const speech = "speechSynthesis" in window ? window.speechSynthesis : null;
+    const updateVoices = () => {
+      if (speech) setVoices(speech.getVoices());
+    };
+    if (speech) {
       updateVoices();
-      window.speechSynthesis.addEventListener("voiceschanged", updateVoices);
+      speech.addEventListener("voiceschanged", updateVoices);
     }
     return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", () => undefined);
+      conversationModeRef.current = false;
+      waitingForResponseRef.current = false;
       recognition.current?.abort();
       recognition.current = null;
       utterance.current = null;
-      window.speechSynthesis?.cancel();
+      speech?.removeEventListener("voiceschanged", updateVoices);
+      speech?.cancel();
     };
   }, []);
 
