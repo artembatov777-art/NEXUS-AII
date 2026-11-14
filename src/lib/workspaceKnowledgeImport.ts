@@ -57,6 +57,7 @@ export async function collectWorkspaceKnowledgeFiles(root: string, invoke: Works
     visitedDirectories.add(key);
     const raw = await invoke("list_workspace_entries", { path: current.path });
     if (!Array.isArray(raw)) throw new Error("Workspace directory listing returned invalid data.");
+    if (raw.length >= 500) truncated = true;
     for (const value of raw) {
       visitedEntries += 1;
       if (visitedEntries > MAX_ENTRIES) { truncated = true; break; }
