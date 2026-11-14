@@ -328,7 +328,7 @@ fn move_workspace_entries_batch_inner(
     let journal_id = if let Some(journal) = journal {
         let entries = plans.iter().map(|(source, destination)| RenameEntry {
             source: source.clone(),
-            destination: destination.join(source.file_name().unwrap_or_default()),
+            destination: destination.join(source.file_name().expect("validated source has a file name")),
         }).collect::<Vec<_>>();
         Some(journal.begin(&entries)?)
     } else {
