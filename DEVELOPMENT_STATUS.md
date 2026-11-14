@@ -53,6 +53,12 @@ Residual work: hostile parent-directory TOCTOU protection and durable recovery o
 
 ## Phase VI — Security & Integration
 
+Additional source hardening is now present on the working branch, with fresh CI verification pending:
+- Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
+- Provider API keys are redacted from successful non-streaming output and streamed text, including when a key is split across SSE deltas.
+- File move/rename source paths resolve the approved parent directory without canonicalizing the final component, preventing symlink-target substitution during source resolution.
+- Regression tests were added for metadata tampering, legacy backup import, split-delta secret redaction, and final-component symlink rejection. These changes must not be called verified until the latest frontend and native workflows finish.
+
 OS credential-vault storage, default-deny runtime policy, per-action approval, bounded provider/MCP transports, redacted audit/trace records, transactional workspace backup/restore, CSP, and narrow Tauri capabilities are implemented. Exported backups use AES-256-GCM with PBKDF2-SHA256 passphrase derivation (600,000 iterations for new exports); passphrases are held only in UI memory and never persisted. Legacy plaintext backups remain importable after an explicit warning.
 
 SQLite, browser stores, and checkpoints are not application-level encrypted. Remaining work includes integrated adversarial testing, owner-side credential-vault lifecycle checks, broader cross-module recovery, and independent security testing.
