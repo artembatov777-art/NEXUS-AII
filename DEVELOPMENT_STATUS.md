@@ -31,6 +31,8 @@ The desktop workspace, restrained JARVIS-inspired visual system, responsive layo
 
 Automated UI tests cover navigation, preview disclosures, chat behavior, keyboard shortcuts, dialogs, and key module interactions. The latest preview still requires an owner-side iPhone Safari check.
 
+- Fixed the mobile navigation stacking defect: the open sidebar now sits above the blurred dismissal scrim, so its text remains sharp and its controls receive pointer input. The scrim remains below the drawer and continues to dismiss navigation when tapped outside it. Fresh frontend/mobile CI and real-device Safari verification are required before calling the fix fully verified.
+
 ## Phase II — AI Core
 
 The provider-neutral model router supports direct OpenAI-compatible endpoints, model discovery, generation health checks, streaming, usage events, bounded retries, normalized errors, and cancellation. Provider profiles store secrets in OS credential-vault entries; no-key mode is restricted to loopback endpoints. Model IDs must come from actual provider discovery.

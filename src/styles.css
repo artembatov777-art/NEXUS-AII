@@ -508,3 +508,15 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .agent-reconciliation > p { margin: 8px 0; color: #c6b58f; font-size: 9px; line-height: 1.55; }
 .agent-reconciliation .agent-card-heading { margin-bottom: 6px; }
 .agent-reconciliation .agent-history-item { border-color: #4a3d2a; }
+
+/* Mobile navigation layer order: keep the interactive drawer above its blurred dismiss scrim. */
+@media (max-width: 640px) {
+  .sidebar:not(.sidebar-hidden) {
+    position: relative;
+    z-index: 80;
+  }
+
+  .sidebar-scrim {
+    z-index: 79;
+  }
+}
