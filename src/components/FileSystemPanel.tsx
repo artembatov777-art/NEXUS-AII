@@ -373,38 +373,25 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       return;
     }
     if (typeof destination !== "string") return;
-    if (!window.confirm("Move " + selectedPaths.length + " selected files to this approved folder? Existing files will not be overwritten. If a move fails, NEXUS will try to restore files already moved.\n\n" + destination)) return;
+    if (!window.confirm("Move " + selectedPaths.length + " selected files to this approved folder? Existing files will not be overwritten. NEXUS records the complete operation first and can restore an interrupted batch after restart.\n\n" + destination)) return;
 
     setBusy(true);
     setError("");
     setNotice("");
-    const moved: Array<{ destination: string; originalDirectory: string }> = [];
-    let auditFailures = 0;
     try {
-      for (const source of selectedPaths) {
-        const movedPath = await invoke<string>("move_workspace_entry", { path: source, destinationDirectory: destination });
-        moved.push({ destination: movedPath, originalDirectory: parentPath(source) });
+      const moved = await invoke<string[]>("move_workspace_entries_batch", {
+        entries: selectedPaths.map(path => ({ path, destinationDirectory: destination }))
+      });
+      let auditFailures = 0;
+      for (const _entry of moved) {
         if (!(await recordFilesystemAudit("move"))) auditFailures += 1;
       }
       setSelectedPaths([]);
       setNotice("Moved " + moved.length + " files." + (auditFailures ? " " + auditFailures + " audit entr" + (auditFailures === 1 ? "y could" : "ies could") + " not be saved." : ""));
       await refresh(currentPath, true);
     } catch (cause) {
-      const rollbackFailures: string[] = [];
-      for (const item of [...moved].reverse()) {
-        try {
-          await invoke<string>("move_workspace_entry", { path: item.destination, destinationDirectory: item.originalDirectory });
-          if (!(await recordFilesystemAudit("move"))) auditFailures += 1;
-        } catch {
-          rollbackFailures.push(item.destination);
-        }
-      }
-      const failureMessage = rollbackFailures.length
-        ? "Bulk move stopped and rollback was incomplete. " + rollbackFailures.length + " file(s) need manual review: " + rollbackFailures.slice(0, 4).join(", ")
-        : "Bulk move failed; previously moved files were restored. " + (cause instanceof Error ? cause.message : String(cause));
-      if (rollbackFailures.length) setSelectedPaths([]);
       await refresh(currentPath, true);
-      setError(failureMessage);
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
     }
