@@ -16,10 +16,10 @@ const FileSystemPanel = lazy(() => import("./components/FileSystemPanel").then(m
 const ToolsPanel = lazy(() => import("./components/ToolsPanel").then(module => ({ default: module.ToolsPanel })));
 import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
-import { KnowledgeRetrievalService, reconcileKnowledgeIndex } from "./core/knowledge";
+import { HybridMemoryRetriever, KnowledgeRetrievalService, reconcileKnowledgeIndex } from "./core/knowledge";
 import { WorkspaceProjectRepository } from "./lib/projectStorage";
 import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/nativeRepositories";
-import { MemoryService, type MemoryId } from "./core/memory";
+
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
@@ -31,6 +31,7 @@ import { filterConversationHistory } from "./lib/conversationHistory";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
+import { IndexedDbMemoryVectorIndex } from "./lib/memoryVectorIndex";
 import type { ChatMessage, Conversation, ProviderSettings } from "./types";
 
 type ProviderVaultStatus = "loading" | "available" | "not_required" | "missing" | "unavailable" | "browser";
@@ -119,11 +120,9 @@ export default function App() {
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
     knowledgeRepository, embeddings, vectors
   ), [knowledgeRepository, embeddings, vectors]);
-  const memoryService = useMemo(() => new MemoryService(
-    new WorkspaceMemoryRepository(window.localStorage),
-    { memoryId: () => crypto.randomUUID() as MemoryId },
-    { now: () => Date.now() }
-  ), []);
+  const memoryRepository = useMemo(() => new WorkspaceMemoryRepository(window.localStorage), []);
+  const memoryVectors = useMemo(() => new IndexedDbMemoryVectorIndex(), []);
+  const memoryRetriever = useMemo(() => new HybridMemoryRetriever(memoryRepository, embeddings, memoryVectors), [memoryRepository, embeddings, memoryVectors]);
   async function refreshProjects() {
     const result = await projectService.list();
     if (result.ok) {
@@ -306,9 +305,9 @@ export default function App() {
     try {
       const contextParts: string[] = [];
       const contextWarnings: string[] = [];
-      const remembered = await memoryService.search(text, "profile", 5, undefined, controller.signal);
+      const remembered = await memoryRetriever.search(text, "profile", 5, controller.signal);
       if (!remembered.ok) contextWarnings.push(`Saved profile memory unavailable: ${remembered.error.message}`);
-      else if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.category}; source: ${item.source.label}]\n${item.content}`).join("\n\n"));
+      else if (remembered.value.length) contextParts.push("Relevant user-approved memories:\n" + remembered.value.map(item => `[Memory: ${item.record.category}; source: ${item.record.source.label}]\n${item.record.content}`).join("\n\n"));
       let sourceReferences: import("./types").ChatSourceReference[] = [];
       // Project context must follow the conversation's persisted ownership.
       // The global project selector may have changed while an older chat is open;
@@ -317,7 +316,7 @@ export default function App() {
       if (conversationProjectId) {
         const [retrieved, projectMemories] = await Promise.all([
           knowledgeService.retrieve(text, conversationProjectId, 6, controller.signal),
-          memoryService.search(text, "project", 5, conversationProjectId, controller.signal)
+          memoryRetriever.search(text, "project", 5, controller.signal, conversationProjectId)
         ]);
         if (!retrieved.ok) contextWarnings.push(`Project knowledge unavailable: ${retrieved.error.message}`);
         else {
@@ -325,7 +324,7 @@ export default function App() {
           sourceReferences = retrieved.value.citations;
         }
         if (!projectMemories.ok) contextWarnings.push(`Project memory unavailable: ${projectMemories.error.message}`);
-        else if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.category}]\n${item.content}`).join("\n\n"));
+        else if (projectMemories.value.length) contextParts.push("Selected project memories:\n" + projectMemories.value.map(item => `[Project memory: ${item.record.category}]\n${item.record.content}`).join("\n\n"));
       }
       const assistantId = makeId();
       let streamedAnswer = "";
