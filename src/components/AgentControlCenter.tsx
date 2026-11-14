@@ -66,14 +66,24 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
             const toolId = reason.match(/Tool "([^"]+)"/)?.[1] ?? "";
             const actions: Record<string, string> = {
+              "workspace.list": "list entries in this folder",
+              "workspace.search": "search file and folder names",
+              "workspace.search_content": "search text inside approved files",
+              "workspace.read": "read this file",
               "workspace.write": "create a new file",
               "workspace.mkdir": "create a new folder",
               "workspace.rename": "rename this entry",
               "workspace.move": "move this entry"
             };
-            const action = scope === "filesystem:read:selected" ? "read" : actions[toolId] ?? "change this workspace entry";
+            const action = actions[toolId] ?? (scope === "filesystem:read:selected" ? "read this workspace location" : "change this workspace entry");
+            const readNotes: Record<string, string> = {
+              "workspace.list": "Only directory entries inside the approved folder are listed.",
+              "workspace.search": "Only names inside the approved folder are searched.",
+              "workspace.search_content": "Text content is read only from supported regular files inside the approved folder.",
+              "workspace.read": "Only the selected regular text file is read."
+            };
             const reviewNote = scope === "filesystem:read:selected"
-              ? "The agent will only read this file."
+              ? readNotes[toolId] ?? "The agent will only read inside the approved workspace."
               : toolId === "workspace.write"
                 ? "The file is created only when the destination does not already exist. Review the content preview."
                 : "The operation is limited to the approved workspace and will not replace an existing destination.";
