@@ -72,6 +72,18 @@ const isValidIdentifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 160 &&
   !/[\u0000-\u001f\u007f]/.test(value);
 
+const isAbortSignalLike = (value: unknown): value is AbortSignal => {
+  try {
+    if (typeof value !== "object" || value === null) return false;
+    const signal = value as AbortSignal;
+    return typeof signal.aborted === "boolean"
+      && typeof signal.addEventListener === "function"
+      && typeof signal.removeEventListener === "function";
+  } catch {
+    return false;
+  }
+};
+
 const serializedSize = (value: unknown): number | null => {
   try {
     const serialized = JSON.stringify(value);
@@ -128,8 +140,8 @@ export class ToolGateway {
     actorId: string
   ): Promise<Result<Output>> {
     if (!isValidIdentifier(actorId)) return err("permission_denied", "A valid host actor identity is required.");
-    if (!isValidIdentifier(context?.runId) || !isValidIdentifier(context?.traceId)) {
-      return err("validation", "Tool run and trace identifiers are invalid.");
+    if (!isValidIdentifier(context?.runId) || !isValidIdentifier(context?.traceId) || !isAbortSignalLike(context?.signal)) {
+      return err("validation", "Tool run, trace, or cancellation context is invalid.");
     }
     const tool = this.tools.get(toolId);
     if (!tool) return err("tool_failed", `Tool "${toolId}" is not registered.`);
