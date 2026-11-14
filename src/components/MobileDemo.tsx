@@ -187,7 +187,7 @@ export function MobileDemo() {
         <p className="demo-disclaimer">Демо-режим · сообщения не отправляются модели</p>
       </div>}
 
-      {notice && <button className="demo-notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+      {notice && <button className="demo-notice" aria-live="polite" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       <nav className="demo-tabbar" aria-label="Основная навигация">
         <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
         <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
