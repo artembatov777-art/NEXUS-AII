@@ -67,6 +67,18 @@ export class NexusApplication {
 
       yield ok({ conversationId: input.conversationId, assistantText });
     } catch (cause) {
+      // Preserve any text already shown to the caller before a provider failure
+      // or cancellation. Otherwise the visible partial answer disappears on reload.
+      if (assistantText.trim()) {
+        const saved = await this.conversations.appendMessage(input.conversationId, {
+          role: "assistant",
+          content: assistantText
+        });
+        if (!saved.ok) {
+          yield saved;
+          return;
+        }
+      }
       const message = cause instanceof Error ? cause.message : "Unexpected model error.";
       yield err(input.signal?.aborted ? "cancelled" : "provider_unavailable", message, !input.signal?.aborted);
     }
