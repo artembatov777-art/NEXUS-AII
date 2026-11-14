@@ -16,6 +16,7 @@ Updated: 2026-11-14
 ## Verified automation evidence
 
 - Frontend Quality passed on `55741684a3992dc31e2ad61bb127ca988678a341`: 69 test files, 481 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
+- Fresh Frontend Quality passed on `f06625cdc9c3165e3ea4ca93f21ae69354135c0d`: 69 test files, 485 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities. The native cross-platform workflow for this source revision has not yet reported a completed result.
 - Mobile Interface Preview build and deployment passed on the same source commit.
 - Native Windows/macOS/Linux Rust tests and installer packaging are still being verified. The current matrix has reached package creation on Windows, macOS, and Linux after adding a square Linux AppImage icon; the full matrix and artifact uploads are not yet confirmed. Do not treat a queued or partial matrix as a pass.
 - Native filesystem permission snapshots now use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
