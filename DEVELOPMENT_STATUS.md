@@ -6,8 +6,8 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit with completed frontend/mobile CI: `55741684a3992dc31e2ad61bb127ca988678a341`
-- Latest workflow configuration commit: `92aafe70ffc9f8165a5e658bc866e9ca6e6337e7`
+- Latest source implementation commit: `a5f74e13865021f7985b548dbed08f0afe8d5684`
+- Latest completed frontend Quality commit: `a5f74e13865021f7985b548dbed08f0afe8d5684`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -15,14 +15,12 @@ Updated: 2026-11-14
 
 ## Verified automation evidence
 
-- Frontend Quality passed on `55741684a3992dc31e2ad61bb127ca988678a341`: 69 test files, 481 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
-- Fresh Frontend Quality passed on `f06625cdc9c3165e3ea4ca93f21ae69354135c0d`: 69 test files, 485 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities. The native cross-platform workflow for this source revision has not yet reported a completed result.
-- Mobile Interface Preview build and deployment passed on the same source commit.
-- Native Windows/macOS/Linux Rust tests and installer packaging are still being verified. The current matrix has reached package creation on Windows, macOS, and Linux after adding a square Linux AppImage icon; the full matrix and artifact uploads are not yet confirmed. Do not treat a queued or partial matrix as a pass.
-- Native filesystem permission snapshots now use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
-- Batch file rename and bulk file move now write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status in the File System panel.
+- Frontend Quality passed on `a5f74e13865021f7985b548dbed08f0afe8d5684`: 69 test files, 487 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
+- Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. The subsequent retry-recovery command and UI changes are being revalidated by the native workflow for the current branch head; do not treat that run as passed until all three jobs finish.
+- Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
+- Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
+- Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
-
 ## Phase I — Complete interface
 
 The desktop workspace, restrained JARVIS-inspired visual system, responsive layouts, chat/history, command palette, global search, projects, memory, knowledge, agents, tools/MCP, file system, Training Lab, and provider settings are implemented. Heavy modules are lazy-loaded. Mobile preview is isolated behind `?demo=1` and does not contact a model or native filesystem.
