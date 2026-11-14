@@ -14,7 +14,7 @@ function serialize<T>(storage: StorageAdapter, operation: () => Promise<T>): Pro
 function toDomain(item: UiConversation): DomainConversation {
   const messages: Message[] = item.messages.filter(message => message.id !== "welcome").map(message => ({
     id: message.id as Message["id"], role: message.role, content: message.content, createdAt: message.createdAt,
-    ...(message.sourceReferences?.length ? { metadata: { sourceReferences: message.sourceReferences } } : {})
+    ...((message.sourceReferences?.length || message.imageAttachment) ? { metadata: { ...(message.sourceReferences?.length ? { sourceReferences: message.sourceReferences } : {}), ...(message.imageAttachment ? { imageAttachment: message.imageAttachment } : {}) } } : {})
   }));
   return {
     id: item.id as ConversationId, title: item.title.slice(0, 120), messages,
@@ -25,10 +25,12 @@ function toDomain(item: UiConversation): DomainConversation {
 function toUi(item: DomainConversation): UiConversation {
   const messages: ChatMessage[] = item.messages.map(message => {
     const refs = message.metadata?.sourceReferences;
+    const imageAttachment = message.metadata?.imageAttachment;
     return {
       id: message.id, role: message.role === "assistant" ? "assistant" : "user",
       content: message.content, createdAt: message.createdAt,
-      ...(Array.isArray(refs) ? { sourceReferences: refs as ChatMessage["sourceReferences"] } : {})
+      ...(Array.isArray(refs) ? { sourceReferences: refs as ChatMessage["sourceReferences"] } : {}),
+      ...(imageAttachment && typeof imageAttachment === "object" ? { imageAttachment: imageAttachment as ChatMessage["imageAttachment"] } : {})
     };
   });
   return { id: item.id, title: item.title, messages, updatedAt: item.updatedAt, ...(item.projectId ? { projectId: item.projectId } : {}) };
