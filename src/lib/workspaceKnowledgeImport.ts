@@ -25,6 +25,8 @@ const MAX_ENTRIES = 5_000;
 const MAX_FILES = 100;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+const EXCLUDED_DIRECTORIES = new Set([".git", ".svn", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", "node_modules", "target", "dist", "build", ".venv", "venv", "__pycache__", ".next", ".cache"]);
+const SENSITIVE_FILE_NAMES = new Set(["id_rsa", "id_ed25519", "credentials.json", "secrets.json"]);
 
 function normalizePath(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/g, "");
@@ -70,13 +72,17 @@ export async function collectWorkspaceKnowledgeFiles(root: string, invoke: Works
         continue;
       }
       if (entry.kind === "directory") {
+        if (EXCLUDED_DIRECTORIES.has(entry.name.toLowerCase())) { skippedFiles += 1; continue; }
         if (current.depth < MAX_DEPTH) pending.push({ path: entry.path, depth: current.depth + 1 });
         else truncated = true;
         continue;
       }
       if (entry.kind !== "file") { skippedFiles += 1; continue; }
-      const extension = entry.name.split(".").pop()?.toLowerCase() ?? "";
-      if (!TEXT_EXTENSIONS.has(extension) || entry.sizeBytes > MAX_FILE_BYTES) {
+      const lowerName = entry.name.toLowerCase();
+      const extension = lowerName.split(".").pop() ?? "";
+      if (lowerName === ".env" || lowerName.startsWith(".env.") || SENSITIVE_FILE_NAMES.has(lowerName) ||
+          ["pem", "key", "p12", "pfx", "keystore"].includes(extension) ||
+          !TEXT_EXTENSIONS.has(extension) || entry.sizeBytes > MAX_FILE_BYTES) {
         skippedFiles += 1;
         continue;
       }

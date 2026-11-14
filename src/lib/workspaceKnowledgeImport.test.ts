@@ -51,6 +51,24 @@ describe("collectWorkspaceKnowledgeFiles", () => {
     expect(result.files.map(file => file.name)).toEqual(["lower.txt", "upper.txt"]);
   });
 
+
+  it("skips credential directories and likely secret files before reading content", async () => {
+    const invoke = vi.fn(async (_command: string, args?: Record<string, unknown>) => {
+      if (args?.path === "/approved") return [
+        { name: ".ssh", path: "/approved/.ssh", kind: "directory", sizeBytes: 0 },
+        { name: ".git", path: "/approved/.git", kind: "directory", sizeBytes: 0 },
+        { name: ".env", path: "/approved/.env", kind: "file", sizeBytes: 20 },
+        { name: "id_ed25519", path: "/approved/id_ed25519", kind: "file", sizeBytes: 100 },
+        { name: "notes.md", path: "/approved/notes.md", kind: "file", sizeBytes: 10 }
+      ];
+      return [];
+    });
+    const result = await collectWorkspaceKnowledgeFiles("/approved", invoke);
+    expect(result.files.map(file => file.name)).toEqual(["notes.md"]);
+    expect(result.skippedFiles).toBe(4);
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects invalid roots and malformed directory listings", async () => {
     await expect(collectWorkspaceKnowledgeFiles(" ", vi.fn())).rejects.toThrow(/approved workspace/);
     await expect(collectWorkspaceKnowledgeFiles("/approved", vi.fn(async () => null))).rejects.toThrow(/invalid data/);
