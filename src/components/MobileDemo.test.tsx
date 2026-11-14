@@ -90,4 +90,56 @@ describe("mobile interface preview interactions", () => {
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Отправить сообщение"]')?.click());
     expect(container.textContent).not.toContain("сообщение не отправлялось AI-модели");
   });
+
+  it("opens every secondary module from the mobile module hub", () => {
+    act(() => buttonContaining("Ещё").click());
+    act(() => buttonContaining("Tools & MCP").click());
+    expect(container.textContent).toContain("TOOL GATEWAY");
+
+    act(() => buttonContaining("Ещё").click());
+    act(() => buttonContaining("Training Lab").click());
+    expect(container.textContent).toContain("MODEL DEVELOPMENT");
+
+    act(() => buttonContaining("Ещё").click());
+    act(() => buttonContaining("Агенты").click());
+    expect(container.textContent).toContain("NEXUS AUTOMATION");
+  });
+
+  it("filters the demo project list and exposes an empty search state", () => {
+    act(() => buttonContaining("Проекты").click());
+    const search = container.querySelector<HTMLInputElement>('input[aria-label="Поиск проектов"]');
+    if (!search) throw new Error("Project search input was not found.");
+    setInputValue(search, "no matching project");
+    expect(container.textContent).toContain("Проекты не найдены.");
+    expect(container.textContent).not.toContain("NEXUS AU");
+  });
+
+  it("keeps knowledge search explicitly in preview mode", () => {
+    act(() => buttonContaining("Ещё").click());
+    act(() => buttonContaining("База знаний").click());
+    const search = container.querySelector<HTMLInputElement>('input[aria-label="Поиск по базе знаний"]');
+    if (!search) throw new Error("Knowledge search input was not found.");
+    setInputValue(search, "architecture");
+    act(() => buttonContaining("Найти").click());
+    expect(container.textContent).toContain("Демо-поиск по запросу «architecture»");
+    expect(container.textContent).toContain("Реальные документы пока не индексируются");
+  });
+
+  it("expands tool details and dismisses preview notices", () => {
+    act(() => buttonContaining("Ещё").click());
+    act(() => buttonContaining("Tools & MCP").click());
+    const browser = buttonContaining("Browser");
+    expect(browser.getAttribute("aria-expanded")).toBe("true");
+    act(() => browser.click());
+    expect(browser.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("Требуется: Сетевой доступ");
+
+    act(() => buttonContaining("Настройки").click());
+    act(() => buttonContaining("О проекте").click());
+    expect(container.textContent).toContain("NEXUS AU — личная AI-экосистема в разработке.");
+    const notice = container.querySelector<HTMLButtonElement>(".demo-notice");
+    if (!notice) throw new Error("Preview notice was not rendered.");
+    act(() => notice.click());
+    expect(container.querySelector(".demo-notice")).toBeNull();
+  });
 });
