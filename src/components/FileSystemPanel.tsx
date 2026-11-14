@@ -400,7 +400,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       const extension = hasExtension ? name.slice(extensionIndex) : "";
       return { path, newName: prefix + stem + suffix + extension };
     });
-    const targets = entriesToRename.map(entry => entry.newName.toLocaleLowerCase());
+    const targets = entriesToRename.map(entry => entry.newName.toLowerCase());
     if (new Set(targets).size !== targets.length) {
       setError("The rename pattern creates duplicate file names. Change the prefix or suffix.");
       return;
@@ -409,7 +409,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setError("The generated file names must contain 1 to 255 characters.");
       return;
     }
-    if (!window.confirm("Rename " + entriesToRename.length + " selected files? File extensions are preserved. Existing files will not be overwritten. If a rename fails, NEXUS will try to restore earlier names.")) return;
+    const previewNames = entriesToRename.slice(0, 8).map(entry => entry.newName).join("\\n");
+    const omittedCount = entriesToRename.length - Math.min(entriesToRename.length, 8);
+    const omittedNote = omittedCount > 0 ? "\\n… and " + omittedCount + " more file(s)" : "";
+    if (!window.confirm("Rename " + entriesToRename.length + " selected files? File extensions are preserved. Existing files will not be overwritten. If a rename fails, NEXUS will try to restore earlier names.\\n\\n" + previewNames + omittedNote)) return;
 
     setBusy(true);
     setError("");
