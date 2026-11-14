@@ -53,7 +53,10 @@ class TauriModelProvider implements ModelProvider {
         displayName: id,
         supportsStreaming: true,
         supportsTools: false,
-        declaredLocation: this.settings.inferenceLocation
+        declaredLocation: this.settings.inferenceLocation,
+        // The current native request contract accepts text only. Never infer
+        // image/audio support from an OpenAI-compatible endpoint's model IDs.
+        modalities: ["text"]
       })));
     } catch (cause) {
       this.discoveredModels.clear();
