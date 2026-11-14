@@ -13,27 +13,27 @@ describe("knowledge document parsers", () => {
 
   it("imports CSV, YAML, XML, logs, source code, and configuration as bounded text", async () => {
     const fixtures = [
-      ["table.csv", "name,value\\nalpha,1"],
-      ["config.yaml", "service:\\n  enabled: true"],
+      ["table.csv", "name,value\nalpha,1"],
+      ["config.yaml", "service:\n  enabled: true"],
       ["feed.xml", "<root><item>hello</item></root>"],
       ["app.log", "INFO startup complete"],
       ["answer.ts", "export const answer = 42;"],
-      ["Cargo.toml", "[workspace]\\nname = \"nexus\""]
+      ["Cargo.toml", "[workspace]\nname = \"nexus\""]
     ];
     for (const [name, content] of fixtures) {
       const parsed = await parseKnowledgeFile(new File([content], name));
       expect(parsed.mediaType).toBe("text/plain");
-      expect(parsed.content).toContain(content.split("\\n")[0]);
+      expect(parsed.content).toContain(content.split("\n")[0]);
     }
   });
 
   it("normalizes valid JSON and JSONL and rejects malformed records", async () => {
     const json = await parseKnowledgeFile(new File(['{"enabled":true,"count":2}'], "config.json"));
     expect(json.content).toContain('"enabled": true');
-    const jsonl = await parseKnowledgeFile(new File(['{"id":1}\\n{"id":2}'], "records.jsonl"));
-    expect(jsonl.content).toBe('{"id":1}\\n{"id":2}');
+    const jsonl = await parseKnowledgeFile(new File(['{"id":1}\n{"id":2}'], "records.jsonl"));
+    expect(jsonl.content).toBe('{"id":1}\n{"id":2}');
     await expect(parseKnowledgeFile(new File(['{"broken":'], "broken.json"))).rejects.toThrow(/valid JSON/);
-    await expect(parseKnowledgeFile(new File(['{"ok":1}\\nnot-json'], "broken.jsonl"))).rejects.toThrow(/invalid JSON record/);
+    await expect(parseKnowledgeFile(new File(['{"ok":1}\nnot-json'], "broken.jsonl"))).rejects.toThrow(/invalid JSON record/);
   });
 
   it("rejects unsupported extensions and oversized files", async () => {
