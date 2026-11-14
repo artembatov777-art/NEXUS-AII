@@ -289,15 +289,30 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     try {
       const nextPath = await invoke<string>("rename_workspace_entry", { path: selectedPath, newName: renameName.trim() });
       const audited = await recordFilesystemAudit("rename");
-      const content = await invoke<string>("read_workspace_file", { path: nextPath });
+      let content = "";
+      let nextImage: WorkspaceImagePreview | null = null;
+      if (isRasterImage(nextPath)) {
+        try {
+          nextImage = await invoke<WorkspaceImagePreview>("read_workspace_image_preview", { path: nextPath });
+        } catch {
+          // A text file may have been renamed to a raster extension. Keep the
+          // rename, but fall back to a text read instead of leaving the panel stale.
+          content = await invoke<string>("read_workspace_file", { path: nextPath });
+        }
+      } else if (!imagePreview) {
+        content = await invoke<string>("read_workspace_file", { path: nextPath });
+      }
       await refresh(currentPath, true);
       setSelectedPath(nextPath);
       setRenameName(nextPath.split(/[\\\\/]/).pop() ?? renameName.trim());
-      setImagePreview(null);
+      setImagePreview(nextImage);
       setPreview(content);
       setDraft(content);
       setEditing(false);
-      setNotice(audited ? "File renamed." : "File renamed, but the audit entry could not be saved.");
+      const previewNote = imagePreview && !nextImage && !isRasterImage(nextPath)
+        ? " The renamed binary file is preserved, but its new extension does not support image preview."
+        : "";
+      setNotice((audited ? "File renamed." : "File renamed, but the audit entry could not be saved.") + previewNote);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
