@@ -43,6 +43,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
   const [status, setStatus] = useState("");
   const [working, setWorking] = useState(false);
   const [liveTestRunning, setLiveTestRunning] = useState(false);
+  const [evaluationProgress, setEvaluationProgress] = useState<{ completed: number; total: number } | null>(null);
   const liveTestAbort = useMemo(() => ({ current: null as AbortController | null }), []);
 
   async function refresh() {
@@ -147,6 +148,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setLiveTestRunning(true);
     setWorking(true);
     setError("");
+    setEvaluationProgress({ completed: 0, total: testSamples.length });
     setStatus(`Evaluating ${testSamples.length} held-out test samples with ${provider.model}. Expected outputs remain local.`);
     try {
       const evaluation = await executeDatasetEvaluation(testSamples, async (sample, signal) =>
@@ -159,7 +161,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       {
         signal: controller.signal,
         concurrency: 3,
-        onProgress: (completed, total) => setStatus(`Evaluating held-out test samples: ${completed}/${total} completed. Up to 3 requests run concurrently.`)
+        onProgress: (completed, total) => { setEvaluationProgress({ completed, total }); setStatus(`Evaluating held-out test samples: ${completed}/${total} completed. Up to 3 requests run concurrently.`); }
       });
       const summary = scoreDatasetEvaluation(dataset.samples ?? [], evaluation.outputs);
       setModelId(provider.model);
@@ -202,6 +204,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setLiveTestRunning(true);
     setWorking(true);
     setError("");
+    const modelProgress = new Map(models.map(model => [model, 0]));
+    setEvaluationProgress({ completed: 0, total: testSamples.length * models.length });
     setStatus(`Comparing ${models.length} models on the same ${testSamples.length}-sample held-out test split. Up to one request per model runs concurrently.`);
     try {
       const results = await runDatasetModelComparison(models, testSamples, async (model, sample, signal) =>
@@ -213,7 +217,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         }], "", undefined, signal, undefined, { temperature: 0, maxOutputTokens: 1024 }),
       {
         signal: controller.signal,
-        onProgress: (model, completed, total) => setStatus(`Dataset comparison · ${model}: ${completed}/${total} test cases completed.`)
+        onProgress: (model, completed, total) => { modelProgress.set(model, completed); setEvaluationProgress({ completed: [...modelProgress.values()].reduce((sum, value) => sum + value, 0), total: testSamples.length * models.length }); setStatus(`Dataset comparison · ${model}: ${completed}/${total} test cases completed.`); }
       });
       const modelMetrics = Object.fromEntries(results.map(result => [
         result.model,
@@ -404,6 +408,10 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       </div>
       {error && <div className="error-banner">{error}</div>}
       {status && <div className="knowledge-status">{status}</div>}
+      {evaluationProgress && <div className="training-progress" aria-live="polite">
+        <progress max={Math.max(1, evaluationProgress.total)} value={Math.min(evaluationProgress.completed, evaluationProgress.total)} style={{ width: "100%" }}/>
+        <small>{evaluationProgress.completed}/{evaluationProgress.total} provider evaluations completed</small>
+      </div>}
       <div className="training-section">
         <div className="training-section-title"><Database size={16}/> Register dataset manifest</div>
         <div className="training-two-col">
