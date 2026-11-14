@@ -293,7 +293,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function renameSelected() {
-    if (!selectedPath || !renameName.trim() || !confirmDiscardDraft("rename this file")) return;
+    if (recoveryStatus || !selectedPath || !renameName.trim() || !confirmDiscardDraft("rename this file")) return;
     if (!window.confirm(`Rename this file to "${renameName.trim()}"? The file contents will not change.`)) return;
     setBusy(true);
     setError("");
@@ -342,7 +342,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function moveSelected() {
-    if (!selectedPath || !moveDestination.trim() || !confirmDiscardDraft("move this file")) return;
+    if (recoveryStatus || !selectedPath || !moveDestination.trim() || !confirmDiscardDraft("move this file")) return;
     if (!window.confirm(`Move this file to the selected folder?\n\n${moveDestination.trim()}`)) return;
     setBusy(true);
     setError("");
@@ -364,7 +364,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function bulkMoveSelected() {
-    if (!selectedPaths.length || !confirmDiscardDraft("move the selected files")) return;
+    if (recoveryStatus || !selectedPaths.length || !confirmDiscardDraft("move the selected files")) return;
     let destination: string | string[] | null;
     try {
       destination = await open({ directory: true, multiple: false, title: "Choose destination folder" });
@@ -398,7 +398,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function bulkRenameSelected() {
-    if (!selectedPaths.length || !confirmDiscardDraft("rename the selected files")) return;
+    if (recoveryStatus || !selectedPaths.length || !confirmDiscardDraft("rename the selected files")) return;
     const prefix = renamePrefix;
     const suffix = renameSuffix;
     if (!prefix.trim() && !suffix.trim()) {
@@ -482,7 +482,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function revokeDirectory(path: string) {
-    if (!confirmDiscardDraft("revoke this directory") || !window.confirm(`Remove NEXUS access to this directory? Existing files will not be changed.\n\n${path}`)) return;
+    if (recoveryStatus || !confirmDiscardDraft("revoke this directory") || !window.confirm(`Remove NEXUS access to this directory? Existing files will not be changed.\n\n${path}`)) return;
     setBusy(true);
     try {
       const allowed = await invoke<string[]>("revoke_workspace_directory", { path });
@@ -531,17 +531,17 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         <div className="file-access-grant">
           <div className="file-pane-label">APPROVED DIRECTORIES</div>
           <div className="file-grant-input"><input value={grantPath} onChange={event => setGrantPath(event.target.value)} placeholder="Choose a folder or enter its path" aria-label="Folder path to grant"/><button className="secondary-btn" onClick={() => void chooseDirectory()} disabled={busy}><FolderOpen size={14}/> Browse</button><button className="primary-btn" onClick={() => void grantDirectory()} disabled={busy || !grantPath.trim()}>Allow folder</button></div>
-          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
+          {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy || Boolean(recoveryStatus)}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
-        {recoveryStatus && <div className="error-banner" role="alert">Filesystem recovery required: {recoveryStatus} Do not repeat the affected rename until recovery succeeds.</div>}
+        {recoveryStatus && <div className="error-banner" role="alert">Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery succeeds.</div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
-            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || (!renamePrefix && !renameSuffix)}>Rename selected</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
+            {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || Boolean(recoveryStatus) || (!renamePrefix && !renameSuffix)}>Rename selected</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy || Boolean(recoveryStatus)}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
             <div className="file-list" role="list" aria-label="Workspace files">
               {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
                 const name = match.path.split(/[\\/]/).pop() ?? match.path;
@@ -557,9 +557,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
             <div className="file-pane-label">INSPECTOR</div>
             {selectedPath ? <><div className="file-preview-icon"><SelectedIcon size={24}/></div><h3>{selectedPath.split(/[\\/]/).pop()}</h3><p>{selectedPath}</p><div className="file-entry-actions">
               <label>Rename file<input aria-label="New file name" value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
-              <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || !renameName.trim()}>Rename</button>
+              <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || Boolean(recoveryStatus) || !renameName.trim()}>Rename</button>
               <label>Move to approved folder<div className="file-move-input"><input aria-label="Move destination folder" value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder="Destination folder path"/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
-              <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || !moveDestination.trim()}>Move file</button>
+              <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || Boolean(recoveryStatus) || !moveDestination.trim()}>Move file</button>
             </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">IMAGE PREVIEW · READ ONLY · MAX 4 MB</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</> : <span className="file-image-readonly">Image previews are read-only. Original file is unchanged.</span>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
         </div>
