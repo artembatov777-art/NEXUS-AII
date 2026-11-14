@@ -733,3 +733,14 @@ button:disabled { opacity: .48; }
   letter-spacing: .1em;
   text-transform: uppercase;
 }
+
+/* Keep the mobile drawer above its backdrop-filter scrim. This must follow the
+   responsive sidebar rules so the final cascade preserves the interactive layer. */
+@media (max-width: 640px) {
+  .sidebar:not(.sidebar-hidden) {
+    z-index: 80;
+  }
+  .sidebar-scrim {
+    z-index: 79;
+  }
+}

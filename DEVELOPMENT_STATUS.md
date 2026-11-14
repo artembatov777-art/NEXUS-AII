@@ -31,7 +31,7 @@ The desktop workspace, restrained JARVIS-inspired visual system, responsive layo
 
 Automated UI tests cover navigation, preview disclosures, chat behavior, keyboard shortcuts, dialogs, and key module interactions. The latest preview still requires an owner-side iPhone Safari check.
 
-- Fixed the mobile navigation stacking defect: the open sidebar now sits above the blurred dismissal scrim, so its text remains sharp and its controls receive pointer input. The scrim remains below the drawer and continues to dismiss navigation when tapped outside it. Fresh frontend/mobile CI and real-device Safari verification are required before calling the fix fully verified.
+- Fixed the mobile navigation stacking defect in the final-loaded stylesheet: the open sidebar now has z-index 80 above the blurred dismissal scrim at z-index 79 (the previous responsive rule had been overridden by a later stylesheet). The drawer remains interactive while taps outside it still reach the dismiss scrim. Fresh frontend/mobile CI and real-device Safari verification are required before calling the fix fully verified.
 
 ## Phase II — AI Core
 
