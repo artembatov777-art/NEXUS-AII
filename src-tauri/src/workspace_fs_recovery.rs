@@ -83,13 +83,35 @@ impl WorkspaceOperationJournal {
         if let Some(message) = error.as_ref() {
             return Err(format!("A previous file operation needs recovery before another batch rename can run: {message}"));
         }
+        drop(error);
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let pending: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not verify pending file operation recovery.")?;
+        if pending > 0 {
+            return Err("A previous file operation is still journaled and must be recovered before another batch rename can run.".into());
+        }
         Ok(())
     }
 
     pub fn recovery_status(&self) -> Result<Option<String>, String> {
-        self.recovery_error.lock()
-            .map(|value| value.clone())
-            .map_err(|_| "The file recovery status is unavailable.".into())
+        if let Some(message) = self.recovery_error.lock()
+            .map_err(|_| "The file recovery status is unavailable.")?.clone() {
+            return Ok(Some(message));
+        }
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let pending: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not inspect pending file operation recovery.")?;
+        Ok(if pending > 0 {
+            Some("An interrupted file operation is waiting for recovery. Restart NEXUS to retry automatic recovery.".into())
+        } else {
+            None
+        })
     }
 
     pub fn recover(&self, access: &WorkspaceAccess) -> Result<(), String> {
