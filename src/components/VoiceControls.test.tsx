@@ -165,6 +165,37 @@ describe("VoiceControls", () => {
     expect(container.textContent).not.toContain("End conversation");
   });
 
+  it("aborts active speech recognition when the voice controls unmount", () => {
+    class FakeRecognition {
+      static latest: FakeRecognition | null = null;
+      abort = vi.fn();
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { FakeRecognition.latest = this; }
+      start() { this.onstart?.(); }
+      stop() { this.onend?.(); }
+    }
+    const speech = Object.assign(new EventTarget(), { getVoices: () => [], speak: vi.fn(), cancel: vi.fn() });
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
+    const start = container.querySelector('button[aria-label="Start voice input"]');
+    act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const active = FakeRecognition.latest;
+    expect(active).not.toBeNull();
+    act(() => {
+      root.unmount();
+      root = createRoot(container);
+    });
+    expect(active?.abort).toHaveBeenCalledTimes(1);
+    expect(speech.cancel).toHaveBeenCalled();
+  });
+
   it("ends voice conversation and reports microphone permission denial", () => {
     class FakeRecognition {
       static latest: FakeRecognition | null = null;
