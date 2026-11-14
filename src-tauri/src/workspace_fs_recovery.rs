@@ -541,7 +541,6 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
-    #[cfg(unix)]
     #[test]
     fn oversized_recovery_payload_is_preserved_and_never_deserialized() {
         let (base, _root, access, journal) = fixture();
