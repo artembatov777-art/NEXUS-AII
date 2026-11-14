@@ -118,20 +118,61 @@ describe("TauriModelProvider", () => {
     }));
   });
 
-  it("requires catalog discovery before streaming from a model-unspecified provider profile", async () => {
+  it("discovers an unconfigured provider before rejecting a model absent from its catalog", async () => {
     mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(["qwen-local"]);
     const router = createTauriModelRouterForProfiles([createOllamaProviderProfile()]);
     if (!router) throw new Error("Expected native profile router.");
     const stream = router.stream("nexus.ollama", {
       model: "unverified-model", messages: [{ role: "user", content: "hello" }]
     });
     await expect((async () => { for await (const _event of stream) { /* consume */ } })())
-      .rejects.toThrow(/Discover the provider model catalog/i);
-    expect(mockedInvoke).not.toHaveBeenCalled();
+      .rejects.toThrow(/not present in the discovered provider catalog/i);
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
+      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none"
+    });
+    expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
   });
 
+  it("discovers a configured model automatically before its first generation request", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        channel.onmessage({ type: "text_delta", text: "Verified model" });
+        channel.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const events = [];
+    for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "model-a", messages: [{ role: "user", content: "hello" }]
+    })) events.push(event);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    const commands = mockedInvoke.mock.calls.map(([command]) => command);
+    expect(commands.slice(0, 2)).toEqual(["list_provider_models", "send_chat_stream"]);
+  });
 
-  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {
+  it("rejects a configured model that the provider does not return during discovery", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(["other-model"]);
+    const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "missing-model", inferenceLocation: "remote" });
+    if (!router) throw new Error("Expected native model router.");
+    const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "missing-model", messages: [{ role: "user", content: "hello" }]
+    });
+    await expect((async () => { for await (const _event of stream) { /* consume */ } })())
+      .rejects.toThrow(/not present in the discovered provider catalog/i);
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
+  });
+
+  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
       if (command === "list_provider_models") return Promise.resolve(["model-a", "model-b"]);
@@ -224,6 +265,7 @@ describe("TauriModelProvider", () => {
   it("normalizes transient provider failures during streaming", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation(command => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
       if (command === "send_chat_stream") return Promise.reject(new Error("Provider returned HTTP 503: backend unavailable"));
       return Promise.resolve(true);
     });
@@ -309,15 +351,19 @@ describe("TauriModelProvider", () => {
   it("sends a native cancellation command when an active stream is aborted", async () => {
     mockedIsTauri.mockReturnValue(true);
     let rejectStream: ((reason?: unknown) => void) | null = null;
-    mockedInvoke.mockImplementation((command) => {
+    let sendStarted!: () => void;
+    const started = new Promise<void>(resolve => { sendStarted = resolve; });
+    mockedInvoke.mockImplementation(command => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
       if (command === "send_chat_stream") {
+        sendStarted();
         return new Promise((_resolve, reject) => { rejectStream = reject; });
       }
       if (command === "cancel_chat_stream") {
         rejectStream?.(new Error("Model request was cancelled."));
         return Promise.resolve(true);
       }
-      return Promise.resolve([]);
+      return Promise.resolve(true);
     });
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
@@ -325,17 +371,17 @@ describe("TauriModelProvider", () => {
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, { model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal });
     const iterator = stream[Symbol.asyncIterator]();
     const pending = iterator.next();
-    await Promise.resolve();
-    await Promise.resolve();
+    await started;
     controller.abort();
     await expect(pending).rejects.toThrow(/cancelled/);
     expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
   });
 
-  it("cancels the native request when a consumer stops reading the stream", async () => {
+  it("cancels the native request when a consumer stops reading the stream", async () => {  it("cancels the native request when a consumer stops reading the stream", async () => {
     mockedIsTauri.mockReturnValue(true);
     let rejectStream: ((reason?: unknown) => void) | null = null;
     mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
       if (command === "send_chat_stream") {
         const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string }) => void } }).onEvent;
         return new Promise((_resolve, reject) => {
@@ -382,7 +428,9 @@ describe("TauriModelProvider", () => {
 
   it("rejects a native stream that resolves without a completion event", async () => {
     mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockResolvedValue(undefined);
+    mockedInvoke.mockImplementation(command => command === "list_provider_models"
+      ? Promise.resolve(["model-a"])
+      : Promise.resolve(undefined));
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
@@ -395,7 +443,11 @@ describe("TauriModelProvider", () => {
 
   it("does not enqueue cancellation for a native request that already failed", async () => {
     mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockRejectedValue(new Error("Provider returned HTTP 503: unavailable"));
+    mockedInvoke.mockImplementation(command => command === "list_provider_models"
+      ? Promise.resolve(["model-a"])
+      : command === "send_chat_stream"
+        ? Promise.reject(new Error("Provider returned HTTP 503: unavailable"))
+        : Promise.resolve(true));
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
     const stream = router.stream(NATIVE_MODEL_PROVIDER_ID, {
@@ -403,16 +455,22 @@ describe("TauriModelProvider", () => {
     });
     await expect((async () => { for await (const _ of stream) { /* consume */ } })())
       .rejects.toThrow(/temporarily unavailable/i);
-    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    expect(mockedInvoke.mock.calls.filter(([command]) => command === "send_chat_stream")).toHaveLength(1);
     expect(mockedInvoke).not.toHaveBeenCalledWith("cancel_chat_stream", expect.anything());
   });
 
   it("unblocks an idle stream immediately when its abort signal fires", async () => {
     mockedIsTauri.mockReturnValue(true);
-    mockedInvoke.mockImplementation((command) => {
-      if (command === "send_chat_stream") return new Promise(() => { /* native request remains pending */ });
+    let sendStarted!: () => void;
+    const started = new Promise<void>(resolve => { sendStarted = resolve; });
+    mockedInvoke.mockImplementation(command => {
+      if (command === "list_provider_models") return Promise.resolve(["model-a"]);
+      if (command === "send_chat_stream") {
+        sendStarted();
+        return new Promise(() => { /* native request remains pending */ });
+      }
       if (command === "cancel_chat_stream") return Promise.resolve(true);
-      return Promise.resolve([]);
+      return Promise.resolve(true);
     });
     const router = createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" });
     if (!router) throw new Error("Expected native model router.");
@@ -421,8 +479,7 @@ describe("TauriModelProvider", () => {
       model: "model-a", messages: [{ role: "user", content: "plan" }], signal: controller.signal
     })[Symbol.asyncIterator]();
     const pending = iterator.next();
-    await Promise.resolve();
-    await Promise.resolve();
+    await started;
     controller.abort();
     await expect(pending).rejects.toThrow(/cancelled/i);
     expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
