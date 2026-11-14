@@ -46,8 +46,9 @@ function isValidStoredImageAttachment(value: unknown): value is NonNullable<Conv
       !/^[A-Za-z0-9+/]+={0,2}$/.test(value.data) || value.data.length % 4 !== 0 ||
       !Number.isSafeInteger(value.byteLength) || (value.byteLength as number) <= 0 ||
       (value.byteLength as number) > 3_200_000 ||
-      typeof value.model !== "string" || value.model.length > 160 ||
-      typeof value.aspectRatio !== "string" || value.aspectRatio.length > 8 ||
+      typeof value.model !== "string" || !value.model.trim() || value.model.length > 160 ||
+      typeof value.aspectRatio !== "string" ||
+      !["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"].includes(value.aspectRatio) ||
       (value.imageSize !== "1K" && value.imageSize !== "2K")) return false;
   const padding = value.data.endsWith("==") ? 2 : value.data.endsWith("=") ? 1 : 0;
   return (value.data.length / 4) * 3 - padding === value.byteLength;
