@@ -92,7 +92,7 @@ export default async function handler(req, res) {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: { aspectRatio, imageSize }
+            responseFormat: { image: { aspectRatio, imageSize } }
           }
         }),
         signal: controller.signal
