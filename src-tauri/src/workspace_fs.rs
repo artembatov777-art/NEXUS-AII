@@ -506,8 +506,7 @@ pub fn write_workspace_file_checked(
     write_workspace_file_inner(&path, &content, Some(&expected_content), &access)
 }
 
-#[tauri::command]
-pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAccess>) -> Result<(), String> {
+fn create_workspace_directory_inner(path: &str, access: &WorkspaceAccess) -> Result<(), String> {
     if path.trim().is_empty() || path.len() > 4096 { return Err("Enter a valid directory path.".into()); }
     let requested = PathBuf::from(path);
     let parent = requested.parent().ok_or_else(|| "The new directory must be inside an allowed directory.".to_string())?;
@@ -524,6 +523,11 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
         return Err("A file or directory already exists at that path.".into());
     }
     fs::create_dir(&target).map_err(|e| format!("Could not create directory: {e}"))
+}
+
+#[tauri::command]
+pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAccess>) -> Result<(), String> {
+    create_workspace_directory_inner(&path, &access)
 }
 
 #[cfg(test)]
@@ -833,6 +837,47 @@ mod tests {
         assert!(search_workspace_entries_in(&root, &root, " ").is_err());
         assert!(search_workspace_entries_in(&root, &sibling, "notes").is_err());
         fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_creation_rejects_a_parent_symlink_that_escapes_the_approved_root() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-mkdir-symlink-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        let outside = base.join("outside");
+        fs::create_dir_all(&root).expect("create approved root");
+        fs::create_dir_all(&outside).expect("create outside directory");
+        symlink(&outside, root.join("redirect")).expect("create outside parent symlink");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+        let result = create_workspace_directory_inner(root.join("redirect").join("created").to_str().unwrap(), &access);
+        assert!(result.is_err());
+        assert!(!outside.join("created").exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn directory_creation_is_limited_to_approved_roots_and_never_replaces_existing_entries() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-mkdir-safe-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+        let created = root.join("new-folder");
+        create_workspace_directory_inner(created.to_str().unwrap(), &access).expect("create folder");
+        assert!(created.is_dir());
+        assert!(create_workspace_directory_inner(created.to_str().unwrap(), &access).unwrap_err().contains("already exists"));
+        assert!(create_workspace_directory_inner(base.join("outside").to_str().unwrap(), &access).is_err());
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]
