@@ -36,7 +36,7 @@ export function CommandPalette({ onClose, onRun }: { onClose: () => void; onRun:
         else if (event.key === "Enter" && filtered[activeIndex]) { event.preventDefault(); onRun(filtered[activeIndex].id); }
       }} placeholder={t("Search commands and modules…")} aria-label={t("Search commands")} aria-controls="command-palette-options" aria-activedescendant={filtered[activeIndex] ? `command-option-${filtered[activeIndex].id}` : undefined}/></label>
       <div className="command-palette-list" id="command-palette-options" role="listbox" aria-label={t("Available commands")}>
-        {filtered.map((item, index) => { const Icon = item.icon; return <button id={`command-option-${item.id}`} key={item.id} role="option" aria-selected={activeIndex === index} className={activeIndex === index ? "is-active" : ""} onMouseEnter={() => setActiveIndex(index)} onClick={() => onRun(item.id)}><span className="command-palette-icon"><Icon size={16}/></span><span><strong>{item.title}</strong><small>{item.description}</small></span><kbd>↵</kbd></button>; })}
+        {filtered.map((item, index) => { const Icon = item.icon; return <button id={`command-option-${item.id}`} key={item.id} role="option" aria-selected={activeIndex === index} className={activeIndex === index ? "is-active" : ""} onMouseEnter={() => setActiveIndex(index)} onClick={() => onRun(item.id)}><span className="command-palette-icon"><Icon size={16}/></span><span><strong>{t(item.title)}</strong><small>{t(item.description)}</small></span><kbd>↵</kbd></button>; })}
         {filtered.length === 0 && <p className="command-palette-empty">No matching commands.</p>}
       </div>
       <footer><span><Activity size={12}/> NEXUS QUICK CONTROL</span><span>ESC TO CLOSE</span></footer>
