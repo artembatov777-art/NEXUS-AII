@@ -28,6 +28,16 @@ describe("knowledge retrieval",()=>{
   const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("architecture");
   expect(result.ok&&result.value[0].record.id).toBe("lex");
  });
+ it("enforces memory scope boundaries even if the repository returns unrelated records",async()=>{
+  const allowed={...rec("allowed"),scope:"project" as const,projectId:"project-a"};
+  const privateRecord={...rec("private"),scope:"project" as const,projectId:"project-b"};
+  const repository:MemorySearchRepository={
+   search:async()=>ok([allowed,privateRecord]),
+   getByIds:async ids=>ok([allowed,privateRecord].filter(record=>ids.includes(record.id)))
+  };
+  const result=await new HybridMemoryRetriever(repository).search("architecture","project",5,undefined,"project-a");
+  expect(result).toMatchObject({ok:true,value:[{record:{id:"allowed"}}]});
+ });
  it("propagates cancellation instead of silently returning lexical-only memory results",async()=>{
   const records=[rec("lex")];const repository:MemorySearchRepository={search:async()=>ok(records),getByIds:async()=>ok(records)};
   const controller=new AbortController();
