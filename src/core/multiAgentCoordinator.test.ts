@@ -47,6 +47,33 @@ describe("MultiAgentCoordinator", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it("detaches nested plan inputs before pausing for owner approval", async () => {
+    let allowed = false;
+    const originalInput = { nested: { destination: "approved/first.txt" } };
+    const mutablePlan = {
+      goal: "work",
+      steps: [{ id: "a", toolId: "workspace.write", purpose: "write a file", input: originalInput, dependsOn: [] }]
+    };
+    const execute = vi.fn(async (_agentId: AgentId, input: unknown) => ok(input));
+    const coordinator = new MultiAgentCoordinator(
+      { execute },
+      { authorize: async () => allowed ? "allow" : "ask_user" },
+      new InMemoryTraceSink(),
+      { now: () => 1 }
+    );
+
+    const paused = await collect(coordinator.run(runId, mutablePlan, assignments, new AbortController().signal));
+    expect(paused.at(-1)?.type).toBe("waiting_for_approval");
+    originalInput.nested.destination = "outside/changed-after-validation.txt";
+    allowed = true;
+
+    const resumed = await collect(coordinator.resume(runId, new AbortController().signal));
+    expect(resumed.at(-1)?.type).toBe("completed");
+    expect(execute.mock.calls[0][1]).toMatchObject({
+      input: { nested: { destination: "approved/first.txt" } }
+    });
+  });
+
   it("rejects forward dependencies before executing", async () => {
     const execute = vi.fn(async () => ok({}));
     const coordinator = makeCoordinator(execute);
