@@ -10,6 +10,16 @@ describe("knowledge retrieval",()=>{
   const ranked=await new HybridMemoryRetriever(repository,embeddings,vectors).search("design systems","all",5);
   expect(ranked.ok&&ranked.value[0].record.id).toBe("semantic");
  });
+ it("bounds long chat prompts for memory retrieval instead of failing context assembly",async()=>{
+  let receivedQuery="";
+  const repository:MemorySearchRepository={
+   search:async query=>{receivedQuery=query;return ok([]);},
+   getByIds:async()=>ok([])
+  };
+  const result=await new HybridMemoryRetriever(repository).search("context ".repeat(100));
+  expect(result).toEqual({ok:true,value:[]});
+  expect(receivedQuery).toHaveLength(500);
+ });
  it("does not download or invoke embeddings when no memories exist",async()=>{
   const repository:MemorySearchRepository={
    search:async()=>ok([]),getByIds:async()=>ok([]),exportAll:async()=>ok([])
