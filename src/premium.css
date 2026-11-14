@@ -688,3 +688,14 @@ button:disabled { opacity: .48; }
   .deck-tool:hover { transform: none; }
   .deck-core::after { animation: none; }
 }
+
+
+/* Clear, readable feedback for filtered conversation history. */
+.empty-history[role="status"] {
+  margin: 8px 6px;
+  padding: 10px 9px;
+  border: 1px dashed rgba(121, 199, 232, .16);
+  border-radius: 8px;
+  color: #8495a8;
+  line-height: 1.5;
+}

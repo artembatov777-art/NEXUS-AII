@@ -27,6 +27,7 @@ import { CommandPalette, type NexusCommandId } from "./components/CommandPalette
 import { resolveConversationProjectId } from "./lib/conversationProjectContext";
 import { getWorkspacePanelState, type WorkspacePanel } from "./lib/workspacePanels";
 import { isDedicatedCredentialHandle } from "./lib/providerCredentials";
+import { filterConversationHistory } from "./lib/conversationHistory";
 
 import { LocalTransformerEmbeddingProvider } from "./lib/localEmbeddings";
 import { IndexedDbKnowledgeVectorIndex } from "./lib/knowledgeVectorIndex";
@@ -178,6 +179,7 @@ export default function App() {
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
+  const filteredConversations = useMemo(() => filterConversationHistory(conversations, selectedProjectId, historyQuery), [conversations, selectedProjectId, historyQuery]);
   const messages = active?.messages ?? [welcome];
   // The gateway may be local while routing to a cloud model. Never infer
   // inference locality from the gateway hostname; use the owner's explicit model route.
@@ -627,8 +629,8 @@ export default function App() {
       }} title="Clear all history" aria-label="Clear all conversation history"><Trash2 size={14}/></button></div></div>
       <div className="history-search"><Search size={13}/><input aria-label="Search conversation history" value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="Search history…"/></div>
       <div className="history-list">
-        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId && (c.title+" "+c.messages.map(m=>m.content).join(" ")).toLocaleLowerCase().includes(historyQuery.toLocaleLowerCase())).map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); closeMobileNavigation(); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
-        {conversations.filter(c => (c.projectId ?? "") === selectedProjectId).length === 0 && <p className="empty-history">No conversations in this workspace yet.</p>}
+        {filteredConversations.map(c => <div className={`history-row ${activeId === c.id ? "active" : ""}`} key={c.id}><button onClick={() => { setActiveId(c.id); setSelectedProjectId(c.projectId ?? ""); setError(""); closeMobileNavigation(); }}><MessageSquare size={14}/><span>{c.title}</span></button><button className="delete-chat" onClick={() => removeConversation(c.id)} aria-label="Delete conversation"><X size={13}/></button></div>)}
+        {filteredConversations.length === 0 && <p className="empty-history" role="status">{historyQuery.trim() ? "No conversations match this search." : "No conversations in this workspace yet."}</p>}
       </div>
       <div className="sidebar-bottom"><div className="secure-line"><ShieldCheck size={15}/> Local conversation storage</div><button className="profile-row" onClick={() => { openWorkspacePanel("settings"); closeMobileNavigation(); }}><div className="avatar">N</div><div><strong>NEXUS AU</strong><span>Version {appVersion}</span></div><Settings2 size={16}/></button></div>
     </aside>
@@ -685,7 +687,7 @@ export default function App() {
 
     {commandPaletteOpen && <CommandPalette onClose={() => setCommandPaletteOpen(false)} onRun={(id: NexusCommandId) => {
       if (id === "focus") { openWorkspacePanel("chat"); setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
-      if (id === "chat") { openWorkspacePanel("chat"); closeMobileNavigation(); return; }
+      if (id === "chat") { openWorkspacePanel("chat"); setActiveId(null); setError(""); closeMobileNavigation(); return; }
       if (id === "new-chat") { openWorkspacePanel("chat"); newChat(); return; }
       const panelByCommand: Record<Exclude<NexusCommandId, "focus" | "chat" | "new-chat">, WorkspacePanel> = { search: "search", models: "settings", training: "training", agents: "agents", memory: "memory", knowledge: "knowledge", projects: "projects", files: "files", tools: "tools" };
       openWorkspacePanel(panelByCommand[id as Exclude<NexusCommandId, "focus" | "chat" | "new-chat">]);
