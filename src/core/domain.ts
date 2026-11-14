@@ -22,6 +22,8 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   schemaVersion: 1;
+  /** Project ownership follows the conversation, not the selected workspace. */
+  projectId?: string;
 }
 
 export interface ConversationSummary {
