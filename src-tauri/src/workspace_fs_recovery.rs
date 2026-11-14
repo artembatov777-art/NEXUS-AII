@@ -339,6 +339,7 @@ pub fn get_workspace_operation_recovery_details(
     journal: tauri::State<'_, WorkspaceOperationJournal>,
     access: tauri::State<'_, WorkspaceAccess>,
 ) -> Result<Vec<RecoveryOperationDetails>, String> {
+    let _operation_guard = journal.lock_operation()?;
     journal.recovery_details(&access)
 }
 
@@ -456,6 +457,65 @@ mod tests {
         assert_eq!(fs::read_to_string(&source).unwrap(), "source");
         assert_eq!(fs::read_to_string(&destination).unwrap(), "destination");
         assert!(journal.ensure_ready().is_err());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn recovery_details_report_both_paths_and_their_current_states() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&source, "source").expect("write source");
+        fs::write(&destination, "destination").expect("write destination");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        let details = journal.recovery_details(&access).expect("read recovery details");
+        assert_eq!(details.len(), 1);
+        assert!(details[0].valid);
+        assert_eq!(details[0].entries.len(), 1);
+        assert_eq!(details[0].entries[0].source, source.to_string_lossy());
+        assert_eq!(details[0].entries[0].destination, destination.to_string_lossy());
+        assert_eq!(details[0].entries[0].source_state, "regular file");
+        assert_eq!(details[0].entries[0].destination_state, "regular file");
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn manual_reconciliation_clears_only_the_journal_and_preserves_conflicting_files() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&source, "source contents").expect("write source");
+        fs::write(&destination, "destination contents").expect("write destination");
+        let operation_id = journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        assert!(journal.recover(&access).is_err());
+        assert!(journal.ensure_ready().is_err());
+        journal.acknowledge_manual_resolution(&operation_id).expect("acknowledge manual resolution");
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source contents");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "destination contents");
+        assert!(journal.recovery_status().expect("status").is_none());
+        assert!(journal.ensure_ready().is_ok());
+        assert!(journal.acknowledge_manual_resolution(&operation_id).is_err());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn manual_reconciliation_keeps_other_pending_records_blocked() {
+        let (base, root, _access, journal) = fixture();
+        let first = journal.begin(&[RenameEntry { source: root.join("one"), destination: root.join("one-new") }])
+            .expect("persist first operation");
+        let second = journal.begin(&[RenameEntry { source: root.join("two"), destination: root.join("two-new") }])
+            .expect("persist second operation");
+        journal.acknowledge_manual_resolution(&first).expect("acknowledge first operation");
+        assert!(journal.recovery_status().expect("status").is_some());
+        assert!(journal.ensure_ready().is_err());
+        journal.acknowledge_manual_resolution(&second).expect("acknowledge second operation");
+        assert!(journal.recovery_status().expect("status").is_none());
+        assert!(journal.ensure_ready().is_ok());
         drop(journal);
         fs::remove_dir_all(base).expect("cleanup");
     }
