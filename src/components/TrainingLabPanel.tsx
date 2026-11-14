@@ -403,8 +403,8 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider. Dataset evaluation sends only held-out test inputs; expected outputs stay local for scoring. Use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage and disables live inference. In the desktop app, running a test, comparison, or dataset evaluation sends evaluation inputs to the configured provider; expected outputs stay local for scoring. Use only data you are comfortable sending."}
         <br/>Private conversations, memories, and raw sample text are not imported automatically.
       </div>
-      {error && <div className="error-banner">{error}</div>}
-      {status && <div className="knowledge-status">{status}</div>}
+      {error && <div className="error-banner">{t(error)}</div>}
+      {status && <div className="knowledge-status">{t(status)}</div>}
       {evaluationProgress && <div className="training-progress" aria-live="polite">
         <progress max={Math.max(1, evaluationProgress.total)} value={Math.min(evaluationProgress.completed, evaluationProgress.total)} style={{ width: "100%" }}/>
         <small>{evaluationProgress.completed}/{evaluationProgress.total} provider evaluations completed</small>
