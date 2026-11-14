@@ -25,7 +25,7 @@ const MAX_ENTRIES = 5_000;
 const MAX_FILES = 100;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
-const EXCLUDED_DIRECTORIES = new Set([".git", ".svn", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", "node_modules", "target", "dist", "build", ".venv", "venv", "__pycache__", ".next", ".cache"]);
+const EXCLUDED_DIRECTORIES = new Set([".git", ".svn", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", "node_modules", "target", "dist", "build", ".venv", "venv", "__pycache__", ".next", ".cache", "secrets", "credentials", "certs", "certificates", ".npm", ".docker", ".terraform", ".password-store", ".vault"]);
 const SENSITIVE_FILE_NAMES = new Set(["id_rsa", "id_ed25519", "credentials.json", "secrets.json"]);
 
 function normalizePath(path: string): string {
