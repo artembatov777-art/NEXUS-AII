@@ -25,15 +25,15 @@ describe("prepareConversationRequest", () => {
   });
 
   it("drops older turns when the UTF-8 content budget is reached", () => {
-    const history = [
-      message("user", "old".repeat(40_000)),
-      message("assistant", "middle".repeat(40_000)),
-      message("user", "latest")
-    ];
+    const history = Array.from({ length: 11 }, (_, index) =>
+      message(index % 2 ? "assistant" : "user", String(index).padEnd(90_000, "x"))
+    );
     const prepared = prepareConversationRequest(history);
-    expect(prepared.messages.map(item => item.content)).toEqual(["middle".repeat(40_000), "latest"]);
+    expect(prepared.messages).toHaveLength(10);
+    expect(prepared.messages[0]?.content).toBe(history[1]?.content);
+    expect(prepared.messages.at(-1)?.content).toBe(history.at(-1)?.content);
     expect(prepared.omittedMessageCount).toBe(1);
-    expect(prepared.includedContentBytes).toBeLessThanOrEqual(900_000);
+    expect(prepared.includedContentBytes).toBe(900_000);
   });
 
   it("rejects a latest message larger than the native per-message limit", () => {
