@@ -53,7 +53,7 @@
 
 ### Webview policy
 
-The Tauri CSP sets default-src self, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI.
+The Tauri CSP sets default-src self, an explicit script-src limited to self plus WebAssembly compilation, worker-src self/blob for the local ONNX embedding runtime, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI. Blob workers do not grant arbitrary remote script origins.
 
 ## Direct provider boundary and deferred gateway integration
 
