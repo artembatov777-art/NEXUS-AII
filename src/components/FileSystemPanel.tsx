@@ -69,6 +69,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [notice, setNotice] = useState("");
   const [conflictDetected, setConflictDetected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
 
   function confirmDiscardDraft(action: string): boolean {
     if (!editing || draft === preview) return true;
@@ -90,6 +91,11 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     if (!discardConfirmed && !confirmDiscardDraft("refresh or navigate the file list")) return;
     setBusy(true);
     try {
+      try {
+        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+      } catch {
+        setRecoveryStatus("NEXUS could not verify whether an interrupted file operation needs recovery.");
+      }
       const result = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
       setEntries(result);
       setSelectedPaths(previous => previous.filter(selected => result.some(entry => entry.path === selected && entry.kind === "file")));
@@ -116,6 +122,11 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     if (!isTauri()) return;
     setBusy(true);
     try {
+      try {
+        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+      } catch {
+        setRecoveryStatus("NEXUS could not verify whether an interrupted file operation needs recovery.");
+      }
       const allowed = await invoke<string[]>("list_workspace_directories");
       setRoots(allowed);
       if (allowed.length && !currentPath) await refresh(allowed[0]);
@@ -536,6 +547,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
+        {recoveryStatus && <div className="error-banner" role="alert">Filesystem recovery required: {recoveryStatus} Do not repeat the affected rename until recovery succeeds.</div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
