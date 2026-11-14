@@ -19,7 +19,8 @@ permissions:
 
 concurrency:
   group: mobile-preview-pages
-  cancel-in-progress: true
+  # Let the active validation finish; only the newest pending revision is retained.
+  cancel-in-progress: false
 
 jobs:
   build:
