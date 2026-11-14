@@ -25,11 +25,11 @@ jobs:
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
       - name: Install Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |
@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run tauri build -- --bundles "appimage,deb"
       - name: Upload native installer packages for manual smoke tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nexus-au-installers-${{ runner.os }}-${{ github.sha }}
           path: src-tauri/target/release/bundle/**/*
@@ -65,8 +65,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
       - name: Resolve patched rusqlite and SQLite versions
         run: cargo update --manifest-path src-tauri/Cargo.toml -p rusqlite --precise 0.42.0
       - name: Commit updated Rust lockfile on the working branch
@@ -85,10 +85,10 @@ jobs:
     needs: update-rust-lockfile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: feat/nexus-core-architecture
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Audit Rust dependency advisories
