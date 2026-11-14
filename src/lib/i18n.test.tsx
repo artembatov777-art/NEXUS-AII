@@ -8,7 +8,7 @@ describe("NEXUS localization", () => {
   it("keeps English text when English is selected", () => {
     expect(translate("Provider settings", "en")).toBe("Provider settings");
   });
-  it("does not alter unknown technical identifiers", () => {
+  it("translates Russian-origin labels into English without changing Russian mode", () => {\n    expect(translate("Язык интерфейса", "ru")).toBe("Язык интерфейса");\n    expect(translate("Язык интерфейса", "en")).toBe("Interface language");\n    expect(translate("Настройки", "en")).toBe("Settings");\n  });\n  it("does not alter unknown technical identifiers", () => {
     expect(translate("gemini-3.1-flash-lite", "ru")).toBe("gemini-3.1-flash-lite");
   });
 });
