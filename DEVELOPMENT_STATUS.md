@@ -6,8 +6,8 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `aad100df0628130e42181d0a08421fc56d954e40`.
-- Latest completed frontend Quality commit: `aad100df0628130e42181d0a08421fc56d954e40`
+- Latest source implementation commit: `b4ff1908f526ea3e02e2267602ee3343d15d9f37`.
+- Latest completed frontend Quality commit: `b4ff1908f526ea3e02e2267602ee3343d15d9f37`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -17,7 +17,7 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Frontend Quality passed on `aad100df0628130e42181d0a08421fc56d954e40` (73 test files / 514 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43626630329`). The run includes planner field-type validation, prompt-injection workflow-boundary coverage, and the new Unix ancestor-symlink permission-reload regression test. Mobile Interface Preview passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632` (run `43626108715`). Native cross-platform verification for `aad100df0628130e42181d0a08421fc56d954e40` remains pending (run `43626630314`).
+- Frontend Quality passed on `b4ff1908f526ea3e02e2267602ee3343d15d9f37` (73 test files / 514 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43626811314`). Mobile Interface Preview passed on the same commit (run `43626811347`). Native cross-platform verification for `b4ff1908f526ea3e02e2267602ee3343d15d9f37` remains pending (run `43626811300`).
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
@@ -61,8 +61,9 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 - Agent planning now validates the runtime types of model-generated step IDs, tool IDs, purpose strings, and dependency IDs before processing them. Malformed fields return validation errors rather than throwing; adversarial tests also verify that untrusted reference text cannot authorize unavailable tools or replace the owner-supplied task goal.
 - Tauri security contract tests inspect the actual CSP and default capability manifest, enforcing same-origin scripts, the WebAssembly-only compilation exception, explicit connect destinations, and the narrow permission list.
 - New conversation titles are normalized for whitespace and Unicode-safe truncation before persistence; unit tests cover existing titles, blank messages, whitespace, and emoji.
+- Agent, Memory, and Knowledge panels now explicitly select browser-backed repositories in web preview and native SQLite repositories in the desktop shell, keeping the preview functional without invoking unavailable native commands.
 
-Additional source hardening is now present on the working branch, with fresh CI verification pending:
+Additional source hardening is now present on the working branch. Frontend Quality and Mobile Interface Preview passed on `b4ff1908f526ea3e02e2267602ee3343d15d9f37`; native cross-platform verification remains pending:
 - Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
 - Provider API keys are redacted from successful non-streaming output and streamed text, including when a key is split across SSE deltas.
 - File move/rename source paths resolve the approved parent directory without canonicalizing the final component, preventing symlink-target substitution during source resolution.
@@ -74,7 +75,7 @@ SQLite, browser stores, and checkpoints are not application-level encrypted. Rem
 
 ## Phase VII — Testing & Release 1.0
 
-Frontend Quality passed on `aad100df0628130e42181d0a08421fc56d954e40` (73 test files / 514 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview deployment passed on `5c93a0887aec5e32233b24bebd423f2367a1d632`; the latest frontend is UI-identical. Native Windows/macOS/Linux tests and package generation for the current filesystem-root hardening commit remain pending. No signed public release has been produced.
+Frontend Quality passed on `b4ff1908f526ea3e02e2267602ee3343d15d9f37` (73 test files / 514 tests, production build, npm audit with 0 vulnerabilities). Mobile Interface Preview deployment passed on the same commit. Native Windows/macOS/Linux tests and package generation for the current browser/native repository selection changes remain pending. No signed public release has been produced. No signed public release has been produced.
 
 Release acceptance still requires:
 - Successful current Windows/macOS/Linux Rust tests and native package builds.
@@ -89,10 +90,10 @@ Release acceptance still requires:
 
 - Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
 - Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
-- Frontend Quality passed on `aad100df0628130e42181d0a08421fc56d954e40`; Mobile Interface Preview passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632`. Native cross-platform verification for the latest filesystem-root hardening changes remains pending.
+- Frontend Quality and Mobile Interface Preview passed on `b4ff1908f526ea3e02e2267602ee3343d15d9f37`. Native cross-platform verification for the latest source changes remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
 - Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
-- Latest source implementation commit: `aad100df0628130e42181d0a08421fc56d954e40`; subsequent documentation-only commits may follow without changing that source baseline.
+- Latest source implementation commit: `b4ff1908f526ea3e02e2267602ee3343d15d9f37`; subsequent documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
