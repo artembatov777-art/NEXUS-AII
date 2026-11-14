@@ -56,7 +56,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 **Status: groundwork active in parallel with Phase II runtime validation; Phase II remains formally active until its exit criteria pass.**
 
 - [x] Implement inspectable memory management with user-controlled create, revise, search, and deletion; memory records are included in versioned workspace export/backup.
-- [x] Implement document ingestion and project-scoped knowledge retrieval with source/page/section provenance.
+- [x] Implement document ingestion and project-scoped knowledge retrieval with source/page/section provenance, including bounded multi-file batches and TXT/Markdown/source-code/CSV/JSON/JSONL/YAML/XML/PDF/DOCX parsing.
+- [x] Import supported text/code files recursively from explicitly approved workspace roots into project knowledge, with depth/file/byte limits, path containment checks, sensitive-directory exclusions, and clear provider-transfer consent.
 - [x] Add reliable indexing, rebuild, and recovery behavior: startup reconciliation, bounded batches, corrupt-row cleanup, cancellation, and resumable repair.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
 - [x] Test privacy boundaries, project-scoped retrieval quality, source citations, and native/browser persistence.
@@ -89,6 +90,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
+- [x] Connect approved workspace folders to project knowledge import while retaining native path checks, size caps, binary-file exclusion, and explicit consent.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
 **Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.
