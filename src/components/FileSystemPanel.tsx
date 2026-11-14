@@ -15,6 +15,7 @@ type WorkspaceEntry = {
 type WorkspaceContentMatch = { path: string; lineNumber: number; preview: string };
 type WorkspaceContentSearch = { matches: WorkspaceContentMatch[]; totalMatches: number; scannedFiles: number; truncated: boolean };
 type WorkspaceImagePreview = { dataUrl: string; mediaType: string; sizeBytes: number };
+type WorkspaceRecoveryOperation = { operationId: string; valid: boolean; error: string | null; entries: { source: string; destination: string; sourceState: string; destinationState: string }[] };
 
 const isRasterImage = (name: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
 
@@ -70,6 +71,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [conflictDetected, setConflictDetected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
+  const [recoveryOperations, setRecoveryOperations] = useState<WorkspaceRecoveryOperation[]>([]);
 
   function confirmDiscardDraft(action: string): boolean {
     if (!editing || draft === preview) return true;
@@ -86,15 +88,26 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     return () => window.removeEventListener("nexus-file-system-close-request", requestClose);
   }, [editing, draft, preview, onClose]);
 
+  async function refreshRecoveryState(): Promise<string | null> {
+    const [status, operations] = await Promise.all([
+      invoke<string | null>("get_workspace_operation_recovery_status"),
+      invoke<WorkspaceRecoveryOperation[]>("get_workspace_operation_recovery_details")
+    ]);
+    setRecoveryStatus(status);
+    setRecoveryOperations(operations);
+    return status;
+  }
+
   async function refresh(path = currentPath, discardConfirmed = false) {
     if (!path || !isTauri()) return;
     if (!discardConfirmed && !confirmDiscardDraft("refresh or navigate the file list")) return;
     setBusy(true);
     try {
       try {
-        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+        await refreshRecoveryState();
       } catch {
         setRecoveryStatus("NEXUS could not verify whether an interrupted file operation needs recovery.");
+        setRecoveryOperations([]);
       }
       const result = await invoke<WorkspaceEntry[]>("list_workspace_entries", { path });
       setEntries(result);
@@ -123,9 +136,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     try {
       try {
-        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+        await refreshRecoveryState();
       } catch {
         setRecoveryStatus("NEXUS could not verify whether an interrupted file operation needs recovery.");
+        setRecoveryOperations([]);
       }
       const allowed = await invoke<string[]>("list_workspace_directories");
       setRoots(allowed);
@@ -142,9 +156,10 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     try {
-      await invoke("retry_workspace_operation_recovery");
-      const status = await invoke<string | null>("get_workspace_operation_recovery_status");
-      setRecoveryStatus(status);
+      const status = await (async () => {
+        await invoke("retry_workspace_operation_recovery");
+        return refreshRecoveryState();
+      })();
       if (status) {
         setError(status);
       } else {
@@ -153,9 +168,39 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       try {
-        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+        await refreshRecoveryState();
       } catch {
         setRecoveryStatus("NEXUS could not verify whether filesystem recovery completed.");
+        setRecoveryOperations([]);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function acknowledgeRecovery(operationId: string) {
+    const operation = recoveryOperations.find(item => item.operationId === operationId);
+    const pathCount = operation?.entries.length ?? 0;
+    const confirmed = window.confirm(
+      `Mark recovery record ${operationId} as manually reconciled?\n\nNEXUS will not move, rename, or delete any files. It will only remove this recovery record. Verify the ${pathCount} recorded path pair(s) above in your file manager first.`
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      await invoke("acknowledge_workspace_operation_recovery", { operationId });
+      const audited = await recordFilesystemAudit("recovery-manual-reconciliation");
+      const status = await refreshRecoveryState();
+      setNotice(status
+        ? (audited ? "Recovery record acknowledged. Other pending records still need review." : "Recovery record cleared, but the audit history could not be updated.")
+        : (audited ? "Manual reconciliation recorded. No files were changed; filesystem operations are available again." : "Recovery record cleared, but the audit history could not be updated."));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      try {
+        await refreshRecoveryState();
+      } catch {
+        setRecoveryStatus("NEXUS could not verify whether the recovery record was cleared.");
+        setRecoveryOperations([]);
       }
     } finally {
       setBusy(false);
@@ -558,7 +603,24 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy || Boolean(recoveryStatus)}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
-        {recoveryStatus && <div className="error-banner" role="alert"><span>Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery succeeds. If a path conflict blocked recovery, resolve it in your file manager and retry.</span><button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>Retry recovery</button></div>}
+        {recoveryStatus && <div className="error-banner file-recovery-banner" role="alert">
+          <span>Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery is cleared. Review the recorded paths below. Resolve any conflict in your file manager, then retry recovery. If you have already reconciled a record manually, you can acknowledge it here without changing any files.</span>
+          {recoveryOperations.map(operation => <div className="file-recovery-operation" key={operation.operationId}>
+            <strong>Recovery record {operation.operationId}</strong>
+            {operation.error && <small>{operation.error}</small>}
+            {operation.entries.length > 0 && <details>
+              <summary>Review {operation.entries.length} recorded path pair(s)</summary>
+              <div className="file-recovery-entry-list">
+                {operation.entries.map((entry, index) => <div className="file-recovery-entry" key={operation.operationId + "-" + index}>
+                  <div><small>Original path · {entry.sourceState}</small><code>{entry.source}</code></div>
+                  <div><small>Recorded destination · {entry.destinationState}</small><code>{entry.destination}</code></div>
+                </div>)}
+              </div>
+            </details>}
+            <button className="secondary-btn" onClick={() => void acknowledgeRecovery(operation.operationId)} disabled={busy}>Confirm manual reconciliation</button>
+          </div>)}
+          <button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>Retry recovery</button>
+        </div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
