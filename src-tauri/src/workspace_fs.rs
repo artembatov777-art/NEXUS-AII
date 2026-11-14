@@ -10,6 +10,34 @@ const MAX_DIRECTORY_ENTRIES: usize = 500;
 
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
+/// Refuse hard-linked files: a second directory entry may expose the same inode
+/// outside the owner-approved workspace, even when the selected path is inside it.
+fn ensure_no_external_hard_links(file: &fs::File) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = file.metadata()
+            .map_err(|_| "NEXUS could not verify whether the file has external hard links.")?;
+        if metadata.nlink() > 1 {
+            return Err("NEXUS will not access a hard-linked file because another path may expose the same data.".into());
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
+        let mut information: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        let queried = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) };
+        if queried == 0 {
+            return Err("NEXUS could not verify whether the file has external hard links.".into());
+        }
+        if information.nNumberOfLinks > 1 {
+            return Err("NEXUS will not access a hard-linked file because another path may expose the same data.".into());
+        }
+    }
+    Ok(())
+}
+
 /// Opens only a regular file and refuses to follow a final-component symlink/reparse point.
 /// The caller must still validate the canonical parent against an approved root.
 pub(crate) fn open_regular_file_readonly(path: &Path) -> Result<fs::File, String> {
@@ -32,6 +60,7 @@ pub(crate) fn open_regular_file_readonly(path: &Path) -> Result<fs::File, String
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err("NEXUS can open regular files only, not links or special entries.".into());
     }
+    ensure_no_external_hard_links(&file)?;
     Ok(file)
 }
 
@@ -57,30 +86,7 @@ fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err("NEXUS can edit regular files only, not links or special entries.".into());
     }
-    // Editing a hard-linked inode could modify data reachable outside the
-    // approved workspace. Refuse ambiguous aliases rather than widening scope.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        if metadata.nlink() > 1 {
-            return Err("NEXUS will not edit a hard-linked file because another path may expose the same data.".into());
-        }
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
-        let mut information: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        // The stable std MetadataExt::number_of_links API is not available on
-        // Windows; query the same link count from the already-open file handle.
-        let queried = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) };
-        if queried == 0 {
-            return Err("NEXUS could not verify whether the file has external hard links.".into());
-        }
-        if information.nNumberOfLinks > 1 {
-            return Err("NEXUS will not edit a hard-linked file because another path may expose the same data.".into());
-        }
-    }
+    ensure_no_external_hard_links(&file)?;
     Ok(file)
 }
 
@@ -505,6 +511,29 @@ mod tests {
         let result = read_workspace_file_inner(link.to_str().unwrap(), &access);
         assert!(result.is_err(), "a final-component symlink must not be followed even when its target is inside the approved root");
         assert_eq!(fs::read_to_string(&target).unwrap(), "approved target");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn workspace_file_reads_reject_hard_linked_files() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-hardlink-read-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("notes.txt");
+        let alias = base.join("outside-alias.txt");
+        fs::write(&target, "private content").expect("create file");
+        fs::hard_link(&target, &alias).expect("create external hard link");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let result = read_workspace_file_inner(target.to_str().unwrap(), &access);
+        assert!(result.unwrap_err().contains("hard-linked"));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "private content");
+        assert_eq!(fs::read_to_string(&alias).unwrap(), "private content");
         fs::remove_dir_all(base).expect("cleanup");
     }
 
