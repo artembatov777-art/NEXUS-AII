@@ -609,7 +609,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <span>Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery is cleared. Review the recorded paths below. Resolve any conflict in your file manager, then retry recovery. If you have already reconciled a record manually, you can acknowledge it here without changing any files.</span>
           {recoveryOperations.map(operation => <div className="file-recovery-operation" key={operation.operationId}>
             <strong>Recovery record {operation.operationId}</strong>
-            {operation.error && <small>{operation.error}</small>}
+            {operation.error && <small>{t(operation.error)}</small>}
             {operation.entries.length > 0 && <details>
               <summary>Review {operation.entries.length} recorded path pair(s)</summary>
               <div className="file-recovery-entry-list">
@@ -624,7 +624,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>Retry recovery</button>
         </div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
-        {notice && <div className="knowledge-status" role="status">{notice}</div>}
+        {notice && <div className="knowledge-status" role="status">{t(notice)}</div>}
         <div className="file-workspace-body">
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
