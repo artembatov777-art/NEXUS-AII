@@ -8,7 +8,7 @@ Updated: 2026-11-14
 - Branch: `feat/nexus-core-architecture`
 - Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
 - Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard and unsaved-change protection `9ab2189` / `aaa0b86`, profile regression tests `286579b`, private-dataset transfer policy and regression test `1260917` / `eb2f55a` / `e343792`, and security/threat-model documentation updates.
-- Latest recorded branch head before this status refresh: `192711c1dd797a5c630650acbaa454520e60ab18`.
+- Latest recorded branch head after the current implementation increment: `843b919e8ce8e6f35799c9c143c5ffb22d27a4b3`.
 - Draft tracking PR: [#2](https://github.com/artembatov777-art/NEXUS-AII/pull/2); it is open and must not be merged without owner approval.
 - Do not work on `main` and do not merge a pull request without owner approval.
 
@@ -65,15 +65,15 @@ The later commits include documentation and provider-profile UX/test changes. CI
 
 ## Phase status
 
-All phases remain open until their complete acceptance criteria are verified.
+The seven-phase sequence below matches `docs/ROADMAP.md`. No phase is formally closed until its full exit criteria are verified.
 
-1. Foundation & Infrastructure: PARTIAL.
-2. Workspace & Interface: PARTIAL.
-3. Memory, Agents & Tools: PARTIAL.
-4. Desktop, Security & Stability: PARTIAL.
-5. AI Core & Provider Router: PARTIAL.
-6. Training Lab: PARTIAL.
-7. Multimodality & Voice: PARTIAL.
+1. Complete interface: IN PROGRESS; current-head CI and owner-side iPhone visual acceptance remain to be reconfirmed.
+2. AI Core: IN PROGRESS; provider-neutral runtime is implemented, while live local/cloud verification and final capability/lifecycle boundaries remain.
+3. Memory & Knowledge: IMPLEMENTED BASELINE; integrated acceptance remains tied to the complete application.
+4. Agents & Tools: PARTIAL; automatic input-bound result replay and final integration/smoke tests remain.
+5. NEXUS File System: IN PROGRESS; scoped operations, previews, batch moves, and batch rename are implemented; broader recovery remains.
+6. Security & Integration: PARTIAL; integrated permission, credential-vault, platform-boundary, and threat-model acceptance remain.
+7. Testing & Release 1.0: NOT RELEASE-READY; full end-to-end, owner-side smoke tests, packaging, and release evidence remain.
 
 ## Known incomplete work
 
@@ -85,7 +85,7 @@ All phases remain open until their complete acceptance criteria are verified.
 - OmniRoute must be added and tested as an optional provider adapter during final integration, without removing direct local/cloud providers.
 - Fine-tuning/training runtime, model-weight updates, checkpoint and artifact management remain incomplete.
 - Manual Windows desktop smoke testing, owner-side provider credentials, and actual local-runtime testing require the owner's device and environment.
-- Re-run the complete native CI matrix after the latest changes and resolve any failures before release claims.
+- The latest verified baseline `2b9795102cf4de0af73cc6b51b0c11c22c396fe9` passed frontend Quality, npm audit, Vitest, TypeScript/Vite production build, and native Windows/macOS/Linux check/test/build jobs. Subsequent interface and batch-rename commits are not yet verified by a completed CI run; the first native run was cancelled by newer branch pushes.
 
 ## Next implementation order
 
