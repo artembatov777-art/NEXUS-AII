@@ -509,11 +509,20 @@ pub fn write_workspace_file_checked(
 #[tauri::command]
 pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAccess>) -> Result<(), String> {
     if path.trim().is_empty() || path.len() > 4096 { return Err("Enter a valid directory path.".into()); }
-    let target = PathBuf::from(path);
-    let parent = target.parent().ok_or_else(|| "The new directory must be inside an allowed directory.".to_string())?;
+    let requested = PathBuf::from(path);
+    let parent = requested.parent().ok_or_else(|| "The new directory must be inside an allowed directory.".to_string())?;
     let root = access.ensure_new_path_allowed(parent)?;
-    if target.exists() { return Err("A file or directory already exists at that path.".into()); }
-    if !target.starts_with(&root) { return Err("The new directory must be inside an allowed directory.".into()); }
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|e| format!("Could not resolve the new directory's parent: {e}"))?;
+    if !canonical_parent.is_dir() || !canonical_parent.starts_with(&root) {
+        return Err("The new directory must be inside an allowed directory.".into());
+    }
+    let name = requested.file_name()
+        .ok_or_else(|| "The new directory must have a valid name.".to_string())?;
+    let target = canonical_parent.join(name);
+    if fs::symlink_metadata(&target).is_ok() {
+        return Err("A file or directory already exists at that path.".into());
+    }
     fs::create_dir(&target).map_err(|e| format!("Could not create directory: {e}"))
 }
 
