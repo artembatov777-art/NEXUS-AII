@@ -66,6 +66,31 @@ describe("ToolGateway", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("rejects a missing or malformed cancellation signal before audit or permission checks", async () => {
+    const { gateway, permissions, audit } = setup();
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+
+    const missingSignal = await gateway.execute(
+      "sample",
+      { query: "x" },
+      { runId: "run-1", traceId: "trace-1" } as ToolExecutionContext,
+      "actor-1"
+    );
+    const malformedSignal = await gateway.execute(
+      "sample",
+      { query: "x" },
+      { ...context(), signal: { aborted: false } } as unknown as ToolExecutionContext,
+      "actor-1"
+    );
+
+    expect(missingSignal).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(malformedSignal).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(audit.list).not.toHaveBeenCalled();
+    expect(permissions.authorize).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("reads the full bounded audit history before deciding whether a step can be replayed", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([])) };
