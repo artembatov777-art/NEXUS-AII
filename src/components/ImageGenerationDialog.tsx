@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, LoaderCircle, X } from "lucide-react";
-import { generateGeminiImage, type GeneratedImage, type ImageAspectRatio, type ImageSize } from "../lib/geminiImageGeneration";
+import { ImageGenerationRouter, type GeneratedImage, type ImageAspectRatio, type ImageSize } from "../core/imageGeneration";
+import { createGeminiImageProvider } from "../lib/geminiImageProvider";
 import "./image-generation.css";
 
 export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: string; onClose: () => void }) {
@@ -41,13 +42,17 @@ export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: s
     setError("");
     setImage(null);
     try {
-      const result = await generateGeminiImage(prompt, accessToken, {
+      const router = new ImageGenerationRouter();
+      const registered = router.register(createGeminiImageProvider(accessToken));
+      if (!registered.ok) throw new Error(registered.error.message);
+      const result = await router.generate("gemini-image", {
+        prompt,
         aspectRatio,
         imageSize,
-        remoteConsent: remoteApproved,
-        signal: next.signal
-      });
-      if (!next.signal.aborted) setImage(result);
+        allowRemoteProcessing: remoteApproved
+      }, next.signal);
+      if (!result.ok) throw new Error(result.error.message);
+      if (!next.signal.aborted) setImage(result.value);
     } catch (cause) {
       if (!next.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
