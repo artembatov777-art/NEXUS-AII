@@ -32,6 +32,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [tags, setTags] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [searching, setSearching] = useState(false);
   const projects = useMemo(() => new ProjectService(new WorkspaceProjectRepository(window.localStorage), () => crypto.randomUUID() as ProjectId, () => Date.now()), []);
   const [projectOptions, setProjectOptions] = useState<WorkspaceProject[]>([]);
   const [projectId, setProjectId] = useState("");
@@ -47,6 +48,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
 
   async function refresh(search = query) {
     const requestId = ++refreshSequence.current;
+    setSearching(!!search.trim());
     try {
       if (search.trim()) {
         const result = await memoryRetriever.search(search, "all", 50);
@@ -71,6 +73,8 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
       if (requestId === refreshSequence.current) {
         setError(cause instanceof Error ? cause.message : "Could not load saved memories.");
       }
+    } finally {
+      if (requestId === refreshSequence.current) setSearching(false);
     }
   }
 
