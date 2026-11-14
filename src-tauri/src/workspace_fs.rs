@@ -127,8 +127,21 @@ impl WorkspaceAccess {
             .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|value| fs::canonicalize(value).ok())
-            .filter(|path| path.is_dir())
+            .filter_map(|value| {
+                let path = PathBuf::from(value);
+                let canonical = fs::canonicalize(&path).ok()?;
+                // Persisted grants contain canonical paths. If a directory or any
+                // ancestor was replaced by a symlink/reparse point while NEXUS was
+                // closed, do not silently retarget the owner's previous approval.
+                if canonical != path {
+                    return None;
+                }
+                let metadata = fs::symlink_metadata(&path).ok()?;
+                if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                    return None;
+                }
+                Some(path)
+            })
             .collect();
         Self { roots: Mutex::new(roots), persistence_path }
     }
@@ -799,6 +812,34 @@ mod tests {
         assert!(roots.contains(&fs::canonicalize(&second).expect("canonical second")));
         drop(roots);
         fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_reload_does_not_retarget_a_grant_through_a_replaced_root_symlink() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-root-reload-symlink-{}-{nonce}", std::process::id()));
+        let approved = base.join("approved");
+        let outside = base.join("outside");
+        let settings = base.join("settings");
+        fs::create_dir_all(&approved).expect("create originally approved root");
+        fs::create_dir_all(&outside).expect("create outside directory");
+        fs::create_dir_all(&settings).expect("create settings directory");
+        let persistence_path = settings.join("permissions.json");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&approved).expect("canonical approved root")]),
+            persistence_path: persistence_path.clone(),
+        };
+        access.persist(&[fs::canonicalize(&approved).expect("canonical approved root")])
+            .expect("persist approved root");
+
+        fs::remove_dir(&approved).expect("remove original approved root");
+        symlink(&outside, &approved).expect("replace approved path with symlink");
+        let reloaded = WorkspaceAccess::load(persistence_path);
+        assert!(reloaded.roots.lock().expect("lock reloaded roots").is_empty());
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]
