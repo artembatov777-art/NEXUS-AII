@@ -84,7 +84,8 @@ Release acceptance still requires:
 - Active phase: **Phase VI — Security & Integration**. Do not mark this phase complete.
 - Latest completed engineering block: ambiguous tool timeouts and failed model-generation streams are non-retryable; partial assistant output is persisted when a stream fails or is cancelled. Regression tests cover both paths.
 - Frontend Quality and Mobile Interface Preview passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`. Native cross-platform verification for the latest source changes remains pending.
-- Next engineering task: trace the production desktop chat path in `src/App.tsx` and integrate it with the stable application facade and durable conversation repository without losing project context, knowledge citations, streaming, or cancellation. Add end-to-end integration coverage before moving to the remaining Phase VI filesystem recovery and threat-model work.
+- Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
+- Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
 - Latest source implementation commit: `eeb665f5391fac6d21f4fd54689f9dcc540c0be8`; documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
