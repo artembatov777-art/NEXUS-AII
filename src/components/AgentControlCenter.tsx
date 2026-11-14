@@ -234,7 +234,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
       if (projectId) {
         const [knowledge, projectMemories] = await Promise.all([
-          runtime.knowledgeService.retrieve(goal, projectId, 4),
+          runtime.knowledgeService.retrieve(goal, projectId, 4, nextController.signal),
           memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
         ]);
         if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
