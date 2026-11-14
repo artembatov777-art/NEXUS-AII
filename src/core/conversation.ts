@@ -19,7 +19,8 @@ export interface Clock {
 
 export interface CreateConversationInput {
   title?: string;
-  firstMessage?: Pick<Message, "role" | "content">;
+  firstMessage?: Pick<Message, "role" | "content"> & Partial<Pick<Message, "metadata">>;
+  projectId?: string;
 }
 
 export class ConversationService {
@@ -45,7 +46,8 @@ export class ConversationService {
         id: this.ids.messageId(),
         role: input.firstMessage.role,
         content,
-        createdAt: now
+        createdAt: now,
+        ...(input.firstMessage.metadata ? { metadata: { ...input.firstMessage.metadata } } : {})
       });
     }
 
@@ -55,7 +57,8 @@ export class ConversationService {
       messages,
       createdAt: now,
       updatedAt: now,
-      schemaVersion: 1
+      schemaVersion: 1,
+      ...(input.projectId ? { projectId: input.projectId } : {})
     };
 
     const saved = await this.repository.save(conversation);
@@ -65,7 +68,7 @@ export class ConversationService {
 
   async appendMessage(
     conversationId: ConversationId,
-    message: Pick<Message, "role" | "content">
+    message: Pick<Message, "role" | "content"> & Partial<Pick<Message, "metadata">>
   ): Promise<Result<Conversation>> {
     const content = message.content.trim();
     if (!content) return err("validation", "Message cannot be empty.");
@@ -80,7 +83,7 @@ export class ConversationService {
       ...loaded.value,
       messages: [
         ...loaded.value.messages,
-        { id: this.ids.messageId(), role: message.role, content, createdAt: now }
+        { id: this.ids.messageId(), role: message.role, content, createdAt: now, ...(message.metadata ? { metadata: { ...message.metadata } } : {}) }
       ],
       updatedAt: now
     };
