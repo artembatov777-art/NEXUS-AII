@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Bot, BookOpen, Check, ChevronDown, Command, Cpu, FlaskConical, FolderKanban, Menu, MessageSquare, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, X, Zap, Copy, ClipboardPaste, FolderOpen, Plug } from "lucide-react";
 import { sendMessage, testProviderGeneration } from "./lib/ai";
-import { ModelRegistry } from "./core/model";
+import { ModelRegistry, type ModelMessage } from "./core/model";
+import { ConversationService } from "./core/conversation";
+import { NexusApplication } from "./core/application";
 import { createOllamaProviderProfile, createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./lib/tauriModelProvider";
 const MemoryPanel = lazy(() => import("./components/MemoryPanel").then(module => ({ default: module.MemoryPanel })));
 const GlobalSearchPanel = lazy(() => import("./components/GlobalSearchPanel").then(module => ({ default: module.GlobalSearchPanel })));
@@ -14,7 +16,9 @@ import { VoiceControls } from "./components/VoiceControls";
 const ProviderProfilesPanel = lazy(() => import("./components/ProviderProfilesPanel").then(module => ({ default: module.ProviderProfilesPanel })));
 const FileSystemPanel = lazy(() => import("./components/FileSystemPanel").then(module => ({ default: module.FileSystemPanel })));
 const ToolsPanel = lazy(() => import("./components/ToolsPanel").then(module => ({ default: module.ToolsPanel })));
-import { loadConversations, loadProvider, saveConversations, saveProvider } from "./lib/storage";
+import { loadConversations, loadProvider, saveProvider } from "./lib/storage";
+import { WorkspaceConversationRepository, mapUiConversationToDomain, mapDomainConversationToUi } from "./lib/workspaceConversationRepository";
+import { prepareConversationRequest } from "./lib/conversationRequest";
 import { ProjectService, type ProjectId, type WorkspaceProject } from "./core/projects";
 import { HybridMemoryRetriever, KnowledgeRetrievalService, reconcileKnowledgeIndex } from "./core/knowledge";
 import { WorkspaceProjectRepository } from "./lib/projectStorage";
@@ -124,6 +128,16 @@ export default function App() {
   const knowledgeService = useMemo(() => new KnowledgeRetrievalService(
     knowledgeRepository, embeddings, vectors
   ), [knowledgeRepository, embeddings, vectors]);
+  const conversationRepository = useMemo(() => new WorkspaceConversationRepository(window.localStorage), []);
+  const chatApplication = useMemo(() => {
+    const router = createTauriModelRouter(provider);
+    if (!router) return null;
+    const service = new ConversationService(conversationRepository, {
+      conversationId: () => crypto.randomUUID() as import("./core/domain").ConversationId,
+      messageId: () => crypto.randomUUID() as import("./core/domain").Message["id"]
+    }, { now: () => Date.now() });
+    return new NexusApplication(service, router);
+  }, [conversationRepository, provider.baseUrl, provider.model, provider.credentialHandle, provider.inferenceLocation]);
   const memoryRepository = useMemo(() => new WorkspaceMemoryRepository(window.localStorage), []);
   const memoryVectors = useMemo(() => new IndexedDbMemoryVectorIndex(), []);
   const memoryRetriever = useMemo(() => new HybridMemoryRetriever(memoryRepository, embeddings, memoryVectors), [memoryRepository, embeddings, memoryVectors]);
@@ -155,7 +169,7 @@ export default function App() {
     void loadConversations().then(items => { if (mounted) { setConversations(items); setConversationsReady(true); } }).catch(e => { if (mounted) { setError(e instanceof Error ? e.message : "Could not load conversations."); setConversationsReady(true); } });
     return () => { mounted = false; };
   }, []);
-  useEffect(() => { if (conversationsReady) void saveConversations(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady]);
+  useEffect(() => { if (conversationsReady) void conversationRepository.replaceAll(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady, conversationRepository]);
   useEffect(() => { saveProvider(provider); }, [provider]);
   useEffect(() => {
     let active = true;
@@ -333,14 +347,36 @@ export default function App() {
       const assistantId = makeId();
       let streamedAnswer = "";
       setLastUsage(null);
-      const answer = await sendMessage(provider, next, contextParts.join("\n\n"), delta => {
-        streamedAnswer += delta;
-        updateMessages(target!.id, [...next, {
-          id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(),
-          ...(sourceReferences.length ? { sourceReferences } : {})
-        }]);
-      }, controller.signal, usage => setLastUsage(usage));
-      updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+      if (isTauri() && chatApplication) {
+        const persisted = await conversationRepository.save(mapUiConversationToDomain({ ...target, messages: target.messages.filter(message => message.id !== "welcome") }));
+        if (!persisted.ok) throw new Error(persisted.error.message);
+        const prepared: ModelMessage[] = prepareConversationRequest(next.map(({ role, content }) => ({ role, content })), contextParts.join("\n\n")).messages;
+        let applicationError = "";
+        for await (const event of chatApplication.sendMessage({
+          conversationId: target.id as import("./core/domain").ConversationId,
+          providerId: NATIVE_MODEL_PROVIDER_ID, model: provider.model, content: text,
+          requestMessages: prepared,
+          ...(sourceReferences.length ? { assistantMetadata: { sourceReferences } } : {}),
+          signal: controller.signal
+        })) {
+          if (!event.ok) { applicationError = event.error.message; continue; }
+          if ("type" in event.value) {
+            if (event.value.type === "text_delta") {
+              streamedAnswer += event.value.text;
+              updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+            } else if (event.value.type === "usage") setLastUsage({ inputTokens: event.value.inputTokens, outputTokens: event.value.outputTokens });
+          }
+        }
+        const stored = await conversationRepository.get(target.id as import("./core/domain").ConversationId);
+        if (stored.ok && stored.value) updateMessages(target.id, mapDomainConversationToUi(stored.value).messages);
+        if (applicationError && !controller.signal.aborted) setError(applicationError);
+      } else {
+        const answer = await sendMessage(provider, next, contextParts.join("\n\n"), delta => {
+          streamedAnswer += delta;
+          updateMessages(target!.id, [...next, { id: assistantId, role: "assistant", content: streamedAnswer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+        }, controller.signal, usage => setLastUsage(usage));
+        updateMessages(target.id, [...next, { id: assistantId, role: "assistant", content: answer, createdAt: Date.now(), ...(sourceReferences.length ? { sourceReferences } : {}) }]);
+      }
       if (contextWarnings.length) setError("Answer generated without some saved context. " + contextWarnings.join(" "));
     } catch (e) {
       if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
