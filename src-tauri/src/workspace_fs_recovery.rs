@@ -386,7 +386,8 @@ mod tests {
         let root = base.join("approved");
         fs::create_dir_all(&root).expect("create approved root");
         let permissions = base.join("permissions.json");
-        fs::write(&permissions, serde_json::to_vec(&vec![root.to_string_lossy().into_owned()]).expect("serialize roots"))
+        let canonical_root = fs::canonicalize(&root).expect("canonicalize approved root");
+        fs::write(&permissions, serde_json::to_vec(&vec![canonical_root.to_string_lossy().into_owned()]).expect("serialize roots"))
             .expect("write permissions");
         let access = WorkspaceAccess::load(permissions);
         let journal = WorkspaceOperationJournal::open(&base.join("journal.sqlite")).expect("open journal");
