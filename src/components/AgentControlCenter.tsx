@@ -61,7 +61,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource, reason }) => {
           if (scope === "mcp:execute") {
-            return window.confirm(`Allow execution of this MCP tool?\\n\\n${resource}\\n\\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
+            return window.confirm(`Allow execution of this MCP tool?\n\n${resource}\n\nThe connected server is external and may process the supplied input.`) ? "allow" : "deny";
           }
           if (scope === "filesystem:read:selected" || scope === "filesystem:write:selected") {
             const toolId = reason.match(/Tool "([^"]+)"/)?.[1] ?? "";
@@ -77,7 +77,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               : toolId === "workspace.write"
                 ? "The file is created only when the destination does not already exist. Review the content preview."
                 : "The operation is limited to the approved workspace and will not replace an existing destination.";
-            return window.confirm(`Allow the NEXUS agent to ${action}?\\n\\n${resource}\\n\\n${reviewNote}\\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
+            return window.confirm(`Allow the NEXUS agent to ${action}?\n\n${resource}\n\n${reviewNote}\nAccess remains limited to directories you explicitly approved in File System.`) ? "allow" : "deny";
           }
           return "deny";
         }
