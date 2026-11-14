@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "build:pages": "tsc -b && vite build --mode pages"
+    "build:pages": "tsc -b && vite build --mode pages",
+    "check:workflow-pins": "node scripts/verify-workflow-action-pins.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
