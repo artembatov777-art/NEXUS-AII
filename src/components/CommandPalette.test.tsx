@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LanguageProvider } from "../lib/i18n";
 import { CommandPalette, type NexusCommandId } from "./CommandPalette";
 
 let container: HTMLDivElement;
 let root: Root;
+
+function renderInEnglish(node: ReactNode) {
+  renderInEnglish(<LanguageProvider>{node}</LanguageProvider>));
+}
+
+async function renderInEnglishAsync(node: ReactNode) {
+  await act(async () => { root.render(<LanguageProvider>{node}</LanguageProvider>); });
+}
 const onClose = vi.fn();
 const onRun = vi.fn<(id: NexusCommandId) => void>();
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -17,7 +26,7 @@ describe("NEXUS command palette", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    act(() => root.render(<CommandPalette onClose={onClose} onRun={onRun}/>));
+    act(() => root.render(<CommandPalette onClose={onClose} onRun={onRun}/>);
   });
   afterEach(() => {
     act(() => root.unmount());
