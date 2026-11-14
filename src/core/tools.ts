@@ -68,6 +68,10 @@ export const MAX_TOOL_AUDIT_HISTORY_EVENTS = 5_000;
 const MAX_INPUT_BYTES = 64_000;
 const MAX_OUTPUT_BYTES = 64_000;
 
+const isValidIdentifier = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0 && value.length <= 160 &&
+  !/[\\u0000-\\u001f\\u007f]/.test(value);
+
 const serializedSize = (value: unknown): number | null => {
   try {
     const serialized = JSON.stringify(value);
@@ -123,7 +127,10 @@ export class ToolGateway {
     context: ToolExecutionContext,
     actorId: string
   ): Promise<Result<Output>> {
-    if (typeof actorId !== "string" || !actorId.trim() || actorId.length > 160) return err("permission_denied", "A valid host actor identity is required.");
+    if (!isValidIdentifier(actorId)) return err("permission_denied", "A valid host actor identity is required.");
+    if (!isValidIdentifier(context?.runId) || !isValidIdentifier(context?.traceId)) {
+      return err("validation", "Tool run and trace identifiers are invalid.");
+    }
     const tool = this.tools.get(toolId);
     if (!tool) return err("tool_failed", `Tool "${toolId}" is not registered.`);
 
@@ -146,14 +153,15 @@ export class ToolGateway {
     try {
       // A durable "started" or terminal record means this exact run/step may already
       // have crossed an external side-effect boundary. Never replay it blindly.
-      if (this.audit.list) {
-        let history: Result<ToolAuditEvent[]>;
-        try { history = await this.audit.list({ runId: context.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
-        catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
-        if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
-        const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
-        if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
+      if (!this.audit.list) {
+        return err("storage_failed", "Tool execution was blocked because prior-step audit history is unavailable.");
       }
+      let history: Result<ToolAuditEvent[]>;
+      try { history = await this.audit.list({ runId: context.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
+      catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
+      if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
+      const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
+      if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
   
       let resource: string;
       try { resource = tool.resourceForInput ? tool.resourceForInput(validated.value) : tool.id; }
