@@ -6,7 +6,7 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit with completed frontend/mobile CI: `5f9f25ba657b2f07004bfcf21bb86538fd27dd50`
+- Latest source implementation commit with completed frontend/mobile CI: `55741684a3992dc31e2ad61bb127ca988678a341`
 - Latest workflow configuration commit: `92aafe70ffc9f8165a5e658bc866e9ca6e6337e7`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -15,9 +15,9 @@ Updated: 2026-11-14
 
 ## Verified automation evidence
 
-- Frontend Quality passed on `5f9f25ba657b2f07004bfcf21bb86538fd27dd50`: 68 test files, 473 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
+- Frontend Quality passed on `55741684a3992dc31e2ad61bb127ca988678a341`: 69 test files, 481 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
 - Mobile Interface Preview build and deployment passed on the same source commit.
-- Native Windows/macOS/Linux Rust tests and installer packaging are being verified in the current cross-platform matrix. The workflow builds Windows NSIS/MSI, macOS DMG, and Linux AppImage/DEB packages and uploads them for manual smoke tests. Do not treat a queued or partial matrix as a pass.
+- Native Windows/macOS/Linux Rust tests and installer packaging are still being verified. The current matrix has reached package creation on Windows, macOS, and Linux after adding a square Linux AppImage icon; the full matrix and artifact uploads are not yet confirmed. Do not treat a queued or partial matrix as a pass.
 - Native filesystem permission snapshots now use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 
@@ -35,7 +35,7 @@ Live provider verification is intentionally deferred. It requires a running owne
 
 ## Phase III — Memory & Knowledge
 
-Inspectable memory create/revise/search/delete, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and encrypted workspace export/import are implemented. Knowledge import supports text/Markdown, CSV, JSON/JSONL, YAML, XML, source/configuration files, PDF, and DOCX, with bounded batch import. Chat uses persistent hybrid keyword/semantic memory retrieval with scope and project isolation. Memory and knowledge context is marked as untrusted reference data. Cancellation propagates through retrieval and background semantic-index reconciliation.
+Inspectable memory create/revise/search/delete, hybrid keyword/semantic retrieval in chat and the Memory panel, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and encrypted workspace export/import are implemented. Knowledge import supports text/Markdown, CSV, JSON/JSONL, YAML, XML, source/configuration files, PDF, and DOCX, with bounded multi-file import and recursive scans of explicitly approved workspace roots. Sensitive directories and credential-like files are excluded. Chat uses persistent hybrid keyword/semantic memory retrieval with scope and project isolation. Memory and knowledge context is marked as untrusted reference data. Cancellation propagates through retrieval and background semantic-index reconciliation.
 
 The first semantic memory use may download the local embedding model. If that model cannot load, keyword retrieval remains available. Owner-side multi-session persistence and real imported-document workflows remain part of final acceptance.
 
@@ -47,7 +47,7 @@ Automatic persisted input-bound result replay is intentionally not implemented: 
 
 ## Phase V — NEXUS File System
 
-Owner-approved roots, scoped browsing/search, guarded text reads, create/edit, rename/move, image previews, batch rename, no-overwrite destination semantics, conflict detection, and audit events are implemented. Platform-specific atomic no-replace operations prevent a destination created after preflight from being overwritten. Renaming a file preserves the active image preview state.
+Owner-approved roots, scoped browsing/search, guarded text reads, create/edit, rename/move, image previews, batch rename, no-overwrite destination semantics, conflict detection, secure permission snapshots, and audit events are implemented. Platform-specific atomic no-replace operations prevent a destination created after preflight from being overwritten. Renaming a file preserves the active image preview state.
 
 Residual work: hostile parent-directory TOCTOU protection and durable recovery of interrupted multi-file operations. Real desktop permission and filesystem behavior must be verified by the owner.
 
