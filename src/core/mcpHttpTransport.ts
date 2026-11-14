@@ -2,8 +2,30 @@ import type { McpRequest, McpResponse, McpTransport } from "./mcpClient";
 
 export interface McpHttpTransportOptions { endpoint: string; fetcher?: typeof fetch; headers?: Record<string, string>; timeoutMs?: number; }
 const MAX_RESPONSE_BYTES = 2_000_000;
+const MAX_REQUEST_BYTES = 256_000;
 const MAX_SSE_EVENT_BYTES = 256_000;
 const MAX_SSE_EVENTS = 1_000;
+
+function serializeBoundedPayload(value: unknown): string {
+  let encoded: string;
+  try { encoded = JSON.stringify(value); } catch { throw new Error("MCP request payload is not valid JSON."); }
+  if (typeof encoded !== "string" || new TextEncoder().encode(encoded).byteLength > MAX_REQUEST_BYTES) {
+    throw new Error("MCP request payload exceeded the 256 KB limit.");
+  }
+  return encoded;
+}
+
+function isCorrelatedRpcResponse(value: unknown, expectedId: number): value is McpResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const response = value as Record<string, unknown>;
+  if (response.jsonrpc !== "2.0" || response.id !== expectedId) return false;
+  const hasResult = Object.prototype.hasOwnProperty.call(response, "result");
+  const error = response.error;
+  const hasValidError = !!error && typeof error === "object" && !Array.isArray(error) &&
+    Number.isInteger((error as Record<string, unknown>).code) &&
+    typeof (error as Record<string, unknown>).message === "string";
+  return hasResult !== hasValidError;
+}
 
 async function readBoundedText(response: Response): Promise<string> {
   if (!response.body) return "";
@@ -52,6 +74,7 @@ export function parseMcpSseResponse(body: string, expectedId: number): McpRespon
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
     const message = parsed as Partial<McpResponse>;
     if (message.id !== expectedId) return;
+    if (!isCorrelatedRpcResponse(parsed, expectedId)) throw new Error("MCP SSE response is not a valid correlated JSON-RPC 2.0 response.");
     if (matched) throw new Error("MCP SSE response contains duplicate correlated responses.");
     matched = parsed as McpResponse;
   };
@@ -131,7 +154,7 @@ export class McpHttpTransport implements McpTransport {
     const response = await this.fetcher(this.endpoint.toString(), {
       method: "POST",
       headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers, ...this.sessionHeaders() },
-      body: JSON.stringify({ jsonrpc: "2.0", method, params }),
+      body: serializeBoundedPayload({ jsonrpc: "2.0", method, params }),
       signal,
       credentials: "omit",
       redirect: "error",
@@ -150,7 +173,7 @@ export class McpHttpTransport implements McpTransport {
     const response = await this.fetcher(this.endpoint.toString(), {
       method: "POST",
       headers: { "content-type": "application/json", "accept": "application/json, text/event-stream", ...this.headers, ...this.sessionHeaders() },
-      body: JSON.stringify(request),
+      body: serializeBoundedPayload(request),
       signal,
       credentials: "omit",
       redirect: "error",
@@ -162,8 +185,12 @@ export class McpHttpTransport implements McpTransport {
     const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const body = await readBoundedText(response);
     let message: McpResponse;
-    if (type === "application/json") message = JSON.parse(body) as McpResponse;
-    else if (type === "text/event-stream") message = parseMcpSseResponse(body, request.id);
+    if (type === "application/json") {
+      let parsed: unknown;
+      try { parsed = JSON.parse(body); } catch { throw new Error("MCP server returned invalid JSON."); }
+      if (!isCorrelatedRpcResponse(parsed, request.id)) throw new Error("MCP server returned an invalid or uncorrelated JSON-RPC 2.0 response.");
+      message = parsed;
+    } else if (type === "text/event-stream") message = parseMcpSseResponse(body, request.id);
     else throw new Error("MCP server returned an unsupported content type.");
 
     if (request.method === "initialize") {

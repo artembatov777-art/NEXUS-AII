@@ -98,6 +98,28 @@ describe("McpHttpTransport", () => {
     expect(parseMcpSseResponse(body, 7)).toMatchObject({ jsonrpc: "2.0", id: 7, result: { ready: true } });
   });
 
+
+  it("bounds outbound request and notification payloads before network access", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 202 }));
+    const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
+    await expect(transport.request({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { data: "x".repeat(260_000) } }, new AbortController().signal)).rejects.toThrow(/256 KB/);
+    await expect(transport.notify("notifications/progress", { data: "x".repeat(260_000) }, new AbortController().signal)).rejects.toThrow(/256 KB/);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed and uncorrelated JSON-RPC responses", async () => {
+    for (const payload of [
+      { jsonrpc: "1.0", id: 1, result: {} },
+      { jsonrpc: "2.0", id: 2, result: {} },
+      { jsonrpc: "2.0", id: 1 },
+      { jsonrpc: "2.0", id: 1, result: {}, error: { code: -1, message: "bad" } }
+    ]) {
+      const fetcher = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } }));
+      const transport = new McpHttpTransport({ endpoint: "https://mcp.example/tools", fetcher });
+      await expect(transport.request({ jsonrpc: "2.0", id: 1, method: "ping" }, new AbortController().signal)).rejects.toThrow(/JSON-RPC/);
+    }
+  });
+
   it("rejects duplicate, malformed, oversized and uncorrelated SSE frames", () => {
     expect(() => parseMcpSseResponse('data: {"jsonrpc":"2.0","id":1,"result":{}}\n\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n', 1)).toThrow(/duplicate/);
     expect(() => parseMcpSseResponse("data: {broken}\n\n", 1)).toThrow(/invalid JSON/);
