@@ -842,6 +842,36 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn permission_reload_does_not_retarget_a_grant_through_a_replaced_ancestor_symlink() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-ancestor-reload-symlink-{}-{nonce}", std::process::id()));
+        let approved_parent = base.join("approved-parent");
+        let approved = approved_parent.join("approved");
+        let outside = base.join("outside");
+        let outside_root = outside.join("approved");
+        let settings = base.join("settings");
+        fs::create_dir_all(&approved).expect("create originally approved root");
+        fs::create_dir_all(&outside_root).expect("create outside target root");
+        fs::create_dir_all(&settings).expect("create settings directory");
+        let persistence_path = settings.join("permissions.json");
+        let canonical_approved = fs::canonicalize(&approved).expect("canonical approved root");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![canonical_approved.clone()]),
+            persistence_path: persistence_path.clone(),
+        };
+        access.persist(&[canonical_approved]).expect("persist approved root");
+
+        fs::remove_dir_all(&approved_parent).expect("remove original ancestor");
+        symlink(&outside, &approved_parent).expect("replace approved ancestor with symlink");
+        let reloaded = WorkspaceAccess::load(persistence_path);
+        assert!(reloaded.roots.lock().expect("lock reloaded roots").is_empty());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
     #[test]
     fn permission_persistence_rejects_no_valid_paths_by_default() {
         let nonce = std::time::SystemTime::now()
