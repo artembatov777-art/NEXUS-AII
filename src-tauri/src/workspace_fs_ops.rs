@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn no_replace_move_preserves_an_existing_file_destination() {
-        let root = temporary_root("no-replace-file");
+        let (base, root, _access) = fixture();
         let source = root.join("source.txt");
         let destination = root.join("destination.txt");
         fs::write(&source, "source contents").expect("write source");
@@ -366,12 +366,12 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(&source).expect("read source"), "source contents");
         assert_eq!(fs::read_to_string(&destination).expect("read destination"), "destination contents");
-        fs::remove_dir_all(root).expect("cleanup");
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]
     fn no_replace_move_preserves_an_existing_directory_destination() {
-        let root = temporary_root("no-replace-directory");
+        let (base, root, _access) = fixture();
         let source = root.join("source");
         let destination = root.join("destination");
         fs::create_dir(&source).expect("create source directory");
@@ -383,7 +383,7 @@ mod tests {
         assert!(result.is_err());
         assert!(source.join("source.txt").exists());
         assert!(destination.join("destination.txt").exists());
-        fs::remove_dir_all(root).expect("cleanup");
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]
