@@ -6,7 +6,7 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`.
+- Latest source implementation commit: `58a5e09489174f6b85e17edada78c87c6a206c97`.
 - Latest completed frontend Quality commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
@@ -17,7 +17,7 @@ Updated: 2026-11-14
 
 - Frontend Quality passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment passed on `b6405a98f4694c7ece67d95ec2c1009aef6cc08d`.
 - Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. Native verification for the latest source changes is still pending; the last confirmed cross-platform native pass remains `9a6f10a999c3a59f2171cad94b2219979714d201`. Do not treat native packaging as passed for the latest source changes until all three platform jobs finish.
-- Latest frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` (73 test files / 509 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43626198833`). The Mobile Interface Preview build and deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632` (run `43626108715`). Native desktop verification for `623dbe37c2189f4b412db0689c6f0f3eff36921b` is still pending (run `43626198813`).
+- Latest completed frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` (73 test files / 509 tests, TypeScript/Vite production build, and npm audit with 0 vulnerabilities; run `43626198833`). The Mobile Interface Preview build and deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632` (run `43626108715`). New planner-boundary changes on source commit `58a5e09489174f6b85e17edada78c87c6a206c97` have fresh Quality, Native desktop, and Mobile Preview workflows pending (runs `43626460170`, `43626460185`, and `43626456107`).
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
@@ -57,6 +57,7 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 ## Phase VI — Security & Integration
 - Tool execution timeouts are now explicitly non-retryable because an executor may ignore cancellation and finish an external side effect after the caller times out; the durable `started`/`failed` audit trail keeps the step available for owner reconciliation. Regression coverage exercises an executor that ignores its abort signal.
 - Filesystem recovery journal payloads are limited to 1 MiB when written and before JSON deserialization. Recovery and inspection SQL checks the BLOB byte length before transferring payload text into Rust, so oversized records are not loaded for parsing. Oversized or malformed records remain preserved for manual review, block recovery/mutations, and are surfaced as invalid in recovery details. Regression tests cover oversized persisted records, multibyte UTF-8 sizing, and rejection of oversized serialized writes.
+- Agent planning now validates the runtime types of model-generated step IDs, tool IDs, purpose strings, and dependency IDs before processing them. Malformed fields return validation errors rather than throwing; adversarial tests also verify that untrusted reference text cannot authorize unavailable tools or replace the owner-supplied task goal.
 - Tauri security contract tests inspect the actual CSP and default capability manifest, enforcing same-origin scripts, the WebAssembly-only compilation exception, explicit connect destinations, and the narrow permission list.
 - New conversation titles are normalized for whitespace and Unicode-safe truncation before persistence; unit tests cover existing titles, blank messages, whitespace, and emoji.
 
@@ -90,7 +91,7 @@ Release acceptance still requires:
 - Frontend Quality passed on `623dbe37c2189f4b412db0689c6f0f3eff36921b` and Mobile Interface Preview deployment passed on UI-identical commit `5c93a0887aec5e32233b24bebd423f2367a1d632`. Native cross-platform verification for the latest source changes remains pending.
 - Completed engineering block: the production desktop chat path now routes through `NexusApplication` and a serialized browser/SQLite conversation repository. Prepared bounded memory/project context is sent to the model, project ownership and source/page citations persist with the conversation, streaming usage/deltas remain visible, and partial output remains recoverable after failure/cancellation. Integration tests cover prepared context, project scope, citation persistence, concurrent conversation upserts, and deletion.
 - Next engineering block: finish Phase VI filesystem recovery and threat-model work, then close remaining Phase VII CI and release acceptance gaps. This chat integration is not verified until fresh frontend and native workflows pass.
-- Latest source implementation commit: `623dbe37c2189f4b412db0689c6f0f3eff36921b`; subsequent documentation-only commits may follow without changing that source baseline.
+- Latest source implementation commit: `58a5e09489174f6b85e17edada78c87c6a206c97`; subsequent documentation-only commits may follow without changing that source baseline.
 
 ## Owner-side blockers
 
