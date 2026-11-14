@@ -23,7 +23,10 @@ const definition = (execute: (input: { query: string }, context: ToolExecutionCo
 
 const setup = (decision: "allow" | "deny" | "ask_user" = "allow") => {
   const permissions = { authorize: vi.fn().mockResolvedValue(decision) };
-  const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+  const audit = {
+    record: vi.fn().mockResolvedValue(ok(undefined)),
+    list: vi.fn().mockResolvedValue(ok([]))
+  };
   const gateway = new ToolGateway(permissions, audit, { now: () => 123 });
   return { gateway, permissions, audit };
 };
@@ -33,6 +36,34 @@ describe("ToolGateway", () => {
     const { gateway } = setup();
     const mcpTool = { ...definition(), id: "mcp.remote.search", requiredPermissions: ["mcp:execute"] as ("mcp:execute")[] };
     expect(gateway.register(mcpTool).ok).toBe(true);
+  });
+
+  it("fails closed when the audit sink cannot verify prior execution history", async () => {
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    const authorize = vi.fn().mockResolvedValue("allow");
+    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)) };
+    const gateway = new ToolGateway({ authorize }, audit, { now: () => 123 });
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
+    expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
+    expect(authorize).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed run and trace identifiers before audit lookup", async () => {
+    const { gateway, audit } = setup();
+    const execute = vi.fn(async () => ok({ answer: 42 }));
+    expect(gateway.register(definition(execute)).ok).toBe(true);
+    const result = await gateway.execute(
+      "sample",
+      { query: "x" },
+      { ...context(), traceId: "trace-1\\nforged" },
+      "actor-1"
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(audit.list).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("reads the full bounded audit history before deciding whether a step can be replayed", async () => {
