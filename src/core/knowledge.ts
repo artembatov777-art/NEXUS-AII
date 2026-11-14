@@ -6,13 +6,15 @@ export interface EmbeddingProvider {
   embed(texts: string[], signal?: AbortSignal): Promise<Result<number[][]>>;
 }
 export interface VectorMemoryIndex {
-  upsert(id: string, vector: number[]): Promise<void>;
+  upsert(record: MemoryRecord, vector: number[]): Promise<void>;
   remove(id: string): Promise<void>;
-  search(vector: number[], scope: MemoryScope, limit: number): Promise<Array<{ id: string; score: number }>>;
+  search(vector: number[], scope: MemoryScope, limit: number, projectId?: string): Promise<Array<{ id: string; score: number }>>;
+  reconcile?(records: MemoryRecord[]): Promise<MemoryRecord[]>;
 }
 export interface MemorySearchRepository {
-  search(query: string, scope: MemoryScope, limit: number): Promise<Result<MemoryRecord[]>>;
+  search(query: string, scope: MemoryScope, limit: number, projectId?: string): Promise<Result<MemoryRecord[]>>;
   getByIds(ids: string[]): Promise<Result<MemoryRecord[]>>;
+  exportAll?(): Promise<Result<MemoryRecord[]>>;
 }
 export interface RankedMemory { record: MemoryRecord; score: number; lexicalScore: number; semanticScore: number; }
 
@@ -27,34 +29,60 @@ export class HybridMemoryRetriever {
     if (semanticWeight < 0 || semanticWeight > 1) throw new Error("semanticWeight must be between 0 and 1");
   }
 
-  async search(query: string, scope: MemoryScope = "all", limit = 10, signal?: AbortSignal): Promise<Result<RankedMemory[]>> {
+  async search(query: string, scope: MemoryScope = "all", limit = 10, signal?: AbortSignal, projectId?: string): Promise<Result<RankedMemory[]>> {
     const normalized = query.trim();
-    if (!normalized || normalized.length > 500 || !Number.isInteger(limit) || limit < 1 || limit > 50) {
-      return err("validation", "Memory search query or result limit is invalid.");
-    }
-    const lexical = await this.repository.search(normalized, scope, Math.min(100, limit * 5));
-    if (!lexical.ok) return lexical;
-    const lexicalScores = new Map(lexical.value.map((record, index) => [record.id, 1 / (index + 1)]));
-    if (!this.embeddings || !this.vectors) {
-      return ok(lexical.value.slice(0, limit).map(record => ({ record, score: lexicalScores.get(record.id) ?? 0, lexicalScore: lexicalScores.get(record.id) ?? 0, semanticScore: 0 })));
-    }
+    if (!normalized || normalized.length > 500 || !Number.isInteger(limit) || limit < 1 || limit > 50 ||
+        (scope === "project" && !projectId?.trim())) return err("validation", "Memory search query, scope, project, or result limit is invalid.");
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    const lexical = await this.repository.search(normalized, scope, Math.min(100, limit * 5), projectId);
+    if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+    if (!lexical.ok) return lexical;
+    const lexicalFallback = () => ok(lexical.value.slice(0, limit).map((record, index) => ({
+      record, score: 1 / (index + 1), lexicalScore: 1 / (index + 1), semanticScore: 0
+    })));
+    if (!this.embeddings || !this.vectors) return lexicalFallback();
+
+    // Keep the persistent semantic index aligned with authoritative memory records.
+    if (this.repository.exportAll && this.vectors.reconcile) {
+      try {
+        const all = await this.repository.exportAll();
+        if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+        if (!all.ok || all.value.length > 1_000) return lexicalFallback();
+        const missing = await this.vectors.reconcile(all.value);
+        for (let offset = 0; offset < missing.length; offset += 16) {
+          if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+          const batch = missing.slice(offset, offset + 16);
+          const embeddedBatch = await this.embeddings.embed(batch.map(record => record.content), signal);
+          if (signal?.aborted || (!embeddedBatch.ok && embeddedBatch.error.code === "cancelled")) return err("cancelled", "Memory retrieval was cancelled.");
+          if (!embeddedBatch.ok || embeddedBatch.value.length !== batch.length ||
+              embeddedBatch.value.some(vector => !Array.isArray(vector) || !vector.length || vector.some(value => !Number.isFinite(value)))) return lexicalFallback();
+          await Promise.all(batch.map((record, index) => this.vectors!.upsert(record, embeddedBatch.value[index])));
+        }
+      } catch {
+        if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
+        return lexicalFallback();
+      }
+    }
+
     const embedded = await this.embeddings.embed([normalized], signal);
     if (signal?.aborted || (!embedded.ok && embedded.error.code === "cancelled")) return err("cancelled", "Memory retrieval was cancelled.");
-    if (!embedded.ok) {
-      return ok(lexical.value.slice(0, limit).map(record => ({ record, score: lexicalScores.get(record.id) ?? 0, lexicalScore: lexicalScores.get(record.id) ?? 0, semanticScore: 0 })));
-    }
+    if (!embedded.ok) return lexicalFallback();
     const vector = embedded.value[0];
     if (!vector || vector.length === 0 || vector.some(value => !Number.isFinite(value))) return err("validation", "Embedding provider returned an invalid vector.");
-    const semantic = await this.vectors.search(vector, scope, Math.min(100, limit * 5));
+    const semantic = await this.vectors.search(vector, scope, Math.min(100, limit * 5), projectId);
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     const semanticScores = new Map(semantic.map(item => [item.id, Math.max(0, Math.min(1, item.score))]));
-    const ids = [...new Set([...lexicalScores.keys(), ...semanticScores.keys()])];
+    const ids = [...new Set([...lexical.value.map(record => record.id), ...semanticScores.keys()])];
     const loaded = await this.repository.getByIds(ids);
     if (signal?.aborted) return err("cancelled", "Memory retrieval was cancelled.");
     if (!loaded.ok) return loaded;
+    const scoped = loaded.value.filter(record =>
+      (scope === "all" || record.scope === scope) &&
+      (scope !== "project" || record.projectId === projectId)
+    );
+    const lexicalScores = new Map(lexical.value.map((record, index) => [record.id, 1 / (index + 1)]));
     const lexicalMax = Math.max(1, ...lexicalScores.values());
-    const ranked = loaded.value.map(record => {
+    const ranked = scoped.map(record => {
       const lexicalScore = (lexicalScores.get(record.id) ?? 0) / lexicalMax;
       const semanticScore = semanticScores.get(record.id) ?? 0;
       const score = lexicalScore * (1 - this.semanticWeight) + semanticScore * this.semanticWeight;
