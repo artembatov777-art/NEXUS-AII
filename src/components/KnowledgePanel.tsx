@@ -222,8 +222,8 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
           <button className="icon-btn" disabled={working} onClick={() => void removeDocument(document.documentId)} aria-label={"Remove " + document.fileName}><Trash2 size={14}/></button>
         </div>)}
       </div>}
-      {status && <div className="knowledge-status">{status}</div>}
-      {error && <div className="error-banner">{error}</div>}
+      {status && <div className="knowledge-status">{t(status)}</div>}
+      {error && <div className="error-banner">{t(error)}</div>}
       {answer && <div className="knowledge-results"><h3>Retrieved context</h3><pre>{answer}</pre>{citations.length > 0 && <div className="knowledge-citations"><strong>Sources</strong>{citations.map(c => <div key={c.chunkId}>{c.sourceLabel}{c.page ? ` · page ${c.page}` : ""}{c.section ? ` · ${c.section}` : ""}</div>)}</div>}</div>}
       <footer className="project-footnote">Stored in the desktop SQLite database (browser preview uses local storage). Imports support TXT, Markdown, source code, CSV, JSON/JSONL, YAML, XML, PDF, and DOCX. Local semantic search uses a sentence-transformer model downloaded on first use; lexical search remains available if it cannot load.</footer>
     </section>
