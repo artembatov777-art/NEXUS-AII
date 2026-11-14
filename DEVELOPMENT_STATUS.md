@@ -6,8 +6,9 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Branch: `feat/nexus-core-architecture`
-- Current code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
-- Documentation alignment commit: `e1c920140fb4fd098ced5a521cbf61de049cbecd`
+- Last recorded verified code baseline: `daedf7126fc006a75f83ad515b9ce27e80cec8c5`
+- Later branch commits: provider documentation alignment `e1c9201`, filesystem roadmap evidence `e467932`, provider-profile deletion guard `9ab2189`, unsaved-profile switch guard `aaa0b86`, and UI regression tests `286579b`.
+- Current branch head at this update: `286579b6202ac65142fb1425993057ea888415e0`.
 - Do not work on `main` and do not merge a pull request without owner approval.
 
 ## Verified CI
@@ -21,7 +22,7 @@ For code baseline `daedf7126fc006a75f83ad515b9ce27e80cec8c5`:
 - Mobile interface preview build/deploy: passed.
 - Native desktop Windows/macOS/Linux matrix: was still running when this status was written. Do not claim native build or Rust tests passed until that run finishes successfully.
 
-The later `e1c9201` commit only aligns documentation with the provider strategy. Its quality run was in progress at the time of this status update.
+The later commits include documentation and provider-profile UX/test changes. CI status for the current branch head has not been independently retrieved in this session. Do not treat the older baseline's passing tests as verification of these later commits.
 
 ## Implemented in the latest development increment
 
@@ -48,6 +49,8 @@ The later `e1c9201` commit only aligns documentation with the provider strategy.
 - A single dataset evaluation is bounded to 1,000 test cases and can be cancelled.
 - Training Lab model comparison now preserves successful model outputs when one provider fails; cancellation remains global.
 - Actual model-weight training, LoRA execution, and checkpoint/artifact management are not implemented yet.
+- Provider profiles support multiple saved endpoint configurations without storing API keys; recent UI changes now confirm profile deletion and protect unsaved changes when switching profiles. Regression tests were added, but these latest tests have not yet been confirmed by CI.
+- The File System panel already supports bounded raster-image previews and batch file moves with rollback attempts; component and Rust tests cover the current implementation. The roadmap now distinguishes this from broader bulk organization still outstanding.
 
 ### Voice
 
@@ -74,7 +77,7 @@ All phases remain open until their complete acceptance criteria are verified.
 
 - Image attachments and image-to-model processing are not integrated into chat.
 - Audio-file ingestion/transcription is not implemented. Current voice support is browser/WebView speech input/output.
-- Provider settings expose one active endpoint profile; a complete multi-provider profile manager and provider-specific capability registry remain to be completed.
+- Saved provider profiles can store multiple endpoint configurations, but only one profile is active at a time. A complete provider-specific capability registry remains to be completed.
 - Local runtime lifecycle management (install/download models, load/unload, resource reporting) is not implemented. Ollama must already be installed and running externally.
 - Direct cloud support currently targets compatible OpenAI-style endpoints; non-compatible vendor APIs need dedicated adapters.
 - OmniRoute must be added and tested as an optional provider adapter during final integration, without removing direct local/cloud providers.
@@ -84,13 +87,14 @@ All phases remain open until their complete acceptance criteria are verified.
 
 ## Next implementation order
 
-1. Finish and inspect native CI for the current branch head.
-2. Continue multimodal chat support: validated image attachments, provider content-part transport, and audio-file handling.
-3. Complete provider profile management and capability-aware model registry.
-4. Add runtime lifecycle/status features where the host supports them.
-5. Complete Training Lab runtime/artifact boundaries and report unsupported hardware honestly.
-6. Integrate OmniRoute only in the final phase as an optional adapter.
-7. Run end-to-end user journeys, security tests, Windows packaging, and manual smoke tests.
-8. Update this file after each substantial verified milestone.
+1. Retrieve and inspect frontend Quality, Mobile Interface Preview, and native CI for the current branch head; fix failures before relying on older test evidence.
+2. Complete the remaining interface acceptance checks, including the latest hosted mobile preview on a real iPhone Safari session.
+3. Finish AI Core provider capability metadata, provider-profile integration, runtime lifecycle/status boundaries, and live local/cloud verification on the owner's device.
+4. Continue the remaining filesystem conflict/recovery and bulk-organization work.
+5. Complete the integrated security review, including credential-vault, audit, CSP, Tauri capability, and dependency boundaries.
+6. Expand multimodal chat with validated image attachments, provider content-part transport, and audio-file handling.
+7. Complete Training Lab artifact/runtime boundaries without claiming model-weight training that is not implemented.
+8. Run end-to-end user journeys, security tests, Windows packaging, and owner-side manual smoke tests.
+9. Integrate OmniRoute only as an optional adapter during final integration, if the owner chooses to proceed.
 
 Do not report NEXUS AU as complete until every required module and end-to-end acceptance criterion is implemented and tested.
