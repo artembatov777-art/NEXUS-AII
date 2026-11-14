@@ -32,6 +32,25 @@ describe("collectWorkspaceKnowledgeFiles", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
+
+  it("preserves case-sensitive Unix directory names during recursive scans", async () => {
+    const invoke = vi.fn(async (_command: string, args?: Record<string, unknown>) => {
+      if (args?.path === "/Approved") return [
+        { name: "Case", path: "/Approved/Case", kind: "directory", sizeBytes: 0 },
+        { name: "case", path: "/Approved/case", kind: "directory", sizeBytes: 0 }
+      ];
+      if (args?.path === "/Approved/Case") return [
+        { name: "upper.txt", path: "/Approved/Case/upper.txt", kind: "file", sizeBytes: 1 }
+      ];
+      if (args?.path === "/Approved/case") return [
+        { name: "lower.txt", path: "/Approved/case/lower.txt", kind: "file", sizeBytes: 1 }
+      ];
+      return [];
+    });
+    const result = await collectWorkspaceKnowledgeFiles("/Approved", invoke);
+    expect(result.files.map(file => file.name)).toEqual(["lower.txt", "upper.txt"]);
+  });
+
   it("rejects invalid roots and malformed directory listings", async () => {
     await expect(collectWorkspaceKnowledgeFiles(" ", vi.fn())).rejects.toThrow(/approved workspace/);
     await expect(collectWorkspaceKnowledgeFiles("/approved", vi.fn(async () => null))).rejects.toThrow(/invalid data/);
