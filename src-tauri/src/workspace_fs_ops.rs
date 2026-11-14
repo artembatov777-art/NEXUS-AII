@@ -562,18 +562,18 @@ mod tests {
         let duplicate = rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "same.txt".into() },
             WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "other.txt".into() },
-        ], &access);
+        ], &access, None);
         assert!(duplicate.is_err());
         let mixed = rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: first.to_string_lossy().into_owned(), new_name: "one-new.txt".into() },
             WorkspaceRenameRequest { path: second.to_string_lossy().into_owned(), new_name: "two-new.txt".into() },
-        ], &access);
+        ], &access, None);
         assert!(mixed.is_err());
         let outside = base.join("outside.txt");
         fs::write(&outside, "outside").expect("create outside");
         let escaped = rename_workspace_entries_batch_inner(vec![
             WorkspaceRenameRequest { path: outside.to_string_lossy().into_owned(), new_name: "moved.txt".into() },
-        ], &access);
+        ], &access, None);
         assert!(escaped.is_err());
         assert!(first.exists() && second.exists() && outside.exists());
         fs::remove_dir_all(base).expect("cleanup");
