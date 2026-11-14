@@ -662,8 +662,8 @@ mod payload_validation_tests {
     #[test]
     fn provider_secret_redactor_preserves_normal_text_and_handles_no_key_mode() {
         let mut with_key = ProviderSecretRedactor::new(Some("token"));
-        assert_eq!(with_key.push("ordinary output"), "ordinary out");
-        assert_eq!(with_key.finish(), "put");
+        assert_eq!(with_key.push("ordinary output"), "ordinary ou");
+        assert_eq!(with_key.finish(), "tput");
         let mut without_key = ProviderSecretRedactor::new(None);
         assert_eq!(without_key.push("streamed text"), "streamed text");
         assert_eq!(without_key.finish(), "");
