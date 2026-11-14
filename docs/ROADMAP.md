@@ -110,8 +110,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Redact provider credentials from successful non-streaming output and streamed SSE deltas, including credentials split across delta boundaries.
 - [x] Validate model-generated agent step field types and add planner-level plus end-to-end prompt-injection tests proving untrusted reference context cannot expand the workflow tool allowlist or replace the owner-supplied goal.
 - [x] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries; CSP/capability contracts are regression-tested, RustSec warnings are documented as tracked upstream dependency risks, and OS credential/platform limitations plus filesystem TOCTOU residuals are recorded in the security review.
-- [ ] Complete error handling, cancellation, observability, and recovery paths.
-- [ ] Run a focused threat-model review against the integrated product.
+- [x] Complete error handling, cancellation, observability, and recovery paths: partial chat output is persisted after stream failure/cancellation; tool timeouts and ambiguous side effects are non-retryable; ToolGateway fails closed without verifiable audit history or a valid cancellation signal; durable audit and filesystem recovery journals support startup recovery and explicit manual reconciliation. Ambiguous filesystem conflicts still require owner review, tracked in Phase V.
+- [x] Run a focused threat-model review against the integrated product; `THREAT_MODEL.md` and `SECURITY_REVIEW.md` record mitigations and residual risks, including parent-directory TOCTOU, upstream GTK/glib and unmaintained Rust dependencies, and owner-side credential-vault verification.
 
 **Exit criteria:** all modules operate as one system with consistent permissions, secure secret handling, traceable actions, and tested recovery.
 
