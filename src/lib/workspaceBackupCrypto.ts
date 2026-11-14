@@ -9,11 +9,10 @@ const MAX_CIPHERTEXT_BYTES = 50_000_000;
 const MIN_PASSPHRASE_LENGTH = 12;
 
 function backupAdditionalData(iterations: number): Uint8Array {
-  return new TextEncoder().encode(
-    `${BACKUP_FORMAT}\\0${BACKUP_SCHEMA_VERSION}\\0PBKDF2-SHA256\\0${iterations}\\0AES-256-GCM`
-  );
+  return new TextEncoder().encode(JSON.stringify([
+    BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, "PBKDF2-SHA256", iterations, "AES-256-GCM"
+  ]));
 }
-
 interface EncryptedWorkspaceBackup {
   format: typeof BACKUP_FORMAT;
   schemaVersion: typeof LEGACY_BACKUP_SCHEMA_VERSION | typeof BACKUP_SCHEMA_VERSION;
