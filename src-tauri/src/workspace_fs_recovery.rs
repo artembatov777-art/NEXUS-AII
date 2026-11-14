@@ -585,6 +585,7 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
+    #[cfg(unix)]
     #[test]
     fn recovery_never_follows_a_symlink_at_a_journaled_destination() {
         use std::os::unix::fs::symlink;
