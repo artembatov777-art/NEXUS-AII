@@ -4,6 +4,7 @@ import { extractNumericExperimentMetrics, requiresExplicitDatasetTransferConfirm
 import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
+import { runDatasetEvaluation } from "../lib/datasetEvaluationRunner";
 import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
 import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
@@ -146,31 +147,25 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
     setWorking(true);
     setError("");
     setStatus(`Evaluating ${testSamples.length} held-out test samples with ${provider.model}. Expected outputs remain local.`);
-    const outputs: Record<string, { response: string; latencyMs: number }> = {};
-    const failures: string[] = [];
     try {
-      for (const sample of testSamples) {
-        if (controller.signal.aborted) throw new Error("Dataset evaluation was cancelled.");
-        const startedAt = performance.now();
-        try {
-          const response = await sendMessage(provider, [{
-            id: crypto.randomUUID(),
-            role: "user",
-            content: sample.input,
-            createdAt: Date.now()
-          }], "", undefined, controller.signal, undefined, { temperature: 0, maxOutputTokens: 1024 });
-          outputs[sample.id] = { response, latencyMs: performance.now() - startedAt };
-        } catch (cause) {
-          if (controller.signal.aborted) throw cause;
-          failures.push(`${sample.id}: ${cause instanceof Error ? cause.message : "Provider request failed"}`);
-        }
-      }
-      const summary = scoreDatasetEvaluation(dataset.samples ?? [], outputs);
+      const evaluation = await runDatasetEvaluation(testSamples, async (sample, signal) =>
+        sendMessage(provider, [{
+          id: crypto.randomUUID(),
+          role: "user",
+          content: sample.input,
+          createdAt: Date.now()
+        }], "", undefined, signal, undefined, { temperature: 0, maxOutputTokens: 1024 }),
+      {
+        signal: controller.signal,
+        concurrency: 3,
+        onProgress: (completed, total) => setStatus(`Evaluating held-out test samples: ${completed}/${total} completed. Up to 3 requests run concurrently.`)
+      });
+      const summary = scoreDatasetEvaluation(dataset.samples ?? [], evaluation.outputs);
       setModelId(provider.model);
       setMetrics(JSON.stringify({ datasetId: dataset.id, datasetVersion: dataset.version, modelId: provider.model, ...summary }, null, 2));
       setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, evaluationSplit: "test", expectedOutputsSentToProvider: false }, null, 2));
       setStatus(`Dataset evaluation finished: ${summary.completedCases}/${summary.totalCases} cases completed, ${summary.exactMatches} exact matches, ${summary.expectedContained} expected outputs contained. Average latency: ${summary.averageLatencyMs} ms.`);
-      setError(failures.length ? failures.join(" | ") : "");
+      setError(evaluation.failures.length ? evaluation.failures.map(item => `${item.sampleId}: ${item.message}`).join(" | ") : "");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Dataset evaluation failed.");
       setStatus("");
