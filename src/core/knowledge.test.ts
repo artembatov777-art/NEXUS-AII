@@ -10,6 +10,17 @@ describe("knowledge retrieval",()=>{
   const ranked=await new HybridMemoryRetriever(repository,embeddings,vectors).search("design systems","all",5);
   expect(ranked.ok&&ranked.value[0].record.id).toBe("semantic");
  });
+ it("does not download or invoke embeddings when no memories exist",async()=>{
+  const repository:MemorySearchRepository={
+   search:async()=>ok([]),getByIds:async()=>ok([]),exportAll:async()=>ok([])
+  };
+  let calls=0;
+  const embeddings:EmbeddingProvider={embed:async()=>{calls+=1;return ok([[1,0]]);}};
+  const vectors:VectorMemoryIndex={upsert:async()=>{},remove:async()=>{},reconcile:async()=>[],search:async()=>[]};
+  const result=await new HybridMemoryRetriever(repository,embeddings,vectors).search("query");
+  expect(result).toEqual({ok:true,value:[]});
+  expect(calls).toBe(0);
+ });
  it("falls back to lexical retrieval when embeddings fail",async()=>{
   const records=[rec("lex")];const repository:MemorySearchRepository={search:async()=>ok(records),getByIds:async()=>ok(records)};
   const embeddings:EmbeddingProvider={embed:async()=>({ok:false,error:{code:"provider_unavailable",message:"offline",retryable:true}})};
