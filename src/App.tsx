@@ -796,7 +796,7 @@ export default function App() {
       if (id === "focus") { openWorkspacePanel("chat"); setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); return; }
       if (id === "chat") { openWorkspacePanel("chat"); setActiveId(null); setError(""); closeMobileNavigation(); return; }
       if (id === "new-chat") { openWorkspacePanel("chat"); newChat(); return; }
-      const panelByCommand: Record<Exclude<NexusCommandId, "focus" | "chat" | "new-chat">, WorkspacePanel> = { search: "search", models: "settings", training: "training", agents: "agents", memory: "memory", knowledge: "knowledge", projects: "projects", files: "files", tools: "tools" };
+      const panelByCommand: Record<Exclude<NexusCommandId, "focus" | "chat" | "new-chat">, WorkspacePanel> = { search: "search", models: "settings", training: "training", agents: "agents", memory: "memory", knowledge: "knowledge", projects: "projects", files: "files", tools: "tools", studio: "studio" };
       openWorkspacePanel(panelByCommand[id as Exclude<NexusCommandId, "focus" | "chat" | "new-chat">]);
       closeMobileNavigation();
     }} />}

@@ -51,6 +51,10 @@ describe("NEXUS Studio", () => {
     click("Add node");
     expect(container.textContent).toContain("AI architecture");
     expect(JSON.parse(localStorage.getItem("nexus-au:studio-graph:v1") ?? "[]")).toHaveLength(1);
+    const source = container.querySelector<HTMLSelectElement>('select[aria-label="Relationship source"]');
+    const target = container.querySelector<HTMLSelectElement>('select[aria-label="Relationship target"]');
+    expect(source).not.toBeNull();
+    expect(target).not.toBeNull();
   });
 
   it("shows real workspace analytics and health states", () => {
