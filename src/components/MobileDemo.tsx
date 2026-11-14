@@ -63,7 +63,7 @@ export function MobileDemo() {
           <div className="demo-brand-mark"><Sparkles size={19}/></div>
           <div><strong>NEXUS</strong><span>PERSONAL AI SYSTEM</span></div>
         </div>
-        <button className="demo-round-button" aria-label="Уведомления" onClick={() => setNotice("Уведомлений пока нет.")}><Bell size={18}/></button>
+        <button className="demo-round-button" aria-label={t("Уведомления")} onClick={() => setNotice("Уведомлений пока нет.")}><Bell size={18}/></button>
       </header>
 
       <div className="demo-context-row">
@@ -97,7 +97,7 @@ export function MobileDemo() {
         </>}
 
         {tab === "projects" && <div className="demo-section">
-          <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button aria-label="Создать проект" onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
+          <div className="demo-section-heading"><div><span>YOUR WORKSPACE</span><h2>Твои проекты</h2></div><button aria-label={t("Создать проект")} onClick={() => setNotice("Создание проектов будет доступно в рабочей версии.")}><Plus size={18}/></button></div>
           <div className="demo-search"><Search size={16}/><input aria-label="Поиск проектов" value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder="Поиск проектов..."/></div>
           {"NEXUS AU".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card violet"><div className="demo-project-icon"><Command size={19}/></div><span>ACTIVE PROJECT</span><h3>NEXUS AU</h3><p>Персональная AI-экосистема</p><small>Интерфейсный прототип · демонстрационные данные</small></article>}
           {"Личное развитие".toLowerCase().includes(projectQuery.trim().toLowerCase()) && <article className="demo-project-card blue"><div className="demo-project-icon"><Zap size={19}/></div><span>PERSONAL</span><h3>Личное развитие</h3><p>Цели, навыки и планы</p><small>4 заметки</small></article>}
@@ -183,15 +183,15 @@ export function MobileDemo() {
 
       {tab === "chat" && <div className="demo-chat-footer">
         <div className="demo-composer">
-          <button className="demo-add-button" aria-label="Добавить вложение" onClick={() => setNotice("Вложения появятся в следующих версиях демо.")}><Plus size={18}/></button>
-          <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder="Напиши сообщение..." aria-label="Сообщение"/>
-          <button className="demo-send-button" onClick={sendDemoMessage} aria-label="Отправить сообщение"><ArrowUp size={18}/></button>
+          <button className="demo-add-button" aria-label={t("Добавить вложение")} onClick={() => setNotice("Вложения появятся в следующих версиях демо.")}><Plus size={18}/></button>
+          <input value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") sendDemoMessage(); }} placeholder="Напиши сообщение..." aria-label={t("Сообщение")}/>
+          <button className="demo-send-button" onClick={sendDemoMessage} aria-label={t("Отправить сообщение")}><ArrowUp size={18}/></button>
         </div>
         <p className="demo-disclaimer">Демо-режим · сообщения не отправляются модели</p>
       </div>}
 
       {notice && <button className="demo-notice" aria-live="polite" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
-      <nav className="demo-tabbar" aria-label="Основная навигация">
+      <nav className="demo-tabbar" aria-label={t("Основная навигация")}>
         <button className={tab === "chat" ? "active" : ""} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}><MessageSquare size={19}/><span>Чат</span></button>
         <button className={tab === "projects" ? "active" : ""} aria-pressed={tab === "projects"} onClick={() => setTab("projects")}><FolderKanban size={19}/><span>Проекты</span></button>
         <button className={tab === "memory" ? "active" : ""} aria-pressed={tab === "memory"} onClick={() => setTab("memory")}><Brain size={19}/><span>Память</span></button>
