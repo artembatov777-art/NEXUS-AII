@@ -79,18 +79,18 @@ function readBody(req) {
 
 function validateMessages(value) {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_MESSAGES) return null;
-  const messages = [];
+  const contents = [];
   for (const item of value) {
     if (!item || (item.role !== "user" && item.role !== "assistant") ||
         typeof item.content !== "string" || !item.content.trim() ||
         item.content.length > MAX_MESSAGE_CHARS) return null;
-    messages.push({
+    contents.push({
       role: item.role === "assistant" ? "model" : "user",
       parts: [{ text: item.content }]
     });
   }
-  if (messages[messages.length - 1].role !== "user") return null;
-  return messages;
+  if (contents[contents.length - 1].role !== "user") return null;
+  return contents;
 }
 
 export default async function handler(req, res) {
@@ -128,6 +128,9 @@ export default async function handler(req, res) {
   const model = typeof body.model === "string" && ALLOWED_MODELS.has(body.model)
     ? body.model
     : DEFAULT_MODEL;
+  const systemInstruction = typeof body.systemInstruction === "string"
+    ? body.systemInstruction.slice(0, 24_000)
+    : "";
   const generationConfig = {};
   if (Number.isFinite(body.temperature)) generationConfig.temperature = Math.min(2, Math.max(0, body.temperature));
   if (Number.isInteger(body.maxOutputTokens)) generationConfig.maxOutputTokens = Math.min(8192, Math.max(1, body.maxOutputTokens));
@@ -145,6 +148,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           contents: messages,
+          ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
           ...(Object.keys(generationConfig).length ? { generationConfig } : {})
         }),
         signal: controller.signal
