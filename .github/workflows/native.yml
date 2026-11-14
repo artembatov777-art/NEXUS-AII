@@ -8,7 +8,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep the active cross-platform build alive while newer commits queue.
+  # GitHub retains only the latest pending run for this concurrency group.
+  cancel-in-progress: false
 
 jobs:
   native:
