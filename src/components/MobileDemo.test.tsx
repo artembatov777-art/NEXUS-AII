@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MobileDemo } from "./MobileDemo";
+import { LanguageProvider } from "../lib/i18n";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -31,15 +32,17 @@ function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: s
 
 describe("mobile interface preview interactions", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    act(() => root.render(<MobileDemo />));
+    act(() => root.render(<LanguageProvider><MobileDemo /></LanguageProvider>));
   });
 
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    window.localStorage.clear();
   });
 
   it("navigates between the primary mobile sections", () => {
@@ -51,6 +54,22 @@ describe("mobile interface preview interactions", () => {
 
     act(() => buttonContaining("Настройки").click());
     expect(container.textContent).toContain("SYSTEM CONTROL");
+  });
+
+  it("defaults to Russian and persists the selected English interface language", () => {
+    act(() => buttonContaining("Настройки").click());
+    const language = container.querySelector<HTMLSelectElement>("#demo-language");
+    if (!language) throw new Error("Interface language selector was not found.");
+    expect(language.value).toBe("ru");
+
+    act(() => {
+      language.value = "en";
+      language.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(window.localStorage.getItem("nexus-au:language:v1")).toBe("en");
+
+    act(() => buttonContaining("Projects").click());
+    expect(container.textContent).toContain("Your projects");
   });
 
   it("opens secondary modules from the More section", () => {
