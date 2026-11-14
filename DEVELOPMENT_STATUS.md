@@ -111,3 +111,11 @@ These steps cannot be honestly completed by source-code changes or headless CI a
 4. Provide signing credentials/certificates only if signed distributable installers are required.
 
 Do not mark the project complete until all seven phase exit criteria and owner-side release gates have evidence. A successful frontend build is not a completed desktop release.
+
+
+## Hosted Gemini proxy hardening
+
+- Added Vitest coverage for the serverless Gemini proxy: method and bearer-token rejection, message validation, server-side API-key forwarding, normalized upstream errors, output usage mapping, and message-size limits.
+- Fixed request parsing for Vercel's Node runtime: use its pre-parsed `req.body` when present, enforce the same 64 KiB limit, and retain bounded raw-stream parsing for runtimes that do not pre-parse JSON.
+- Corrected the deployment guide's example model so it matches the endpoint allowlist.
+- The proxy is not wired into the public browser/mobile demo. The NEXUS access token must never be embedded in the Vite bundle; enabling a browser client requires an explicit, memory-only owner token entry and a same-origin Vercel deployment. These changes require fresh CI and deployed endpoint verification before being called complete.
