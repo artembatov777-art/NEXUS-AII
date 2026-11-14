@@ -6,60 +6,60 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Current branch head when this status was written: `c5edd88bb749cd8900da9af74eeb1a547498f5f1`
+- Latest source implementation commit with completed frontend/mobile CI: `c0191259b72c4ae411943cc29b8ee606ea5541d3`
+- Latest workflow configuration commit: `f42dc895034702a3dc15ca83396e5573bc6935f4`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
-- OmniRoute is intentionally excluded from active development. No OmniRoute connection is configured.
-- Ollama integration is prepared through its compatible local endpoint, but no Ollama service or model is started or connected by NEXUS.
+- OmniRoute is intentionally excluded. No OmniRoute connection is configured.
+- Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
 - No provider API keys are committed or requested during this development pass.
 
 ## Verified automation evidence
 
-- Frontend Quality passed on implementation commit `cd013f738d8f0ad84fbf6388d879065584588a75`: 64 test files, 450 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
-- Mobile Interface Preview build and deployment passed on the same UI/runtime implementation commit.
-- These results cover the application code at `cd013`. Later commits in this branch primarily add installer packaging and installation/security documentation.
-- The native Windows/macOS/Linux workflow was updated to build platform installer packages (Windows NSIS/MSI, macOS DMG, Linux AppImage/DEB) and upload them for manual smoke tests. The packaging workflow has not yet completed successfully on the current branch head.
-- Earlier native CI exposed an invalid Rust test fixture in the no-overwrite filesystem regression tests. The fixture was corrected to use the shared approved-root test harness. A successful native matrix on the corrected current head is still required; do not infer it from frontend CI.
-- Rust dependency review previously identified two tracked advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade. Continue to treat these as known dependency risks.
+- Frontend Quality passed on `c0191259b72c4ae411943cc29b8ee606ea5541d3`: 66 test files, 462 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
+- Mobile Interface Preview build and deployment passed on the same source commit.
+- Native Windows/macOS/Linux tests and installer packaging are not yet confirmed on the latest branch head. The workflow now builds Windows NSIS/MSI, macOS DMG, and Linux AppImage/DEB packages and uploads them for manual smoke tests. A successful matrix result is still required.
+- Earlier native CI exposed an invalid Rust test fixture in the no-overwrite filesystem regression tests. The fixture was corrected to use the shared approved-root harness. A successful current native matrix remains required.
+- Rust dependency review still tracks two known advisories: unmaintained `proc-macro-error` and the unsound iterator implementation in `glib 0.18.5`, which requires a compatible GTK/WebKit dependency-stack upgrade.
 
 ## Phase I — Complete interface
 
-The desktop workspace, restrained JARVIS-inspired visual system, responsive layouts, chat/history, command palette, global search, projects, memory, knowledge, agents, tools/MCP, file system, Training Lab, and provider settings are implemented. Mobile preview is isolated behind `?demo=1` and does not contact a model or native filesystem.
+The desktop workspace, restrained JARVIS-inspired visual system, responsive layouts, chat/history, command palette, global search, projects, memory, knowledge, agents, tools/MCP, file system, Training Lab, and provider settings are implemented. Heavy modules are lazy-loaded. Mobile preview is isolated behind `?demo=1` and does not contact a model or native filesystem.
 
-Automated UI tests cover navigation, preview disclosures, chat behavior, keyboard shortcuts, dialogs, and key module interactions. The latest hosted preview and refreshed responsive workspace still require an owner-side iPhone Safari check.
+Automated UI tests cover navigation, preview disclosures, chat behavior, keyboard shortcuts, dialogs, and key module interactions. The latest preview still requires an owner-side iPhone Safari check.
 
 ## Phase II — AI Core
 
-The provider-neutral model router supports direct OpenAI-compatible endpoints, discovery, generation health checks, streaming, usage events, bounded retries, normalized errors, and cancellation. Provider profiles keep secrets in OS credential-vault entries; no-key mode is restricted to loopback endpoints. Model IDs must come from actual provider discovery.
+The provider-neutral model router supports direct OpenAI-compatible endpoints, model discovery, generation health checks, streaming, usage events, bounded retries, normalized errors, and cancellation. Provider profiles store secrets in OS credential-vault entries; no-key mode is restricted to loopback endpoints. Model IDs must come from actual provider discovery.
 
 Live provider verification is intentionally deferred. It requires a running owner-controlled local model service and/or owner-supplied cloud credentials. NEXUS does not install or start Ollama. OmniRoute is not required by the core and remains excluded.
 
 ## Phase III — Memory & Knowledge
 
-Inspectable memory create/revise/search/delete, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and backup integration are implemented. Retrieved context is marked as untrusted reference data. Chat cancellation now propagates through profile/project memory search, semantic knowledge retrieval, and background semantic-index reconciliation.
+Inspectable memory create/revise/search/delete, project-scoped knowledge ingestion and retrieval, source/page provenance, local semantic embeddings, vector reconciliation, index repair, and encrypted workspace export/import are implemented. Chat uses persistent hybrid keyword/semantic memory retrieval with scope and project isolation. Memory and knowledge context is marked as untrusted reference data. Cancellation propagates through retrieval and background semantic-index reconciliation.
 
-Owner-side multi-session persistence and real imported-document workflows remain part of final acceptance.
+The first semantic memory use may download the local embedding model. If that model cannot load, keyword retrieval remains available. Owner-side multi-session persistence and real imported-document workflows remain part of final acceptance.
 
 ## Phase IV — Agents & Tools
 
-The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, MCP HTTP transport, schema/output limits, discovery/import, and owner-confirmed reconciliation of ambiguous external outcomes are implemented.
+The bounded agent runtime, model-driven planning, SQLite checkpoints, pause/resume/cancellation, one-time approvals, audit history, Tool Gateway, and MCP HTTP transport are implemented. MCP requests and responses are bounded, JSON-RPC responses are correlated to request IDs, transport-owned session headers cannot be overridden, and ambiguous external outcomes require owner-confirmed reconciliation.
 
 Automatic persisted input-bound result replay is intentionally not implemented: storing arbitrary tool outputs for replay could duplicate private data or unsafe side effects. Duplicate run/step execution is blocked instead. OAuth/bearer authentication and adversarial live-server tests remain open.
 
 ## Phase V — NEXUS File System
 
-Owner-approved roots, scoped browsing/search, guarded text reads, create/edit, rename/move, image previews, batch rename, no-overwrite destination semantics, conflict detection, and audit events are implemented. Platform-specific atomic no-replace operations now prevent a destination created after preflight from being overwritten.
+Owner-approved roots, scoped browsing/search, guarded text reads, create/edit, rename/move, image previews, batch rename, no-overwrite destination semantics, conflict detection, and audit events are implemented. Platform-specific atomic no-replace operations prevent a destination created after preflight from being overwritten. Renaming a file preserves the active image preview state.
 
 Residual work: hostile parent-directory TOCTOU protection and durable recovery of interrupted multi-file operations. Real desktop permission and filesystem behavior must be verified by the owner.
 
 ## Phase VI — Security & Integration
 
-OS credential-vault storage, default-deny runtime policy, per-action approval, bounded provider/MCP transports, redacted audit/trace records, transactional workspace backup/restore, CSP, and narrow Tauri capabilities are implemented.
+OS credential-vault storage, default-deny runtime policy, per-action approval, bounded provider/MCP transports, redacted audit/trace records, transactional workspace backup/restore, CSP, and narrow Tauri capabilities are implemented. Exported backups use AES-256-GCM with PBKDF2-SHA256 passphrase derivation (600,000 iterations for new exports); passphrases are held only in UI memory and never persisted. Legacy plaintext backups remain importable after an explicit warning.
 
-Remaining work includes integrated adversarial testing, owner-side credential-vault lifecycle checks, broader cross-module recovery, and independent security testing. SQLite, browser stores, and checkpoints are not application-level encrypted. Exported backups use AES-256-GCM with PBKDF2-SHA256; the passphrase is never stored and cannot be recovered if lost.
+SQLite, browser stores, and checkpoints are not application-level encrypted. Remaining work includes integrated adversarial testing, owner-side credential-vault lifecycle checks, broader cross-module recovery, and independent security testing.
 
 ## Phase VII — Testing & Release 1.0
 
-Frontend CI evidence is current for `cd013`. The native workflow now attempts platform package generation and artifact upload, but this newer packaging workflow still needs a complete successful run. No signed public release has been produced.
+Frontend Quality and mobile preview passed on the latest source implementation commit. Native Rust tests and package generation still need a successful cross-platform CI result. No signed public release has been produced.
 
 Release acceptance still requires:
 - Successful current Windows/macOS/Linux Rust tests and native package builds.
@@ -67,7 +67,7 @@ Release acceptance still requires:
 - Credential-vault save/status/use/delete checks on Windows, macOS, and Linux.
 - Real provider verification when the owner chooses to supply credentials and run a local model service.
 - Backup/restore, cancellation, interrupted-operation, and crash-recovery acceptance.
-- Signed/reproducible artifacts, installation instructions, release notes, and a known-limitations list.
+- Signed/reproducible artifacts, release notes, and a known-limitations list.
 - Fresh iPhone Safari acceptance for the latest mobile preview.
 
 ## Owner-side blockers
