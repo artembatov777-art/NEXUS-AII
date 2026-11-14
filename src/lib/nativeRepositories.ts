@@ -218,10 +218,17 @@ export class WorkspaceKnowledgeRepository implements KnowledgeRepository {
   }
 
   async add(chunks: KnowledgeChunk[]): Promise<Result<void>> {
-    const all = await this.readResult();
-    if (!all.ok) return all;
-    const ids = new Set(chunks.map(chunk => chunk.id));
-    return this.persist([...all.value.filter(chunk => !ids.has(chunk.id)), ...chunks]);
+    if (!isTauri()) return this.local.add(chunks);
+    try {
+      await this.ensureMigrated();
+      // The native command is an atomic ID-based UPSERT. Send only the new
+      // chunks instead of rewriting a stale full snapshot that could resurrect
+      // a document deleted by another panel between read and write.
+      await invoke("save_knowledge_chunks", { chunks });
+      return ok(undefined);
+    } catch (error) {
+      return failure(error, "Could not persist project knowledge.");
+    }
   }
 
   async replaceDocument(documentId: string, projectId: string, chunks: KnowledgeChunk[]): Promise<Result<void>> {
