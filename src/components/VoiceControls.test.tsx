@@ -30,6 +30,12 @@ describe("VoiceControls", () => {
     expect(container.textContent).toContain("Speech recognition is not supported");
   });
 
+  it("discloses that host speech recognition may use an online service", () => {
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
+    expect(container.textContent).toContain("Speech recognition may use an online service");
+    expect(container.textContent).toContain("Do not dictate sensitive information");
+  });
+
   it("passes final recognized speech to the chat composer callback", () => {
     class FakeRecognition {
       lang = "";
