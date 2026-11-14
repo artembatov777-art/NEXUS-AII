@@ -363,7 +363,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         <button className="icon-btn" onClick={onClose} aria-label="Close agent control center"><X size={18}/></button>
       </header>
 
-      {runtimeState.error && <div className="agent-error"><AlertTriangle size={16}/>{runtimeState.error}</div>}
+      {runtimeState.error && <div className="agent-error"><AlertTriangle size={16}/>{t(runtimeState.error)}</div>}
 
       <section className="agent-runtime-strip" aria-label="Agent runtime overview">
         <article><span className="agent-runtime-mark"/><div><strong>{registeredAgents.length}</strong><small>Registered agents</small></div></article>
@@ -403,7 +403,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
           <article className="agent-card">
             <div className="agent-card-heading"><div><span className="agent-kicker">LIVE EXECUTION</span><h3>Run event stream</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
-            {feed.length === 0 ? <div className="agent-empty">Start a run to inspect progress, approval handoffs and output.</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{item.text}</pre></div>)}</div>}
+            {feed.length === 0 ? <div className="agent-empty">Start a run to inspect progress, approval handoffs and output.</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
             {busy && <button className="agent-danger-button" onClick={() => controller.current?.abort()}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
