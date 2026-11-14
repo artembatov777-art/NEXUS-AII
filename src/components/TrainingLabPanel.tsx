@@ -184,7 +184,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Live dataset model comparison is available only in the native desktop app.");
       return;
     }
-    const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
+    const models = comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
     const modelSelectionError = validateComparisonModelSelection(models, availableModels);
     if (modelSelectionError) { setError(modelSelectionError); return; }
     const dataset = selectedDatasetRecord;
@@ -244,7 +244,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Live model comparison is available only in the native desktop app.");
       return;
     }
-    const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
+    const models = comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
     const modelSelectionError = validateComparisonModelSelection(models, availableModels);
     if (modelSelectionError) { setError(modelSelectionError); return; }
     if (!evaluationPrompt.trim()) {
