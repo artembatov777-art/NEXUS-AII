@@ -14,7 +14,7 @@ function isMemoryRecord(value: unknown): value is MemoryRecord {
   const source = record.source;
   const validId = (item: unknown): item is string =>
     typeof item === "string" && item.trim().length > 0 && item.length <= 160 &&
-    !/[\\u0000-\\u001f\\u007f]/.test(item);
+    !/[\u0000-\u001f\u007f]/.test(item);
   if (!validId(record.id) || typeof record.content !== "string" ||
       !record.content.trim() || record.content.length > 4_000 ||
       !["preference", "goal", "fact", "workflow", "project"].includes(record.category ?? "") ||
