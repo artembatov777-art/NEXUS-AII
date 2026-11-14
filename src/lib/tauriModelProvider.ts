@@ -172,7 +172,7 @@ class TauriModelProvider implements ModelProvider {
 }
 
 export interface TauriProviderProfile {
-  /** Stable router identity, for example nexus.ollama or nexus.omniroute. */
+  /** Stable router identity for a compatible provider endpoint, for example nexus.ollama or nexus.cloud. */
   id: string;
   settings: ProviderSettings;
 }
@@ -187,25 +187,6 @@ export function createOllamaProviderProfile(model = ""): TauriProviderProfile {
       inferenceLocation: "local",
       credentialHandle: "none"
     }
-  };
-}
-
-/**
- * Builds a future OmniRoute profile from an owner-supplied HTTPS endpoint.
- * This only validates and stores configuration; it never connects to it.
- */
-export function createOmniRouteProviderProfile(
-  baseUrl: string,
-  model: string,
-  credentialHandle: "default" | "ollama" = "default"
-): TauriProviderProfile {
-  const endpointError = providerEndpointError(baseUrl);
-  if (endpointError) {
-    throw new Error("OmniRoute must use HTTPS, or HTTP on a localhost/loopback endpoint.");
-  }
-  return {
-    id: "nexus.omniroute",
-    settings: { baseUrl: baseUrl.trim(), model, inferenceLocation: "remote", credentialHandle }
   };
 }
 
