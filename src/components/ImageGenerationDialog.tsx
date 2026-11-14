@@ -4,7 +4,7 @@ import { ImageGenerationRouter, type GeneratedImage, type ImageAspectRatio, type
 import { createGeminiImageProvider } from "../lib/geminiImageProvider";
 import "./image-generation.css";
 
-export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: string; onClose: () => void }) {
+export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { accessToken: string; onClose: () => void; onGenerated: (image: GeneratedImage, prompt: string) => void }) {
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("1:1");
   const [imageSize, setImageSize] = useState<ImageSize>("1K");
@@ -52,7 +52,10 @@ export function ImageGenerationDialog({ accessToken, onClose }: { accessToken: s
         allowRemoteProcessing: remoteApproved
       }, next.signal);
       if (!result.ok) throw new Error(result.error.message);
-      if (!next.signal.aborted) setImage(result.value);
+      if (!next.signal.aborted) {
+        setImage(result.value);
+        onGenerated(result.value, prompt.trim());
+      }
     } catch (cause) {
       if (!next.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
