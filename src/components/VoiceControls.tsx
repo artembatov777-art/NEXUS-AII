@@ -320,6 +320,10 @@ export function VoiceControls({
 
   useEffect(() => {
     if (isGenerating) {
+      if (conversationModeRef.current) {
+        if (!waitingForResponseRef.current) lastSpokenTextRef.current = textToSpeak;
+        waitingForResponseRef.current = true;
+      }
       recognition.current?.stop();
       return;
     }
