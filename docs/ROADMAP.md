@@ -61,6 +61,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Add reliable indexing, rebuild, and recovery behavior: startup reconciliation, bounded batches, corrupt-row cleanup, cancellation, and resumable repair.
 - [x] Integrate relevant approved profile memory and selected project knowledge into chat context and bounded AI agent-planning reference context; retrieved content is marked untrusted and source labels are retained.
 - [x] Test privacy boundaries, project-scoped retrieval quality, source citations, and native/browser persistence.
+- [x] Serialize legacy project migration across repository instances and wait for migration before native project mutations; append knowledge through incremental ID-based SQLite upserts to avoid stale-snapshot resurrection.
 
 **Exit criteria:** NEXUS can retrieve the right approved context across sessions and projects, cite source material, and let the owner inspect and control stored information.
 
@@ -90,6 +91,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
+- [x] Keep the final source component unresolved during move, rename, and batch-rename validation so a substituted final symlink cannot redirect the operation to its target.
 - [x] Connect approved workspace folders to project knowledge import while retaining native path checks, size caps, binary-file exclusion, and explicit consent.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
@@ -101,6 +103,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [ ] Complete permission enforcement and approval policy across all modules.
 - [ ] Complete credential-vault, secret-redaction, and data-routing reviews.
 - [x] Add versioned backup/restore coverage for projects, conversations, memories, knowledge, agent checkpoints, Training Lab datasets/experiments, and sanitized audit/trace history. Provider keys and approved folder permissions are excluded; v1 backups remain importable with an explicit warning.
+- [x] Authenticate encrypted-backup envelope metadata with AES-GCM additional authenticated data in schema v2 while retaining schema v1 import compatibility.
+- [x] Redact provider credentials from successful non-streaming output and streamed SSE deltas, including credentials split across delta boundaries.
 - [ ] Review CSP, Tauri capabilities, dependency advisories, and platform boundaries.
 - [ ] Complete error handling, cancellation, observability, and recovery paths.
 - [ ] Run a focused threat-model review against the integrated product.
