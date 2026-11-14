@@ -547,7 +547,7 @@ mod tests {
         let connection = journal.connection.lock().expect("journal connection");
         connection.execute(
             "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
-            params!["oversized-record", "x".repeat(MAX_JOURNAL_PAYLOAD_BYTES + 1), 1_i64],
+            params!["oversized-record", "é".repeat(MAX_JOURNAL_PAYLOAD_BYTES / 2 + 1), 1_i64],
         ).expect("insert oversized recovery payload");
         drop(connection);
 
