@@ -1,8 +1,10 @@
+export const LOCAL_EMBEDDING_MODEL_ID = "onnx-community/all-MiniLM-L6-v2";
 import type { KnowledgeChunk, KnowledgeVectorIndex } from "../core/knowledge";
 
 interface VectorRow {
   id: string;
   chunkId?: string;
+  modelId?: string;
   projectId: string;
   documentId: string;
   vector: number[];
@@ -23,6 +25,7 @@ export function normalizeVectorRows(value: unknown): VectorRow[] {
     return [{
       id: row.id!,
       ...(typeof row.chunkId === "string" ? { chunkId: row.chunkId } : {}),
+      ...(typeof row.modelId === "string" ? { modelId: row.modelId } : {}),
       projectId: typeof row.projectId === "string" ? row.projectId : "",
       documentId: typeof row.documentId === "string" ? row.documentId : "",
       vector: Array.isArray(row.vector) ? row.vector : [],
@@ -42,7 +45,7 @@ export function planVectorReconciliation(rows: VectorRow[], chunks: KnowledgeChu
     const chunkId = row.chunkId ?? row.id;
     const key = vectorStorageKey(row.projectId, chunkId);
     const chunk = expected.get(key);
-    if (!Array.isArray(row.vector) || row.vector.length === 0 || !row.vector.every(Number.isFinite) || !chunk || row.id !== key || row.documentId !== chunk.documentId) {
+    if (row.modelId !== LOCAL_EMBEDDING_MODEL_ID || !Array.isArray(row.vector) || row.vector.length === 0 || !row.vector.every(Number.isFinite) || !chunk || row.id !== key || row.documentId !== chunk.documentId) {
       staleIds.push(row.id);
       continue;
     }
@@ -76,6 +79,7 @@ export class IndexedDbKnowledgeVectorIndex implements KnowledgeVectorIndex {
     await this.write(db, "readwrite", store => store.put({
       id: vectorStorageKey(chunk.projectId, chunk.id),
       chunkId: chunk.id,
+      modelId: LOCAL_EMBEDDING_MODEL_ID,
       projectId: chunk.projectId,
       documentId: chunk.documentId,
       vector,

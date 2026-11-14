@@ -46,5 +46,5 @@ async function loadLocalExtractor(): Promise<Extractor> {
     model: string,
     options: { dtype: "q8" }
   ) => Promise<Extractor>;
-  return createPipeline("feature-extraction", MODEL_ID, { dtype: "q8" });
+  return createPipeline("feature-extraction", LOCAL_EMBEDDING_MODEL_ID, { dtype: "q8" });
 }

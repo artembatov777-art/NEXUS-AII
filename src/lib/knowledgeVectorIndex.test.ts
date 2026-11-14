@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cosineSimilarity, normalizeVectorRows, planVectorReconciliation, vectorStorageKey } from "./knowledgeVectorIndex";
+import { cosineSimilarity, LOCAL_EMBEDDING_MODEL_ID, normalizeVectorRows, planVectorReconciliation, vectorStorageKey } from "./knowledgeVectorIndex";
 
 describe("knowledge vector index similarity", () => {
   it("scores identical normalized vectors at one", () => {
@@ -45,18 +45,30 @@ describe("knowledge vector reconciliation", () => {
   it("treats empty or non-finite vectors as stale and schedules re-indexing", () => {
     const chunks = [chunk("empty", "p1", "doc-empty"), chunk("nan", "p1", "doc-nan")];
     const rows = [
-      { id: vectorStorageKey("p1", "empty"), chunkId: "empty", projectId: "p1", documentId: "doc-empty", vector: [], updatedAt: 1 },
-      { id: vectorStorageKey("p1", "nan"), chunkId: "nan", projectId: "p1", documentId: "doc-nan", vector: [Number.NaN], updatedAt: 1 }
+      { id: vectorStorageKey("p1", "empty"), chunkId: "empty", modelId: LOCAL_EMBEDDING_MODEL_ID, projectId: "p1", documentId: "doc-empty", vector: [], updatedAt: 1 },
+      { id: vectorStorageKey("p1", "nan"), chunkId: "nan", modelId: LOCAL_EMBEDDING_MODEL_ID, projectId: "p1", documentId: "doc-nan", vector: [Number.NaN], updatedAt: 1 }
     ];
     const plan = planVectorReconciliation(rows, chunks);
     expect(plan.staleIds).toHaveLength(2);
     expect(plan.missingChunks.map(item => item.id)).toEqual(["empty", "nan"]);
   });
 
+  it("rebuilds vectors created by a different or unknown embedding model", () => {
+    const chunks = [chunk("current", "p1", "doc-current")];
+    const rows = [{
+      id: vectorStorageKey("p1", "current"), chunkId: "current",
+      modelId: "previous-embedding-model", projectId: "p1",
+      documentId: "doc-current", vector: [1, 0], updatedAt: 1
+    }];
+    const plan = planVectorReconciliation(rows, chunks);
+    expect(plan.staleIds).toEqual([vectorStorageKey("p1", "current")]);
+    expect(plan.missingChunks.map(item => item.id)).toEqual(["current"]);
+  });
+
   it("removes stale and legacy-keyed vectors and returns missing chunks for re-indexing", () => {
     const chunks = [chunk("a", "p1", "doc-a"), chunk("b", "p1", "doc-b")];
     const rows = [
-      { id: vectorStorageKey("p1", "a"), chunkId: "a", projectId: "p1", documentId: "doc-a", vector: [1], updatedAt: 1 },
+      { id: vectorStorageKey("p1", "a"), chunkId: "a", modelId: LOCAL_EMBEDDING_MODEL_ID, projectId: "p1", documentId: "doc-a", vector: [1], updatedAt: 1 },
       { id: "deleted-chunk", projectId: "p1", documentId: "deleted-doc", vector: [1], updatedAt: 1 },
       { id: "b", projectId: "p1", documentId: "doc-b", vector: [1], updatedAt: 1 }
     ];
