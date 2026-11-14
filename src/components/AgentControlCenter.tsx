@@ -17,6 +17,7 @@ import { loadMcpServerConfigs } from "../lib/mcpServerStorage";
 import { canUseAgentProvider } from "../lib/agentProviderAvailability";
 import { HybridMemoryRetriever } from "../core/knowledge";
 import { WorkspaceMemoryRepository } from "../lib/nativeRepositories";
+import { LocalStorageMemoryRepository } from "../lib/memoryStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
 
@@ -101,11 +102,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
     }
   }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation]);
+  const memoryRepository = useMemo(() => isTauri()
+    ? new WorkspaceMemoryRepository(window.localStorage)
+    : new LocalStorageMemoryRepository(window.localStorage), []);
   const memoryRetriever = useMemo(() => new HybridMemoryRetriever(
-    new WorkspaceMemoryRepository(window.localStorage),
+    memoryRepository,
     new LocalTransformerEmbeddingProvider(),
     new IndexedDbMemoryVectorIndex()
-  ), []);
+  ), [memoryRepository]);
   const [task, setTask] = useState("");
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
