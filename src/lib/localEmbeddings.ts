@@ -21,6 +21,7 @@ export class LocalTransformerEmbeddingProvider implements EmbeddingProvider {
       const extractor = await (this.extractor ??= this.createExtractor());
       if (signal?.aborted) return err("cancelled", "Embedding was cancelled.");
       const output = await extractor(texts, { pooling: "mean", normalize: true });
+      if (signal?.aborted) return err("cancelled", "Embedding was cancelled.");
       const raw = output.tolist();
       if (!Array.isArray(raw)) return err("validation", "Local embedding model returned an invalid tensor.");
       const vectors = (raw as unknown[]).map(row => Array.isArray(row) ? row.map(Number) : []);
