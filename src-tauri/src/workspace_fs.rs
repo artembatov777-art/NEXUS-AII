@@ -313,6 +313,9 @@ fn write_workspace_file_inner(
 
     match fs::symlink_metadata(&target) {
         Ok(metadata) => {
+            if expected_content.is_none() {
+                return Err("A file or folder already exists at this path. Choose a different name instead of overwriting it.".into());
+            }
             if metadata.file_type().is_symlink() || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
@@ -424,6 +427,26 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn creating_a_file_never_truncates_an_existing_file() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-create-no-overwrite-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("important.txt");
+        fs::write(&target, "keep original contents").expect("create existing file");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let result = write_workspace_file_inner(target.to_str().unwrap(), "", None, &access);
+        assert!(result.unwrap_err().contains("already exists"));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "keep original contents");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
 
     #[cfg(unix)]
     #[test]
