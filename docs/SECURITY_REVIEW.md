@@ -1,6 +1,6 @@
 # NEXUS AU security review
 
-**Review date:** 2026-11-13  
+**Review date:** 2026-11-14  
 **Scope:** source-level review of the native Tauri host, React webview, provider transport, MCP transport, agent execution, SQLite persistence, backup/restore, and browser preview. This is an engineering review, not an independent penetration test or formal security certification.
 
 ## Trust boundaries
