@@ -96,10 +96,15 @@ export class ImageGenerationRouter {
       if (!result.ok) return result;
       if (signal?.aborted) return err("cancelled", "Image generation was cancelled.");
       const image = result.value;
+      const padding = typeof image?.data === "string" ? (image.data.endsWith("==") ? 2 : image.data.endsWith("=") ? 1 : 0) : 0;
+      const decodedLength = typeof image?.data === "string" && image.data.length % 4 === 0
+        ? (image.data.length / 4) * 3 - padding
+        : -1;
       if (!image || !["image/png", "image/jpeg", "image/webp"].includes(image.mimeType) ||
           typeof image.data !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data) ||
           !Number.isSafeInteger(image.byteLength) || image.byteLength <= 0 || image.byteLength > 3_200_000 ||
-          image.data.length > 4_300_000 || typeof image.model !== "string" ||
+          image.data.length > 4_300_000 || decodedLength !== image.byteLength ||
+          !validId(image.model) || image.model !== capabilities.modelId || typeof image.text !== "string" ||
           image.aspectRatio !== request.aspectRatio || image.imageSize !== request.imageSize) {
         return err("provider_unavailable", "The image provider returned invalid or oversized output.");
       }
