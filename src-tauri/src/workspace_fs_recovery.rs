@@ -271,6 +271,23 @@ mod tests {
     }
 
     #[test]
+    fn recovery_restores_an_interrupted_cross_folder_batch_move() {
+        let (base, root, access, journal) = fixture();
+        let destination_directory = root.join("Archive");
+        fs::create_dir(&destination_directory).expect("create destination directory");
+        let source = root.join("draft.txt");
+        let destination = destination_directory.join("draft.txt");
+        fs::write(&destination, "moved contents").expect("write moved file");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending move");
+        journal.recover(&access).expect("recover interrupted move");
+        assert_eq!(fs::read_to_string(&source).unwrap(), "moved contents");
+        assert!(!destination.exists());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
     fn recovery_restores_only_the_completed_prefix_of_a_partial_batch() {
         let (base, root, access, journal) = fixture();
         let first = root.join("one.txt");
