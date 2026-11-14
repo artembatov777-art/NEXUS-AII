@@ -53,7 +53,7 @@ describe("mobile interface preview interactions", () => {
     expect(container.textContent).toContain("Память NEXUS");
 
     act(() => buttonContaining("Настройки").click());
-    expect(container.textContent).toContain("SYSTEM CONTROL");
+    expect(container.textContent).toContain("УПРАВЛЕНИЕ СИСТЕМОЙ");
   });
 
   it("defaults to Russian and persists the selected English interface language", () => {
@@ -75,7 +75,7 @@ describe("mobile interface preview interactions", () => {
   it("opens secondary modules from the More section", () => {
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("База знаний").click());
-    expect(container.textContent).toContain("PROJECT KNOWLEDGE");
+    expect(container.textContent).toContain("БАЗА ЗНАНИЙ ПРОЕКТА");
 
     act(() => buttonContaining("Ещё").click());
     act(() => buttonContaining("Файловая система").click());
@@ -112,7 +112,7 @@ describe("mobile interface preview interactions", () => {
 
   it("opens every secondary module from the mobile module hub", () => {
     act(() => buttonContaining("Ещё").click());
-    act(() => buttonContaining("Tools & MCP").click());
+    act(() => buttonContaining("Инструменты и MCP").click());
     expect(container.textContent).toContain("TOOL GATEWAY");
 
     act(() => buttonContaining("Ещё").click());
