@@ -520,3 +520,24 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
     z-index: 79;
   }
 }
+
+
+.message-image-attachment {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 520px);
+  margin-top: 10px;
+}
+.message-image-attachment img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+}
+.message-image-attachment small {
+  color: var(--muted, #94a3b8);
+  font-size: 11px;
+}
