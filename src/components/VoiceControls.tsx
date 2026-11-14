@@ -294,7 +294,7 @@ export function VoiceControls({
       return;
     }
     if (!textToSpeak.trim()) {
-      setError("There is no assistant response to read yet.");
+      setError(t("There is no assistant response to read yet."));
       return;
     }
     speakText(textToSpeak, false);
@@ -341,10 +341,10 @@ export function VoiceControls({
 
   return <div className="voice-controls">
     <button type="button" className={conversationMode ? "voice-active" : ""} onClick={toggleConversation} disabled={isGenerating && !conversationMode} aria-label={conversationMode ? "End voice conversation" : "Start voice conversation"}>
-      {conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{conversationMode ? "End conversation" : "Voice conversation"}</span>
+      {conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{t(conversationMode ? "End conversation" : "Voice conversation")}</span>
     </button>
     <button type="button" className={listening ? "voice-active" : ""} onClick={toggleListening} disabled={conversationMode || isGenerating} aria-label={listening ? "Stop voice input" : "Start voice input"}>
-      {listening && !conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{listening && !conversationMode ? "Listening" : "Voice input"}</span>
+      {listening && !conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{t(listening && !conversationMode ? "Listening" : "Voice input")}</span>
     </button>
     <select aria-label={t("Speech recognition language")} value={language} disabled={listening || speaking} onChange={event => setLanguage(event.target.value)}>
       <option value="ru-RU">Русский</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="fi-FI">Suomi</option>
@@ -353,7 +353,7 @@ export function VoiceControls({
       <option value="">System voice</option>{voices.map(voice => <option key={voice.voiceURI} value={voice.name}>{voice.name}</option>)}
     </select>}
     <button type="button" className={speaking ? "voice-active" : ""} onClick={toggleSpeak} aria-label={speaking ? "Stop reading" : "Read latest response"}>
-      {speaking ? <VolumeX size={15}/> : <Volume2 size={15}/>}<span>{speaking ? "Stop reading" : "Read response"}</span>
+      {speaking ? <VolumeX size={15}/> : <Volume2 size={15}/>}<span>{t(speaking ? "Stop reading" : "Read response")}</span>
     </button>
     {interim && <small aria-live="polite">{interim}</small>}
     {error && <small role="status">{t(error)}</small>}
