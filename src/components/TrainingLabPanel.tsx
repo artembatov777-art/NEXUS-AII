@@ -225,9 +225,9 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
           ? { status: "completed", ...result.summary, failedSampleDetails: result.failures }
           : { status: "failed", error: result.error }
       ]));
-      setModelId(models.join(", "));
+      setModelId("multi-model-comparison");
       setMetrics(JSON.stringify({ datasetId: dataset.id, datasetVersion: dataset.version, comparisonModels: models, evaluationSplit: "test", expectedOutputsSentToProvider: false, models: modelMetrics }, null, 2));
-      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, modelsCompared: models.length, datasetTestSamples: testSamples.length, perModelConcurrency: 1 }, null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, models, modelsCompared: models.length, datasetTestSamples: testSamples.length, perModelConcurrency: 1 }, null, 2));
       const completed = results.filter(result => result.status === "fulfilled").length;
       setStatus(`Dataset comparison finished: ${completed}/${models.length} models completed on the identical held-out test split. Per-model quality, latency, and failures are in Metrics JSON.`);
       setError(results.filter(result => result.status === "rejected").map(result => `${result.model}: ${result.error}`).join(" | "));
