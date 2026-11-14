@@ -548,6 +548,7 @@ mod tests {
         assert_eq!(fs::read_to_string(root.join("archived-one.txt")).unwrap(), "first contents");
         assert_eq!(fs::read_to_string(root.join("archived-two.md")).unwrap(), "second contents");
         assert!(journal.recovery_status().expect("recovery status").is_none());
+        drop(journal);
         fs::remove_dir_all(base).expect("cleanup");
     }
 
