@@ -226,7 +226,10 @@ export class ToolGateway {
         const cancelled = context.signal.aborted || (!timedOut && controller.signal.aborted);
         const code = timedOut ? "timeout" : cancelled ? "cancelled" : "tool_failed";
         await this.writeAudit(tool.id, context, "failed", code);
-        return err(code, message, code === "timeout");
+        // A timed-out executor may ignore AbortSignal and finish an external side
+        // effect after this call returns. Its outcome is ambiguous, so never advertise
+        // the timeout as safe to retry; reconciliation must happen before a new run.
+        return err(code, message);
       } finally {
         clearTimeout(timeout);
         context.signal.removeEventListener("abort", onAbort);
