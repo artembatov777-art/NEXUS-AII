@@ -81,7 +81,8 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Read UTF-8 text/code files through the native host and hand selected file content to a guarded AI analysis draft (75 KB source cap and a 90 KB serialized chat-message cap; owner confirms before content enters the chat draft).
 - [x] Create and edit regular files inside one approved root; rename/move require explicit UI confirmation and are implemented for individual entries.
 - [x] Record owner-initiated file reads, content searches, create/edit/rename/move actions, and folder permission changes in the native audit history without storing private paths.
-- [ ] Add bulk organization and file previews.
+- [x] Add bounded raster-image previews (PNG/JPEG/GIF/WebP/BMP, signature-checked, 4 MB cap, read-only) and batch file moves with explicit confirmation, no-overwrite behavior, per-file audit events, and rollback attempts on partial failure; component and Rust tests cover success, conflicts, rollback, invalid image signatures, and size limits.
+- [ ] Extend bulk organization beyond batch moves (for example, safe multi-file rename and richer conflict/recovery workflows).
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
