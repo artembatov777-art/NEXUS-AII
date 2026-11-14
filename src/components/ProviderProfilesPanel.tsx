@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
 import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
@@ -130,9 +131,9 @@ export function ProviderProfilesPanel({
     }
   }
 
-  return <section className="provider-profiles" aria-label="Saved provider profiles">
+  return <section className="provider-profiles" aria-label={t("Saved provider profiles")}>
     <label>Saved provider profiles
-      <select aria-label="Saved provider profiles" value={selectedId} onChange={event => {
+      <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
         if (profile && isDirty && !window.confirm("Discard unsaved changes to the current provider profile and switch?")) return;
         setSelectedId(profile?.id ?? "");
@@ -146,7 +147,7 @@ export function ProviderProfilesPanel({
       </select>
     </label>
     <div className="modal-actions">
-      <input aria-label="New provider profile name" value={label} onChange={event => setLabel(event.target.value)} placeholder="Name this configuration"/>
+      <input aria-label={t("New provider profile name")} value={label} onChange={event => setLabel(event.target.value)} placeholder={t("Name this configuration")}/>
       <button className="secondary-btn" type="button" onClick={saveAsNew}>Save as profile</button>
       {selectedProfile && <button className="secondary-btn" type="button" onClick={updateSelected} disabled={!isDirty}>Update selected</button>}
       {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>Delete profile</button>}
