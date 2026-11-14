@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LanguageProvider } from "../lib/i18n";
 
 const { invokeMock, isTauriMock, openMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), isTauriMock: vi.fn(), openMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, isTauri: isTauriMock }));
@@ -17,12 +16,11 @@ const onClose = vi.fn();
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 async function renderPanel(onAnalyze?: (file: { name: string; path: string; content: string }) => void) {
-  await act(async () => { root.render(<LanguageProvider><FileSystemPanel onClose={onClose} onAnalyze={onAnalyze} /></LanguageProvider>); });
+  await act(async () => { root.render(<FileSystemPanel onClose={onClose} onAnalyze={onAnalyze} />); });
 }
 describe("FileSystemPanel native workspace access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.localStorage.setItem("nexus-au:language:v1", "en");
     isTauriMock.mockReturnValue(false);
     invokeMock.mockReset();
     openMock.mockReset();
