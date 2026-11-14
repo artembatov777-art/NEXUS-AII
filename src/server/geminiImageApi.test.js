@@ -101,6 +101,22 @@ describe("POST /api/gemini-image", () => {
     expect(res.json()).toEqual({ error: "Gemini returned an invalid image payload." });
   });
 
+  it("aborts the upstream request when the browser client disconnects", async () => {
+    let upstreamSignal;
+    vi.mocked(fetch).mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      upstreamSignal = options?.signal as AbortSignal;
+      upstreamSignal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    const req = request({ body: { prompt: "A landscape", allowRemoteProcessing: true } });
+    const res = response();
+    const pending = handler(req, res);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    req.emit("aborted");
+    await pending;
+    expect(upstreamSignal?.aborted).toBe(true);
+    expect(res.body).toBe("");
+  });
+
   it("does not expose upstream error bodies or credentials", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("private upstream details", { status: 500 }));
     const res = response();
