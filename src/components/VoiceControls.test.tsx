@@ -104,6 +104,6 @@ describe("VoiceControls", () => {
     act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
     const button = container.querySelector('button[aria-label="Start voice input"]');
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(onTranscript).toHaveBeenCalledWith("hello from voice");
+    expect(onTranscript).toHaveBeenCalledWith("hello from voice", false);
   });
 });
