@@ -134,6 +134,64 @@ describe("VoiceControls", () => {
     expect(FakeRecognition.latest).not.toBe(firstRecognition);
   });
 
+  it("stops recognition and speech when voice conversation is ended", () => {
+    class FakeRecognition {
+      static latest: FakeRecognition | null = null;
+      abort = vi.fn(() => this.onend?.());
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { FakeRecognition.latest = this; }
+      start() { this.onstart?.(); }
+      stop() { this.onend?.(); }
+    }
+    const speech = Object.assign(new EventTarget(), { getVoices: () => [], speak: vi.fn(), cancel: vi.fn() });
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
+    Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: class { constructor(public text: string) {} } });
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
+    const start = container.querySelector('button[aria-label="Start voice conversation"]');
+    act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const active = FakeRecognition.latest;
+    expect(active).not.toBeNull();
+    const stop = container.querySelector('button[aria-label="End voice conversation"]');
+    act(() => stop?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(active?.abort).toHaveBeenCalledTimes(1);
+    expect(speech.cancel).toHaveBeenCalled();
+    expect(container.textContent).not.toContain("End conversation");
+  });
+
+  it("ends voice conversation and reports microphone permission denial", () => {
+    class FakeRecognition {
+      static latest: FakeRecognition | null = null;
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { FakeRecognition.latest = this; }
+      start() { this.onstart?.(); }
+      stop() { this.onend?.(); }
+      abort() { this.onend?.(); }
+    }
+    const speech = Object.assign(new EventTarget(), { getVoices: () => [], speak: vi.fn(), cancel: vi.fn() });
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: speech });
+    Object.defineProperty(globalThis, "SpeechSynthesisUtterance", { configurable: true, value: class { constructor(public text: string) {} } });
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
+    const start = container.querySelector('button[aria-label="Start voice conversation"]');
+    act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    act(() => FakeRecognition.latest?.onerror?.({ error: "not-allowed" }));
+    expect(container.textContent).toContain("Microphone permission was denied");
+    expect(container.textContent).not.toContain("End conversation");
+  });
+
   it("passes final recognized speech to the chat composer callback", () => {
     class FakeRecognition {
       lang = "";
