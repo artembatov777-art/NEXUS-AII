@@ -1,5 +1,5 @@
 use crate::workspace_fs::WorkspaceAccess;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,9 +12,9 @@ const MAX_JOURNALED_ENTRIES: usize = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RenameEntry {
-    source: PathBuf,
-    destination: PathBuf,
+pub(crate) struct RenameEntry {
+    pub(crate) source: PathBuf,
+    pub(crate) destination: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ impl WorkspaceOperationJournal {
         })
     }
 
-    fn begin(&self, entries: &[RenameEntry]) -> Result<String, String> {
+    pub(crate) fn begin(&self, entries: &[RenameEntry]) -> Result<String, String> {
         if entries.is_empty() || entries.len() > MAX_JOURNALED_ENTRIES {
             return Err("The file operation journal received an invalid batch.".into());
         }
@@ -67,7 +67,7 @@ impl WorkspaceOperationJournal {
         Ok(operation_id)
     }
 
-    fn complete(&self, operation_id: &str) -> Result<(), String> {
+    pub(crate) fn complete(&self, operation_id: &str) -> Result<(), String> {
         let connection = self.connection.lock()
             .map_err(|_| "The file operation journal is unavailable.")?;
         connection.execute(
@@ -77,7 +77,7 @@ impl WorkspaceOperationJournal {
         Ok(())
     }
 
-    fn ensure_ready(&self) -> Result<(), String> {
+    pub(crate) fn ensure_ready(&self) -> Result<(), String> {
         let error = self.recovery_error.lock()
             .map_err(|_| "The file recovery status is unavailable.")?;
         if let Some(message) = error.as_ref() {
