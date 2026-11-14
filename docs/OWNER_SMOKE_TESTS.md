@@ -53,6 +53,7 @@ Use a disposable approved folder.
 
 - [ ] Create, revise, search, and delete a test memory.
 - [ ] Import a sample document and confirm source/page provenance in retrieval.
+- [ ] Batch-import mixed TXT/Markdown, CSV, JSON/JSONL, YAML/XML, source/configuration, PDF, and DOCX files; confirm per-file failures are reported without discarding successful imports.
 - [ ] Confirm project-scoped knowledge does not leak into another project.
 - [ ] Run an agent task with a harmless read-only tool; approve one call and deny another.
 - [ ] Pause, resume, and cancel a run; inspect its audit trail.
