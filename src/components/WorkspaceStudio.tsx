@@ -62,7 +62,7 @@ export function WorkspaceStudio(props: Props) {
   const [nodeLabel, setNodeLabel] = useState("");
   const [workflowName, setWorkflowName] = useState("");
   const [workflowSteps, setWorkflowSteps] = useState("");
-  const [activeTab, setActiveTab] = useState<"overview" | "inbox" | "graph" | "workflows">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "inbox" | "graph" | "workflows" | "analytics" | "guardian">("overview");
   const [storageWarning, setStorageWarning] = useState("");
   const [now] = useState(() => Date.now());
 
@@ -122,7 +122,8 @@ export function WorkspaceStudio(props: Props) {
     else if (id === "agents") props.onOpenAgents();
     else if (id === "files") props.onOpenFiles();
     else if (id === "voice") props.onOpenChat();
-    else if (id === "guardian") props.onOpenTools();
+    else if (id === "analytics") setActiveTab("analytics");
+    else if (id === "guardian") setActiveTab("guardian");
     else setActiveTab("overview");
   }
 
@@ -137,6 +138,8 @@ export function WorkspaceStudio(props: Props) {
         <button className={activeTab === "inbox" ? "active" : ""} onClick={() => setActiveTab("inbox")}>{t("Inbox")} <span>{inbox.filter(item => !item.done).length}</span></button>
         <button className={activeTab === "graph" ? "active" : ""} onClick={() => setActiveTab("graph")}>{t("Knowledge Graph")}</button>
         <button className={activeTab === "workflows" ? "active" : ""} onClick={() => setActiveTab("workflows")}>{t("Workflows")}</button>
+        <button className={activeTab === "analytics" ? "active" : ""} onClick={() => setActiveTab("analytics")}>{t("Analytics")}</button>
+        <button className={activeTab === "guardian" ? "active" : ""} onClick={() => setActiveTab("guardian")}>{t("Guardian")}</button>
       </nav>
       {storageWarning && <p className="studio-warning" role="status">{storageWarning}</p>}
       {activeTab === "overview" && <>
@@ -156,6 +159,28 @@ export function WorkspaceStudio(props: Props) {
           </button>; })}
         </section>
       </>}
+      {activeTab === "analytics" && <section className="studio-content">
+        <div className="studio-section-kicker"><Activity size={14}/> {t("WORKSPACE TELEMETRY")}</div><h3>{t("Workspace Analytics")}</h3>
+        <div className="studio-briefing-grid">
+          <article><strong>{analytics.total}</strong><span>{t("Saved conversations")}</span></article>
+          <article><strong>{analytics.messages}</strong><span>{t("Messages across history")}</span></article>
+          <article><strong>{analytics.recent}</strong><span>{t("Conversations updated in 7 days")}</span></article>
+          <article><strong>{analytics.projects}</strong><span>{t("Projects")}</span></article>
+          <article><strong>{analytics.projectConversations}</strong><span>{t("Project-linked conversations")}</span></article>
+          <article><strong>{inbox.length}</strong><span>{t("Captured inbox items")}</span></article>
+        </div>
+        <p className="studio-note">{t("Metrics are calculated from locally saved workspace records; no activity is sent to an analytics service.")}</p>
+      </section>}
+      {activeTab === "guardian" && <section className="studio-content">
+        <div className="studio-section-kicker"><ShieldCheck size={14}/> {t("SYSTEM HEALTH CHECK")}</div><h3>{t("System Guardian")}</h3>
+        <div className="studio-health-list">
+          <article data-ready={props.workspaceReady}><span/><div><strong>{t("Workspace data")}</strong><small>{props.workspaceReady ? t("Conversation storage is loaded.") : t("Workspace storage is still loading.")}</small></div><b>{props.workspaceReady ? t("READY") : t("LOADING")}</b></article>
+          <article data-ready={props.providerConfigured}><span/><div><strong>{t("AI provider configuration")}</strong><small>{props.providerVerified ? t("A generation test passed in this session.") : props.providerConfigured ? t("A provider is configured but not verified.") : t("No provider is configured.")}</small></div><b>{props.providerVerified ? t("VERIFIED") : props.providerConfigured ? t("UNVERIFIED") : t("MISSING")}</b></article>
+          <article data-ready={props.nativeRuntime}><span/><div><strong>{t("Native integrations")}</strong><small>{props.nativeRuntime ? t("Desktop runtime detected; device permissions still apply.") : t("Browser preview cannot access native file and credential services.")}</small></div><b>{props.nativeRuntime ? t("DESKTOP") : t("PREVIEW")}</b></article>
+        </div>
+        <button className="secondary-btn" onClick={props.onOpenTools}>{t("Inspect connected tools and permissions")}</button>
+        <p className="studio-note">{t("Guardian reports only states the application can observe. It does not claim that an untested provider or external service is healthy.")}</p>
+      </section>}
       {activeTab === "inbox" && <section className="studio-content">
         <div className="studio-section-kicker"><Inbox size={14}/> {t("CAPTURE CENTER")}</div><h3>{t("Universal Inbox")}</h3>
         <div className="studio-form"><input aria-label={t("Inbox title")} value={title} onChange={event => setTitle(event.target.value)} placeholder={t("Short title")}/><textarea aria-label={t("Inbox note")} value={body} onChange={event => setBody(event.target.value)} placeholder={t("Capture an idea, link or note…")} rows={3}/><button className="primary-btn" onClick={addInboxItem} disabled={!title.trim() && !body.trim()}><Plus size={15}/> {t("Save to inbox")}</button></div>
@@ -169,6 +194,7 @@ export function WorkspaceStudio(props: Props) {
         <div className="studio-graph">
           {[...projects.map(item => ({ id: `project:${item.id}`, label: item.name, kind: "project" as const })), ...conversations.slice(0, 12).map(item => ({ id: `conversation:${item.id}`, label: item.title, kind: "conversation" as const })), ...nodes].map(node => <article key={node.id} data-kind={node.kind}><span/><strong>{node.label}</strong><small>{t(node.kind)}</small>{node.kind === "idea" && <button onClick={() => setNodes(current => current.filter(item => item.id !== node.id))} aria-label={t("Remove node")}><X size={13}/></button>}</article>)}
         </div>
+        <button className="secondary-btn" onClick={props.onOpenKnowledge}>{t("Open full knowledge base")}</button>
         <p className="studio-note">{t("Workspace context is read-only here; personal idea nodes are saved locally on this device.")}</p>
       </section>}
       {activeTab === "workflows" && <section className="studio-content">

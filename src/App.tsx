@@ -819,7 +819,6 @@ export default function App() {
       onToggleFocus={() => setFocusMode(value => !value)}
       onOpenAgents={() => openWorkspacePanel("agents")}
       onOpenFiles={() => openWorkspacePanel("files")}
-      onOpenKnowledge={() => openWorkspacePanel("knowledge")}
       onOpenTools={() => openWorkspacePanel("tools")}
       onOpenChat={() => openWorkspacePanel("chat")}
     /></Suspense>}

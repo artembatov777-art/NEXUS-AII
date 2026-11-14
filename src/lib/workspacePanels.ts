@@ -9,8 +9,7 @@ export type WorkspacePanel =
   | "knowledge"
   | "training"
   | "files"
-  | "tools"
-  | "studio";
+  | "tools";
 
 export interface WorkspacePanelState {
   commandPaletteOpen: boolean;
@@ -23,7 +22,6 @@ export interface WorkspacePanelState {
   trainingLabOpen: boolean;
   fileSystemOpen: boolean;
   toolsOpen: boolean;
-  studioOpen: boolean;
 }
 
 const closed: WorkspacePanelState = {
@@ -36,8 +34,7 @@ const closed: WorkspacePanelState = {
   knowledgeOpen: false,
   trainingLabOpen: false,
   fileSystemOpen: false,
-  toolsOpen: false,
-  studioOpen: false
+  toolsOpen: false
 };
 
 /** Resolve the single active workspace surface so modal layers cannot stack. */
@@ -53,7 +50,6 @@ export function getWorkspacePanelState(panel: WorkspacePanel): WorkspacePanelSta
     case "training": return { ...closed, trainingLabOpen: true };
     case "files": return { ...closed, fileSystemOpen: true };
     case "tools": return { ...closed, toolsOpen: true };
-    case "studio": return { ...closed, studioOpen: true };
     case "chat": return { ...closed };
   }
 }
