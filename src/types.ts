@@ -6,12 +6,21 @@ export interface ChatSourceReference {
   section?: string;
   chunkId: string;
 }
+export interface ChatImageAttachment {
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  data: string;
+  model: string;
+  aspectRatio: string;
+  imageSize: "1K" | "2K";
+  byteLength: number;
+}
 export interface ChatMessage {
   id: string;
   role: Role;
   content: string;
   createdAt: number;
   sourceReferences?: ChatSourceReference[];
+  imageAttachment?: ChatImageAttachment;
 }
 export interface Conversation {
   id: string;
