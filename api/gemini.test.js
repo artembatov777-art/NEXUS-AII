@@ -111,7 +111,7 @@ describe("POST /api/gemini", () => {
       usage: { inputTokens: 8, outputTokens: 2 },
       model: "gemini-3.1-flash-lite"
     });
-    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
     expect(String(url)).not.toContain("server-side-google-key");
     expect(options?.headers).toMatchObject({ "x-goog-api-key": "server-side-google-key" });
     expect(options?.body).toContain('"role":"user"');
