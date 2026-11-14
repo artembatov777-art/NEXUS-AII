@@ -173,6 +173,6 @@ export function VoiceControls({ onTranscript, textToSpeak }: { onTranscript: (te
     </button>
     {interim && <small aria-live="polite">{interim}</small>}
     {error && <small role="status">{error}</small>}
-    <small className="voice-note">Voice services are provided by the browser or desktop WebView; language and offline support depend on the host system.</small>
+    <small className="voice-note">Speech recognition may use an online service provided by the browser or desktop WebView. Do not dictate sensitive information unless you trust that service; offline support depends on the host system.</small>
   </div>;
 }
