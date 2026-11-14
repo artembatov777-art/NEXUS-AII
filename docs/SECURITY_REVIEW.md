@@ -21,6 +21,7 @@
 - provider_vault_status distinguishes available, missing, and unavailable. The UI explains vault failure and does not fall back to plaintext storage.
 - Provider URL validation requires HTTPS except for loopback HTTP, rejects embedded credentials/query/fragment, disables redirects, validates message roles and request size, and caps response bodies at 2 MB.
 - Provider keys are redacted from provider error excerpts.
+- The provider-neutral application facade treats a failed generation stream as non-retryable because the provider may already have accepted and billed the request. Any partial assistant text already streamed is persisted before the error or cancellation is surfaced, preventing visible work from disappearing on reload.
 - Provider keys are also redacted from successful non-streaming model output and streamed text deltas. The streaming redactor retains a bounded suffix so a credential split across separate SSE content events is not emitted in fragments; regression tests cover split-delta and non-streaming cases.
 - Legacy shared credential handles (`default` and `ollama`) remain supported. New saved cloud profiles receive unique, fixed-format OS-vault handles; up to 16 endpoint profiles can be stored, with one active endpoint selected at a time. Automated key rotation and credential recovery UX are not implemented.
 
