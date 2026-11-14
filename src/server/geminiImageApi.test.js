@@ -104,7 +104,7 @@ describe("POST /api/gemini-image", () => {
   it("does not expose upstream error bodies or credentials", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("private upstream details", { status: 500 }));
     const res = response();
-    await handler(request({ body: { prompt: "A landscape" } }), res);
+    await handler(request({ body: { prompt: "A landscape", allowRemoteProcessing: true } }), res);
     expect(res.statusCode).toBe(502);
     expect(res.body).not.toContain("private upstream details");
     expect(res.body).not.toContain("server-side-google-key");
