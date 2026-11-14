@@ -5,6 +5,7 @@ import { WorkspaceTrainingLabRepository } from "../lib/trainingLabRepository";
 import { isTauri } from "@tauri-apps/api/core";
 import { sendMessage } from "../lib/ai";
 import { runDatasetEvaluation as executeDatasetEvaluation } from "../lib/datasetEvaluationRunner";
+import { runDatasetModelComparison } from "../lib/datasetModelComparison";
 import { runModelComparison as executeModelComparison, summarizeModelComparison } from "../lib/modelComparison";
 import { parseTrainingDatasetFile, serializeTrainingDatasetSamples } from "../lib/trainingDatasetFile";
 import type { ProviderSettings } from "../types";
@@ -168,6 +169,66 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError(evaluation.failures.length ? evaluation.failures.map(item => `${item.sampleId}: ${item.message}`).join(" | ") : "");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Dataset evaluation failed.");
+      setStatus("");
+    } finally {
+      if (liveTestAbort.current === controller) liveTestAbort.current = null;
+      setLiveTestRunning(false);
+      setWorking(false);
+    }
+  }
+
+  async function runDatasetModelComparisonBench() {
+    if (!isTauri()) {
+      setError("Live dataset model comparison is available only in the native desktop app.");
+      return;
+    }
+    const models = [...new Set(comparisonModels.split(/[\\n,]+/).map(item => item.trim()).filter(Boolean))];
+    if (models.length < 2 || models.length > 4) {
+      setError("Enter between two and four distinct model IDs before comparing the dataset.");
+      return;
+    }
+    const dataset = selectedDatasetRecord;
+    const testSamples = dataset?.samples?.filter(sample => sample.split === "test") ?? [];
+    if (!dataset || testSamples.length === 0 || testSamples.length > 1_000) {
+      setError("Select a saved dataset with between 1 and 1,000 held-out test samples.");
+      return;
+    }
+    if (requiresExplicitDatasetTransferConfirmation(dataset) &&
+        !window.confirm(`This owner-approved private dataset will be sent to each selected provider model (declared route: ${provider.inferenceLocation}). A local or loopback endpoint may still forward data remotely. Expected outputs stay local. Continue?`)) return;
+
+    liveTestAbort.current?.abort();
+    const controller = new AbortController();
+    liveTestAbort.current = controller;
+    setLiveTestRunning(true);
+    setWorking(true);
+    setError("");
+    setStatus(`Comparing ${models.length} models on the same ${testSamples.length}-sample held-out test split. Up to one request per model runs concurrently.`);
+    try {
+      const results = await runDatasetModelComparison(models, testSamples, async (model, sample, signal) =>
+        sendMessage({ ...provider, model }, [{
+          id: crypto.randomUUID(),
+          role: "user",
+          content: sample.input,
+          createdAt: Date.now()
+        }], "", undefined, signal, undefined, { temperature: 0, maxOutputTokens: 1024 }),
+      {
+        signal: controller.signal,
+        onProgress: (model, completed, total) => setStatus(`Dataset comparison · ${model}: ${completed}/${total} test cases completed.`)
+      });
+      const modelMetrics = Object.fromEntries(results.map(result => [
+        result.model,
+        result.status === "fulfilled"
+          ? { status: "completed", ...result.summary, failedSampleDetails: result.failures }
+          : { status: "failed", error: result.error }
+      ]));
+      setModelId(models.join(", "));
+      setMetrics(JSON.stringify({ datasetId: dataset.id, datasetVersion: dataset.version, comparisonModels: models, evaluationSplit: "test", expectedOutputsSentToProvider: false, models: modelMetrics }, null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, modelsCompared: models.length, datasetTestSamples: testSamples.length, perModelConcurrency: 1 }, null, 2));
+      const completed = results.filter(result => result.status === "fulfilled").length;
+      setStatus(`Dataset comparison finished: ${completed}/${models.length} models completed on the identical held-out test split. Per-model quality, latency, and failures are in Metrics JSON.`);
+      setError(results.filter(result => result.status === "rejected").map(result => `${result.model}: ${result.error}`).join(" | "));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Dataset model comparison failed.");
       setStatus("");
     } finally {
       if (liveTestAbort.current === controller) liveTestAbort.current = null;
@@ -376,6 +437,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <label>Model comparison IDs<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
         <small id="training-model-hint">{availableModels.length ? `Discovered models: ${availableModels.length}. Enter 2 to 4 IDs from the provider catalog.` : "Load the provider model catalog in Settings, then enter 2 to 4 model IDs."}</small>
         <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>Compare selected models</button>
+        <button className="secondary-btn" onClick={() => void runDatasetModelComparisonBench()} disabled={working || !isTauri() || !selectedDatasetRecord?.samples?.some(sample => sample.split === "test")}>Compare models on held-out dataset</button>
         {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>}
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
