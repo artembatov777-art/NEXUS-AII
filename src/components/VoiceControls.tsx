@@ -347,10 +347,10 @@ export function VoiceControls({
       {listening && !conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{t(listening && !conversationMode ? "Listening" : "Voice input")}</span>
     </button>
     <select aria-label={t("Speech recognition language")} value={language} disabled={listening || speaking} onChange={event => setLanguage(event.target.value)}>
-      <option value="ru-RU">Русский</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="fi-FI">Suomi</option>
+      <option value="ru-RU">Русский</option><option value="en-US">{t("English (US)")}</option><option value="en-GB">{t("English (UK)")}</option><option value="fi-FI">{t("Suomi")}</option>
     </select>
     {voices.length > 0 && <select aria-label={t("Text-to-speech voice")} value={voiceName} disabled={speaking} onChange={event => setVoiceName(event.target.value)}>
-      <option value="">System voice</option>{voices.map(voice => <option key={voice.voiceURI} value={voice.name}>{voice.name}</option>)}
+      <option value="">{t("System voice")}</option>{voices.map(voice => <option key={voice.voiceURI} value={voice.name}>{voice.name}</option>)}
     </select>}
     <button type="button" className={speaking ? "voice-active" : ""} onClick={toggleSpeak} aria-label={speaking ? "Stop reading" : "Read latest response"}>
       {speaking ? <VolumeX size={15}/> : <Volume2 size={15}/>}<span>{t(speaking ? "Stop reading" : "Read response")}</span>
