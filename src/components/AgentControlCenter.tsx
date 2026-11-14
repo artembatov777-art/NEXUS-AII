@@ -230,7 +230,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       addFeed("Retrieving relevant saved profile and project context…");
       const contextWarnings: string[] = [];
       const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
-      const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.category}; source: ${item.source.label}] ${item.content}`) : [];
+      const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`) : [];
       if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
       if (projectId) {
         const [knowledge, projectMemories] = await Promise.all([
@@ -240,7 +240,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
         else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
         if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
-        else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.category}; source: ${item.source.label}] ${item.content}`));
+        else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`));
       }
       if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
       const referenceContext = contextParts.join("\n\n").slice(0, 12_000);
