@@ -618,6 +618,14 @@ mod payload_validation_tests {
     }
 
     #[test]
+    fn provider_secret_redaction_covers_non_streaming_model_output() {
+        assert_eq!(
+            redact_provider_secret("The provider echoed sk-private-token in its answer.", Some("sk-private-token")),
+            "The provider echoed [redacted] in its answer."
+        );
+    }
+
+    #[test]
     fn unauthenticated_provider_credentials_are_limited_to_loopback() {
         assert_eq!(load_provider_credential("none", true).unwrap(), None);
         assert!(load_provider_credential("none", false).is_err());
@@ -1730,8 +1738,9 @@ async fn send_chat(
     }
     let data: ChatCompletionResponse = serde_json::from_slice(&body)
         .map_err(|e| format!("Could not parse provider response: {e}"))?;
-    data.choices.into_iter().next().map(|choice| choice.message.content)
-        .ok_or_else(|| "Provider returned an empty response.".into())
+    let content = data.choices.into_iter().next().map(|choice| choice.message.content)
+        .ok_or_else(|| "Provider returned an empty response.".to_string())?;
+    Ok(redact_provider_secret(&content, api_key.as_deref()))
 }
 
 
