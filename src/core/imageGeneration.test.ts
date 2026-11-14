@@ -81,6 +81,16 @@ describe("ImageGenerationRouter", () => {
     expect(cancelled).toMatchObject({ ok: false, error: { code: "cancelled" } });
   });
 
+  it("rejects noncanonical base64 image payloads", async () => {
+    const router = new ImageGenerationRouter();
+    const malformed = { ...output, data: "=iVBORw0KGgo", byteLength: 8 };
+    router.register(provider(async () => ok(malformed)));
+    const result = await router.generate("test-image", {
+      prompt: "A lake", aspectRatio: "1:1", imageSize: "1K", allowRemoteProcessing: true
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "provider_unavailable" } });
+  });
+
   it("returns provider failures without retrying", async () => {
     const router = new ImageGenerationRouter();
     router.register(provider(vi.fn(async () => err("provider_unavailable", "Offline."))));
