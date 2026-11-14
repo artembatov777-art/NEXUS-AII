@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -581,7 +582,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     <section className="file-workspace" role="dialog" aria-modal="true" aria-labelledby="file-workspace-title">
       <header className="file-workspace-header">
         <div className="file-workspace-heading"><div className="file-workspace-mark"><HardDrive size={19}/></div><div><div className="eyebrow">NATIVE WORKSPACE MODULE</div><h2 id="file-workspace-title">File system</h2><p>Browse, search, create, edit, rename, and move files in approved folders</p></div></div>
-        <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={closeWorkspace} aria-label="Close file system"><X size={18}/></button></div>
+        <div className="file-workspace-header-actions"><span className="file-preview-state"><i/> {isTauri() ? "NATIVE ACCESS" : "DESKTOP REQUIRED"}</span><button className="icon-btn" onClick={closeWorkspace} aria-label={t("Close file system")}><X size={18}/></button></div>
       </header>
       {!isTauri() ? <div className="file-workspace-empty"><LockKeyhole size={28}/><h3>Native desktop access required</h3><p>Windows folders are accessed by the Tauri desktop app, not the browser preview.</p></div> : <>
         <div className="file-workspace-toolbar">
@@ -629,7 +630,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>
             <div className="file-table-head"><span>NAME</span><span>SIZE</span><span>MODIFIED</span></div>
             {selectedPaths.length > 0 && <div className="file-bulk-actions"><span>{selectedPaths.length} of 100 files selected</span><input aria-label="Bulk rename prefix" value={renamePrefix} onChange={event => setRenamePrefix(event.target.value)} placeholder="Prefix"/><input aria-label="Bulk rename suffix" value={renameSuffix} onChange={event => setRenameSuffix(event.target.value)} placeholder="Suffix"/><button className="secondary-btn" onClick={() => void bulkRenameSelected()} disabled={busy || Boolean(recoveryStatus) || (!renamePrefix && !renameSuffix)}>Rename selected</button><button className="secondary-btn" onClick={() => void bulkMoveSelected()} disabled={busy || Boolean(recoveryStatus)}>Move selected</button><button className="secondary-btn" onClick={() => setSelectedPaths([])} disabled={busy}>Clear</button></div>}
-            <div className="file-list" role="list" aria-label="Workspace files">
+            <div className="file-list" role="list" aria-label={t("Workspace files")}>
               {contentSearchMode && searchActive ? contentMatches.map((match, index) => {
                 const name = match.path.split(/[\\/]/).pop() ?? match.path;
                 return <button key={`${match.path}:${match.lineNumber}:${index}`} className={selectedPath === match.path ? "selected" : ""} onClick={() => void openEntry({ name, path: match.path, kind: "file", sizeBytes: 0, modifiedAtMs: null })}>
@@ -643,9 +644,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           <aside className="file-preview-pane">
             <div className="file-pane-label">INSPECTOR</div>
             {selectedPath ? <><div className="file-preview-icon"><SelectedIcon size={24}/></div><h3>{selectedPath.split(/[\\/]/).pop()}</h3><p>{selectedPath}</p><div className="file-entry-actions">
-              <label>Rename file<input aria-label="New file name" value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
+              <label>Rename file<input aria-label={t("New file name")} value={renameName} onChange={event => setRenameName(event.target.value)} /></label>
               <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || Boolean(recoveryStatus) || !renameName.trim()}>Rename</button>
-              <label>Move to approved folder<div className="file-move-input"><input aria-label="Move destination folder" value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder="Destination folder path"/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
+              <label>Move to approved folder<div className="file-move-input"><input aria-label={t("Move destination folder")} value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder={t("Destination folder path")}/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
               <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || Boolean(recoveryStatus) || !moveDestination.trim()}>Move file</button>
             </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">IMAGE PREVIEW · READ ONLY · MAX 4 MB</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</> : <span className="file-image-readonly">Image previews are read-only. Original file is unchanged.</span>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
