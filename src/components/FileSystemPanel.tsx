@@ -138,6 +138,30 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     }
   }
 
+  async function retryRecovery() {
+    setBusy(true);
+    setError("");
+    try {
+      await invoke("retry_workspace_operation_recovery");
+      const status = await invoke<string | null>("get_workspace_operation_recovery_status");
+      setRecoveryStatus(status);
+      if (status) {
+        setError(status);
+      } else {
+        setNotice("Filesystem recovery completed. Move and rename operations are available again.");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      try {
+        setRecoveryStatus(await invoke<string | null>("get_workspace_operation_recovery_status"));
+      } catch {
+        setRecoveryStatus("NEXUS could not verify whether filesystem recovery completed.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => { void loadRoots(); }, []);
 
   async function searchFiles() {
@@ -534,7 +558,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
           {roots.map(root => <div className="file-root-row" key={root}><button onClick={() => { if (confirmDiscardDraft("open another approved folder")) void refresh(root, true); }}><Folder size={14}/><span>{root}</span></button><button className="file-revoke" onClick={() => void revokeDirectory(root)} disabled={busy || Boolean(recoveryStatus)}>Revoke</button></div>)}
           {!roots.length && <p>No directories have been approved. Add one above. Access is limited to the exact folders you approve.</p>}
         </div>
-        {recoveryStatus && <div className="error-banner" role="alert">Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery succeeds.</div>}
+        {recoveryStatus && <div className="error-banner" role="alert"><span>Filesystem recovery required: {recoveryStatus} Do not move or rename files until recovery succeeds. If a path conflict blocked recovery, resolve it in your file manager and retry.</span><button className="secondary-btn" onClick={() => void retryRecovery()} disabled={busy}>Retry recovery</button></div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>Reload latest version</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{notice}</div>}
         <div className="file-workspace-body">
