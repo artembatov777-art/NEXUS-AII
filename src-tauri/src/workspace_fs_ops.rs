@@ -36,18 +36,24 @@ fn encode_base64(bytes: &[u8]) -> String {
 }
 
 fn read_image_preview(access: &WorkspaceAccess, requested_path: &Path) -> Result<serde_json::Value, String> {
-    let link_metadata = fs::symlink_metadata(requested_path)
+    let parent = requested_path.parent()
+        .ok_or_else(|| "The selected image must be inside an approved directory.".to_string())?;
+    let root = access.allowed_root_for(parent)?;
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Could not resolve the selected image directory: {error}"))?;
+    if !canonical_parent.starts_with(&root) {
+        return Err("The selected image is outside an approved directory.".into());
+    }
+    let name = requested_path.file_name()
+        .ok_or_else(|| "The selected image has no valid name.".to_string())?;
+    // Keep the final component unresolved until it is opened with no-follow flags.
+    let target = canonical_parent.join(name);
+    let link_metadata = fs::symlink_metadata(&target)
         .map_err(|error| format!("Could not inspect the selected image: {error}"))?;
     if link_metadata.file_type().is_symlink() || !link_metadata.is_file() {
         return Err("Image preview is available only for regular files, not symbolic links or special entries.".into());
     }
-    let root = access.allowed_root_for(requested_path)?;
-    let canonical = fs::canonicalize(requested_path)
-        .map_err(|error| format!("Could not resolve the selected image: {error}"))?;
-    if !canonical.starts_with(&root) {
-        return Err("The selected image is outside an approved directory.".into());
-    }
-    let file = open_regular_file_readonly(&canonical)?;
+    let file = open_regular_file_readonly(&target)?;
     let metadata = file.metadata()
         .map_err(|error| format!("Could not inspect the opened image: {error}"))?;
     if metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
@@ -60,7 +66,7 @@ fn read_image_preview(access: &WorkspaceAccess, requested_path: &Path) -> Result
     if bytes.len() as u64 > MAX_IMAGE_PREVIEW_BYTES {
         return Err("Image preview supports files up to 4 MB.".into());
     }
-    let media_type = image_media_type(&canonical, &bytes)
+    let media_type = image_media_type(&target, &bytes)
         .ok_or_else(|| "The file extension and image signature do not match a supported PNG, JPEG, GIF, WebP, or BMP image.".to_string())?;
     Ok(serde_json::json!({
         "dataUrl": format!("data:{media_type};base64,{}", encode_base64(&bytes)),

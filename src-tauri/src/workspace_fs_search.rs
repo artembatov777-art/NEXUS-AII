@@ -94,11 +94,18 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
             scanned_files += 1;
             if metadata.len() > MAX_FILE_BYTES { continue; }
 
-            let mut bytes = Vec::with_capacity(metadata.len() as usize);
-            let file = match open_regular_file_readonly(&canonical) {
+            // Open the original directory entry, not its canonicalized target:
+            // a final-component symlink substituted after the preflight must fail.
+            let file = match open_regular_file_readonly(&entry_path) {
                 Ok(value) => value,
                 Err(_) => continue,
             };
+            let opened_metadata = match file.metadata() {
+                Ok(value) if value.is_file() => value,
+                _ => continue,
+            };
+            if opened_metadata.len() > MAX_FILE_BYTES { continue; }
+            let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
             if file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).is_err() || bytes.len() as u64 > MAX_FILE_BYTES {
                 continue;
             }

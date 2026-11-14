@@ -57,6 +57,22 @@ fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err("NEXUS can edit regular files only, not links or special entries.".into());
     }
+    // Editing a hard-linked inode could modify data reachable outside the
+    // approved workspace. Refuse ambiguous aliases rather than widening scope.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.nlink() > 1 {
+            return Err("NEXUS will not edit a hard-linked file because another path may expose the same data.".into());
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.number_of_links() > 1 {
+            return Err("NEXUS will not edit a hard-linked file because another path may expose the same data.".into());
+        }
+    }
     Ok(file)
 }
 
@@ -289,14 +305,25 @@ pub fn search_workspace_entries(path: String, query: String, access: State<'_, W
     search_workspace_entries_in(&root, Path::new(&path), &query)
 }
 
-#[tauri::command]
-pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> Result<String, String> {
-    let root = access.allowed_root_for(Path::new(&path))?;
-    let canonical = fs::canonicalize(&path).map_err(|e| format!("Could not open file: {e}"))?;
-    if !canonical.starts_with(&root) {
+fn read_workspace_file_inner(path: &str, access: &WorkspaceAccess) -> Result<String, String> {
+    if path.trim().is_empty() || path.len() > 4096 {
+        return Err("The selected file path is invalid.".into());
+    }
+    let requested = Path::new(path);
+    let parent = requested.parent()
+        .ok_or_else(|| "The file must be inside an approved directory.".to_string())?;
+    let root = access.allowed_root_for(parent)?;
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Could not resolve the selected file's directory: {error}"))?;
+    if !canonical_parent.starts_with(&root) {
         return Err("The requested file is outside the allowed directory.".into());
     }
-    let file = open_regular_file_readonly(&canonical)?;
+    let name = requested.file_name()
+        .ok_or_else(|| "The selected file has no valid name.".to_string())?;
+    // Resolve only the parent. Canonicalizing the complete path would follow
+    // a final-component symlink before O_NOFOLLOW/OPEN_REPARSE_POINT can reject it.
+    let target = canonical_parent.join(name);
+    let file = open_regular_file_readonly(&target)?;
     let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
     if metadata.len() > MAX_TEXT_FILE_BYTES {
         return Err("This file is larger than the 2 MB preview limit.".into());
@@ -308,6 +335,11 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
         return Err("This file grew beyond the 2 MB preview limit while being read.".into());
     }
     String::from_utf8(bytes).map_err(|_| "This file is not UTF-8 text and cannot be previewed.".into())
+}
+
+#[tauri::command]
+pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> Result<String, String> {
+    read_workspace_file_inner(&path, &access)
 }
 
 fn write_workspace_file_inner(
@@ -437,6 +469,54 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_file_reads_reject_final_component_symlinks_even_when_target_is_approved() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-read-no-follow-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("target.txt");
+        fs::write(&target, "approved target").expect("create target");
+        let link = root.join("linked.txt");
+        symlink(&target, &link).expect("create in-root symbolic link");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let result = read_workspace_file_inner(link.to_str().unwrap(), &access);
+        assert!(result.is_err(), "a final-component symlink must not be followed even when its target is inside the approved root");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "approved target");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checked_writes_reject_hard_linked_files() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-hardlink-write-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let target = root.join("notes.txt");
+        let alias = base.join("outside-alias.txt");
+        fs::write(&target, "original").expect("create file");
+        fs::hard_link(&target, &alias).expect("create external hard link");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let result = write_workspace_file_inner(target.to_str().unwrap(), "updated", Some("original"), &access);
+        assert!(result.unwrap_err().contains("hard-linked"));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        assert_eq!(fs::read_to_string(&alias).unwrap(), "original");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
 
     #[test]
     fn creating_a_file_never_truncates_an_existing_file() {
