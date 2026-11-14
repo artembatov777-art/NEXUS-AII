@@ -420,7 +420,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
           <label>{t("Source reference")}<input value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="URL, archive, or generated dataset ID"/></label>
         </div>
         <div className="training-two-col">
-          <label>{t("Privacy class")}<select value={privacyClass} onChange={event => setPrivacyClass(event.target.value as DatasetManifest["privacyClass"])}><option value="synthetic">Synthetic</option><option value="public">{t("Public")}</option><option value="owner_approved">{t("Owner-approved private")}</option></select></label>
+          <label>{t("Privacy class")}<select value={privacyClass} onChange={event => setPrivacyClass(event.target.value as DatasetManifest["privacyClass"])}><option value="synthetic">{t("Synthetic")}</option><option value="public">{t("Public")}</option><option value="owner_approved">{t("Owner-approved private")}</option></select></label>
           <label>{t("Consent status")}<select value={privacyClass === "owner_approved" ? consentStatus : "not_required"} disabled={privacyClass !== "owner_approved"} onChange={event => setConsentStatus(event.target.value as DatasetManifest["consentStatus"])}><option value="not_required">{t("Not required")}</option><option value="approved">{t("Approved")}</option></select></label>
         </div>
         {privacyClass === "owner_approved" && <label>{t("Approval reference")}<input value={approvalReference} onChange={event => setApprovalReference(event.target.value)} placeholder="Explicit owner approval reference"/></label>}
@@ -466,7 +466,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       <div className="training-section">
         <div className="training-section-title"><RefreshCw size={15}/> Saved records</div>
         <div className="training-record-counts"><span>{datasets.length} dataset version(s)</span><span>{experiments.length} experiment(s)</span><button className="icon-btn" onClick={() => void refresh()} aria-label="Refresh Training Lab records"><RefreshCw size={14}/></button></div>
-        {selectedDatasetRecord && <button className="secondary-btn" onClick={() => exportDatasetSamples(selectedDatasetRecord)} disabled={!selectedDatasetRecord.samples?.length}>Export selected dataset samples (.jsonl)</button>}
+        {selectedDatasetRecord && <button className="secondary-btn" onClick={() => exportDatasetSamples(selectedDatasetRecord)} disabled={!selectedDatasetRecord.samples?.length}>{t("Export selected dataset samples (.jsonl)")}</button>}
         {datasets.map(dataset => <div className="training-record" key={dataset.id+dataset.version}><strong>{dataset.name} · v{dataset.version}</strong><small>{dataset.license} · {dataset.privacyClass} · {dataset.splits.train.length}/{dataset.splits.validation.length}/{dataset.splits.test.length} train/validation/test IDs · {dataset.samples?.length ?? 0} stored samples</small></div>)}
         {experiments.map(experiment => <div className="training-record" key={experiment.id}><strong>{experiment.name}</strong><small>{experiment.modelId} · {experiment.method} · {new Date(experiment.createdAt).toLocaleString()}</small></div>)}
         {!datasets.length && !experiments.length && <p className="global-search-empty">{t("No Training Lab records yet.")}</p>}
