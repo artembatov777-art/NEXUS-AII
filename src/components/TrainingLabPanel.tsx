@@ -277,7 +277,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       ).join("\n\n════════════════════════════════\n\n"));
       setModelId("multi-model-comparison");
       setMetrics(JSON.stringify(summarizeModelComparison(results), null, 2));
-      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length, successfulModels: successful.length, failedModels: failed.length }, null, 2));
+      setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, models, comparedModels: models.length, successfulModels: successful.length, failedModels: failed.length }, null, 2));
       setStatus(failed.length
         ? `Comparison partially completed: ${successful.length} of ${models.length} models returned results. Failed models are listed above.`
         : `Comparison completed: all ${successful.length} models returned results using the same prompt.`);
