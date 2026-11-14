@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 
@@ -345,10 +346,10 @@ export function VoiceControls({
     <button type="button" className={listening ? "voice-active" : ""} onClick={toggleListening} disabled={conversationMode || isGenerating} aria-label={listening ? "Stop voice input" : "Start voice input"}>
       {listening && !conversationMode ? <MicOff size={15}/> : <Mic size={15}/>}<span>{listening && !conversationMode ? "Listening" : "Voice input"}</span>
     </button>
-    <select aria-label="Speech recognition language" value={language} disabled={listening || speaking} onChange={event => setLanguage(event.target.value)}>
+    <select aria-label={t("Speech recognition language")} value={language} disabled={listening || speaking} onChange={event => setLanguage(event.target.value)}>
       <option value="ru-RU">Русский</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="fi-FI">Suomi</option>
     </select>
-    {voices.length > 0 && <select aria-label="Text-to-speech voice" value={voiceName} disabled={speaking} onChange={event => setVoiceName(event.target.value)}>
+    {voices.length > 0 && <select aria-label={t("Text-to-speech voice")} value={voiceName} disabled={speaking} onChange={event => setVoiceName(event.target.value)}>
       <option value="">System voice</option>{voices.map(voice => <option key={voice.voiceURI} value={voice.name}>{voice.name}</option>)}
     </select>}
     <button type="button" className={speaking ? "voice-active" : ""} onClick={toggleSpeak} aria-label={speaking ? "Stop reading" : "Read latest response"}>
