@@ -172,7 +172,7 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
   });
 
-  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {
+  it("streams another discovered model from a direct cloud profile with an initial selection", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockImplementation((command, args) => {
       if (command === "list_provider_models") return Promise.resolve(["model-a", "model-b"]);
@@ -377,7 +377,7 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("cancel_chat_stream", expect.objectContaining({ streamId: expect.any(String) }));
   });
 
-  it("cancels the native request when a consumer stops reading the stream", async () => {  it("cancels the native request when a consumer stops reading the stream", async () => {
+  it("cancels the native request when a consumer stops reading the stream", async () => {
     mockedIsTauri.mockReturnValue(true);
     let rejectStream: ((reason?: unknown) => void) | null = null;
     mockedInvoke.mockImplementation((command, args) => {
