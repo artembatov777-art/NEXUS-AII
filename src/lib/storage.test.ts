@@ -117,6 +117,39 @@ describe("conversation workspace storage", () => {
     await saveConversations([base], storage);
     expect(await loadConversations(storage)).toEqual([base]);
   });
+  it("round-trips validated generated image attachments", async () => {
+    const storage = new MemoryStorage();
+    const conversation: Conversation = {
+      ...base,
+      messages: [{
+        id: "image-message", role: "assistant", content: "Generated image", createdAt: 11,
+        imageAttachment: {
+          mimeType: "image/png", data: "iVBORw0KGgo=", byteLength: 8,
+          model: "gemini-3.1-flash-image", aspectRatio: "1:1", imageSize: "1K"
+        }
+      }]
+    };
+    await saveConversations([conversation], storage);
+    expect(await loadConversations(storage)).toEqual([conversation]);
+  });
+
+  it("drops malformed or oversized generated image attachments without dropping the message", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("nexus-au:conversations:v2", JSON.stringify([{
+      ...base,
+      messages: [{
+        id: "image-message", role: "assistant", content: "Generated image", createdAt: 11,
+        imageAttachment: {
+          mimeType: "image/svg+xml", data: "<svg/>", byteLength: 6,
+          model: "untrusted", aspectRatio: "1:1", imageSize: "1K"
+        }
+      }]
+    }]));
+    const loaded = await loadConversations(storage);
+    expect(loaded[0]?.messages[0]?.content).toBe("Generated image");
+    expect(loaded[0]?.messages[0]?.imageAttachment).toBeUndefined();
+  });
+
   it("migrates legacy conversations without losing their content", async () => {
     const storage = new MemoryStorage();
     storage.setItem("nexus-au:conversations:v1", JSON.stringify([{ ...base, projectId: undefined }]));
