@@ -218,7 +218,10 @@ pub fn rename_workspace_entry(
     path: String,
     new_name: String,
     access: State<'_, WorkspaceAccess>,
+    journal: State<'_, WorkspaceOperationJournal>,
 ) -> Result<String, String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.ensure_ready()?;
     if path.trim().is_empty() || path.len() > 4096 {
         return Err("The selected path is invalid.".into());
     }
@@ -232,7 +235,10 @@ pub fn move_workspace_entry(
     path: String,
     destination_directory: String,
     access: State<'_, WorkspaceAccess>,
+    journal: State<'_, WorkspaceOperationJournal>,
 ) -> Result<String, String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.ensure_ready()?;
     if path.trim().is_empty() || path.len() > 4096
         || destination_directory.trim().is_empty() || destination_directory.len() > 4096 {
         return Err("The source or destination path is invalid.".into());
