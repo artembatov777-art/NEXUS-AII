@@ -541,3 +541,7 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
   color: var(--muted, #94a3b8);
   font-size: 11px;
 }
+
+
+/* Language selection */
+.language-setting{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:12px;padding:12px 13px;margin:0 0 14px;border:1px solid #34394a;border-radius:9px;background:#10151e}.language-setting label{margin:0!important;color:#d5d9e3!important;font-size:12px!important}.language-setting select{width:100%;background:#0d1119;border:1px solid #454d60;border-radius:8px;padding:9px 10px;color:#edf0f6;font:inherit;font-size:12px}.language-setting select:focus{outline:2px solid #816bb7;outline-offset:2px}
