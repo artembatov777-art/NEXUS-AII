@@ -14,6 +14,9 @@ type WorkspaceEntry = {
 
 type WorkspaceContentMatch = { path: string; lineNumber: number; preview: string };
 type WorkspaceContentSearch = { matches: WorkspaceContentMatch[]; totalMatches: number; scannedFiles: number; truncated: boolean };
+type WorkspaceImagePreview = { dataUrl: string; mediaType: string; sizeBytes: number };
+
+const isRasterImage = (name: string) => /\\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
 
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B`
   : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB`
@@ -48,6 +51,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [selectedPath, setSelectedPath] = useState("");
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [preview, setPreview] = useState("");
+  const [imagePreview, setImagePreview] = useState<WorkspaceImagePreview | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [grantPath, setGrantPath] = useState("");
@@ -131,6 +135,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setSelectedPath("");
     setSelectedPaths([]);
     setPreview("");
+    setImagePreview(null);
     setDraft("");
     setEditing(false);
     try {
@@ -191,6 +196,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     if (entry.kind === "directory") {
       setSelectedPath("");
       setPreview("");
+      setImagePreview(null);
       setDraft("");
       setEditing(false);
       await refresh(entry.path, true);
@@ -200,16 +206,26 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     try {
-      const content = await invoke<string>("read_workspace_file", { path: entry.path });
       setSelectedPath(entry.path);
       setRenameName(entry.name);
       setMoveDestination("");
-      setPreview(content);
-      setDraft(content);
       setEditing(false);
       setConflictDetected(false);
-      const audited = await recordFilesystemAudit("read");
-      if (!audited) setNotice("File opened, but the audit entry could not be saved.");
+      if (isRasterImage(entry.name)) {
+        const image = await invoke<WorkspaceImagePreview>("read_workspace_image_preview", { path: entry.path });
+        setImagePreview(image);
+        setPreview("");
+        setDraft("");
+        const audited = await recordFilesystemAudit("read_image_preview");
+        if (!audited) setNotice("Image preview loaded, but the audit entry could not be saved.");
+      } else {
+        const content = await invoke<string>("read_workspace_file", { path: entry.path });
+        setImagePreview(null);
+        setPreview(content);
+        setDraft(content);
+        const audited = await recordFilesystemAudit("read");
+        if (!audited) setNotice("File opened, but the audit entry could not be saved.");
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -244,6 +260,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     try {
       const latest = await invoke<string>("read_workspace_file", { path: selectedPath });
+      setImagePreview(null);
       setPreview(latest);
       setDraft(latest);
       setEditing(false);
@@ -270,6 +287,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       await refresh(currentPath, true);
       setSelectedPath(nextPath);
       setRenameName(nextPath.split(/[\\\\/]/).pop() ?? renameName.trim());
+      setImagePreview(null);
       setPreview(content);
       setDraft(content);
       setEditing(false);
@@ -301,6 +319,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       const audited = await recordFilesystemAudit("move");
       setSelectedPath("");
       setPreview("");
+      setImagePreview(null);
       setDraft("");
       setEditing(false);
       setNotice(audited ? "File moved." : "File moved, but the audit entry could not be saved.");
@@ -394,6 +413,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       setEntries([]);
       setSelectedPath("");
       setPreview("");
+      setImagePreview(null);
       setDraft("");
       setEditing(false);
       if (allowed[0]) await refresh(allowed[0], true);
@@ -460,7 +480,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
               <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || !renameName.trim()}>Rename</button>
               <label>Move to approved folder<div className="file-move-input"><input aria-label="Move destination folder" value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder="Destination folder path"/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>Browse</button></div></label>
               <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || !moveDestination.trim()}>Move file</button>
-            </div><div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div><div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
+            </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">IMAGE PREVIEW · READ ONLY · MAX 4 MB</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">TEXT CONTENT · MAX 2 MB</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>Cancel</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>Edit file</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>Analyze with AI</button>}</> : <span className="file-image-readonly">Image previews are read-only. Original file is unchanged.</span>}</div></> : <div className="file-empty">Select a text file to inspect or edit it.</div>}
           </aside>
         </div>
         <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={closeWorkspace}>Close workspace</button></footer>

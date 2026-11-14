@@ -3,6 +3,80 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::State;
 
+
+const MAX_IMAGE_PREVIEW_BYTES: u64 = 4 * 1024 * 1024;
+
+fn image_media_type(path: &Path, bytes: &[u8]) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "png" if bytes.starts_with(b"\x89PNG\r\n\x1a\n") => Some("image/png"),
+        "jpg" | "jpeg" if bytes.starts_with(&[0xff, 0xd8, 0xff]) => Some("image/jpeg"),
+        "gif" if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") => Some("image/gif"),
+        "webp" if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" => Some("image/webp"),
+        "bmp" if bytes.starts_with(b"BM") => Some("image/bmp"),
+        _ => None,
+    }
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0] as u32;
+        let second = chunk.get(1).copied().unwrap_or(0) as u32;
+        let third = chunk.get(2).copied().unwrap_or(0) as u32;
+        let value = (first << 16) | (second << 8) | third;
+        output.push(TABLE[((value >> 18) & 0x3f) as usize] as char);
+        output.push(TABLE[((value >> 12) & 0x3f) as usize] as char);
+        output.push(if chunk.len() > 1 { TABLE[((value >> 6) & 0x3f) as usize] as char } else { '=' });
+        output.push(if chunk.len() > 2 { TABLE[(value & 0x3f) as usize] as char } else { '=' });
+    }
+    output
+}
+
+fn read_image_preview(access: &WorkspaceAccess, requested_path: &Path) -> Result<serde_json::Value, String> {
+    let link_metadata = fs::symlink_metadata(requested_path)
+        .map_err(|error| format!("Could not inspect the selected image: {error}"))?;
+    if link_metadata.file_type().is_symlink() || !link_metadata.is_file() {
+        return Err("Image preview is available only for regular files, not symbolic links or special entries.".into());
+    }
+    let root = access.allowed_root_for(requested_path)?;
+    let canonical = fs::canonicalize(requested_path)
+        .map_err(|error| format!("Could not resolve the selected image: {error}"))?;
+    if !canonical.starts_with(&root) {
+        return Err("The selected image is outside an approved directory.".into());
+    }
+    let metadata = fs::metadata(&canonical)
+        .map_err(|error| format!("Could not inspect the selected image: {error}"))?;
+    if !metadata.is_file() || metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
+        return Err("Image preview supports regular files up to 4 MB.".into());
+    }
+    let mut file = fs::File::open(&canonical)
+        .map_err(|error| format!("Could not open the selected image: {error}"))?;
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    use std::io::Read;
+    file.take(MAX_IMAGE_PREVIEW_BYTES + 1).read_to_end(&mut bytes)
+        .map_err(|error| format!("Could not read the selected image: {error}"))?;
+    if bytes.len() as u64 > MAX_IMAGE_PREVIEW_BYTES {
+        return Err("Image preview supports files up to 4 MB.".into());
+    }
+    let media_type = image_media_type(&canonical, &bytes)
+        .ok_or_else(|| "The file extension and image signature do not match a supported PNG, JPEG, GIF, WebP, or BMP image.".to_string())?;
+    Ok(serde_json::json!({
+        "dataUrl": format!("data:{media_type};base64,{}", encode_base64(&bytes)),
+        "mediaType": media_type,
+        "sizeBytes": bytes.len()
+    }))
+}
+
+#[tauri::command]
+pub fn read_workspace_image_preview(path: String, access: State<'_, WorkspaceAccess>) -> Result<serde_json::Value, String> {
+    if path.trim().is_empty() || path.len() > 4096 {
+        return Err("The selected image path is invalid.".into());
+    }
+    read_image_preview(&access, Path::new(&path))
+}
+
 fn validate_entry_name(name: &str) -> Result<(), String> {
     if name.trim().is_empty() || name.len() > 255 || name == "." || name == ".."
         || name.chars().any(char::is_control)
@@ -114,6 +188,43 @@ mod tests {
             .expect("write permissions");
         let access = WorkspaceAccess::load(permissions);
         (base, root, access)
+    }
+
+    #[test]
+    fn image_preview_accepts_only_scoped_raster_files_with_matching_signatures() {
+        let (base, root, access) = fixture();
+        let png = root.join("preview.png");
+        fs::write(&png, b"\x89PNG\r\n\x1a\nfixture").expect("write PNG fixture");
+        let result = read_image_preview(&access, &png).expect("read approved PNG");
+        assert_eq!(result["mediaType"], "image/png");
+        assert_eq!(result["dataUrl"], format!("data:image/png;base64,{}", encode_base64(b"\x89PNG\r\n\x1a\nfixture")));
+
+        let disguised = root.join("notes.txt");
+        fs::write(&disguised, b"\x89PNG\r\n\x1a\nfixture").expect("write disguised image");
+        assert!(read_image_preview(&access, &disguised).is_err());
+
+        let svg = root.join("active.svg");
+        fs::write(&svg, b"<svg xmlns='http://www.w3.org/2000/svg'></svg>").expect("write SVG");
+        assert!(read_image_preview(&access, &svg).is_err());
+
+        let outside = base.join("outside.png");
+        fs::write(&outside, b"\x89PNG\r\n\x1a\nfixture").expect("write outside image");
+        assert!(read_image_preview(&access, &outside).is_err());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn image_preview_rejects_oversized_files_and_base64_padding_is_correct() {
+        let (base, root, access) = fixture();
+        let oversized = root.join("large.png");
+        let mut content = b"\x89PNG\r\n\x1a\n".to_vec();
+        content.resize((MAX_IMAGE_PREVIEW_BYTES + 1) as usize, 0);
+        fs::write(&oversized, content).expect("write oversized image");
+        assert!(read_image_preview(&access, &oversized).unwrap_err().contains("4 MB"));
+        assert_eq!(encode_base64(b"f"), "Zg==");
+        assert_eq!(encode_base64(b"fo"), "Zm8=");
+        assert_eq!(encode_base64(b"foo"), "Zm9v");
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]

@@ -213,6 +213,29 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", { path: filePath });
   });
 
+  it("previews approved raster images without treating binary data as editable text", async () => {
+    const rootPath = "/home/test/Pictures";
+    const filePath = rootPath + "/diagram.png";
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "diagram.png", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }];
+      if (command === "read_workspace_image_preview") return { dataUrl, mediaType: "image/png", sizeBytes: 8 };
+      return undefined;
+    });
+    await renderPanel();
+    const fileButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("diagram.png"));
+    await act(async () => { fileButton!.click(); });
+    const image = container.querySelector<HTMLImageElement>(".file-image-preview img");
+    expect(image?.src).toBe(dataUrl);
+    expect(container.textContent).toContain("image/png");
+    expect(container.textContent).toContain("read-only");
+    expect(container.querySelector("textarea.file-editor")).toBeNull();
+    expect(Array.from(container.querySelectorAll("button")).some(button => button.textContent === "Edit file")).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("read_workspace_image_preview", { path: filePath });
+  });
+
   it("uses the native folder picker to populate the explicit approval path", async () => {
     isTauriMock.mockReturnValue(true);
     openMock.mockResolvedValue("C:\\Users\\Owner\\Work");
