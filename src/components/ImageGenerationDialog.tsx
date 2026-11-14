@@ -102,7 +102,7 @@ export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { a
         </label>
       </div>
       <label className="image-generation-consent"><input type="checkbox" checked={remoteApproved} onChange={event => setRemoteApproved(event.target.checked)}/> I agree to send this prompt to Google Gemini for image generation.</label>
-      {error && <p className="image-generation-error" role="alert">{error}</p>}
+      {error && <p className="image-generation-error" role="alert">{t(error)}</p>}
       {working && <p className="image-generation-status" role="status"><LoaderCircle size={16} className="image-generation-spinner"/> Generating image…</p>}
       {image && <div className="image-generation-result">
         <img src={`data:${image.mimeType};base64,${image.data}`} alt={prompt || "Generated image"}/>
