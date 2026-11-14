@@ -484,6 +484,15 @@ body { color: var(--nx-text); }
   text-overflow: ellipsis;
 }
 .chat-area { scrollbar-gutter: stable; }
+/* The command deck is a dashboard, not a chat column. Give the idle workspace
+   the available desktop width while keeping active conversations readable. */
+.chat-area[data-home="true"] {
+  width: 100%;
+  max-width: 1440px;
+}
+.chat-area[data-home="true"] .chat-heading {
+  margin-bottom: clamp(22px, 2.4vw, 36px);
+}
 .chat-heading { flex-shrink: 0; }
 .chat-heading > p { line-height: 1.65; }
 .command-center { gap: clamp(14px, 1.7vw, 22px); }
