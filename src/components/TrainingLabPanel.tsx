@@ -275,7 +275,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         ? `MODEL: ${result.model}\nLATENCY: ${result.value.latencyMs} ms\n\n${result.value.response}`
         : `MODEL: ${result.model}\nSTATUS: FAILED\nERROR: ${result.error}`
       ).join("\n\n════════════════════════════════\n\n"));
-      setModelId(models.join(", "));
+      setModelId("multi-model-comparison");
       setMetrics(JSON.stringify(summarizeModelComparison(results), null, 2));
       setConfiguration(JSON.stringify({ temperature: 0, maxOutputTokens: 1024, route: provider.inferenceLocation, comparedModels: models.length, successfulModels: successful.length, failedModels: failed.length }, null, 2));
       setStatus(failed.length
