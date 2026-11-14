@@ -97,7 +97,10 @@ export class ImageGenerationRouter {
       if (signal?.aborted) return err("cancelled", "Image generation was cancelled.");
       const image = result.value;
       const padding = typeof image?.data === "string" ? (image.data.endsWith("==") ? 2 : image.data.endsWith("=") ? 1 : 0) : 0;
-      const decodedLength = typeof image?.data === "string" && image.data.length % 4 === 0
+      const unpaddedData = typeof image?.data === "string" ? image.data.slice(0, image.data.length - padding) : "";
+      const validBase64Padding = !unpaddedData.includes("=") &&
+        (padding === 0 || (padding === 1 && unpaddedData.length % 4 === 3) || (padding === 2 && unpaddedData.length % 4 === 2));
+      const decodedLength = typeof image?.data === "string" && image.data.length % 4 === 0 && validBase64Padding
         ? (image.data.length / 4) * 3 - padding
         : -1;
       if (!image || !["image/png", "image/jpeg", "image/webp"].includes(image.mimeType) ||
