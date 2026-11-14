@@ -6,8 +6,8 @@ Updated: 2026-11-14
 
 - Repository: `artembatov777-art/NEXUS-AII`
 - Active branch: `feat/nexus-core-architecture`
-- Latest source implementation commit: `a5f74e13865021f7985b548dbed08f0afe8d5684`
-- Latest completed frontend Quality commit: `a5f74e13865021f7985b548dbed08f0afe8d5684`
+- Latest source implementation commit: `a19452e69885ca1d58828ba67cdfe289c7285857`
+- Latest completed frontend Quality commit: `a19452e69885ca1d58828ba67cdfe289c7285857`
 - `main` has not been modified. Pull Request #2 remains open and unmerged.
 - OmniRoute is intentionally excluded. No OmniRoute connection is configured.
 - Ollama integration is prepared through a loopback-compatible endpoint, but NEXUS does not start or connect to an Ollama service automatically.
@@ -15,8 +15,8 @@ Updated: 2026-11-14
 
 ## Verified automation evidence
 
-- Frontend Quality passed on `a5f74e13865021f7985b548dbed08f0afe8d5684`: 69 test files, 487 tests, TypeScript/Vite production build, and `npm audit --audit-level=high` with 0 reported vulnerabilities.
-- Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. The subsequent retry-recovery command and UI changes are being revalidated by the native workflow for the current branch head; do not treat that run as passed until all three jobs finish.
+- Frontend Quality passed on `a19452e69885ca1d58828ba67cdfe289c7285857`: Vitest suite, TypeScript/Vite production build, and `npm audit --audit-level=high` completed successfully. Mobile Interface Preview build and deployment also passed on this commit.
+- Native Windows/macOS/Linux Rust checks, platform-applicable Rust tests, application packaging, and artifact uploads passed on `9a6f10a999c3a59f2171cad94b2219979714d201`. The native workflow for `a19452e69885ca1d58828ba67cdfe289c7285857` is queued; do not treat it as passed until all three platform jobs finish.
 - Mobile Interface Preview build and deployment passed on the earlier UI-identical implementation baseline; the latest iPhone Safari acceptance remains owner-side.
 - Native filesystem permission snapshots use unique create-new temporary files, restrictive Unix permissions, and a regression test proving a pre-existing temporary symlink is not followed.
 - Batch file rename and bulk file move write a durable SQLite operation journal before the first mutation, attempt reverse-order rollback after interrupted startup, refuse to overwrite conflicting paths, and expose unresolved recovery status with an explicit retry action in the File System panel.
@@ -54,6 +54,7 @@ Residual work: hostile parent-directory TOCTOU protection, in-app conflict resol
 - Move, rename, and batch-rename now canonicalize the approved parent directory while preserving the final source component unresolved; regression tests reject final-component symlinks without touching their targets.
 
 ## Phase VI — Security & Integration
+- Tool execution timeouts are now explicitly non-retryable because an executor may ignore cancellation and finish an external side effect after the caller times out; the durable `started`/`failed` audit trail keeps the step available for owner reconciliation. Regression coverage exercises an executor that ignores its abort signal.
 
 Additional source hardening is now present on the working branch, with fresh CI verification pending:
 - Encrypted backup exports use authenticated envelope schema v2; schema v1 remains importable for backward compatibility. Envelope algorithm/KDF metadata is authenticated as AES-GCM additional data.
