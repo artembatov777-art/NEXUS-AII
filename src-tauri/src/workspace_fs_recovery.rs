@@ -542,6 +542,21 @@ mod tests {
     }
 
     #[test]
+    fn begin_rejects_a_serialized_journal_that_exceeds_the_size_limit() {
+        let (base, _root, _access, journal) = fixture();
+        let long_component = "\\\\".repeat(4096);
+        let entries = (0..100).map(|index| RenameEntry {
+            source: PathBuf::from(format!("{index}-{long_component}")),
+            destination: PathBuf::from(format!("{index}-target-{long_component}")),
+        }).collect::<Vec<_>>();
+        let error = journal.begin(&entries).expect_err("oversized journal must be rejected");
+        assert!(error.contains("size limit"));
+        assert!(journal.recovery_status().expect("status").is_none());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
     fn oversized_recovery_payload_is_preserved_and_never_deserialized() {
         let (base, _root, access, journal) = fixture();
         let connection = journal.connection.lock().expect("journal connection");
