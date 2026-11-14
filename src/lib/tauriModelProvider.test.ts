@@ -37,6 +37,24 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledTimes(2);
   });
 
+  it("declares only verified text capability for compatible native providers", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(["model-a"]);
+    const router = createTauriModelRouter({
+      baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote"
+    });
+    if (!router) throw new Error("Expected native model router.");
+    await expect(router.listModels()).resolves.toMatchObject({
+      ok: true,
+      value: [{
+        id: "model-a",
+        supportsStreaming: true,
+        supportsTools: false,
+        modalities: ["text"]
+      }]
+    });
+  });
+
   it("prepares Ollama as a loopback-only no-key profile without starting it", () => {
     expect(createOllamaProviderProfile("qwen2.5:7b")).toEqual({
       id: "nexus.ollama",
