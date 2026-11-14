@@ -13,6 +13,7 @@ Add both variables to the Vercel environments that will serve the function, then
 - Generate a separate high-entropy random value for `NEXUS_API_TOKEN` (at least 32 random bytes). Do not use your Gemini key as this token.
 - In the NEXUS browser app, choose **Use Gemini on Vercel** and paste the same `NEXUS_API_TOKEN` into the access-token field. The app keeps it in page memory only; a reload clears it.
 - Configure the Vercel project for the same deployment domain from which you open NEXUS. The browser calls the same-origin `/api/gemini` route.
+- Open the normal Vercel deployment URL without `?demo=1`. The separate mobile demo route is intentionally disconnected from AI and remains a static preview.
 
 The endpoint returns 503 until both variables exist. After changing Vercel environment variables, redeploy the project for the new values to take effect.
 
