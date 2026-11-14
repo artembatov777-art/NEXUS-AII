@@ -80,7 +80,9 @@ export class NexusApplication {
         }
       }
       const message = cause instanceof Error ? cause.message : "Unexpected model error.";
-      yield err(input.signal?.aborted ? "cancelled" : "provider_unavailable", message, !input.signal?.aborted);
+      // The request may already have reached the provider (and incurred usage), so a
+      // failed stream is not safe to retry automatically without provider idempotency.
+      yield err(input.signal?.aborted ? "cancelled" : "provider_unavailable", message);
     }
   }
 }
