@@ -138,7 +138,7 @@ export function MemoryPanel({ onClose }: MemoryPanelProps) {
   }}>
     <section className="memory-modal" role="dialog" aria-modal="true" aria-labelledby="memory-title">
       <header className="memory-header">
-        <div><div className="eyebrow">PERSONAL CONTEXT</div><h2 id="memory-title"><Brain size={21}/> Memory</h2><p>Information NEXUS can retrieve in future conversations. Chat uses project-aware semantic and keyword search. First semantic use may download a local embedding model; keyword search remains available if it cannot load.</p></div>
+        <div><div className="eyebrow">PERSONAL CONTEXT</div><h2 id="memory-title"><Brain size={21}/> Memory</h2><p>Information NEXUS can retrieve in future conversations. This panel and chat use hybrid semantic and keyword search. First semantic use may download a local embedding model; keyword search remains available if it cannot load. First semantic use may download a local embedding model; keyword search remains available if it cannot load.</p></div>
         <div className="memory-header-actions"><button className="secondary-btn" onClick={() => void exportMemories()}><Download size={14}/> Export</button><button className="icon-btn" onClick={onClose} aria-label="Close memory"><X size={18}/></button></div>
       </header>
 
