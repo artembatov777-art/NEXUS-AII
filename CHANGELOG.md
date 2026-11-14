@@ -11,11 +11,17 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - Raised the Vite and Vitest minimum dependency ranges to patched releases after the latest Quality CI exposed dependency advisories.
 - Added an injectable embedding extractor boundary so validation and vector conversion can be tested without downloading model weights.
 - Added the explicit Rust `Vec<String>` type to the provider model catalog parser, fixing the cross-platform Rust inference error.
+- Encrypted workspace backups now export schema v2 with AES-GCM authenticated metadata while retaining schema v1 import compatibility.
+- Provider API keys are redacted from successful model output, including stream content split across multiple SSE deltas.
+- Native project migration is coordinated across repository instances, and project mutations wait for migration completion.
+- Knowledge imports now send incremental ID-based upserts instead of rewriting a potentially stale full snapshot.
+- File move/rename source validation keeps the final path component unresolved to avoid following a substituted symlink target.
 
 ### Verification
 - Commit `ae4276e`: frontend Quality passed with 52 test files / 311 tests; `npm audit --audit-level=high` reported 0 vulnerabilities.
 - Commit `ae4276e`: Mobile Interface Preview build and deployment passed.
 - Commit `ae4276e`: Native Windows/macOS/Linux matrix passed, including Rust tests and native executable builds. Subsequent conflict-snapshot and draft-recovery changes are not covered by that run and require fresh CI.
+- Commit `f06625cdc9c3165e3ea4ca93f21ae69354135c0d`: fresh Frontend Quality passed with 69 test files / 485 tests, TypeScript/Vite production build, and npm audit reporting 0 vulnerabilities. Native cross-platform verification for this revision remains pending.
 
 ### Added
 - Agent Control Center integrated into the workspace with a bounded local demo agent, explicit approval/rejection, run progress, cancellation, checkpoint history, and resume support.
@@ -55,6 +61,6 @@ All notable NEXUS AU changes are recorded here. This project is under active dev
 - The MCP transport supports configured HTTP(S) servers without OAuth/bearer-token authentication; native stdio transport is not implemented.
 - Voice capture/output, unrestricted shell execution, arbitrary desktop automation, and hosted multi-user proxy are outside Release 1.0 scope.
 - SQLite, browser stores, checkpoints, and exported backups are not application-level encrypted; rely on OS/device protection and treat backups as sensitive.
-- The repository does not yet commit a Rust `Cargo.lock`; a Rust dependency advisory audit remains a release-hardening task.
+- The repository commits `src-tauri/Cargo.lock`. Rust dependency review still tracks two known advisories (`proc-macro-error` is unmaintained; `glib 0.18.5` has an unsound iterator implementation requiring a compatible GTK/WebKit stack upgrade); these remain release-hardening items.
 
 - Phase II completed for browser-preview/runtime scope: added ToolRegistry, HTTP-capable MCP JSON-RPC client and schema adapter, ModelRouter-backed planning adapter with plan validation, resumable-agent coordinator with approval pause/resume, persistent local trace sink, Trace Inspector, and runtime factories. CI passed on 2026-11-08 with 22 test files and 81 tests. See IMPLEMENTATION_PLAN.md for explicit production boundaries.
