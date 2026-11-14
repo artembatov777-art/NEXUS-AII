@@ -31,20 +31,35 @@ export async function sendMessage(
     }
     if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token from Vercel settings. This is separate from your Gemini API key.");
     const systemMessage = requestMessages.find(message => message.role === "system");
-    const turns = requestMessages.filter(message => message.role !== "system");
+    let turns = requestMessages.filter(message => message.role !== "system").slice(-40);
+    if (turns.some(message => message.content.length > 12_000)) {
+      throw new Error("A chat message exceeds the Gemini proxy's 12,000-character per-message limit. Shorten the latest message and try again.");
+    }
+    const systemInstruction = systemMessage
+      ? new TextDecoder().decode(new TextEncoder().encode(systemMessage.content).slice(0, 24_000))
+      : "";
+    const payload: Record<string, unknown> = {
+      model: settings.model,
+      messages: turns,
+      ...(systemInstruction ? { systemInstruction } : {}),
+      ...(generation?.temperature !== undefined ? { temperature: generation.temperature } : {}),
+      ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {})
+    };
+    // Keep the serialized request below the server's 64 KiB hard limit.
+    while (new TextEncoder().encode(JSON.stringify(payload)).byteLength > 60 * 1024 && turns.length > 1) {
+      turns = turns.slice(1);
+      payload.messages = turns;
+    }
+    if (new TextEncoder().encode(JSON.stringify(payload)).byteLength > 64 * 1024) {
+      throw new Error("This request is too large for the Gemini proxy. Shorten the message or reduce attached context.");
+    }
     const response = await fetch("/api/gemini", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${gatewayToken.trim()}`
       },
-      body: JSON.stringify({
-        model: settings.model,
-        messages: turns,
-        ...(systemMessage ? { systemInstruction: systemMessage.content } : {}),
-        ...(generation?.temperature !== undefined ? { temperature: generation.temperature } : {}),
-        ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {})
-      }),
+      body: JSON.stringify(payload),
       signal
     });
     const payload = await response.json().catch(() => ({})) as {
