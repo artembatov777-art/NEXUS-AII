@@ -396,7 +396,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-lab-title">
       <header className="memory-header">
-        <div><div className="eyebrow">MODEL DEVELOPMENT</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.</p></div>
+        <div><div className="eyebrow">{t("MODEL DEVELOPMENT")}</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.</p></div>
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
       <div className="training-notice">
@@ -412,54 +412,54 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       <div className="training-section">
         <div className="training-section-title"><Database size={16}/> Register dataset manifest</div>
         <div className="training-two-col">
-          <label>Dataset ID<input value={datasetId} onChange={event => setDatasetId(event.target.value)} maxLength={160}/></label>
-          <label>Dataset name<input value={datasetName} onChange={event => setDatasetName(event.target.value)} maxLength={160}/></label>
+          <label>{t("Dataset ID")}<input value={datasetId} onChange={event => setDatasetId(event.target.value)} maxLength={160}/></label>
+          <label>{t("Dataset name")}<input value={datasetName} onChange={event => setDatasetName(event.target.value)} maxLength={160}/></label>
         </div>
         <div className="training-two-col">
-          <label>License<input value={license} onChange={event => setLicense(event.target.value)} placeholder="CC0-1.0"/></label>
-          <label>Source reference<input value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="URL, archive, or generated dataset ID"/></label>
+          <label>{t("License")}<input value={license} onChange={event => setLicense(event.target.value)} placeholder="CC0-1.0"/></label>
+          <label>{t("Source reference")}<input value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="URL, archive, or generated dataset ID"/></label>
         </div>
         <div className="training-two-col">
-          <label>Privacy class<select value={privacyClass} onChange={event => setPrivacyClass(event.target.value as DatasetManifest["privacyClass"])}><option value="synthetic">Synthetic</option><option value="public">Public</option><option value="owner_approved">Owner-approved private</option></select></label>
-          <label>Consent status<select value={privacyClass === "owner_approved" ? consentStatus : "not_required"} disabled={privacyClass !== "owner_approved"} onChange={event => setConsentStatus(event.target.value as DatasetManifest["consentStatus"])}><option value="not_required">Not required</option><option value="approved">Approved</option></select></label>
+          <label>{t("Privacy class")}<select value={privacyClass} onChange={event => setPrivacyClass(event.target.value as DatasetManifest["privacyClass"])}><option value="synthetic">Synthetic</option><option value="public">{t("Public")}</option><option value="owner_approved">{t("Owner-approved private")}</option></select></label>
+          <label>{t("Consent status")}<select value={privacyClass === "owner_approved" ? consentStatus : "not_required"} disabled={privacyClass !== "owner_approved"} onChange={event => setConsentStatus(event.target.value as DatasetManifest["consentStatus"])}><option value="not_required">{t("Not required")}</option><option value="approved">{t("Approved")}</option></select></label>
         </div>
-        {privacyClass === "owner_approved" && <label>Approval reference<input value={approvalReference} onChange={event => setApprovalReference(event.target.value)} placeholder="Explicit owner approval reference"/></label>}
+        {privacyClass === "owner_approved" && <label>{t("Approval reference")}<input value={approvalReference} onChange={event => setApprovalReference(event.target.value)} placeholder="Explicit owner approval reference"/></label>}
         <div className="training-splits">
-          <label>Train sample IDs<textarea rows={2} value={trainIds} onChange={event => setTrainIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
-          <label>Validation sample IDs<textarea rows={2} value={validationIds} onChange={event => setValidationIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
-          <label>Test sample IDs<textarea rows={2} value={testIds} onChange={event => setTestIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
+          <label>{t("Train sample IDs")}<textarea rows={2} value={trainIds} onChange={event => setTrainIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
+          <label>{t("Validation sample IDs")}<textarea rows={2} value={validationIds} onChange={event => setValidationIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
+          <label>{t("Test sample IDs")}<textarea rows={2} value={testIds} onChange={event => setTestIds(event.target.value)} placeholder="One ID per line or comma-separated"/></label>
         </div>
-        <div className="training-two-col"><label className="secondary-btn">Import JSON / JSONL samples<input type="file" accept=".json,.jsonl,.ndjson,application/json" hidden disabled={working} onChange={event => { void importDatasetFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label><span className="training-record-counts">{importedSamples.length} sample record(s) staged for import</span></div>
+        <div className="training-two-col"><label className="secondary-btn">{t("Import JSON / JSONL samples")}<input type="file" accept=".json,.jsonl,.ndjson,application/json" hidden disabled={working} onChange={event => { void importDatasetFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label><span className="training-record-counts">{importedSamples.length} sample record(s) staged for import</span></div>
         <button className="primary-btn" onClick={() => void saveDataset()} disabled={working}><Save size={14}/> Save dataset version</button>
       </div>
       <div className="training-section">
         <div className="training-section-title"><FlaskConical size={16}/> Manual evaluation bench</div>
-        <label>Evaluation prompt<input value={evaluationPrompt} onChange={event => setEvaluationPrompt(event.target.value)} maxLength={8000}/></label>
-        <label>Required phrases<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
-        <label>Candidate model output<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="A live model response appears here, or paste one manually"/></label>
-        <div className="training-two-col"><button className="primary-btn" onClick={() => void runLiveModelTest()} disabled={working || !isTauri()}>Run live model test</button><button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>Score candidate response</button></div>
+        <label>{t("Evaluation prompt")}<input value={evaluationPrompt} onChange={event => setEvaluationPrompt(event.target.value)} maxLength={8000}/></label>
+        <label>{t("Required phrases")}<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
+        <label>{t("Candidate model output")}<textarea rows={4} value={candidateOutput} onChange={event => setCandidateOutput(event.target.value)} placeholder="A live model response appears here, or paste one manually"/></label>
+        <div className="training-two-col"><button className="primary-btn" onClick={() => void runLiveModelTest()} disabled={working || !isTauri()}>{t("Run live model test")}</button><button className="secondary-btn" onClick={runManualEvaluation} disabled={working}>{t("Score candidate response")}</button></div>
         <button className="secondary-btn" onClick={() => void runDatasetEvaluation()} disabled={working || !isTauri() || !selectedDatasetRecord?.samples?.some(sample => sample.split === "test")}>Evaluate saved dataset test split ({selectedDatasetRecord?.samples?.filter(sample => sample.split === "test").length ?? 0})</button>
-        <label>Model comparison IDs<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
+        <label>{t("Model comparison IDs")}<input value={comparisonModels} onChange={event => setComparisonModels(event.target.value)} placeholder={availableModels.length ? availableModels.slice(0, 4).join(", ") : "model-a, model-b"} aria-describedby="training-model-hint"/></label>
         <small id="training-model-hint">{availableModels.length ? `Discovered models: ${availableModels.length}. Enter 2 to 4 IDs from the provider catalog.` : "Load the provider model catalog in Settings, then enter 2 to 4 model IDs."}</small>
-        <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>Compare selected models</button>
-        <button className="secondary-btn" onClick={() => void runDatasetModelComparisonBench()} disabled={working || !isTauri() || !selectedDatasetRecord?.samples?.some(sample => sample.split === "test")}>Compare models on held-out dataset</button>
-        {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>Cancel model test</button>}
+        <button className="secondary-btn" onClick={() => void runModelComparison()} disabled={working || !isTauri()}>{t("Compare selected models")}</button>
+        <button className="secondary-btn" onClick={() => void runDatasetModelComparisonBench()} disabled={working || !isTauri() || !selectedDatasetRecord?.samples?.some(sample => sample.split === "test")}>{t("Compare models on held-out dataset")}</button>
+        {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>{t("Cancel model test")}</button>}
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
       <div className="training-section">
         <div className="training-section-title"><FlaskConical size={16}/> Record experiment</div>
         <div className="training-two-col">
-          <label>Model ID<input value={modelId} onChange={event => setModelId(event.target.value)} placeholder="provider/model-id"/></label>
-          <label>Method<select value={method} onChange={event => setMethod(event.target.value as ExperimentMethod)}><option value="baseline">Baseline</option><option value="prompting">Prompting</option><option value="retrieval">Retrieval</option><option value="tooling">Tooling</option><option value="lora">LoRA adapter</option></select></label>
+          <label>{t("Model ID")}<input value={modelId} onChange={event => setModelId(event.target.value)} placeholder="provider/model-id"/></label>
+          <label>{t("Method")}<select value={method} onChange={event => setMethod(event.target.value as ExperimentMethod)}><option value="baseline">{t("Baseline")}</option><option value="prompting">{t("Prompting")}</option><option value="retrieval">{t("Retrieval")}</option><option value="tooling">{t("Tooling")}</option><option value="lora">{t("LoRA adapter")}</option></select></label>
         </div>
         <div className="training-two-col">
-          <label>Code revision<input value={codeRevision} onChange={event => setCodeRevision(event.target.value)} placeholder="Git commit SHA"/></label>
-          <label>Hardware<input value={hardware} onChange={event => setHardware(event.target.value)} placeholder="CPU/GPU and memory"/></label>
+          <label>{t("Code revision")}<input value={codeRevision} onChange={event => setCodeRevision(event.target.value)} placeholder="Git commit SHA"/></label>
+          <label>{t("Hardware")}<input value={hardware} onChange={event => setHardware(event.target.value)} placeholder="CPU/GPU and memory"/></label>
         </div>
-        <label>Dataset<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetKey(event.target.value)}>{datasets.map(dataset => <option key={dataset.id+"@"+dataset.version} value={JSON.stringify([dataset.id, dataset.version])}>{dataset.name} · v{dataset.version}</option>)}</select></label>
+        <label>{t("Dataset")}<select value={selectedDataset} disabled={datasets.length === 0} onChange={event => setSelectedDatasetKey(event.target.value)}>{datasets.map(dataset => <option key={dataset.id+"@"+dataset.version} value={JSON.stringify([dataset.id, dataset.version])}>{dataset.name} · v{dataset.version}</option>)}</select></label>
         <div className="training-two-col">
-          <label>Configuration JSON<textarea rows={3} value={configuration} onChange={event => setConfiguration(event.target.value)}/></label>
-          <label>Metrics JSON<textarea rows={3} value={metrics} onChange={event => setMetrics(event.target.value)}/></label>
+          <label>{t("Configuration JSON")}<textarea rows={3} value={configuration} onChange={event => setConfiguration(event.target.value)}/></label>
+          <label>{t("Metrics JSON")}<textarea rows={3} value={metrics} onChange={event => setMetrics(event.target.value)}/></label>
         </div>
         <button className="primary-btn" onClick={() => void saveExperiment()} disabled={working || datasets.length === 0}><Save size={14}/> Save experiment record</button>
       </div>
@@ -469,7 +469,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         {selectedDatasetRecord && <button className="secondary-btn" onClick={() => exportDatasetSamples(selectedDatasetRecord)} disabled={!selectedDatasetRecord.samples?.length}>Export selected dataset samples (.jsonl)</button>}
         {datasets.map(dataset => <div className="training-record" key={dataset.id+dataset.version}><strong>{dataset.name} · v{dataset.version}</strong><small>{dataset.license} · {dataset.privacyClass} · {dataset.splits.train.length}/{dataset.splits.validation.length}/{dataset.splits.test.length} train/validation/test IDs · {dataset.samples?.length ?? 0} stored samples</small></div>)}
         {experiments.map(experiment => <div className="training-record" key={experiment.id}><strong>{experiment.name}</strong><small>{experiment.modelId} · {experiment.method} · {new Date(experiment.createdAt).toLocaleString()}</small></div>)}
-        {!datasets.length && !experiments.length && <p className="global-search-empty">No Training Lab records yet.</p>}
+        {!datasets.length && !experiments.length && <p className="global-search-empty">{t("No Training Lab records yet.")}</p>}
       </div>
     </section>
   </div>;
