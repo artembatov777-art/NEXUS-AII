@@ -26,10 +26,17 @@ From the repository root:
 npm ci --legacy-peer-deps
 npm run test
 npm run build
-npm run tauri build
+# Windows
+npm run tauri build -- --bundles nsis,msi
+
+# macOS
+npm run tauri build -- --bundles dmg
+
+# Linux
+npm run tauri build -- --bundles appimage,deb
 ```
 
-For Linux, install the Tauri 2 WebKitGTK development packages before building. See the Tauri 2 prerequisites for the current distribution-specific package names.
+Run only the command for the current operating system. For Linux, install the Tauri 2 WebKitGTK development packages before building. See the Tauri 2 prerequisites for the current distribution-specific package names.
 
 ## First launch
 
