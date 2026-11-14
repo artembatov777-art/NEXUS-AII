@@ -34,6 +34,21 @@ describe("FileSystemPanel native workspace access", () => {
     container.remove();
   });
 
+  it("surfaces unresolved interrupted filesystem recovery before file operations", async () => {
+    const rootPath = "/home/test/Documents";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_workspace_operation_recovery_status") return "An interrupted rename could not be restored automatically.";
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      return undefined;
+    });
+    await renderPanel();
+    expect(container.textContent).toContain("Filesystem recovery required");
+    expect(container.textContent).toContain("could not be restored automatically");
+    expect(invokeMock).toHaveBeenCalledWith("get_workspace_operation_recovery_status");
+  });
+
   it("moves selected files as a batch and records each move", async () => {
     const rootPath = "/home/test/Documents";
     const destination = rootPath + "/Archive";
