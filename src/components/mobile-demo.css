@@ -583,3 +583,20 @@
 @media (prefers-reduced-motion: reduce) {
   .demo-orb:before, .demo-orb:after { animation: none; }
 }
+
+
+/* iPhone safe-area ownership: only the bottom-most home indicator consumes
+   the device inset; the composer and tab bar must not count it a second time. */
+@media (max-width: 480px) {
+  .demo-chat-footer { padding-bottom: 9px; }
+  .demo-tabbar { padding-bottom: 8px; }
+  .demo-home-indicator { margin-bottom: calc(7px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -53,7 +53,7 @@
 
 ### Webview policy
 
-The Tauri CSP sets default-src self, an explicit script-src limited to self plus WebAssembly compilation, worker-src self/blob for the local ONNX embedding runtime, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI. Blob workers do not grant arbitrary remote script origins.
+The Tauri CSP sets default-src self, base-uri self, object-src none, form-action self, and frame-src none. connect-src permits HTTPS and loopback HTTP because users configure compatible provider/MCP endpoints. Inline styles remain enabled for the current UI.
 
 ## Direct provider boundary and deferred gateway integration
 
@@ -81,14 +81,14 @@ The Tauri CSP sets default-src self, an explicit script-src limited to self plus
 - Native offline speech models, audio-file ingestion, and background hands-free operation are out of scope. Current voice controls are user-initiated browser/WebView APIs and depend on host speech support; recognition may use an online service.
 - Unrestricted desktop automation, filesystem access outside owner-approved roots, general shell execution, and notification workflows are not implemented. The File System module supports bounded read/write/create/search/rename/move operations only within explicitly approved roots. Batch rename is limited to regular files in one directory, preflights all targets, rejects overwrites and Windows-reserved device names, and attempts rollback after partial failure; successful renames create per-file audit events, while incomplete rollback is surfaced for manual review.
 - Browser/WebView speech recognition and speech synthesis controls are implemented where host APIs exist. Voice input is user-initiated and depends on host microphone permission; recognition may use a browser-provided network service, so NEXUS does not promise offline or on-device transcription. Native offline STT/TTS and audio-file ingestion are not implemented.
-- The CI pipeline builds the Tauri app and runs native SQLite integration tests on three OS runners, but it does not automate GUI interaction with a real logged-in desktop session. Implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100` passed frontend Quality (59 test files / 391 tests), npm audit (0 vulnerabilities), production build, native Windows/macOS/Linux checks/tests/builds, and Rust dependency audit.
+- The frontend Quality workflow passes 61 test files / 416 tests, npm audit reports 0 vulnerabilities, and the production build passes. The native Windows/macOS/Linux matrix passes `cargo check`, platform-applicable Rust tests (67 on Linux/macOS; 63 on Windows), native application builds, and artifact uploads. Rust dependency audit completes with two allowed warnings: `RUSTSEC-2024-0370` (`proc-macro-error` is unmaintained and has no fixed upgrade) and `RUSTSEC-2024-0429` (`glib 0.18.5` has an unsound iterator implementation; upgrading requires a compatible GTK/WebKit dependency stack). These warnings are not treated as a clean bill of health; track them during Tauri dependency upgrades.
 - The frontend Quality workflow includes `npm audit --audit-level=high`; each latest run must be reviewed and applicable advisories remediated. An independent penetration test is not part of this review.
 
 ## Release checklist
 
 - [ ] Manually verify key save, status, use, and delete in Windows Credential Manager, macOS Keychain, and a Linux Secret Service desktop session.
 - [ ] Verify OS account/disk encryption and backup handling on release machines.
-- [x] Run frontend npm audit and Rust cargo audit in CI; both completed successfully for implementation commit `435b8914e31126f8261e0f10e2921bc5d8314100`. Continue reviewing future advisories rather than treating one clean run as a permanent guarantee.
+- [x] Run frontend npm audit and Rust cargo audit in CI. Frontend audit reports 0 vulnerabilities; Rust audit passes with the two dependency warnings listed above. Continue reviewing future advisories rather than treating one clean run as a permanent guarantee.
 - [ ] Add GUI automation once a supported WebDriver/desktop test runner is available for all target platforms.
 - [ ] Complete independent security testing before exposing remote MCP or broader desktop automation capabilities.
 

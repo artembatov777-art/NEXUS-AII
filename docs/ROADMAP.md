@@ -7,7 +7,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 ## Product direction
 
 - **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
-- **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted violet and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
+- **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted cyan and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
 - **Model strategy:** hybrid local and cloud through provider-neutral adapters. Ollama is the initial local runtime; OmniRoute is excluded from active development and may be evaluated only during final integration if the owner chooses.
 - **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
 - **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
@@ -88,6 +88,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 - [x] Refuse final-component symlink/reparse-point traversal for regular-file reads, image previews, and content search; create-new writes cannot truncate an existing destination. Existing-file writes use a checked handle and no-follow open flags.
 - [ ] Add broader conflict resolution and recovery for interrupted or multi-file operations.
 - [x] Detect external edits before saving an opened file; preserve the unsaved draft and offer an explicit reload of the latest version.
+- [x] Resolve approved parent directories without canonicalizing the final file component; final-component symlinks/reparse points are refused for regular-file reads, image previews, and content search. Existing-file edits also reject hard-linked inodes using Unix metadata or the Windows file-handle API.
 - [x] Keep browser preview disconnected from the host filesystem; native file commands are unavailable in browser mode.
 
 **Exit criteria:** NEXUS can work with explicitly approved folders on Windows, while access remains scoped, visible, reversible where possible, and protected against unintended writes.

@@ -1,77 +1,69 @@
-# NEXUS AU — Owner Smoke-Test Record
+# NEXUS AU — Owner Smoke Test Checklist
 
-This checklist is for real-device acceptance after the automated build. CI compilation is not a substitute for testing a signed-in desktop session, an unlocked credential vault, a live model endpoint, or mobile Safari.
+Status: prepared for the release candidate. These checks require the owner's real devices and desktop sessions; CI cannot perform them.
 
-## 1. iPhone Safari interface
+## Safety before testing
 
-- Open the hosted interface preview: https://artembatov777-art.github.io/NEXUS-AII/?demo=1
-- Check portrait and landscape layouts, scrolling, safe-area spacing, keyboard visibility, and touch-target usability.
-- Navigate Chat, Projects, Memory, Knowledge, Agents, File System, Tools & MCP, Training Lab, and Settings.
-- Confirm preview notices clearly state that demo messages are not sent to an AI model and demo actions do not touch device files.
-- Open the main responsive workspace without `?demo=1` and verify it does not imply native desktop integrations are active.
-- Record device model, iOS version, browser version, date, and any layout defects. Do not include private chat contents or credentials in the record.
+- Use a disposable test folder and non-sensitive sample documents.
+- Do not paste provider API keys into ChatGPT, GitHub issues, logs, screenshots, or this checklist.
+- Keep the first provider test local. A normal Ollama loopback endpoint does not require an API key unless the owner has explicitly configured authentication.
+- Use a limited-scope cloud key only after local tests pass, and enter it only through the native NEXUS credential settings.
 
-## 2. Desktop provider credential vault
+## iPhone Safari preview
 
-Run separately on each supported desktop OS:
+Open the hosted preview with `?demo=1` appended to the URL.
 
-- Create two saved cloud profiles and verify each receives a different dedicated credential handle.
-- Save a different test provider key in each profile through NEXUS settings.
-- Confirm the UI reports the vault entry as available.
-- Restart NEXUS and confirm the saved key remains available without being displayed in the UI.
-- Run endpoint discovery and a short generation test.
-- Change one profile's key and confirm the other profile remains available.
-- Delete one saved profile and confirm only its dedicated vault entry is removed; any legacy shared key remains untouched.
-- Delete the saved key and confirm the UI reports it missing.
-- Confirm no provider key appears in localStorage, SQLite workspace backup, logs, trace attributes, or exported files.
-- On Linux, verify the signed-in desktop session exposes an unlocked Secret Service-compatible keyring. Headless CI does not establish this.
+- [ ] No horizontal scrolling at common iPhone widths.
+- [ ] Top and bottom controls do not overlap the notch, home indicator, or Safari safe areas.
+- [ ] Chat, Projects, Memory, Knowledge, and More navigation work.
+- [ ] Search fields, buttons, notices, and empty states behave correctly.
+- [ ] The preview clearly states that its sample chat is not connected to a live model.
+- [ ] Reduced Motion is respected when enabled in iOS accessibility settings.
 
-Never send API keys in chat messages, issue reports, screenshots, or smoke-test notes.
+## Native desktop shell
 
-## 3. Local Ollama route
+- [ ] App launches and closes normally on each supported desktop OS.
+- [ ] Window resizing, keyboard navigation, dialogs, and command palette remain usable.
+- [ ] No secrets appear in application logs, traces, localStorage, or exported backups.
 
-- On a desktop where Ollama is installed and running, configure its OpenAI-compatible `/v1` endpoint.
-- Discover model IDs from the endpoint; verify NEXUS does not invent unavailable model names.
-- Run a generation test, then a normal chat request.
-- Verify the configured route disclosure is accurate. A loopback endpoint alone does not prove the model is not forwarding requests elsewhere.
-- Confirm cancellation and timeout behavior.
+## Providers and credentials
 
-NEXUS does not install Ollama, download model weights, or manage Ollama lifecycle in this release baseline.
+- [ ] Configure a running Ollama-compatible loopback endpoint and discover an installed model.
+- [ ] Send a short test prompt, verify streaming, then verify cancellation.
+- [ ] Configure a compatible HTTPS cloud endpoint only after local checks; store the key through the native credential UI.
+- [ ] Confirm the credential status changes correctly after save and delete.
+- [ ] Confirm a deleted key cannot be used and no plaintext fallback is created.
+- [ ] Confirm the selected model comes from the provider's actual discovery response.
+- [ ] Confirm the UI does not claim that a loopback gateway guarantees upstream-local processing.
 
-## 4. Compatible cloud endpoint
+## File System
 
-- Configure a compatible HTTPS endpoint.
-- Store its key in the OS credential vault through the native UI.
-- Discover models, run a generation test, stream a chat response, and cancel a second request.
-- Confirm remote processing is disclosed and provider errors do not expose the key.
-- Confirm switching provider profiles does not silently start a network request.
+Use a disposable approved folder.
 
-## 5. Approved-folder filesystem
+- [ ] Grant access to exactly the intended folder; deny access to an unrelated folder.
+- [ ] Browse, search by name, and search file contents within the approved root.
+- [ ] Preview a supported raster image and reject a disguised/oversized image.
+- [ ] Create a new file without overwriting an existing destination.
+- [ ] Edit a file, modify it externally, and confirm the stale draft is preserved rather than overwriting the newer file.
+- [ ] Rename/move files and test destination conflicts.
+- [ ] Test batch rename/move rollback behavior with disposable files.
+- [ ] Confirm audit history records actions without storing private paths.
 
-- Grant access to a dedicated test folder, not a personal documents root.
-- Verify browsing and search stay inside that approved root.
-- Read a text file, create a new file, edit it, and verify external-edit conflicts preserve the unsaved draft.
-- Verify create-new refuses to overwrite an existing file.
-- Test rename/move/batch operations with one deliberate name conflict and verify no unrelated file is overwritten.
-- Inspect audit history and confirm private absolute paths are not stored in event details.
-- Verify browser preview cannot access the host filesystem.
+## Memory, Knowledge, Agents, and Training Lab
 
-## 6. Memory, knowledge, agents, and tools
+- [ ] Create, revise, search, and delete a test memory.
+- [ ] Import a sample document and confirm source/page provenance in retrieval.
+- [ ] Confirm project-scoped knowledge does not leak into another project.
+- [ ] Run an agent task with a harmless read-only tool; approve one call and deny another.
+- [ ] Pause, resume, and cancel a run; inspect its audit trail.
+- [ ] For an ambiguous external result, use manual reconciliation and confirm NEXUS does not blindly rerun the side effect.
+- [ ] Import a synthetic Training Lab dataset, validate splits, and run a small evaluation.
+- [ ] Confirm private dataset transfer prompts appear before remote evaluation and expected outputs stay local.
 
-- Create, revise, search, and delete a test memory.
-- Import a small non-sensitive document and verify source/page/section provenance in retrieval.
-- Run an agent task that only reads approved test data.
-- Verify each file write and MCP tool call requires its own explicit approval.
-- Simulate an ambiguous tool outcome and use manual reconciliation; confirm the tool is not executed again.
-- Confirm untrusted document/tool content cannot expand permissions or override the system policy.
+## Backup, recovery, and sign-off
 
-## 7. Backup and recovery
-
-- Export a workspace backup and inspect that credentials and approved folder permissions are absent.
-- Import into a disposable workspace and verify projects, conversations, memories, knowledge, agent checkpoints, Training Lab records, and sanitized audit/trace history.
-- Test a legacy backup and confirm its data-loss warning is accurate.
-- Verify interrupted batch operations report incomplete rollback and leave a recoverable manual-review state.
-
-## Result log
-
-For each section, record: platform/device, app build, date, pass/fail, concise reproduction steps, and non-sensitive evidence. Do not mark a section passed based only on CI.
+- [ ] Export a workspace backup and import it into a disposable profile.
+- [ ] Try an invalid backup and confirm the existing workspace remains unchanged.
+- [ ] Verify cancellation and recovery after a simulated interrupted workflow.
+- [ ] Record OS version, NEXUS commit SHA, test date, and pass/fail notes for each platform.
+- [ ] Complete independent security review before enabling broader remote MCP or desktop automation capabilities.
