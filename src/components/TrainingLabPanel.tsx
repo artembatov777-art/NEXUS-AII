@@ -182,7 +182,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
       setError("Live dataset model comparison is available only in the native desktop app.");
       return;
     }
-    const models = [...new Set(comparisonModels.split(/[\\n,]+/).map(item => item.trim()).filter(Boolean))];
+    const models = [...new Set(comparisonModels.split(/[\n,]+/).map(item => item.trim()).filter(Boolean))];
     if (models.length < 2 || models.length > 4) {
       setError("Enter between two and four distinct model IDs before comparing the dataset.");
       return;
