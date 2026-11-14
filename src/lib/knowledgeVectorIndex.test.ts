@@ -16,10 +16,10 @@ describe("IndexedDB connection lifecycle", () => {
     try {
       const index = new IndexedDbKnowledgeVectorIndex();
       const pending = index.hasProject("project-1");
-      request.onblocked?.(new Event("blocked"));
+      request.onblocked?.(new Event("blocked") as IDBVersionChangeEvent);
       await expect(pending).rejects.toThrow(/blocked by another open tab/i);
       const close = vi.fn();
-      request.result = { close } as unknown as IDBDatabase;
+      Object.defineProperty(request, "result", { configurable: true, value: { close } as unknown as IDBDatabase });
       request.onsuccess?.(new Event("success"));
       expect(close).toHaveBeenCalledOnce();
     } finally {
