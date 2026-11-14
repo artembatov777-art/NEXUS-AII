@@ -601,7 +601,7 @@ describe("FileSystemPanel native workspace access", () => {
     const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
     let currentPath = oldPath;
     isTauriMock.mockReturnValue(true);
-    invokeMock.mockImplementation(async (command: string, args?: { path?: string; newName?: string }) => {
+    invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_workspace_directories") return [rootPath];
       if (command === "list_workspace_entries") return [{
         name: currentPath.split("/").pop(), path: currentPath, kind: "file", sizeBytes: 8, modifiedAtMs: 0
@@ -627,7 +627,7 @@ describe("FileSystemPanel native workspace access", () => {
     expect(invokeMock).toHaveBeenCalledWith("rename_workspace_entry", { path: oldPath, newName: "diagram-final.png" });
     expect(invokeMock).toHaveBeenCalledWith("read_workspace_image_preview", { path: newPath });
     expect(invokeMock).not.toHaveBeenCalledWith("read_workspace_file", { path: newPath });
-    expect(container.querySelector(".file-image-preview img")?.src).toBe(dataUrl);
+    expect(container.querySelector<HTMLImageElement>(".file-image-preview img")?.src).toBe(dataUrl);
     confirm.mockRestore();
   });
 
