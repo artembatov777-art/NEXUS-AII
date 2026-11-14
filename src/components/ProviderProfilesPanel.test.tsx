@@ -30,12 +30,13 @@ function setValue(element: HTMLInputElement, value: string) {
 beforeEach(() => {
   window.localStorage.clear();
   vi.clearAllMocks();
+  vi.stubGlobal("confirm", vi.fn(() => true));
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
 });
 
-afterEach(() => { act(() => root.unmount()); container.remove(); });
+afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 
 describe("ProviderProfilesPanel", () => {
   it("loads saved profiles without starting a provider connection", async () => {
@@ -57,6 +58,15 @@ describe("ProviderProfilesPanel", () => {
     expect(raw).toContain("Local model");
     expect(raw).not.toContain("apiKey");
     expect(raw).toContain("127.0.0.1:11434");
+  });
+
+  it("keeps a saved profile when deletion is cancelled", async () => {
+    saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings: cloudSettings }]);
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={cloudSettings} onSelect={onSelect}/>); });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Delete profile")!.click(); });
+    expect(JSON.parse(window.localStorage.getItem("nexus-au:provider-profiles:v1") ?? '{"profiles":[]}').profiles)
+      .toHaveLength(1);
   });
 
   it("updates and deletes the selected profile", async () => {
