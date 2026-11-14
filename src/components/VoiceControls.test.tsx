@@ -19,8 +19,8 @@ afterEach(() => {
   container.remove();
   delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition;
   delete (window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
-  delete (window as Window & { speechSynthesis?: unknown }).speechSynthesis;
-  delete (globalThis as typeof globalThis & { SpeechSynthesisUtterance?: unknown }).SpeechSynthesisUtterance;
+  Reflect.deleteProperty(window, "speechSynthesis");
+  Reflect.deleteProperty(globalThis, "SpeechSynthesisUtterance");
 });
 
 describe("VoiceControls", () => {
