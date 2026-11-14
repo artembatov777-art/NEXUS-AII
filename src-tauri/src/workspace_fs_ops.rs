@@ -85,6 +85,14 @@ fn validate_entry_name(name: &str) -> Result<(), String> {
         || name.ends_with('.') || name.ends_with(' ') {
         return Err("Enter a valid file or folder name without path separators or reserved characters.".into());
     }
+    let windows_stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if matches!(windows_stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" |
+        "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" |
+        "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9"
+    ) {
+        return Err("This file or folder name is reserved by Windows.".into());
+    }
     let mut components = Path::new(name).components();
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
         return Err("The new name must be a single path component.".into());
@@ -447,9 +455,11 @@ mod tests {
 
     #[test]
     fn rename_rejects_invalid_names() {
-        for name in ["", ".", "..", "../escape", "folder/name", "bad:name", "trailing."] {
+        for name in ["", ".", "..", "../escape", "folder/name", "bad:name", "trailing.",
+            "CON", "con.txt", "nul.log", "PRN", "AUX", "COM1", "LPT9"] {
             assert!(validate_entry_name(name).is_err(), "accepted invalid name: {name}");
         }
         assert!(validate_entry_name("report-final.txt").is_ok());
+        assert!(validate_entry_name("conifer.txt").is_ok());
     }
 }
