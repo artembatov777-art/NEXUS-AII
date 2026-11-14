@@ -1,94 +1,35 @@
-# NEXUS AU — Agent System
+# NEXUS AU — Agent Runtime
 
-## Goal
+## Product contract
 
-Agents are specialized task workers coordinated by a bounded orchestrator. They are not independent authorities and do not bypass user permissions.
+Agents are bounded task workers. They do not bypass the Tool Gateway, owner-approved workspace roots, provider credential vault, or explicit permission policy. Retrieved documents and MCP output are untrusted data, never instructions that can grant permissions.
 
-## Initial agent roles
+## Implemented runtime
 
-- **Main / Coordinator:** interprets the user request, delegates bounded subtasks, and combines results.
-- **Research:** gathers and summarizes source-grounded information.
-- **Coding:** inspects, edits, and tests code within an explicitly authorized workspace.
-- **Analyst:** evaluates data and documents.
-- **Writer:** drafts structured text and documentation.
-- **Planner:** converts goals into ordered tasks and acceptance criteria.
-- **Memory:** proposes memory updates and retrieves approved records.
-- **Browser:** interacts with explicitly permitted web resources.
-- **Security Reviewer:** checks proposed changes, permissions, and risky tool use.
+- `src/core/resumableAgents.ts` implements a serializable step runtime with bounded steps, execution time, progress/output size, cancellation, and version-pinned agent definitions.
+- Each state transition is persisted before its progress/output event is emitted. The desktop composition root uses the native SQLite checkpoint repository; browser preview uses localStorage and is not a security boundary.
+- Approval pauses store the requested permission. The host issues an opaque, one-time grant bound to the run, agent, and permission. Outstanding in-memory grants are intentionally invalidated by restart, so a pending action must be reviewed again.
+- `src/core/toolInvocationAgent.ts` adapts model-planned tool calls to the Tool Gateway. `src/lib/workspaceTools.ts` registers bounded list, search, content-search, read, write, mkdir, rename, and move operations. Native Rust filesystem commands remain the final access-control boundary.
+- `src/components/AgentControlCenter.tsx` exposes the local preview workflow, model-backed planning, task execution, checkpoint controls, ambiguous-outcome reconciliation, and recent audit events.
+- `src/core/multiAgentCoordinator.ts` executes validated, dependency-ordered plans with a bounded number of delegated steps. The current model-planned workflow assigns those steps to the Tool Invocation Agent; a full specialist-agent team is not yet a release claim.
+- MCP servers can be configured over HTTPS or loopback HTTP, discovered, and imported into the Tool Registry. Every imported call requires a separate owner confirmation. The current UI supports unauthenticated MCP endpoints only; OAuth and bearer-token credential flows are not implemented.
 
-These are proposed roles, not claims that agents have already been implemented.
+## Built-in workflows
 
-## Agent contract
+1. **Local workflow demo:** creates a local, non-destructive task preview. It does not call a model or access external systems.
+2. **Model-planned workflow:** uses the selected provider to produce a bounded plan, validates tool IDs and schemas against the live registry, and executes approved operations through the Tool Gateway. Local no-key profiles are supported when explicitly configured as credential-free.
 
-Each agent definition should include:
+## Safety and recovery boundaries
 
-- Stable identifier and display name.
-- Purpose and system instructions.
-- Model/provider configuration.
-- Allowed tools and capabilities.
-- Input and output schemas.
-- Timeout and step budget.
-- Maximum delegation depth.
-- Cancellation behavior.
-- Logging and audit metadata.
+- Agent and tool permissions default to deny.
+- Workspace access is limited to owner-approved directories and native command validation.
+- Tool inputs/outputs and plans have explicit size limits.
+- MCP server descriptions and tool results are untrusted.
+- Ambiguous external outcomes are shown for manual reconciliation. Reconciliation blocks blind retries; it does not assert whether an external side effect actually completed.
+- Automatic replay of persisted external side effects is intentionally not implemented.
+- The multi-agent coordinator's pending plan/output state is currently held in memory. Durable agent checkpoints exist, but a process restart does not yet guarantee end-to-end recovery of an entire multi-step coordination plan.
+- Tool OAuth, broad browser/terminal execution, unrestricted shell access, specialist delegation, and autonomous background agents are not implemented.
 
-## Orchestration lifecycle
+## Release acceptance
 
-1. Validate the user's request.
-2. Create a task with explicit scope and acceptance criteria.
-3. Select the minimum necessary agents.
-4. Provide only relevant context and approved tools.
-5. Execute within time, step, and budget limits.
-6. Validate outputs and collect evidence.
-7. Request user approval before sensitive actions.
-8. Return a concise result and execution summary.
-
-## Safety constraints
-
-- No unbounded agent loops or recursive delegation.
-- No permission escalation without user approval.
-- No secrets in prompts or logs unless strictly required by a secure provider flow.
-- Treat retrieved documents and tool output as untrusted input.
-- Make cancellation available.
-- Keep a trace of agent decisions and tool calls.
-
-
-## Implemented runtime slice
-
-The first provider-neutral runtime primitive is implemented in `src/core/agents.ts` with deterministic tests in `src/core/agents.test.ts`.
-
-Currently implemented: agent registration, metadata listing, preflight permission checks, explicit approval handoff event, cancellation, timeout signal, checkpoint/step limits, and output-size limits. An explicit checkpoint followed by a progress event with the same label counts as one logical step.
-
-Not implemented yet: approval resume, model-backed planning, tool gateway integration, specialist delegation, token budgets, persistent run history, and UI. The role list above remains a design proposal, not a set of working agents.
-
-
-## Agent checkpoint foundation
-
-Implemented in `src/core/agentCheckpoints.ts` and `src/lib/agentCheckpointStorage.ts`:
-- Versioned run snapshots with thread/agent/run identity.
-- Monotonic sequence numbers and compare-and-swap stale-writer protection.
-- Immutable run identity and creation timestamp; terminal snapshots cannot be overwritten.
-- JSON-only state payload capped at 256 KB and approval metadata validation.
-
-This is a persistence contract and LocalStorage preview adapter. It is **not yet connected to AgentRuntime**, does not resume an interrupted iterator, and does not provide crash-safe SQLite durability. Those require a serializable agent state machine and explicit resume semantics; replaying arbitrary generator code would be unsafe and incorrect.
-
-
-## Serializable step runtime
-
-Implemented in `src/core/resumableAgents.ts` with tests in `src/core/resumableAgents.test.ts`.
-- Agent work is expressed as a deterministic state transition: JSON state in, one bounded step out.
-- Each step's next state is persisted before progress/output events are emitted.
-- A running checkpoint can be claimed with compare-and-swap and continued by a fresh runtime instance after restart.
-- Approval pauses persist the requested permission; resume requires a host-issued, opaque, one-time grant bound to that run, agent, and permission. Forged and replayed grants are rejected.
-- The runtime preserves its total step budget across resume and applies timeouts to active execution segments, pins checkpoints to the registered agent version, bounds output/progress, and fails closed on permission-service errors.
-
-Important limits: this is a core runtime contract, not yet wired to the UI, SQLite, or native secure storage. Tool Gateway integration is covered by a core-level integration test. The current checkpoint adapter is browser LocalStorage preview storage. A crash after a step's external side effect but before its checkpoint is committed can still cause that step to be retried; side-effecting steps must remain idempotent until operation-level idempotency and durable transactions are implemented. A crash after a checkpoint is committed but before its output event is delivered can lose that event; a durable event outbox is still needed for reliable delivery. Agent definitions must be re-registered after restart.
-
-## Agent tool access
-
-Resumable agent steps may receive an `AgentToolExecutor` port. The provided `GatewayAgentToolExecutor` adapter forwards calls through the Tool Gateway using a host-supplied actor identity. Agents do not receive direct filesystem, shell, browser, network, or raw Tauri capabilities. If no executor is configured, tool calls are denied. This is not yet wired into the application UI or a user approval dialog.
-
-
-## One-time approval grants
-
-`src/core/agentApprovals.ts` adds an in-memory approval authority. The host issues a grant only after checking that the checkpoint is waiting for approval; the opaque grant is bound to run, agent, and permission and can be consumed once. A restart discards outstanding grants, intentionally requiring the user to review the pending request again. The UI and durable native approval store remain future work.
+Automated tests cover agent checkpoint transitions, approval grants, cancellation races, planner validation, Tool Gateway permissions, workspace tool integration, MCP transport bounds, and audit reconciliation. Native smoke tests still require an owner-operated desktop session and harmless test workspace. Never mark the phase complete solely because a build passes.
