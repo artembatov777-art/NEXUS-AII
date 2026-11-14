@@ -85,6 +85,18 @@ describe("MemoryService", () => {
     expect((await service.list("project", 10)).ok).toBe(false);
   });
 
+  it("does not start a memory search after cancellation", async () => {
+    const { service, repository } = setup();
+    let calls = 0;
+    const original = repository.search.bind(repository);
+    repository.search = async (...args) => { calls += 1; return original(...args); };
+    const controller = new AbortController();
+    controller.abort();
+    const result = await service.search("technical", "profile", 5, undefined, controller.signal);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(calls).toBe(0);
+  });
+
   it("searches by scope and can forget a record", async () => {
     const { service, repository } = setup();
     const saved = await service.remember(input, { confirmedByUser: true });
