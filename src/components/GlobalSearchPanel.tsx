@@ -78,7 +78,7 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
   return <div className="modal-backdrop global-search-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="global-search-modal" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
       <header className="memory-header">
-        <div><div className="eyebrow">WORKSPACE SEARCH</div><h2 id="global-search-title"><Search size={20}/> Search everything</h2><p>Choose which workspace data to search.</p></div>
+        <div><div className="eyebrow">{t("WORKSPACE SEARCH")}</div><h2 id="global-search-title"><Search size={20}/> Search everything</h2><p>{t("Choose which workspace data to search.")}</p></div>
         <button className="icon-btn" onClick={onClose} aria-label={t("Close search")}><X size={18}/></button>
       </header>
       <form className="global-search-form" onSubmit={event => { event.preventDefault(); void searchAll(); }}>
@@ -95,8 +95,8 @@ export function GlobalSearchPanel({ conversations, projects, onClose, onOpenConv
         {chatResults.length > 0 && <section><h3><MessageSquare size={14}/> Conversations <span>{chatResults.length}</span></h3>{chatResults.map(item => <button className="global-search-result" key={item.id} onClick={() => onOpenConversation(item)}><strong>{item.title}</strong><small>{item.messages.length} messages · {projects.find(p => p.id === item.projectId)?.name ?? "Personal workspace"}</small></button>)}</section>}
         {memoryResults.length > 0 && <section><h3><Brain size={14}/> Memories <span>{memoryResults.length}</span></h3>{memoryResults.map(item => <button className="global-search-result" key={item.id} onClick={onOpenMemory}><strong>{item.content}</strong><small>{item.category} · {item.scope}</small></button>)}</section>}
         {knowledgeResults.length > 0 && <section><h3><BookOpen size={14}/> Project documents <span>{knowledgeResults.length}</span></h3>{knowledgeResults.map(({chunk,projectName}) => <button className="global-search-result" key={chunk.id} onClick={onOpenKnowledge}><strong>{chunk.sourceLabel}</strong><small>{projectName} · {chunk.text.slice(0,180)}</small></button>)}</section>}
-        {!working && query.trim() && !error && chatResults.length===0 && memoryResults.length===0 && knowledgeResults.length===0 && <p className="global-search-empty">No matching results in the selected scopes.</p>}
-        {!query.trim() && <p className="global-search-empty">Search all projects, conversations and saved context, or narrow the scope above.</p>}
+        {!working && query.trim() && !error && chatResults.length===0 && memoryResults.length===0 && knowledgeResults.length===0 && <p className="global-search-empty">{t("No matching results in the selected scopes.")}</p>}
+        {!query.trim() && <p className="global-search-empty">{t("Search all projects, conversations and saved context, or narrow the scope above.")}</p>}
       </div>
     </section>
   </div>;
