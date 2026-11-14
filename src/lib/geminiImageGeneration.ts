@@ -14,13 +14,14 @@ export interface GeneratedImage {
 export async function generateGeminiImage(
   prompt: string,
   accessToken: string,
-  options: { aspectRatio?: ImageAspectRatio; imageSize?: ImageSize; signal?: AbortSignal } = {}
+  options: { aspectRatio?: ImageAspectRatio; imageSize?: ImageSize; remoteConsent?: boolean; signal?: AbortSignal } = {}
 ): Promise<GeneratedImage> {
   const normalizedPrompt = prompt.trim();
   if (!normalizedPrompt || normalizedPrompt.length > 2_000) {
     throw new Error("Prompt must contain 1 to 2,000 characters.");
   }
   if (!accessToken.trim()) throw new Error("Enter the NEXUS access token in provider settings first.");
+  if (options.remoteConsent !== true) throw new Error("Explicit approval for remote image processing is required.");
   const aspectRatio = options.aspectRatio ?? "1:1";
   const imageSize = options.imageSize ?? "1K";
 
@@ -30,7 +31,7 @@ export async function generateGeminiImage(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken.trim()}`
     },
-    body: JSON.stringify({ prompt: normalizedPrompt, aspectRatio, imageSize }),
+    body: JSON.stringify({ prompt: normalizedPrompt, aspectRatio, imageSize, allowRemoteProcessing: true }),
     signal: options.signal
   });
 
