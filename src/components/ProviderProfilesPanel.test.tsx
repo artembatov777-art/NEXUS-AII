@@ -53,6 +53,7 @@ describe("ProviderProfilesPanel", () => {
       providerProtocol: "openai-chat-completions"
     }));
     expect(container.textContent).toContain("Hosted providers: Gemini, Groq and NVIDIA.");
+    expect(container.textContent).toContain("without an expiry date");
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
   });
 
