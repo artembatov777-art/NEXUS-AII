@@ -88,6 +88,7 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 ## Phase IV — Agents & Tools
 
 - [x] Implement the bounded agent runtime and model-driven planning through AI Core; full phase acceptance still requires integration and native smoke tests.
+- [x] Connect Studio workflow checklists to the agent runtime as explicit task handoffs; the owner starts the run in Agent Command Center and retains per-tool approval control.
 - [x] Implement approval, pause/resume, cancellation, durable SQLite checkpoints, and audit-led duplicate-step replay protection.
 - [x] Add owner-confirmed manual reconciliation for ambiguous external outcomes; reconciliation records a terminal audit state and never reruns the tool.
 - [x] Implement the Tool Gateway, MCP server configuration, session-aware HTTP transport, tool discovery/import, and per-call approval with input preview; broader OAuth/authentication and adversarial integration tests remain open.
