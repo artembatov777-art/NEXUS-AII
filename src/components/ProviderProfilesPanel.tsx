@@ -12,11 +12,13 @@ import {
 export function ProviderProfilesPanel({
   currentSettings,
   onSelect,
-  onDeleteCredential
+  onDeleteCredential,
+  gatewaySessionReady = false
 }: {
   currentSettings: ProviderSettings;
   onSelect: (settings: ProviderSettings) => void;
   onDeleteCredential: (credentialHandle: string) => Promise<void>;
+  gatewaySessionReady?: boolean;
 }) {
   const [profiles, setProfiles] = useState<ProviderProfileRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -25,17 +27,64 @@ export function ProviderProfilesPanel({
   const [persistentStorage, setPersistentStorage] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const loaded = loadProviderProfiles();
     if (!loaded.ok) {
       setStatus(loaded.error.message);
-      return;
+      return () => { active = false; };
     }
     setProfiles(loaded.value);
     const matching = loaded.value.find(profile =>
       JSON.stringify(profile.settings) === JSON.stringify(currentSettings)
     );
     if (matching) setSelectedId(matching.id);
-  }, []);
+
+    if (gatewaySessionReady && !isTauri()) {
+      void (async () => {
+        try {
+          const response = await fetch("/api/profiles", { credentials: "same-origin" });
+          const payload = await response.json() as { profiles?: unknown[]; error?: string };
+          if (!response.ok || !Array.isArray(payload.profiles)) {
+            throw new Error(payload.error || "Cloud profile storage is unavailable.");
+          }
+          const remote: ProviderProfileRecord[] = [];
+          for (const item of payload.profiles) {
+            const validated = validateProviderProfile(item);
+            if (!validated.ok) throw new Error("The cloud profile store contains an invalid profile.");
+            remote.push(validated.value);
+          }
+          const mergedById = new Map(remote.map(profile => [profile.id, profile]));
+          for (const local of loaded.value) {
+            const cloud = mergedById.get(local.id);
+            if (!cloud || (local.updatedAt ?? 0) > (cloud.updatedAt ?? 0)) mergedById.set(local.id, local);
+          }
+          const merged = [...mergedById.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+          const localSaved = saveProviderProfiles(merged);
+          if (!localSaved.ok) throw new Error(localSaved.error.message);
+          if (JSON.stringify(merged) !== JSON.stringify(remote)) {
+            const uploaded = await fetch("/api/profiles", {
+              method: "PUT",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ schemaVersion: 1, profiles: merged })
+            });
+            const result = await uploaded.json() as { error?: string };
+            if (!uploaded.ok) throw new Error(result.error || "Could not upload local profiles to cloud storage.");
+          }
+          if (!active) return;
+          setProfiles(merged);
+          setStatus("Provider profiles are synchronized with your NEXUS account and this device.");
+        } catch (cause) {
+          if (active) setStatus("Profiles remain saved on this device, but cloud synchronization failed: " +
+            (cause instanceof Error ? cause.message : "Unknown synchronization error."));
+        }
+      })();
+    }
+    void requestPersistentProviderProfileStorage().then(result => {
+      if (active && result === true) setPersistentStorage(true);
+    });
+    return () => { active = false; };
+  }, [gatewaySessionReady]);
 
   const selectedProfile = useMemo(
     () => profiles.find(profile => profile.id === selectedId) ?? null,
@@ -52,7 +101,20 @@ export function ProviderProfilesPanel({
     }
     setProfiles(next);
     setSelectedId(selected);
-    setStatus("Provider profile saved locally. API keys remain in OS credential-vault entries.");
+    setStatus("Provider profile saved on this device. API keys remain outside the profile.");
+    if (gatewaySessionReady && !isTauri()) {
+      void fetch("/api/profiles", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schemaVersion: 1, profiles: next })
+      }).then(async response => {
+        const payload = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(payload.error || "Cloud synchronization failed.");
+        setStatus("Provider profile saved on this device and synchronized with NEXUS cloud storage.");
+      }).catch(cause => setStatus("Profile saved locally, but cloud synchronization failed: " +
+        (cause instanceof Error ? cause.message : "Unknown error.")));
+    }
     return true;
   }
 
@@ -69,7 +131,7 @@ export function ProviderProfilesPanel({
         ? "none"
         : createProfileCredentialHandle()
     };
-    const next = upsertProviderProfile(profiles, { id, label: nextLabel, settings });
+    const next = upsertProviderProfile(profiles, { id, label: nextLabel, settings, updatedAt: Date.now() });
     if (!next.ok) {
       setStatus(next.error.message);
       return;
@@ -88,7 +150,8 @@ export function ProviderProfilesPanel({
     const next = upsertProviderProfile(profiles, {
       id: selectedProfile.id,
       label: selectedProfile.label,
-      settings: currentSettings
+      settings: currentSettings,
+      updatedAt: Date.now()
     });
     if (!next.ok) {
       setStatus(next.error.message);
@@ -128,7 +191,20 @@ export function ProviderProfilesPanel({
     }
     setProfiles(next.value);
     setSelectedId("");
-    setStatus("Provider profile deleted.");
+    setStatus("Provider profile deleted on this device.");
+    if (gatewaySessionReady && !isTauri()) {
+      void fetch("/api/profiles", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schemaVersion: 1, profiles: next.value })
+      }).then(async response => {
+        const payload = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(payload.error || "Cloud synchronization failed.");
+        setStatus("Provider profile deleted and synchronized with NEXUS cloud storage.");
+      }).catch(cause => setStatus("Profile deleted locally, but cloud synchronization failed: " +
+        (cause instanceof Error ? cause.message : "Unknown error.")));
+    }
     if (hasDedicatedKey && currentSettings.credentialHandle === credentialHandle) {
       onSelect(DEFAULT_PROVIDER);
     } else {
@@ -196,7 +272,7 @@ export function ProviderProfilesPanel({
       {selectedProfile && <button className="secondary-btn" type="button" onClick={updateSelected} disabled={!isDirty}>{t("Update selected")}</button>}
       {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>{t("Delete profile")}</button>}
     </div>
-    <small>Profiles are saved on this device without an expiry date. {persistentStorage
+    <small>Profiles are saved on this device without an expiry date. {gatewaySessionReady && !isTauri() ? "Cloud synchronization is enabled for this remembered NEXUS device. " : "Remember the NEXUS device session to synchronize profiles across Safari, Home Screen and desktop browser. "}{persistentStorage
       ? "The browser has also granted persistent storage, protecting them from automatic eviction."
       : "They remain until you delete them or clear this app's/browser's site data. Private browsing may discard them."} API keys are never stored in profiles. Selecting a profile does not connect to it.</small>
     {status && <small role="status">{t(status)}</small>}
