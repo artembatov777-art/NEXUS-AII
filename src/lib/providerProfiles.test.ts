@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { StorageAdapter } from "./storage";
 import {
-  loadProviderProfiles, removeProviderProfile, saveProviderProfiles,
+  loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveProviderProfiles,
   upsertProviderProfile, validateProviderProfile
 } from "./providerProfiles";
 import type { ProviderProfileRecord } from "./providerProfiles";
@@ -38,8 +38,8 @@ describe("provider profile persistence", () => {
     expect(loadProviderProfiles(storage)).toEqual({ ok: true, value: [ollama, cloud] });
   });
 
-  it("accepts only the trusted same-origin hosted gateway routes", () => {
-    for (const provider of ["gemini", "deepseek", "nvidia"]) {
+  it("accepts only the trusted same-origin hosted gateway routes, including Groq", () => {
+    for (const provider of ["gemini", "groq", "nvidia"]) {
       expect(validateProviderProfile({
         id: `nexus.${provider}`,
         label: provider,
@@ -63,6 +63,16 @@ describe("provider profile persistence", () => {
         credentialHandle: "default"
       }
     })).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
+  it("requests persistent browser storage when the Storage API supports it", async () => {
+    const persist = vi.fn(async () => true);
+    const persisted = vi.fn(async () => false);
+    vi.stubGlobal("navigator", { storage: { persist, persisted } });
+    await expect(requestPersistentProviderProfileStorage()).resolves.toBe(true);
+    expect(persisted).toHaveBeenCalledOnce();
+    expect(persist).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 
   it("rejects non-loopback no-key profiles and insecure remote HTTP endpoints", () => {
