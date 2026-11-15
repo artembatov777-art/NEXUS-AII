@@ -174,7 +174,7 @@ export function ProviderProfilesPanel({
         {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
       </select>
     </label>}
-    <small>{t("Provider presets declare their API protocol. Claude uses the native Anthropic Messages adapter; the other presets use OpenAI-compatible Chat Completions.")}</small>
+    <small>{t("Hosted providers: Gemini, DeepSeek and NVIDIA. Ollama remains available separately as a local no-key provider.")}</small>
     <label>Saved provider profiles
       <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
