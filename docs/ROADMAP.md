@@ -8,7 +8,7 @@ The seven phases below are the authoritative project sequence. Earlier milestone
 
 - **Product:** NEXUS AU, a personal AI workspace rather than a public SaaS.
 - **Design:** restrained JARVIS-inspired interface, deep black/graphite surfaces, muted cyan and blue accents, a dynamic central reactor, and consistent desktop/mobile behavior.
-- **Model strategy:** hybrid local and cloud through provider-neutral adapters. Ollama is the initial local runtime; OmniRoute is excluded from active development and may be evaluated only during final integration if the owner chooses.
+- **Model strategy:** hybrid local and cloud through provider-neutral adapters. The current native adapter uses OpenAI Chat Completions; built-in endpoint presets and their limits are documented in [PROVIDER_COMPATIBILITY.md](PROVIDER_COMPATIBILITY.md). Ollama is the initial local runtime; OmniRoute is excluded from active development and may be evaluated only during final integration if the owner chooses.
 - **Data ownership:** private workspace data, inspectable memory, explicit permissions, export/backup, and no silent training on personal data.
 - **Development rule:** distinguish implemented code, automated test evidence, and real device/runtime verification. A UI preset or mock is never evidence of a working backend.
 - **NEXUS Studio feature contract:** see [NEXUS_STUDIO.md](NEXUS_STUDIO.md) for the ten workspace features, their real data sources, and explicit non-claims.
