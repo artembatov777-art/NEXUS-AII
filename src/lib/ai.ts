@@ -27,7 +27,7 @@ export async function sendMessage(
   const requestMessages: ModelMessage[] = prepared.messages;
 
   if (!isTauri()) {
-    const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/);
+    const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|gemini|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/);
     if (hostedProvider) {
       if (!gatewayToken?.trim() && !useGatewayCookie) throw new Error("Enter the NEXUS access token once, or remember this device after connecting.");
       const systemMessage = requestMessages.find(message => message.role === "system");
