@@ -40,7 +40,7 @@ class TauriModelProvider implements ModelProvider {
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
     if (this.cachedModels && Date.now() - this.catalogCheckedAt < TauriModelProvider.CATALOG_CACHE_MS) {
-      return ok(this.cachedModels.map(model => ({ ...model, modalities: model.modalities ? [...model.modalities] : undefined })));
+      return ok(this.cachedModels.map(model => ({ ...model, ...(model.modalities ? { modalities: [...model.modalities] } : {}) })));
     }
     if (this.settings.model && !isValidModelId(this.settings.model)) {
       return err("validation", "Configured model name is invalid.");
