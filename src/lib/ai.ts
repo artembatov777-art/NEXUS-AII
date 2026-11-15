@@ -26,6 +26,56 @@ export async function sendMessage(
   const requestMessages: ModelMessage[] = prepared.messages;
 
   if (!isTauri()) {
+    const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia)$/);
+    if (hostedProvider) {
+      if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token configured in Vercel. It is separate from every provider API key.");
+      const systemMessage = requestMessages.find(message => message.role === "system");
+      const turns = requestMessages.filter(message => message.role !== "system").slice(-39);
+      if (turns.some(message => message.content.length > 12_000)) {
+        throw new Error("A chat message exceeds the hosted provider gateway's 12,000-character limit.");
+      }
+      const hostedMessages = [
+        ...(systemMessage ? [{ role: "system" as const, content: new TextDecoder().decode(new TextEncoder().encode(systemMessage.content).slice(0, 24_000)) }] : []),
+        ...turns
+      ];
+      const requestPayload = {
+        action: "chat",
+        model: settings.model,
+        messages: hostedMessages,
+        ...(generation?.temperature !== undefined ? { temperature: generation.temperature } : {}),
+        ...(generation?.maxOutputTokens !== undefined ? { maxOutputTokens: generation.maxOutputTokens } : {})
+      };
+      if (new TextEncoder().encode(JSON.stringify(requestPayload)).byteLength > 64 * 1024) {
+        throw new Error("This request is too large for the hosted provider gateway. Shorten the message or reduce attached context.");
+      }
+      const response = await fetch(settings.baseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + gatewayToken.trim() },
+        body: JSON.stringify(requestPayload),
+        signal
+      });
+      type HostedProviderResponse = {
+        text?: string;
+        usage?: { inputTokens?: number | null; outputTokens?: number | null };
+        error?: string;
+      };
+      let resultPayload: HostedProviderResponse;
+      try {
+        resultPayload = await response.json() as HostedProviderResponse;
+      } catch {
+        throw new Error("Hosted provider gateway returned an invalid response (HTTP " + response.status + ").");
+      }
+      if (!response.ok) throw new Error(resultPayload.error || "Hosted provider request failed (HTTP " + response.status + ").");
+      if (typeof resultPayload.text !== "string" || !resultPayload.text.trim()) {
+        throw new Error("The hosted provider returned an empty response.");
+      }
+      onUsage?.({
+        ...(typeof resultPayload.usage?.inputTokens === "number" ? { inputTokens: resultPayload.usage.inputTokens } : {}),
+        ...(typeof resultPayload.usage?.outputTokens === "number" ? { outputTokens: resultPayload.usage.outputTokens } : {})
+      });
+      onDelta?.(resultPayload.text);
+      return resultPayload.text;
+    }
     if (settings.baseUrl !== "/api/gemini") {
       throw new Error("Browser preview supports Gemini through the secured Vercel proxy only. Select “Use Gemini on Vercel” in provider settings.");
     }
