@@ -1,6 +1,6 @@
 # NEXUS AU security review
 
-**Review date:** 2026-11-14  
+**Review date:** 2026-11-15  
 **Scope:** source-level review of the native Tauri host, React webview, provider transport, MCP transport, agent execution, SQLite persistence, backup/restore, and browser preview. This is an engineering review, not an independent penetration test or formal security certification.
 
 ## Trust boundaries
@@ -9,7 +9,7 @@
 2. **Native host to AI provider.** The endpoint is user-configured. Provider requests use HTTPS, except HTTP on loopback only. Redirects are disabled.
 3. **Native host to MCP server.** MCP endpoints are user-configured and treated as untrusted. Remote metadata and tool results are bounded and validated before registration or handoff.
 4. **Agent to tools.** Agents cannot call arbitrary host APIs. Execution passes through the Tool Gateway and its permission policy.
-5. **Persistence.** Native workspace data is stored in SQLite. Browser preview data and semantic vectors are stored in localStorage/IndexedDB.
+5. **Persistence.** Native workspace data is stored in SQLite. Browser preview data and semantic vectors are stored in localStorage/IndexedDB. Hosted provider profile settings are synchronized through the authenticated Railway API and require a verified persistent Volume.
 
 ## Controls verified in code
 
@@ -46,6 +46,10 @@
 
 ### Storage and backups
 
+- Hosted browser provider profiles are synchronized through the authenticated `/api/profiles` endpoint. The endpoint stores only validated endpoint/model/route metadata and credential handles; provider API keys are not accepted or stored. The current single-owner deployment uses one shared `NEXUS_API_TOKEN`, so remembered devices share one profile collection; this is not multi-user isolation.
+- Railway profile storage requires both `NEXUS_DATA_DIR=/data` and a real mounted Volume covering that directory. In Railway runtime, the server checks the container mount table and fails closed with a service-unavailable response if the configured directory is only ephemeral container storage. The check is not a substitute for owner verification of the Railway Volume configuration.
+- Profile deletion tombstones are monotonic on the server and writes are serialized within the Node process, preventing a stale browser sync request from restoring a profile that another device deleted. This does not provide cross-process locking for multi-replica deployments; the Railway service is currently designed as a single Node service.
+- Cloud profile synchronization does not synchronize native OS-vault secrets, local memories, projects, conversations, knowledge documents, semantic vectors, or workspace folder permissions. Those data stores retain their documented device-local/native behavior.
 - SQLite schema migrations run in one exclusive transaction. Workspace backup import is transactional and has rollback tests.
 - Project deletion uses native database cleanup/cascade behavior and clears project-scoped semantic vectors.
 - Tool audit and trace history have bounded retention; trace attributes are redacted and bounded. Owner-initiated filesystem reads, content searches, creates, edits, renames, moves, and permission changes also create native audit events without including private paths.
