@@ -142,7 +142,7 @@ describe("TauriModelProvider", () => {
       .rejects.toThrow(/not present in the discovered provider catalog/i);
     expect(mockedInvoke).toHaveBeenCalledTimes(1);
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
-      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none", protocol: "openai-chat-completions"
+      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none"
     });
     expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
   });
@@ -422,7 +422,7 @@ describe("TauriModelProvider", () => {
       baseUrl: "http://127.0.0.1:11434/v1",
       model: "",
       inferenceLocation: "local",
-      credentialHandle: "none", protocol: "openai-chat-completions"
+      credentialHandle: "none"
     });
     if (!router) throw new Error("Expected native model router.");
     await expect(router.listModels()).resolves.toMatchObject({
@@ -436,7 +436,7 @@ describe("TauriModelProvider", () => {
     mockedInvoke.mockResolvedValue(["model-a"]);
     const router = createTauriModelRouter({
       baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b",
-      inferenceLocation: "local", credentialHandle: "none", protocol: "openai-chat-completions"
+      inferenceLocation: "local", credentialHandle: "none"
     });
     if (!router) throw new Error("Expected native model router.");
     expect(await router.listModels()).toMatchObject({
@@ -447,7 +447,7 @@ describe("TauriModelProvider", () => {
     });
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
       baseUrl: "http://127.0.0.1:11434/v1",
-      credentialHandle: "none", protocol: "openai-chat-completions"
+      credentialHandle: "none"
     });
   });
 
