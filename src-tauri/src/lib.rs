@@ -745,6 +745,22 @@ mod payload_validation_tests {
     }
 
     #[test]
+    fn anthropic_messages_stream_parser_extracts_text_usage_and_completion() {
+        let start = r#"{"type":"message_start","message":{"usage":{"input_tokens":19}}}"#;
+        let delta = r#"{"type":"content_block_delta","delta":{"type":"text_delta","text":"Claude"}} "#.trim();
+        let usage = r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":8}}"#;
+        let stop = r#"{"type":"message_stop"}"#;
+        assert_eq!(parse_sse_chunk(start).unwrap().unwrap().input_tokens, Some(19));
+        assert_eq!(parse_sse_chunk(delta).unwrap().unwrap().text.as_deref(), Some("Claude"));
+        let parsed = parse_sse_chunk(usage).unwrap().unwrap();
+        assert_eq!(parsed.finish_reason.as_deref(), Some("end_turn"));
+        assert_eq!(parsed.output_tokens, Some(8));
+        assert_eq!(parse_sse_chunk(stop).unwrap().unwrap().finish_reason.as_deref(), Some("end_turn"));
+        assert!(is_anthropic_messages_protocol(Some("anthropic-messages")));
+        assert!(!is_anthropic_messages_protocol(Some("openai-chat-completions")));
+    }
+
+    #[test]
     fn sse_parser_extracts_finish_reason_and_usage_metadata() {
         let event = r#"{"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":23,"completion_tokens":7}}"#;
         let parsed = parse_sse_chunk(event).unwrap().unwrap();
@@ -1448,6 +1464,28 @@ fn parse_sse_chunk(data: &str) -> Result<Option<ParsedSseChunk>, String> {
         let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("Provider streaming error.");
         return Err(message.chars().take(500).collect());
     }
+    // Anthropic Messages API uses typed SSE JSON events instead of OpenAI choices.
+    if let Some(event_type) = payload.get("type").and_then(|v| v.as_str()) {
+        let text = if event_type == "content_block_delta" {
+            payload.get("delta").and_then(|v| v.get("text")).and_then(|v| v.as_str()).map(str::to_owned)
+        } else { None };
+        let finish_reason = match event_type {
+            "message_delta" => payload.get("delta").and_then(|v| v.get("stop_reason")).and_then(|v| v.as_str()).map(str::to_owned),
+            "message_stop" => Some("end_turn".to_string()),
+            _ => None
+        };
+        let input_tokens = if event_type == "message_start" {
+            payload.get("message").and_then(|v| v.get("usage")).and_then(|v| v.get("input_tokens")).and_then(|v| v.as_u64())
+        } else { None };
+        let output_tokens = if event_type == "message_delta" {
+            payload.get("usage").and_then(|v| v.get("output_tokens")).and_then(|v| v.as_u64())
+        } else { None };
+        if event_type == "error" {
+            let message = payload.get("error").and_then(|v| v.get("message")).and_then(|v| v.as_str()).unwrap_or("Anthropic streaming error.");
+            return Err(message.chars().take(500).collect());
+        }
+        return Ok(Some(ParsedSseChunk { text, finish_reason, input_tokens, output_tokens }));
+    }
     let choice = payload.get("choices").and_then(|v| v.as_array())
         .and_then(|items| items.first());
     let delta = choice.and_then(|v| v.get("delta")).and_then(|v| v.get("content"));
@@ -1466,6 +1504,10 @@ fn parse_sse_chunk(data: &str) -> Result<Option<ParsedSseChunk>, String> {
     let output_tokens = usage.and_then(|v| v.get("completion_tokens").or_else(|| v.get("output_tokens")))
         .and_then(|v| v.as_u64());
     Ok(Some(ParsedSseChunk { text, finish_reason, input_tokens, output_tokens }))
+}
+
+fn is_anthropic_messages_protocol(protocol: Option<&str>) -> bool {
+    matches!(protocol, Some("anthropic-messages"))
 }
 
 fn forward_sse_chunk(
@@ -1515,6 +1557,7 @@ fn flush_provider_secret_redactor(
 async fn send_chat_stream(
     base_url: String,
     credential_handle: String,
+    protocol: Option<String>,
     model: String,
     messages: Vec<ProviderInputMessage>,
     temperature: Option<f32>,
@@ -1544,8 +1587,10 @@ async fn send_chat_stream(
         || endpoint.query().is_some() || endpoint.fragment().is_some() {
         return Err("Provider URL cannot contain credentials, query parameters, or fragments.".into());
     }
-    if !endpoint.path().trim_end_matches('/').ends_with("/chat/completions") {
-        let path = format!("{}/chat/completions", endpoint.path().trim_end_matches('/'));
+    let anthropic_protocol = is_anthropic_messages_protocol(protocol.as_deref());
+    let route_suffix = if anthropic_protocol { "/messages" } else { "/chat/completions" };
+    if !endpoint.path().trim_end_matches('/').ends_with(route_suffix) {
+        let path = format!("{}{}", endpoint.path().trim_end_matches('/'), route_suffix);
         endpoint.set_path(&path);
     }
     if !valid_provider_model_id(&model) || messages.is_empty() || messages.len() > 100 {
@@ -1564,13 +1609,31 @@ async fn send_chat_stream(
     }
     validate_generation_parameters(temperature, max_output_tokens)?;
     let api_key = load_provider_credential(&credential_handle, loopback)?;
-    let mut payload = serde_json::json!({
-        "model": model.trim(),
-        "messages": messages.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
-        "stream": true
-    });
+    let mut payload = if anthropic_protocol {
+        let system = messages.iter().filter(|message| message.role == "system")
+            .map(|message| message.content.as_str()).collect::<Vec<_>>().join("\n\n");
+        let conversation = messages.iter().filter(|message| message.role != "system")
+            .map(|message| serde_json::json!({"role":message.role,"content":message.content}))
+            .collect::<Vec<_>>();
+        let mut value = serde_json::json!({
+            "model": model.trim(),
+            "messages": conversation,
+            "max_tokens": max_output_tokens.unwrap_or(1024),
+            "stream": true
+        });
+        if !system.is_empty() { value["system"] = serde_json::json!(system); }
+        value
+    } else {
+        serde_json::json!({
+            "model": model.trim(),
+            "messages": messages.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
+            "stream": true
+        })
+    };
     if let Some(value) = temperature { payload["temperature"] = serde_json::json!(value); }
-    if let Some(value) = max_output_tokens { payload["max_tokens"] = serde_json::json!(value); }
+    if !anthropic_protocol {
+        if let Some(value) = max_output_tokens { payload["max_tokens"] = serde_json::json!(value); }
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(180))
         .redirect(reqwest::redirect::Policy::none())
@@ -1580,7 +1643,13 @@ async fn send_chat_stream(
     let mut response = None;
     for attempt in 0..=2 {
         let mut request = client.post(endpoint.clone()).json(&payload);
-        if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
+        if let Some(key) = api_key.as_deref() {
+            if anthropic_protocol {
+                request = request.header("x-api-key", key).header("anthropic-version", "2023-06-01");
+            } else {
+                request = request.bearer_auth(key);
+            }
+        }
         let send_result = tokio::select! {
             result = request.send() => result,
             _ = wait_for_stream_cancellation(cancelled.clone()) => return Err("Provider streaming request cancelled.".into())
@@ -1818,7 +1887,9 @@ fn parse_provider_model_ids(body: &[u8]) -> Result<Vec<String>, String> {
 async fn list_provider_models(
     base_url: String,
     credential_handle: String,
+    protocol: Option<String>,
 ) -> Result<Vec<String>, String> {
+    let anthropic_protocol = is_anthropic_messages_protocol(protocol.as_deref());
     let mut endpoint = reqwest::Url::parse(base_url.trim())
         .map_err(|_| "Provider URL is invalid.".to_string())?;
     let host = endpoint.host_str().unwrap_or_default();
@@ -1843,7 +1914,13 @@ async fn list_provider_models(
         .build()
         .map_err(|e| format!("Could not configure provider client: {e}"))?;
     let mut request = client.get(endpoint);
-    if let Some(key) = api_key.as_deref() { request = request.bearer_auth(key); }
+    if let Some(key) = api_key.as_deref() {
+        if anthropic_protocol {
+            request = request.header("x-api-key", key).header("anthropic-version", "2023-06-01");
+        } else {
+            request = request.bearer_auth(key);
+        }
+    }
     let mut response = request.send().await
         .map_err(|e| format!("Model catalog request failed: {e}"))?;
     let status = response.status();
