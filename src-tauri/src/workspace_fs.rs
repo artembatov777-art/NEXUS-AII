@@ -277,15 +277,42 @@ impl WorkspaceAccess {
     /// child lookups are relative to that handle, so replacing a parent path
     /// after validation cannot redirect the operation outside the approved tree.
     pub(crate) fn open_approved_directory(&self, path: &Path) -> Result<(CapabilityDir, PathBuf), String> {
-        let root = self.allowed_root_for(path)?;
-        let relative = path.strip_prefix(&root)
-            .map_err(|_| "The requested path is outside an approved directory.")?;
-        if relative.components().any(|component| matches!(
-            component,
-            std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_)
-        )) {
+        if path.components().any(|component| matches!(component, std::path::Component::ParentDir)) {
             return Err("The requested path contains an invalid directory traversal.".into());
         }
+        let root = self.allowed_root_for(path)?;
+        let canonical_path = fs::canonicalize(path)
+            .map_err(|error| format!("Could not resolve the requested directory: {error}"))?;
+        let canonical_relative = canonical_path.strip_prefix(&root)
+            .map_err(|_| "The requested path is outside an approved directory.")?;
+        let relative_count = canonical_relative.components()
+            .filter(|component| matches!(component, std::path::Component::Normal(_)))
+            .count();
+
+        // macOS may expose the same temporary directory through a non-canonical
+        // prefix (for example /var -> /private/var). Reconstruct the caller's
+        // original root alias from the same number of trailing components, then
+        // verify that alias resolves to the already-approved canonical root.
+        // This preserves child names so a symlink inside the approved root is
+        // still opened component-by-component with no-follow semantics.
+        let mut alias_root = path.to_path_buf();
+        let mut names = Vec::with_capacity(relative_count);
+        for _ in 0..relative_count {
+            let name = alias_root.file_name()
+                .ok_or_else(|| "The requested path does not resolve beneath its approved root.".to_string())?
+                .to_os_string();
+            names.push(name);
+            alias_root = alias_root.parent()
+                .ok_or_else(|| "The requested path does not resolve beneath its approved root.".to_string())?
+                .to_path_buf();
+        }
+        if fs::canonicalize(&alias_root)
+            .map_err(|error| format!("Could not verify the approved root alias: {error}"))? != root {
+            return Err("The requested path does not resolve beneath its approved root.".into());
+        }
+        let mut relative = PathBuf::new();
+        for name in names.into_iter().rev() { relative.push(name); }
+
         let mut directory = open_approved_root_handle(&root)?;
         // Resolve one component at a time. open_dir_nofollow only rejects the
         // component it opens, so passing a multi-component path could still
@@ -296,7 +323,6 @@ impl WorkspaceAccess {
                     directory = directory.open_dir_nofollow(name)
                         .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?;
                 }
-                std::path::Component::CurDir => {}
                 _ => return Err("The requested path contains an invalid directory traversal.".into()),
             }
         }
