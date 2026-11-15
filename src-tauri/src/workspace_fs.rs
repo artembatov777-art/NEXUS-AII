@@ -380,7 +380,7 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
             let child = match directory.open_dir_nofollow(&name) { Ok(value) => value, Err(_) => continue };
             let opened = child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?;
             let modified = opened.modified().ok()
-                .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|time| time.duration_since(cap_std::time::SystemClock::UNIX_EPOCH).ok())
                 .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
             ("directory", opened.len(), modified)
         } else if metadata.is_file() {
@@ -511,7 +511,7 @@ fn search_workspace_entries_capability(
                     }
                 }
                 let modified = metadata.modified().ok()
-                    .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|time| time.duration_since(cap_std::time::SystemClock::UNIX_EPOCH).ok())
                     .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
                 ("directory", metadata.len(), modified)
             } else if metadata.is_file() {
