@@ -82,7 +82,7 @@ export async function sendMessage(
       return resultPayload.text;
     }
     if (settings.baseUrl !== "/api/gemini") {
-      throw new Error("Browser preview supports Gemini through the secured Vercel proxy only. Select “Use Gemini on Vercel” in provider settings.");
+      throw new Error("Browser preview supports configured cloud providers only through the secured Railway AI Gateway. Select a provider preset in settings.");
     }
     if (!gatewayToken?.trim() && !useGatewayCookie) throw new Error("Enter the NEXUS access token once, or remember this device after connecting.");
     const systemMessage = requestMessages.find(message => message.role === "system");
