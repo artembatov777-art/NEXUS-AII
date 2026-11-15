@@ -1,3 +1,4 @@
+import { isGatewayAuthorized } from "../server/gatewayAuth.js";
 export const config = { maxDuration: 60 };
 
 const MAX_BODY_BYTES = 8 * 1024;
@@ -14,12 +15,6 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function constantTimeEqual(left, right) {
-  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < left.length; index += 1) mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return mismatch === 0;
-}
 
 function readBody(req) {
   if (req.body !== undefined) {
@@ -62,9 +57,7 @@ export default async function handler(req, res) {
   if (!apiKey) return sendJson(res, 503, { error: "Gemini provider is not configured." });
   if (!accessToken) return sendJson(res, 503, { error: "NEXUS API access is not configured." });
 
-  const authorization = req.headers.authorization || "";
-  const suppliedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!constantTimeEqual(suppliedToken, accessToken)) return sendJson(res, 401, { error: "Unauthorized." });
+  if (!isGatewayAuthorized(req, accessToken)) return sendJson(res, 401, { error: "Unauthorized." });
   if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
     return sendJson(res, 415, { error: "Content-Type must be application/json." });
   }
