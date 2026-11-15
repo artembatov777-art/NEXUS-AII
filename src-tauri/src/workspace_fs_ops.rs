@@ -3,7 +3,7 @@ use crate::workspace_fs::{open_capability_file, WorkspaceAccess};
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
 use cap_std::fs::Dir as CapabilityDir;
 #[cfg(windows)]
-use cap_std::fs::OpenOptions as CapabilityOpenOptions;
+use cap_std::fs::{OpenOptions as CapabilityOpenOptions, OpenOptionsExt};
 use std::ffi::OsStr;
 use crate::workspace_fs_recovery::{RenameEntry, WorkspaceOperationJournal};
 use std::collections::HashSet;
@@ -187,41 +187,24 @@ pub(crate) fn rename_no_replace_at(
     #[cfg(windows)]
     {
         use std::mem::offset_of;
-        use std::os::windows::io::{AsRawHandle, FromRawHandle};
+        use std::os::windows::io::AsRawHandle;
         use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::Foundation::HANDLE;
-        use windows_sys::Win32::Storage::FileSystem::{
-            ReOpenFile, SetFileInformationByHandle, FILE_RENAME_INFO,
-        };
+        use windows_sys::Win32::Storage::FileSystem::{SetFileInformationByHandle, FILE_RENAME_INFO};
 
-        // Open the source entry relative to its pinned parent and refuse a final
-        // reparse point. ReOpenFile then grants DELETE access to this exact object;
-        // SetFileInformationByHandle resolves the destination relative to its
-        // already-open directory handle, without re-resolving either parent path.
+        // Open the source entry relative to its pinned parent, refuse final
+        // reparse points, and request DELETE on this original handle. Windows
+        // directory capabilities intentionally omit FILE_SHARE_DELETE to prevent
+        // parent-directory replacement races, so ReOpenFile cannot safely add
+        // DELETE after the fact. Request the needed access during the no-follow open.
         let mut options = CapabilityOpenOptions::new();
         options.read(true).maybe_dir(true).follow(FollowSymlinks::No);
+        options.access_mode(0x8000_0000 | 0x0001_0000); // GENERIC_READ | DELETE
         let source_file = source_directory.open_with(Path::new(source_name), &options)?.into_std();
         let metadata = source_file.metadata()?;
         if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Only regular files and directories can be moved."));
         }
-        // The source handle was already opened with FollowSymlinks::No, so
-        // ReOpenFile must not request OPEN_REPARSE_POINT again. Windows rejects
-        // that flag for some existing handles with ERROR_SHARING_VIOLATION.
-        // ReOpenFile only needs BACKUP_SEMANTICS for directories.
-        let flags = if metadata.is_dir() { 0x0200_0000 } else { 0 };
-        let renamed_handle = unsafe {
-            ReOpenFile(
-                source_file.as_raw_handle() as HANDLE,
-                0x0001_0000, // DELETE
-                0x0000_0001 | 0x0000_0002 | 0x0000_0004, // share read/write/delete
-                flags,
-            )
-        };
-        if renamed_handle.is_null() || renamed_handle as isize == -1 {
-            return Err(std::io::Error::last_os_error());
-        }
-        let renamed_file = unsafe { std::fs::File::from_raw_handle(renamed_handle as _) };
 
         let wide_name: Vec<u16> = destination_name.encode_wide().collect();
         let name_bytes = u32::try_from(wide_name.len().saturating_mul(std::mem::size_of::<u16>()))
@@ -247,7 +230,7 @@ pub(crate) fn rename_no_replace_at(
         }
         let result = unsafe {
             SetFileInformationByHandle(
-                renamed_file.as_raw_handle() as HANDLE,
+                source_file.as_raw_handle() as HANDLE,
                 3, // FileRenameInfo
                 buffer.as_mut_ptr().cast(),
                 u32::try_from(total_size).map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename metadata is too large."))?,
