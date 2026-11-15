@@ -42,3 +42,27 @@ Allowed models: `gemini-3.1-flash-lite` and `gemini-3.8-flash`. The function val
 ## Security note
 
 The access token is an additional shared-secret gate, not a complete user identity system or durable rate limiter. Do not expose it in public source code, public screenshots, or a committed frontend bundle. Before enabling this endpoint for unrestricted public use, add per-user authentication and persistent rate limiting/quotas. The current desktop Tauri provider flow remains unchanged. Browser chat uses the proxy only when the provider URL is set to `/api/gemini`. The proxy response is returned as a complete answer (not token-streamed); usage counts are still reported when Gemini supplies them. The browser access token is held in React memory only and is not written to localStorage or workspace backups.
+
+
+## Hosted OpenAI-compatible provider gateway
+
+The same Vercel project can proxy OpenAI-compatible providers through the dynamic route `/api/provider/:provider`. Provider keys are resolved only from server-side environment variables. The browser sends the separate `NEXUS_API_TOKEN`, never the upstream provider key.
+
+| Quick setup provider | Provider ID | Vercel environment variable |
+| --- | --- | --- |
+| OpenAI | `openai` | `OPENAI_API_KEY` |
+| xAI / Grok | `xai` | `XAI_API_KEY` |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` |
+| GroqCloud | `groq` | `GROQ_API_KEY` |
+| SambaNova Cloud | `sambanova` | `SAMBANOVA_API_KEY` |
+| NVIDIA NIM | `nvidia` | `NVIDIA_API_KEY` |
+
+In Vercel, open **Project → Settings → Environment Variables**. Add only providers you intend to use. Keep `NEXUS_API_TOKEN` set to the same random value used in the NEXUS browser session. Add provider variables to Production (and Preview only if preview deployments should have access), then redeploy. Never put provider keys in the NEXUS UI, browser storage, source code, or chat.
+
+In NEXUS on iPhone, open **Configuration → Quick provider setup**, select an enabled provider, enter the NEXUS access token, save the configuration, then use **Check endpoint & load models** and **Test selected model**. The model catalog and generation requests go through Vercel.
+
+Gemini continues to use `/api/gemini` and `GEMINI_API_KEY`. Anthropic Claude remains native-desktop-only because its Messages protocol is not OpenAI-compatible. Ollama is local software and cannot be reached from a Vercel function without a separate securely authenticated network bridge. Do not expose an Ollama port directly to the public internet.
+
+The gateway uses a static upstream-host allowlist, bounded JSON requests, a separate bearer access token, bounded timeouts, normalized responses, and generic upstream errors. It does not implement per-user identity or durable rate limiting. Treat `NEXUS_API_TOKEN` as a private owner access secret. For a multi-user public deployment, add real user authentication and persistent quotas before opening access.
