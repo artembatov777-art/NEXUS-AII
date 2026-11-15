@@ -19,21 +19,25 @@ A built-in preset only fills a documented endpoint. It does not validate a user'
 | DeepSeek | `https://api.deepseek.com` | OpenAI-compatible endpoint preset; live verification required |
 | Mistral AI | `https://api.mistral.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
 | xAI / Grok | `https://api.x.ai` | OpenAI-compatible endpoint preset; live verification required |
+| Anthropic Claude | `https://api.anthropic.com/v1` | Native Messages adapter; model discovery and streaming implemented, live verification required |
 | Ollama | `http://127.0.0.1:11434/v1` | Existing local OpenAI-compatible profile; owner must run Ollama |
 
 The presets are convenience configuration, not provider-specific feature adapters. Capabilities such as tools, image input, JSON mode, reasoning controls, and image generation must be declared and tested separately; NEXUS must not infer them from a model name.
 
-## Explicitly not supported by this adapter
+## Protocol adapters
 
-Anthropic Claude's native Messages API is a different protocol from the OpenAI Chat Completions API. A Claude API key and URL must not be presented as a supported preset until NEXUS has a dedicated Anthropic adapter with its own model discovery, request mapping, streaming parser, error normalization, cancellation, and tests.
+Anthropic Claude is implemented as a separate native Messages adapter, not as an OpenAI-compatible URL alias. It uses the Anthropic model catalog, `x-api-key` and `anthropic-version` headers, the Messages request shape (including the separate system instruction and required max token count), and typed SSE events for text, usage, and completion. Automated Rust parser tests and TypeScript IPC adapter tests cover the protocol mapping. Live API verification still requires the owner's own Claude API key.
 
 Other providers that issue API keys are not automatically compatible. They need either an OpenAI-compatible endpoint or a dedicated protocol adapter.
 
 ## Profile and routing behavior
 
-- Multiple provider profiles can be saved and switched manually.
-- The current chat settings select one active provider endpoint at a time.
-- Multi-provider simultaneous routing, automatic task-based model selection, and automatic failover are not yet implemented.
+- Multiple provider profiles are registered in one provider-neutral router and their model catalogs are discovered concurrently.
+- Automatic routing classifies the latest user request into coding, analysis, research, creative, or general work and orders eligible providers using deterministic default preferences.
+- Manual mode restricts requests to the currently selected provider profile.
+- Automatic mode is restricted to profiles with the same owner-declared inference location as the active profile. It does not silently cross from a declared local route to remote cloud profiles or vice versa.
+- Safe failover is allowed only for retryable failures that occur before the first user-visible text delta. Once output has started, NEXUS never silently switches models and risks duplicating or contradicting the answer.
+- Task classification and default provider ordering are heuristics, not benchmark claims. Provider order should be owner-configurable in a later routing policy editor.
 - Browser preview is isolated and does not accept arbitrary provider keys. Its supported remote route remains the secured Gemini Vercel proxy with a separate NEXUS access token.
 - API keys are never stored in browser profile records or workspace backups. Native desktop requests pass only the credential handle to Rust; Rust retrieves the secret from the OS credential vault.
 
