@@ -168,8 +168,9 @@ export async function loadProviderProfilesFromServer() {
   return readStore();
 }
 
-export async function saveProviderProfilesToServer(profiles, deletedIds = []) {
-  const deletedProfileIds = normalizeDeletedIds(deletedIds);
+export async function saveProviderProfilesToServer(profiles, deletedIds) {
+  const existing = deletedIds === undefined ? await readStore() : null;
+  const deletedProfileIds = normalizeDeletedIds(deletedIds ?? existing.deletedProfileIds);
   const deleted = new Set(deletedProfileIds);
   const normalized = normalizeProviderProfiles(profiles).filter(profile => !deleted.has(profile.id));
   const operation = writeQueue.then(() => writeStore(normalized, deletedProfileIds));
