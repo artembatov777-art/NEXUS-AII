@@ -35,7 +35,7 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   // still pass the absolute HTTPS/loopback URL validator.
   const isTrustedHostedGatewayRoute =
     typeof settings.baseUrl === "string" &&
-    /^\\/api\\/provider\\/(?:gemini|deepseek|nvidia)$/.test(settings.baseUrl);
+    ["/api/provider/gemini", "/api/provider/deepseek", "/api/provider/nvidia"].includes(settings.baseUrl);
 
   if (typeof settings.baseUrl !== "string" || settings.baseUrl.length > 2048 ||
       (!isTrustedHostedGatewayRoute && providerEndpointError(settings.baseUrl)) ||
