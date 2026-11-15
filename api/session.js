@@ -1,4 +1,4 @@
-import { clearGatewaySessionCookie, gatewaySessionCookie, isGatewayAuthorized } from "./_lib/gatewayAuth.js";
+import { clearGatewaySessionCookie, gatewaySessionCookie, isGatewayAuthorized } from "../server/gatewayAuth.js";
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
