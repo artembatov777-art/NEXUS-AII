@@ -85,6 +85,37 @@ describe("hosted provider gateway", () => {
     expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
   });
 
+  it("filters Groq audio-only models from the chat model catalog", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      data: [
+        { id: "whisper-large-v3-turbo" },
+        { id: "openai/gpt-oss-20b" },
+        { id: "playai-tts" },
+        { id: "qwen/qwen3.8-27b" },
+        { id: "canopylabs/orpheus-v1-english" }
+      ]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({ provider: "groq", body: { action: "models" } }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      provider: "groq",
+      models: ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+    });
+  });
+
+  it("explains when an audio-only Groq model is submitted to chat completions", async () => {
+    const response = createResponse();
+    await handler(createRequest({
+      provider: "groq",
+      body: { action: "chat", model: "whisper-large-v3-turbo", messages: [{ role: "user", content: "Hello" }] }
+    }), response);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("audio model");
+    expect(response.json().error).toContain("cannot be used for chat completions");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("routes Groq chat through the shared secured gateway", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
       choices: [{ message: { content: "GROQ_OK" } }],
