@@ -40,6 +40,23 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 
 describe("ProviderProfilesPanel", () => {
+  it("applies a built-in compatible provider preset without connecting or storing a key", async () => {
+    await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
+    const select = container.querySelector<HTMLSelectElement>('[aria-label="Quick provider setup"]')!;
+    await act(async () => {
+      select.value = "deepseek";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: "https://api.deepseek.com",
+      model: "",
+      inferenceLocation: "remote",
+      credentialHandle: "default"
+    }));
+    expect(container.textContent).toContain("Anthropic Claude uses a different Messages protocol");
+    expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
+  });
+
   it("loads saved profiles without starting a provider connection", async () => {
     expect(saveProviderProfiles([{
       id: "nexus.cloud", label: "Cloud", settings: cloudSettings
