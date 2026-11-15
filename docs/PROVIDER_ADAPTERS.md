@@ -12,7 +12,7 @@ NEXUS uses a provider-neutral `ModelRouter`. The native desktop adapter connects
 | Groq | Groq OpenAI-compatible API | Railway key or OS credential vault | Hosted gateway / native adapter |
 | NVIDIA NIM | NVIDIA API | Railway key or OS credential vault | Hosted gateway / native adapter |
 
-The browser-hosted provider selector intentionally exposes only Gemini, Groq and NVIDIA. Ollama remains a separate local option. Removed hosted providers are not accepted by the Railway gateway.
+The browser-hosted provider selector intentionally exposes only Gemini, Groq and NVIDIA. Ollama remains a separate local option. Removed hosted providers are not accepted by the Railway gateway. Legacy DeepSeek profile records may still be loaded so owners can delete them; the gateway no longer accepts DeepSeek requests.
 
 The generic `createTauriModelRouterForProfiles` factory can register multiple direct compatible endpoints without contacting them. The current chat UI selects one active profile at a time. Saving or selecting a profile does not start a network request.
 
@@ -37,4 +37,4 @@ The generic `createTauriModelRouterForProfiles` factory can register multiple di
 
 ## Hosted Railway gateway
 
-Browser preview routes only Gemini, DeepSeek and NVIDIA through `/api/provider/:provider`. Each provider has an explicit allowlisted upstream base URL and server-side environment key. The shared `NEXUS_API_TOKEN` authenticates the owner to the gateway; it is not an upstream provider key. Gemini image generation remains a separate server-side image endpoint. `NEXUS Public` identifies the public NEXUS deployment and is not an upstream model provider.
+Browser preview routes only Gemini, Groq and NVIDIA through `/api/provider/:provider`. Each provider has an explicit allowlisted upstream base URL and server-side environment key. The shared `NEXUS_API_TOKEN` authenticates the owner to the gateway; it is not an upstream provider key. Gemini image generation remains a separate server-side image endpoint. `NEXUS Public` identifies the public NEXUS deployment and is not an upstream model provider.
