@@ -1,4 +1,5 @@
 import { t } from "../lib/i18n";
+import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
 import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
@@ -141,19 +142,22 @@ export function ProviderProfilesPanel({
         if (!preset) return;
         const currentHandle = currentSettings.credentialHandle ?? "default";
         const credentialHandle = isDedicatedCredentialHandle(currentHandle) ? currentHandle : "default";
+        const browserGatewayUrl = preset.id === "gemini" ? "/api/gemini" : "/api/provider/" + preset.id;
         onSelect({
           ...currentSettings,
-          baseUrl: preset.baseUrl,
+          baseUrl: !isTauri() && preset.protocol === "openai-chat-completions" ? browserGatewayUrl : preset.baseUrl,
           model: "",
           providerProtocol: preset.protocol,
           inferenceLocation: "remote",
           credentialHandle
         });
-        setStatus(t("Provider preset applied. Save a profile and add its API key in Provider settings."));
+        setStatus(!isTauri() && preset.protocol === "openai-chat-completions"
+          ? "Hosted provider route selected. Add this provider's API key to Vercel Environment Variables, then use the NEXUS access token."
+          : t("Provider preset applied. Save a profile and add its API key in Provider settings."));
         event.currentTarget.value = "";
       }}>
         <option value="">{t("Choose a provider preset…")}</option>
-        {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+        {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id} disabled={!isTauri() && preset.protocol === "anthropic-messages"}>{preset.label}{!isTauri() && preset.protocol === "anthropic-messages" ? " (desktop only)" : ""}</option>)}
       </select>
     </label>
     <small>{t("Provider presets declare their API protocol. Claude uses the native Anthropic Messages adapter; the other presets use OpenAI-compatible Chat Completions.")}</small>
