@@ -92,6 +92,24 @@ describe("sendMessage AI Core integration", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses a remembered browser session cookie without resending the shared token", async () => {
+    native.mockReturnValue(false);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      text: "Remembered session response"
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await sendMessage(
+      { ...settings, baseUrl: "/api/provider/deepseek", model: "deepseek-chat" },
+      messages, "", undefined, undefined, undefined, undefined, undefined, true
+    );
+    expect(result).toBe("Remembered session response");
+    expect(fetchMock).toHaveBeenCalledWith("/api/provider/deepseek", expect.objectContaining({
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }
+    }));
+    vi.unstubAllGlobals();
+  });
+
   it("rejects messages larger than the Gemini proxy limit before making a request", async () => {
     native.mockReturnValue(false);
     const fetchMock = vi.fn<typeof fetch>();
