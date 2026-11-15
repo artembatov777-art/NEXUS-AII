@@ -103,6 +103,7 @@ fn validate_entry_name(name: &str) -> Result<(), String> {
 }
 
 /// Atomically moves an entry only when the destination does not exist.
+#[cfg(test)]
 pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
