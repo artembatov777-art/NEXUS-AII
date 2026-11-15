@@ -166,7 +166,8 @@ export function loadProvider(storage: StorageAdapter = localStorage): ProviderSe
       model: value.model.trim(),
       inferenceLocation: value.inferenceLocation === "local" ? "local" : "remote",
       ...(safeCredentialHandle ? { credentialHandle: safeCredentialHandle } : {}),
-      ...(value.providerProtocol === "anthropic-messages" ? { providerProtocol: "anthropic-messages" as const } : {})
+      ...(value.providerProtocol === "anthropic-messages" ? { providerProtocol: "anthropic-messages" as const } : {}),
+      ...(value.routeMode === "manual" ? { routeMode: "manual" as const } : { routeMode: "auto" as const })
     };
   } catch { return DEFAULT_PROVIDER; }
 }
