@@ -473,7 +473,7 @@ describe("FileSystemPanel native workspace access", () => {
       if (command === "list_workspace_entries") return [];
       if (command === "search_workspace_contents") return {
         matches: [{ path: filePath, lineNumber: 3, preview: "The NEXUS workspace is ready" }],
-        totalMatches: 1, scannedFiles: 4, truncated: false
+        totalMatches: 1, scannedFiles: 4, truncated: true
       };
       if (command === "read_workspace_file") return "line one\nline two\nThe NEXUS workspace is ready";
       return undefined;
@@ -491,7 +491,7 @@ describe("FileSystemPanel native workspace access", () => {
     const searchButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Search"));
     await act(async () => { searchButton!.click(); });
     expect(invokeMock).toHaveBeenCalledWith("search_workspace_contents", { path: rootPath, query: "nexus" });
-    expect(container.textContent).toContain("1 matches in 4 files");
+    expect(container.textContent).toContain("1 matches in 4 files · results may be incomplete");
     expect(container.textContent).toContain("The NEXUS workspace is ready");
     const matchButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".file-list button")).find(button => button.textContent?.includes("The NEXUS workspace is ready"));
     expect(matchButton).toBeDefined();

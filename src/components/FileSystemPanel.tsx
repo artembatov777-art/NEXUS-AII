@@ -227,7 +227,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
       if (contentSearchMode) {
         const result = await invoke<WorkspaceContentSearch>("search_workspace_contents", { path: currentPath, query });
         setContentMatches(result.matches);
-        setContentSearchSummary(`${result.totalMatches} matches in ${result.scannedFiles} files${result.truncated ? " · search limit reached" : ""}`);
+        setContentSearchSummary(`${result.totalMatches} matches in ${result.scannedFiles} files${result.truncated ? " · results may be incomplete" : ""}`);
         setEntries([]);
       } else {
         const result = await invoke<WorkspaceEntry[]>("search_workspace_entries", { path: currentPath, query });
