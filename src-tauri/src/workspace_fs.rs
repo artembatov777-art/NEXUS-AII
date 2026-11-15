@@ -16,7 +16,7 @@ const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
 /// Refuse hard-linked files: a second directory entry may expose the same inode
 /// outside the owner-approved workspace, even when the selected path is inside it.
-fn ensure_no_external_hard_links(file: &fs::File) -> Result<(), String> {
+pub(crate) fn ensure_no_external_hard_links(file: &fs::File) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -469,10 +469,77 @@ fn search_workspace_entries_in(root: &Path, start: &Path, query: &str) -> Result
     Ok(results)
 }
 
+fn search_workspace_entries_capability(
+    access: &WorkspaceAccess,
+    start: &Path,
+    query: &str,
+) -> Result<Vec<WorkspaceEntry>, String> {
+    if query.trim().is_empty() || query.len() > 256 {
+        return Err("Search query must contain 1 to 256 characters.".into());
+    }
+    let (start_directory, root) = access.open_approved_directory(start)?;
+    let start_relative = start.strip_prefix(&root)
+        .map_err(|_| "Search location is outside an approved directory.")?;
+    let needle = query.to_lowercase();
+    let mut pending: Vec<(CapabilityDir, PathBuf, usize)> =
+        vec![(start_directory, start_relative.to_path_buf(), 0)];
+    let mut visited = 0usize;
+    let mut results = Vec::new();
+
+    'walk: while let Some((directory, relative_directory, depth)) = pending.pop() {
+        let iterator = directory.entries()
+            .map_err(|error| format!("Could not search directory: {error}"))?;
+        for item in iterator {
+            visited += 1;
+            if visited > MAX_SEARCH_VISITED_ENTRIES { break 'walk; }
+            let name = item.file_name();
+            let metadata = match directory.symlink_metadata(&name) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if metadata.file_type().is_symlink() { continue; }
+            let (kind, metadata) = if metadata.is_dir() {
+                if depth < MAX_SEARCH_DEPTH {
+                    if let Ok(child) = directory.open_dir(&name) {
+                        pending.push((child, relative_directory.join(&name), depth + 1));
+                    }
+                }
+                ("directory", metadata)
+            } else if metadata.is_file() {
+                let file = match open_capability_file(&directory, &name, true, false, false) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                let opened = file.metadata().map_err(|error| format!("Could not inspect search entry: {error}"))?;
+                if !opened.is_file() { continue; }
+                ensure_no_external_hard_links(&file)?;
+                ("file", opened)
+            } else {
+                continue;
+            };
+            if name.to_string_lossy().to_lowercase().contains(&needle) {
+                let modified_at_ms = metadata.modified().ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+                results.push(WorkspaceEntry {
+                    name: name.to_string_lossy().into_owned(),
+                    path: root.join(&relative_directory).join(&name).to_string_lossy().into_owned(),
+                    kind: kind.into(),
+                    size_bytes: metadata.len(),
+                    modified_at_ms,
+                });
+                if results.len() >= MAX_SEARCH_RESULTS { break 'walk; }
+            }
+        }
+    }
+    results.sort_by(|a, b| (a.kind != "directory").cmp(&(b.kind != "directory"))
+        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(results)
+}
+
 #[tauri::command]
 pub fn search_workspace_entries(path: String, query: String, access: State<'_, WorkspaceAccess>) -> Result<Vec<WorkspaceEntry>, String> {
-    let root = access.allowed_root_for(Path::new(&path))?;
-    search_workspace_entries_in(&root, Path::new(&path), &query)
+    search_workspace_entries_capability(&access, Path::new(&path), &query)
 }
 
 fn read_workspace_file_inner(path: &str, access: &WorkspaceAccess) -> Result<String, String> {
