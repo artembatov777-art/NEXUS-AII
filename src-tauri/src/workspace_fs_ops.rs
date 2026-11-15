@@ -1,4 +1,6 @@
-use crate::workspace_fs::{open_regular_file_readonly, WorkspaceAccess};
+use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use cap_std::fs::Dir as CapabilityDir;
+use std::ffi::OsStr;
 use crate::workspace_fs_recovery::{RenameEntry, WorkspaceOperationJournal};
 use std::collections::HashSet;
 use std::fs;
@@ -37,24 +39,14 @@ fn encode_base64(bytes: &[u8]) -> String {
 }
 
 fn read_image_preview(access: &WorkspaceAccess, requested_path: &Path) -> Result<serde_json::Value, String> {
-    let parent = requested_path.parent()
-        .ok_or_else(|| "The selected image must be inside an approved directory.".to_string())?;
-    let root = access.allowed_root_for(parent)?;
-    let canonical_parent = fs::canonicalize(parent)
-        .map_err(|error| format!("Could not resolve the selected image directory: {error}"))?;
-    if !canonical_parent.starts_with(&root) {
-        return Err("The selected image is outside an approved directory.".into());
-    }
-    let name = requested_path.file_name()
-        .ok_or_else(|| "The selected image has no valid name.".to_string())?;
-    // Keep the final component unresolved until it is opened with no-follow flags.
-    let target = canonical_parent.join(name);
-    let link_metadata = fs::symlink_metadata(&target)
+    let (parent_directory, name, _root) = access.open_approved_parent(requested_path)?;
+    let target = requested_path.to_path_buf();
+    let file = open_capability_file(&parent_directory, &name, true, false, false)?;
+    let link_metadata = file.metadata()
         .map_err(|error| format!("Could not inspect the selected image: {error}"))?;
-    if link_metadata.file_type().is_symlink() || !link_metadata.is_file() {
+    if !link_metadata.is_file() {
         return Err("Image preview is available only for regular files, not symbolic links or special entries.".into());
     }
-    let file = open_regular_file_readonly(&target)?;
     let metadata = file.metadata()
         .map_err(|error| format!("Could not inspect the opened image: {error}"))?;
     if metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
@@ -149,6 +141,62 @@ pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> std::io::R
     }
 }
 
+fn rename_no_replace_at(
+    source_directory: &CapabilityDir,
+    source_name: &OsStr,
+    destination_directory: &CapabilityDir,
+    destination_name: &OsStr,
+    source_path: &Path,
+    destination_path: &Path,
+) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::fd::AsRawFd;
+        let source = CString::new(source_name.as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Source name contains a null byte."))?;
+        let destination = CString::new(destination_name.as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination name contains a null byte."))?;
+        let result = unsafe {
+            libc::renameat2(source_directory.as_raw_fd(), source.as_ptr(),
+                destination_directory.as_raw_fd(), destination.as_ptr(), libc::RENAME_NOREPLACE)
+        };
+        if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::fd::AsRawFd;
+        let source = CString::new(source_name.as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Source name contains a null byte."))?;
+        let destination = CString::new(destination_name.as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination name contains a null byte."))?;
+        let result = unsafe {
+            libc::renameatx_np(source_directory.as_raw_fd(), source.as_ptr(),
+                destination_directory.as_raw_fd(), destination.as_ptr(), libc::RENAME_EXCL)
+        };
+        if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let _pinned_directories = (source_directory, destination_directory);
+        let source: Vec<u16> = source_path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let destination: Vec<u16> = destination_path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe {
+            windows_sys::Win32::Storage::FileSystem::MoveFileW(source.as_ptr(), destination.as_ptr())
+        };
+        if result == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        let _ = (source_directory, source_name, destination_directory, destination_name, source_path, destination_path);
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Handle-relative moves are unsupported on this platform."))
+    }
+}
+
 fn relocate_entry(
     access: &WorkspaceAccess,
     source_path: &Path,
@@ -157,18 +205,13 @@ fn relocate_entry(
 ) -> Result<String, String> {
     // Resolve only the parent directory. Canonicalizing the complete source
     // path follows a final symlink and can redirect a rename to a different file.
-    let requested_parent = source_path.parent()
-        .ok_or_else(|| "The selected entry has no parent directory.".to_string())?;
-    let source_root = access.allowed_root_for(requested_parent)?;
-    let canonical_source_parent = fs::canonicalize(requested_parent)
-        .map_err(|error| format!("Could not resolve the selected entry's directory: {error}"))?;
-    if !canonical_source_parent.starts_with(&source_root) {
-        return Err("The selected entry is outside an approved directory.".into());
-    }
     let source_name = source_path.file_name()
         .ok_or_else(|| "The selected entry has no valid name.".to_string())?;
-    let source = canonical_source_parent.join(source_name);
-    let source_metadata = fs::symlink_metadata(&source)
+    let (source_directory, source_root) = access.open_approved_directory(
+        source_path.parent().ok_or_else(|| "The selected entry has no parent directory.".to_string())?
+    )?;
+    let source = source_path.to_path_buf();
+    let source_metadata = source_directory.symlink_metadata(source_name)
         .map_err(|error| format!("Could not inspect the selected entry: {error}"))?;
     if source_metadata.file_type().is_symlink() || (!source_metadata.is_file() && !source_metadata.is_dir()) {
         return Err("NEXUS can move only regular files and directories, not symbolic links or special entries.".into());
@@ -177,15 +220,11 @@ fn relocate_entry(
         return Err("An approved root directory itself cannot be renamed or moved.".into());
     }
 
-    let destination_root = access.allowed_root_for(destination_directory)?;
+    let (destination_handle, destination_root) = access.open_approved_directory(destination_directory)?;
     if destination_root != source_root {
         return Err("Move and rename operations must stay inside the same approved directory.".into());
     }
-    let destination = fs::canonicalize(destination_directory)
-        .map_err(|error| format!("Could not resolve the destination directory: {error}"))?;
-    if !destination.is_dir() || !destination.starts_with(&source_root) {
-        return Err("The destination must be an existing directory inside the same approved root.".into());
-    }
+    let destination = destination_directory.to_path_buf();
     if source_metadata.is_dir() && destination.starts_with(&source) {
         return Err("A directory cannot be moved into itself or one of its subdirectories.".into());
     }
@@ -199,16 +238,17 @@ fn relocate_entry(
             .ok_or_else(|| "The selected entry has no valid name.".to_string())?
             .to_string_lossy().into_owned()
     };
-    let target = destination.join(name);
+    let target_name = std::ffi::OsString::from(name);
+    let target = destination.join(&target_name);
     if target == source {
         return Err("The selected entry is already at that location.".into());
     }
-    match fs::symlink_metadata(&target) {
+    match destination_handle.symlink_metadata(&target_name) {
         Ok(_) => return Err("A file or folder with that name already exists at the destination.".into()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(format!("Could not verify the destination path: {error}")),
     }
-    rename_no_replace(&source, &target)
+    rename_no_replace_at(&source_directory, source_name, &destination_handle, &target_name, &source, &target)
         .map_err(|error| format!("Could not move the entry without replacing an existing destination. The source and destination may be on different volumes or the entry may be in use: {error}"))?;
     Ok(target.to_string_lossy().into_owned())
 }
