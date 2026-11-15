@@ -1,5 +1,6 @@
 use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
-use cap_std::fs::Dir as CapabilityDir;
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
+use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
 use std::ffi::OsStr;
 use crate::workspace_fs_recovery::{RenameEntry, WorkspaceOperationJournal};
 use std::collections::HashSet;
@@ -181,13 +182,70 @@ pub(crate) fn rename_no_replace_at(
     }
     #[cfg(windows)]
     {
+        use std::mem::offset_of;
+        use std::os::windows::io::{AsRawHandle, FromRawHandle};
         use std::os::windows::ffi::OsStrExt;
-        let _pinned_directories = (source_directory, destination_directory);
-        let source: Vec<u16> = source_path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-        let destination: Vec<u16> = destination_path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-        let result = unsafe {
-            windows_sys::Win32::Storage::FileSystem::MoveFileW(source.as_ptr(), destination.as_ptr())
+        use windows_sys::Win32::Foundation::HANDLE;
+        use windows_sys::Win32::Storage::FileSystem::{
+            ReOpenFile, SetFileInformationByHandle, FILE_RENAME_INFO,
         };
+
+        // Open the source entry relative to its pinned parent and refuse a final
+        // reparse point. ReOpenFile then grants DELETE access to this exact object;
+        // SetFileInformationByHandle resolves the destination relative to its
+        // already-open directory handle, without re-resolving either parent path.
+        let mut options = CapabilityOpenOptions::new();
+        options.read(true).maybe_dir(true).follow(FollowSymlinks::No);
+        let source_file = source_directory.open_with(Path::new(source_name), &options)?.into_std();
+        let metadata = source_file.metadata()?;
+        if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Only regular files and directories can be moved."));
+        }
+        let flags = 0x0020_0000 | if metadata.is_dir() { 0x0200_0000 } else { 0 };
+        let renamed_handle = unsafe {
+            ReOpenFile(
+                source_file.as_raw_handle() as HANDLE,
+                0x0001_0000, // DELETE
+                0x0000_0001 | 0x0000_0002 | 0x0000_0004, // share read/write/delete
+                flags,
+            )
+        };
+        if renamed_handle.is_null() || renamed_handle as isize == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let renamed_file = unsafe { std::fs::File::from_raw_handle(renamed_handle as _) };
+
+        let wide_name: Vec<u16> = destination_name.encode_wide().collect();
+        let name_bytes = u32::try_from(wide_name.len().saturating_mul(std::mem::size_of::<u16>()))
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination name is too long."))?;
+        let file_name_offset = offset_of!(FILE_RENAME_INFO, FileName);
+        let total_size = file_name_offset
+            .checked_add(wide_name.len().saturating_add(1).saturating_mul(std::mem::size_of::<u16>()))
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Destination name is too long."))?;
+        let mut buffer = vec![0u64; total_size.saturating_add(7) / 8];
+        unsafe {
+            let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+            let bytes = info.cast::<u8>();
+            bytes.write(0); // ReplaceIfExists = FALSE: never overwrite a destination.
+            bytes.add(offset_of!(FILE_RENAME_INFO, RootDirectory))
+                .cast::<HANDLE>()
+                .write(destination_directory.as_raw_handle() as HANDLE);
+            bytes.add(offset_of!(FILE_RENAME_INFO, FileNameLength))
+                .cast::<u32>()
+                .write(name_bytes);
+            let name_pointer = bytes.add(file_name_offset).cast::<u16>();
+            std::ptr::copy_nonoverlapping(wide_name.as_ptr(), name_pointer, wide_name.len());
+            name_pointer.add(wide_name.len()).write(0);
+        }
+        let result = unsafe {
+            SetFileInformationByHandle(
+                renamed_file.as_raw_handle() as HANDLE,
+                3, // FileRenameInfo
+                buffer.as_mut_ptr().cast(),
+                u32::try_from(total_size).map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename metadata is too large."))?,
+            )
+        };
+        let _ = (source_path, destination_path);
         if result == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
