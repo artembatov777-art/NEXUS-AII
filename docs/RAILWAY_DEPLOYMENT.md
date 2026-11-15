@@ -38,7 +38,13 @@ returns JSON with `"status":"ok"`. Then configure the provider in NEXUS:
 - Gateway Token: the value of `NEXUS_API_TOKEN` configured in Railway.
 - Model: select a model supported by the configured provider.
 
-The browser remembers the shared Railway gateway session using an HttpOnly cookie. Every hosted provider request is dispatched through the same `/api/provider/:provider` handler. Provider API keys remain in Railway Variables and are never sent to the browser.\n\n## Persistent provider profiles\n\nTo make saved provider profiles available in Safari and when NEXUS is launched from the iOS Home Screen, attach a Railway Volume to this service with mount path `/data` and set `NEXUS_DATA_DIR=/data`. The protected `/api/profiles` endpoint stores validated profile settings in `/data/provider-profiles.json` using atomic file replacement. The browser syncs profiles after the device has been remembered through the NEXUS gateway session. Existing local profiles are merged into the cloud store on first sync. API keys are not included.\n\nThe current gateway uses one shared `NEXUS_API_TOKEN`, so devices authenticated with that token share one profile collection. This is intended for the single-owner NEXUS deployment, not multi-user accounts. Without the mounted volume and variable, the app deliberately keeps local profiles and reports that cloud sync is unavailable; it does not pretend ephemeral container storage is durable.
+The browser remembers the shared Railway gateway session using an HttpOnly cookie. Every hosted provider request is dispatched through the same `/api/provider/:provider` handler. Provider API keys remain in Railway Variables and are never sent to the browser.
+
+## Persistent provider profiles
+
+To make saved provider profiles available in Safari and when NEXUS is launched from the iOS Home Screen, attach a Railway Volume to this service with mount path `/data` and set `NEXUS_DATA_DIR=/data`. The protected `/api/profiles` endpoint stores validated profile settings in `/data/provider-profiles.json` using atomic file replacement. The browser syncs profiles after the device has been remembered through the NEXUS gateway session. Existing local profiles are merged into the cloud store on first sync. API keys are not included.
+
+The current gateway uses one shared `NEXUS_API_TOKEN`, so devices authenticated with that token share one profile collection. This is intended for the single-owner NEXUS deployment, not multi-user accounts. Without the mounted volume and variable, the app deliberately keeps local profiles and reports that cloud sync is unavailable; it does not pretend ephemeral container storage is durable.
 
 ## Important
 
