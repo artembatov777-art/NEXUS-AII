@@ -369,32 +369,37 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
     let mut entries = Vec::new();
     let iterator = directory.entries().map_err(|e| format!("Could not read directory: {e}"))?;
     for item in iterator.take(MAX_DIRECTORY_ENTRIES) {
+        let item = item.map_err(|e| format!("Could not inspect a directory entry: {e}"))?;
         let name = item.file_name();
         let metadata = match directory.symlink_metadata(&name) {
             Ok(value) => value,
             Err(_) => continue,
         };
         if metadata.file_type().is_symlink() { continue; }
-        let (kind, metadata) = if metadata.is_dir() {
+        let (kind, size_bytes, modified_at_ms) = if metadata.is_dir() {
             let child = match directory.open_dir_nofollow(&name) { Ok(value) => value, Err(_) => continue };
-            ("directory", child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?)
+            let opened = child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?;
+            let modified = opened.modified().ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+            ("directory", opened.len(), modified)
         } else if metadata.is_file() {
             let file = match open_capability_file(&directory, &name, true, false, false) { Ok(value) => value, Err(_) => continue };
             let opened = file.metadata().map_err(|e| format!("Could not inspect file entry: {e}"))?;
             if !opened.is_file() { continue; }
             ensure_no_external_hard_links(&file)?;
-            ("file", opened)
+            let modified = opened.modified().ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+            ("file", opened.len(), modified)
         } else {
             continue;
         };
-        let modified_at_ms = metadata.modified().ok()
-            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
         entries.push(WorkspaceEntry {
             name: name.to_string_lossy().into_owned(),
             path: visible_directory.join(&name).to_string_lossy().into_owned(),
             kind: kind.into(),
-            size_bytes: metadata.len(),
+            size_bytes,
             modified_at_ms,
         });
     }
@@ -490,6 +495,7 @@ fn search_workspace_entries_capability(
         let iterator = directory.entries()
             .map_err(|error| format!("Could not search directory: {error}"))?;
         for item in iterator {
+            let item = match item { Ok(value) => value, Err(_) => continue };
             visited += 1;
             if visited > MAX_SEARCH_VISITED_ENTRIES { break 'walk; }
             let name = item.file_name();
@@ -498,13 +504,16 @@ fn search_workspace_entries_capability(
                 Err(_) => continue,
             };
             if metadata.file_type().is_symlink() { continue; }
-            let (kind, metadata) = if metadata.is_dir() {
+            let (kind, size_bytes, modified_at_ms) = if metadata.is_dir() {
                 if depth < MAX_SEARCH_DEPTH {
                     if let Ok(child) = directory.open_dir_nofollow(&name) {
                         pending.push((child, relative_directory.join(&name), depth + 1));
                     }
                 }
-                ("directory", metadata)
+                let modified = metadata.modified().ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+                ("directory", metadata.len(), modified)
             } else if metadata.is_file() {
                 let file = match open_capability_file(&directory, &name, true, false, false) {
                     Ok(value) => value,
@@ -513,19 +522,19 @@ fn search_workspace_entries_capability(
                 let opened = file.metadata().map_err(|error| format!("Could not inspect search entry: {error}"))?;
                 if !opened.is_file() { continue; }
                 ensure_no_external_hard_links(&file)?;
-                ("file", opened)
+                let modified = opened.modified().ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+                ("file", opened.len(), modified)
             } else {
                 continue;
             };
             if name.to_string_lossy().to_lowercase().contains(&needle) {
-                let modified_at_ms = metadata.modified().ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
                 results.push(WorkspaceEntry {
                     name: name.to_string_lossy().into_owned(),
                     path: root.join(&relative_directory).join(&name).to_string_lossy().into_owned(),
                     kind: kind.into(),
-                    size_bytes: metadata.len(),
+                    size_bytes,
                     modified_at_ms,
                 });
                 if results.len() >= MAX_SEARCH_RESULTS { break 'walk; }
@@ -671,7 +680,9 @@ pub fn write_workspace_file_checked(
 fn create_workspace_directory_inner(path: &str, access: &WorkspaceAccess) -> Result<(), String> {
     if path.trim().is_empty() || path.len() > 4096 { return Err("Enter a valid directory path.".into()); }
     let requested = PathBuf::from(path);
-    let parent = requested.parent().ok_or_else(|| "The new directory must be inside an allowed directory.".to_string())?;
+    if requested.parent().is_none() {
+        return Err("The new directory must be inside an allowed directory.".into());
+    }
     let (parent_directory, name, _root) = access.open_approved_parent(&requested)?;
     if parent_directory.symlink_metadata(Path::new(&name)).is_ok() {
         return Err("A file or directory already exists at that path.".into());
