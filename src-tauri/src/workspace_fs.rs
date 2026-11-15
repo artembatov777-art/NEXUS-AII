@@ -500,7 +500,7 @@ fn search_workspace_entries_capability(
             if metadata.file_type().is_symlink() { continue; }
             let (kind, metadata) = if metadata.is_dir() {
                 if depth < MAX_SEARCH_DEPTH {
-                    if let Ok(child) = directory.open_dir(&name) {
+                    if let Ok(child) = directory.open_dir_nofollow(&name) {
                         pending.push((child, relative_directory.join(&name), depth + 1));
                     }
                 }
