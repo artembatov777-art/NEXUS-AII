@@ -35,7 +35,7 @@ async function readBody(req) {
 }
 
 function handleStoreError(res, error) {
-  if (error?.code === "STORAGE_NOT_CONFIGURED") {
+  if (["STORAGE_NOT_CONFIGURED", "VOLUME_NOT_MOUNTED", "VOLUME_MOUNT_UNVERIFIED"].includes(error?.code)) {
     return sendJson(res, 503, { error: error.message, code: error.code });
   }
   console.error("[NEXUS profile storage]", error);
