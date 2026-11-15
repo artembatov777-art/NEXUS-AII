@@ -1,6 +1,9 @@
 use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+#[cfg(windows)]
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
-use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
+use cap_std::fs::Dir as CapabilityDir;
+#[cfg(windows)]
+use cap_std::fs::OpenOptions as CapabilityOpenOptions;
 use std::ffi::OsStr;
 use crate::workspace_fs_recovery::{RenameEntry, WorkspaceOperationJournal};
 use std::collections::HashSet;
@@ -689,6 +692,60 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(outside_source.join("item.txt")).unwrap(), "outside source");
         assert_eq!(fs::read_to_string(outside_destination.join("item.txt")).unwrap(), "outside destination");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn handle_relative_no_replace_move_never_overwrites_an_existing_destination() {
+        let (base, root, access) = fixture();
+        let source_directory = root.join("source");
+        let destination_directory = root.join("destination");
+        fs::create_dir_all(&source_directory).expect("create source directory");
+        fs::create_dir_all(&destination_directory).expect("create destination directory");
+        fs::write(source_directory.join("item.txt"), "source contents").expect("write source");
+        fs::write(destination_directory.join("item.txt"), "destination contents").expect("write destination");
+        let (source_handle, _) = access.open_approved_directory(&source_directory).expect("pin source");
+        let (destination_handle, _) = access.open_approved_directory(&destination_directory).expect("pin destination");
+
+        let result = rename_no_replace_at(
+            &source_handle, OsStr::new("item.txt"),
+            &destination_handle, OsStr::new("item.txt"),
+            &source_directory.join("item.txt"), &destination_directory.join("item.txt"),
+        );
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(source_directory.join("item.txt")).unwrap(), "source contents");
+        assert_eq!(fs::read_to_string(destination_directory.join("item.txt")).unwrap(), "destination contents");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn handle_relative_no_replace_move_supports_files_and_directories() {
+        let (base, root, access) = fixture();
+        let source_directory = root.join("source");
+        let destination_directory = root.join("destination");
+        fs::create_dir_all(&source_directory).expect("create source directory");
+        fs::create_dir_all(&destination_directory).expect("create destination directory");
+        fs::write(source_directory.join("item.txt"), "source contents").expect("write source");
+        fs::create_dir(source_directory.join("folder")).expect("create source child directory");
+        fs::write(source_directory.join("folder").join("nested.txt"), "nested contents").expect("write nested file");
+        let (source_handle, _) = access.open_approved_directory(&source_directory).expect("pin source");
+        let (destination_handle, _) = access.open_approved_directory(&destination_directory).expect("pin destination");
+
+        rename_no_replace_at(
+            &source_handle, OsStr::new("item.txt"),
+            &destination_handle, OsStr::new("moved.txt"),
+            &source_directory.join("item.txt"), &destination_directory.join("moved.txt"),
+        ).expect("move file relative to directory handles");
+        rename_no_replace_at(
+            &source_handle, OsStr::new("folder"),
+            &destination_handle, OsStr::new("folder"),
+            &source_directory.join("folder"), &destination_directory.join("folder"),
+        ).expect("move directory relative to directory handles");
+
+        assert_eq!(fs::read_to_string(destination_directory.join("moved.txt")).unwrap(), "source contents");
+        assert_eq!(fs::read_to_string(destination_directory.join("folder").join("nested.txt")).unwrap(), "nested contents");
+        assert!(!source_directory.join("item.txt").exists());
+        assert!(!source_directory.join("folder").exists());
         fs::remove_dir_all(base).expect("cleanup");
     }
 
