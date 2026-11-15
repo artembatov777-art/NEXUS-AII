@@ -8,6 +8,7 @@ export interface ProviderProfileRecord {
   id: string;
   label: string;
   settings: ProviderSettings;
+  updatedAt?: number;
 }
 
 const STORAGE_KEY = "nexus-au:provider-profiles:v1";
@@ -65,7 +66,8 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
       credentialHandle: credentialHandle as NonNullable<ProviderSettings["credentialHandle"]>,
       ...(settings.providerProtocol === "anthropic-messages" ? { providerProtocol: "anthropic-messages" as const } : {}),
       ...(settings.routeMode === "manual" ? { routeMode: "manual" as const } : {})
-    }
+    },
+    ...(Number.isSafeInteger(value.updatedAt) && (value.updatedAt as number) >= 0 ? { updatedAt: value.updatedAt as number } : {})
   });
 }
 
