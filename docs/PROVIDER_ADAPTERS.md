@@ -1,6 +1,6 @@
 # Provider adapter contract
 
-NEXUS uses a provider-neutral `ModelRouter`. The active native adapter connects directly to configured OpenAI-compatible endpoints. No aggregator or gateway is required by the AI Core.
+NEXUS uses a provider-neutral `ModelRouter`. The native desktop adapter connects directly to configured endpoints and retrieves keys from the OS credential vault. Browser preview uses a separate secured Railway AI Gateway so provider keys remain server-side.
 
 ## Current routes
 
@@ -31,6 +31,6 @@ The generic `createTauriModelRouterForProfiles` factory can register multiple di
 - The adapter supports bounded OpenAI-compatible model discovery and chat completions with streaming/cancellation. Provider-specific capabilities must be declared and tested before use.
 - NEXUS does not install Ollama, download model weights, or manage provider process lifecycle in this baseline.
 
-## Deferred gateway integration
+## Hosted Railway gateway
 
-No OmniRoute-specific profile builder, adapter, or live connection is implemented. A gateway may be evaluated only during final integration if the owner explicitly chooses it. Core local and direct-cloud operation must remain fully functional without a gateway.
+Browser preview routes OpenAI, Gemini, DeepSeek, Mistral, xAI/Grok, Groq, OpenRouter, SambaNova, NVIDIA, and owner-configured OmniRoute through `/api/provider/:provider`. Each provider has an explicit allowlisted upstream base URL and server-side environment key. The shared `NEXUS_API_TOKEN` authenticates the owner to the gateway; it is not an upstream provider key. Gemini image generation remains a separate server-side image endpoint. `NEXUS Public` identifies the public NEXUS deployment and is not an upstream model provider.
