@@ -69,6 +69,25 @@ describe("provider profile persistence", () => {
   });
 
 
+  it("preserves the Claude protocol and manual routing mode without storing secrets", () => {
+    const result = validateProviderProfile({
+      ...ollama,
+      settings: {
+        ...ollama.settings,
+        baseUrl: "https://api.anthropic.com/v1",
+        model: "claude-sonnet",
+        inferenceLocation: "remote",
+        credentialHandle: "default",
+        providerProtocol: "anthropic-messages",
+        routeMode: "manual"
+      }
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { settings: { providerProtocol: "anthropic-messages", routeMode: "manual" } }
+    });
+  });
+
   it("enforces the native provider's UTF-8 model ID byte limit", () => {
     expect(validateProviderProfile({
       ...ollama, settings: { ...ollama.settings, model: "я".repeat(65) }
