@@ -1,5 +1,6 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { ModelRouter, type ModelEvent, type ModelProvider, type ModelRequest } from "../core/model";
+import { classifyModelTask, orderModelRouteCandidates, streamWithModelFailover, type ModelRouteCandidate } from "../core/modelRouting";
 import { ok, err, type Result } from "../core/result";
 import type { ModelDescriptor } from "../core/domain";
 import type { ProviderSettings } from "../types";
@@ -14,11 +15,11 @@ function isValidModelId(model: string): boolean {
 }
 
 /** Model discovery is an idempotent GET, so retry one transient failure. Chat POSTs are never auto-retried to avoid duplicate generation or billing. */
-async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string): Promise<unknown> {
+async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string, protocol: string): Promise<unknown> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await invoke<unknown>("list_provider_models", { baseUrl, credentialHandle });
+      return await invoke<unknown>("list_provider_models", { baseUrl, credentialHandle, protocol });
     } catch (cause) {
       lastError = cause;
       const failure = normalizeProviderFailure(cause);
@@ -43,7 +44,8 @@ class TauriModelProvider implements ModelProvider {
     try {
       const ids = await invokeCatalogWithRetry(
         this.settings.baseUrl,
-        this.settings.credentialHandle ?? "default"
+        this.settings.credentialHandle ?? "default",
+        this.settings.providerProtocol ?? "openai-chat-completions"
       );
       const uniqueIds = normalizeProviderModelIds(ids);
       this.discoveredModels = new Set(uniqueIds);
@@ -128,6 +130,7 @@ class TauriModelProvider implements ModelProvider {
       const streamPromise = invoke("send_chat_stream", {
         baseUrl: this.settings.baseUrl,
         credentialHandle: this.settings.credentialHandle ?? "default",
+        protocol: this.settings.providerProtocol ?? "openai-chat-completions",
         model: request.model,
         messages: request.messages.map(message => ({ role: message.role, content: message.content })),
         temperature: request.temperature ?? null,
@@ -219,7 +222,91 @@ export function createTauriModelRouterForProfiles(profiles: TauriProviderProfile
   return router;
 }
 
-/** Default single-endpoint adapter retained for the current settings UI. */
+class TaskAwareModelProvider implements ModelProvider {
+  readonly id = NATIVE_MODEL_PROVIDER_ID;
+  constructor(
+    private readonly router: ModelRouter,
+    private readonly profiles: TauriProviderProfile[],
+    private readonly preferredProviderId?: string,
+    private readonly routeMode: "auto" | "manual" = "auto"
+  ) {}
+
+  listModels() { return this.router.listModels(); }
+
+  async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
+    const catalog = await this.router.listModels();
+    if (!catalog.ok) throw Object.assign(new Error(catalog.error.message), {
+      code: catalog.error.code, retryable: catalog.error.retryable
+    });
+    const task = classifyModelTask(request.messages);
+    const candidates: ModelRouteCandidate[] = [];
+    const eligible = this.routeMode === "manual" && this.preferredProviderId
+      ? this.profiles.filter(profile => profile.id === this.preferredProviderId)
+      : this.profiles;
+    for (const profile of eligible) {
+      const available = catalog.value.filter(model => model.providerId === profile.id);
+      if (!available.length) continue;
+      const chosen = available.find(model => model.id === profile.settings.model) ?? available[0];
+      if (!chosen) continue;
+      candidates.push({
+        providerId: profile.id,
+        modelId: chosen.id,
+        family: providerFamily(profile.settings)
+      });
+    }
+    const ordered = orderModelRouteCandidates(candidates, task,
+      this.routeMode === "manual" ? this.preferredProviderId : undefined);
+    if (!ordered.length) {
+      const failed = this.router.getProviderFailures();
+      const detail = failed.map(item => item.providerId + ": " + item.message).join("\\n");
+      throw new Error(detail || "No configured provider returned a verified model catalog.");
+    }
+    yield* streamWithModelFailover(this.router, ordered, {
+      messages: request.messages,
+      ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.maxOutputTokens !== undefined ? { maxOutputTokens: request.maxOutputTokens } : {}),
+      ...(request.signal ? { signal: request.signal } : {})
+    });
+  }
+}
+
+function providerFamily(settings: ProviderSettings): string {
+  if (settings.providerProtocol === "anthropic-messages") return "anthropic";
+  const host = (() => { try { return new URL(settings.baseUrl).hostname.toLowerCase(); } catch { return ""; } })();
+  if (host.includes("openai")) return "openai";
+  if (host.includes("deepseek")) return "deepseek";
+  if (host.includes("mistral")) return "mistral";
+  if (host.includes("x.ai")) return "xai";
+  if (host.includes("googleapis") || host.includes("generativelanguage")) return "gemini";
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return "ollama";
+  return "other";
+}
+
+/**
+ * Creates a single application router backed by every saved provider profile.
+ * Catalogs are discovered concurrently; task selection is deterministic and
+ * fallback is allowed only before the first visible text delta.
+ */
+export function createTauriAutoModelRouterForProfiles(
+  profiles: TauriProviderProfile[],
+  preferredProviderId?: string,
+  routeMode: "auto" | "manual" = "auto"
+): ModelRouter | null {
+  if (!isTauri() || profiles.length === 0) return null;
+  const router = new ModelRouter();
+  for (const profile of profiles) {
+    if (!profile.id.trim() || profile.id.length > 128 || !profile.settings.baseUrl.trim()) {
+      throw new Error("Provider profile ID and endpoint are required.");
+    }
+    const registered = router.register(new TauriModelProvider(profile.id, { ...profile.settings }));
+    if (!registered.ok) throw new Error(registered.error.message);
+  }
+  const aggregate = router.register(new TaskAwareModelProvider(router, profiles, preferredProviderId, routeMode));
+  if (!aggregate.ok) throw new Error(aggregate.error.message);
+  return router;
+}
+
+/** Default single-endpoint adapter retained for explicit provider checks and tests. */
 export function createTauriModelRouter(settings: ProviderSettings): ModelRouter | null {
   return createTauriModelRouterForProfiles([{ id: NATIVE_MODEL_PROVIDER_ID, settings }]);
 }
