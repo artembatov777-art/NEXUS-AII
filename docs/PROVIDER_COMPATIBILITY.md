@@ -2,15 +2,16 @@
 
 ## Current adapter contract
 
-The native desktop host currently implements the OpenAI Chat Completions wire format:
-- model discovery: `GET {baseUrl}/models`
-- streamed generation: `POST {baseUrl}/chat/completions`
-- bearer-token authentication from an OS credential-vault handle
-- bounded responses, no redirects, HTTPS for remote endpoints, and HTTP only for loopback hosts
+The native desktop host implements two explicit protocol adapters:
+
+- **OpenAI Chat Completions:** `GET {baseUrl}/models`, `POST {baseUrl}/chat/completions`, bearer-token authentication.
+- **Anthropic Messages:** `GET {baseUrl}/models`, `POST {baseUrl}/messages`, `x-api-key` plus `anthropic-version` headers, Anthropic typed SSE parsing.
+
+Both adapters use bounded responses, no redirects, HTTPS for remote endpoints, HTTP only for loopback hosts, and OS credential-vault handles.
 
 A built-in preset only fills a documented endpoint. It does not validate a user's API key, guarantee account access, guarantee a model is enabled, or start a network request. The owner must save a key in the OS vault, load the provider's live model catalog, and run a generation test.
 
-## Built-in OpenAI-compatible presets
+## Built-in provider presets
 
 | Provider | Base URL | Adapter status |
 |---|---|---|
@@ -45,5 +46,5 @@ Other providers that issue API keys are not automatically compatible. They need 
 
 - Verify model discovery and streaming generation with owner-provided test credentials for each provider.
 - Verify per-profile key isolation, replacement, deletion, and vault failure handling on Windows, macOS, and Linux.
-- Add a dedicated Anthropic adapter before claiming native Claude API support.
-- Add a multi-provider routing policy only after provider identity, capabilities, cost, privacy route, and failover semantics are explicit and testable.
+- Live-test Claude model discovery, generation, usage reporting, and cancellation with an owner-provided API key.
+- Add owner-editable provider priority, task preferences, and cost-aware routing after the initial deterministic routing policy is validated.
