@@ -1,3 +1,4 @@
+import { isGatewayAuthorized } from "../_lib/gatewayAuth.js";
 export const config = { maxDuration: 60 };
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGES = 40;
@@ -20,12 +21,6 @@ function sendJson(res, status, payload) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.end(JSON.stringify(payload));
-}
-function constantTimeEqual(left, right) {
-  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < left.length; index += 1) mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return mismatch === 0;
 }
 function readBody(req) {
   if (req.body !== undefined) {
@@ -101,9 +96,7 @@ export default async function handler(req, res) {
   }
   const accessToken = process.env.NEXUS_API_TOKEN;
   if (!accessToken) return sendJson(res, 503, { error: "NEXUS API access is not configured." });
-  const authorization = req.headers.authorization || "";
-  const suppliedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!constantTimeEqual(suppliedToken, accessToken)) return sendJson(res, 401, { error: "Unauthorized." });
+  if (!isGatewayAuthorized(req, accessToken)) return sendJson(res, 401, { error: "Unauthorized." });
   if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) return sendJson(res, 415, { error: "Content-Type must be application/json." });
   const provider = resolveProvider(req);
   if (!provider) return sendJson(res, 404, { error: "Unsupported hosted provider." });
