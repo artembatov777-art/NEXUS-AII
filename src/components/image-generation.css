@@ -19,3 +19,5 @@
 .image-generation-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
 @keyframes image-generation-spin{to{transform:rotate(360deg)}}
 @media(max-width:560px){.image-generation-dialog{padding:17px}.image-generation-options{grid-template-columns:1fr}.image-generation-actions{position:sticky;bottom:-17px;padding:12px 0 0;background:#0c121a}}
+
+.image-generation-source-actions{display:flex;gap:8px;flex-wrap:wrap}
