@@ -12,7 +12,7 @@ const PROVIDERS = Object.freeze({
   groq: { baseUrl: "https://api.groq.com/openai/v1", keyName: "GROQ_API_KEY" },
   sambanova: { baseUrl: "https://api.sambanova.ai/v1", keyName: "SAMBANOVA_API_KEY" },
   nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" },
-  omniroute: { baseUrl: process.env.OMNIROUTE_BASE_URL || "", keyName: "OMNIROUTE_API_KEY", hostedEndpoint: true }
+  omniroute: { baseUrl: "", keyName: "OMNIROUTE_API_KEY", hostedEndpoint: true }
 });
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -67,7 +67,9 @@ function resolveProvider(req) {
     : typeof req.url === "string"
       ? new URL(req.url, "https://nexus.invalid").pathname.split("/").filter(Boolean).at(-1)
       : "";
-  return Object.hasOwn(PROVIDERS, candidate) ? { id: candidate, ...PROVIDERS[candidate] } : null;
+  return Object.hasOwn(PROVIDERS, candidate)
+    ? { id: candidate, ...PROVIDERS[candidate], ...(candidate === "omniroute" ? { baseUrl: process.env.OMNIROUTE_BASE_URL || "" } : {}) }
+    : null;
 }
 function validateMessages(value) {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_MESSAGES) return null;
