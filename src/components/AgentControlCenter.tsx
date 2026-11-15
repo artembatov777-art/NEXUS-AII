@@ -7,7 +7,8 @@ import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
 import type { ToolAuditEvent } from "../core/tools";
 import type { AmbiguousToolStep } from "../core/toolReconciliation";
-import { createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
+import { createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
+import { loadProviderProfiles } from "../lib/providerProfiles";
 import { TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import type { ResumableAgentEvent } from "../core/resumableAgents";
 import { createWorkspaceNexusRuntime } from "../lib/nexusRuntime";
@@ -53,12 +54,29 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
   return labels[status];
 }
 
-export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string }) {
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string }) {
   const runtimeState = useMemo<RuntimeState>(() => {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
       if (!loadedProfile.ok) throw new Error(loadedProfile.error.message);
-      const models = canUseAgentProvider(providerSettings, hasProviderKey) ? createTauriModelRouter(providerSettings) : null;
+      const saved = loadProviderProfiles(window.localStorage);
+      const records = saved.ok ? saved.value : [];
+      const sameSettings = (left: ProviderSettings, right: ProviderSettings) =>
+        left.baseUrl === right.baseUrl && left.model === right.model &&
+        left.inferenceLocation === right.inferenceLocation &&
+        (left.credentialHandle ?? "default") === (right.credentialHandle ?? "default") &&
+        (left.providerProtocol ?? "openai-chat-completions") === (right.providerProtocol ?? "openai-chat-completions");
+      const activeProfile = records.find(profile => sameSettings(profile.settings, providerSettings));
+      const profiles = records.map(profile => ({ id: profile.id, settings: profile.settings }));
+      if (!activeProfile) profiles.unshift({ id: "nexus.current", settings: providerSettings });
+      const models = canUseAgentProvider(providerSettings, hasProviderKey)
+        ? createTauriAutoModelRouterForProfiles(
+            profiles,
+            activeProfile?.id ?? "nexus.current",
+            providerSettings.routeMode === "manual" ? "manual" : "auto",
+            providerSettings.inferenceLocation
+          )
+        : null;
       const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource, reason }) => {
@@ -102,7 +120,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } catch (cause) {
       return { runtime: null, error: cause instanceof Error ? cause.message : "Could not initialize the local agent runtime.", profile: null };
     }
-  }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation]);
+  }, [hasProviderKey, providerSettings.baseUrl, providerSettings.model, providerSettings.credentialHandle, providerSettings.inferenceLocation, providerSettings.providerProtocol, providerSettings.routeMode]);
   const memoryRepository = useMemo(() => isTauri()
     ? new WorkspaceMemoryRepository(window.localStorage)
     : new LocalStorageMemoryRepository(window.localStorage), []);
@@ -111,7 +129,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     new LocalTransformerEmbeddingProvider(),
     new IndexedDbMemoryVectorIndex()
   ), [memoryRepository]);
-  const [task, setTask] = useState("");
+  const [task, setTask] = useState(initialTask ?? "");
+  useEffect(() => {
+    if (initialTask?.trim()) setTask(initialTask.slice(0, 6000));
+  }, [initialTask]);
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
   const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
