@@ -19,7 +19,7 @@ A built-in preset only fills a documented endpoint. It does not validate a user'
 | Google Gemini API | `https://generativelanguage.googleapis.com/v1beta/openai` | OpenAI-compatible endpoint preset; live verification required |
 | DeepSeek | `https://api.deepseek.com` | OpenAI-compatible endpoint preset; live verification required |
 | Mistral AI | `https://api.mistral.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
-| xAI / Grok | `https://api.x.ai` | OpenAI-compatible endpoint preset; live verification required |
+| xAI / Grok | `https://api.x.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
 | Anthropic Claude | `https://api.anthropic.com/v1` | Native Messages adapter; model discovery and streaming implemented, live verification required |
 | Ollama | `http://127.0.0.1:11434/v1` | Existing local OpenAI-compatible profile; owner must run Ollama |
 
