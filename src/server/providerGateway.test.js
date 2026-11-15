@@ -55,6 +55,20 @@ describe("hosted provider gateway", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("accepts a remembered HttpOnly NEXUS session cookie", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: "gpt-cookie" }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const request = createRequest({
+      headers: { authorization: "", cookie: "nexus_gateway=test-access-token" },
+      body: { action: "models" }
+    });
+    const response = createResponse();
+    await handler(request, response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().models).toEqual(["gpt-cookie"]);
+  });
+
   it("rejects unknown provider IDs without contacting an upstream host", async () => {
     const response = createResponse();
     await handler(createRequest({ provider: "attacker-controlled-host" }), response);
