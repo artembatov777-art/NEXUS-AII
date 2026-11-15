@@ -5,7 +5,7 @@ export type { GeneratedImage, ImageAspectRatio, ImageSize } from "../core/imageG
 export async function generateGeminiImage(
   prompt: string,
   accessToken: string,
-  options: { aspectRatio?: ImageAspectRatio; imageSize?: ImageSize; remoteConsent?: boolean; signal?: AbortSignal; useGatewayCookie?: boolean } = {}
+  options: { aspectRatio?: ImageAspectRatio; imageSize?: ImageSize; remoteConsent?: boolean; signal?: AbortSignal; useGatewayCookie?: boolean; sourceImage?: { mimeType: GeneratedImage["mimeType"]; data: string; byteLength: number } } = {}
 ): Promise<GeneratedImage> {
   const normalizedPrompt = prompt.trim();
   if (!normalizedPrompt || normalizedPrompt.length > 2_000) {
@@ -23,7 +23,10 @@ export async function generateGeminiImage(
       ...(accessToken.trim() ? { Authorization: `Bearer ${accessToken.trim()}` } : {})
     },
     credentials: "same-origin",
-    body: JSON.stringify({ prompt: normalizedPrompt, aspectRatio, imageSize, allowRemoteProcessing: true }),
+    body: JSON.stringify({
+      prompt: normalizedPrompt, aspectRatio, imageSize, allowRemoteProcessing: true,
+      ...(options.sourceImage ? { sourceImage: options.sourceImage } : {})
+    }),
     signal: options.signal
   });
 
