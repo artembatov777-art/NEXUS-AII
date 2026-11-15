@@ -1,4 +1,4 @@
-use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use crate::workspace_fs::{open_capability_file, WorkspaceAccess};
 #[cfg(windows)]
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
 use cap_std::fs::Dir as CapabilityDir;
@@ -150,8 +150,8 @@ pub(crate) fn rename_no_replace_at(
     source_name: &OsStr,
     destination_directory: &CapabilityDir,
     destination_name: &OsStr,
-    source_path: &Path,
-    destination_path: &Path,
+    _source_path: &Path,
+    _destination_path: &Path,
 ) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
@@ -248,7 +248,7 @@ pub(crate) fn rename_no_replace_at(
                 u32::try_from(total_size).map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename metadata is too large."))?,
             )
         };
-        let _ = (source_path, destination_path);
+        let _ = (_source_path, _destination_path);
         if result == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
