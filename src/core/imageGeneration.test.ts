@@ -91,6 +91,27 @@ describe("ImageGenerationRouter", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "provider_unavailable" } });
   });
 
+  it("validates and forwards a bounded source image for iterative editing", async () => {
+    const sourceImage = { mimeType: "image/png" as const, data: "iVBORw0KGgo=", byteLength: 8 };
+    const generate = vi.fn(async (request: ImageGenerationRequest) => ok({
+      ...output, aspectRatio: request.aspectRatio, imageSize: request.imageSize
+    }));
+    const router = new ImageGenerationRouter();
+    router.register(provider(generate));
+    const result = await router.generate("test-image", {
+      prompt: "Add a small moon", aspectRatio: "1:1", imageSize: "1K",
+      allowRemoteProcessing: true, sourceImage
+    });
+    expect(result.ok).toBe(true);
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ sourceImage }), undefined);
+
+    const invalid = await router.generate("test-image", {
+      prompt: "Edit", aspectRatio: "1:1", imageSize: "1K", allowRemoteProcessing: true,
+      sourceImage: { ...sourceImage, byteLength: 99 }
+    });
+    expect(invalid).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("returns provider failures without retrying", async () => {
     const router = new ImageGenerationRouter();
     router.register(provider(vi.fn(async () => err("provider_unavailable", "Offline."))));
