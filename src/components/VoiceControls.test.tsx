@@ -39,6 +39,35 @@ describe("VoiceControls", () => {
   });
 
 
+  it("ignores late speech results after push-to-talk has been stopped", () => {
+    class FakeRecognition {
+      static latest: FakeRecognition | null = null;
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { FakeRecognition.latest = this; }
+      start() { this.onstart?.(); }
+      stop() { this.onend?.(); }
+      abort() { this.onend?.(); }
+    }
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    const onTranscript = vi.fn();
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
+    const start = container.querySelector('button[aria-label="Start voice input"]');
+    act(() => start?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const instance = FakeRecognition.latest;
+    expect(instance).not.toBeNull();
+    const stop = container.querySelector('button[aria-label="Stop voice input"]');
+    act(() => stop?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const result = Object.assign([{ transcript: "late transcript" }], { isFinal: true });
+    act(() => instance?.onresult?.({ resultIndex: 0, results: [result] }));
+    expect(onTranscript).not.toHaveBeenCalled();
+  });
+
   it("submits recognized speech automatically in voice conversation mode", () => {
     class FakeRecognition {
       static latest: FakeRecognition | null = null;
