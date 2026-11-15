@@ -2,6 +2,7 @@ import { t } from "../lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
 import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
+import { PROVIDER_PRESETS, getProviderPreset } from "../lib/providerPresets";
 import {
   loadProviderProfiles, removeProviderProfile, saveProviderProfiles,
   upsertProviderProfile, type ProviderProfileRecord
@@ -132,6 +133,27 @@ export function ProviderProfilesPanel({
   }
 
   return <section className="provider-profiles" aria-label={t("Saved provider profiles")}>
+    <label>{t("Quick provider setup")}
+      <select aria-label={t("Quick provider setup")} defaultValue="" onChange={event => {
+        const preset = getProviderPreset(event.target.value);
+        if (!preset) return;
+        const currentHandle = currentSettings.credentialHandle ?? "default";
+        const credentialHandle = isDedicatedCredentialHandle(currentHandle) ? currentHandle : "default";
+        onSelect({
+          ...currentSettings,
+          baseUrl: preset.baseUrl,
+          model: "",
+          inferenceLocation: "remote",
+          credentialHandle
+        });
+        setStatus(t("Provider preset applied. Save a profile and add its API key in Provider settings."));
+        event.currentTarget.value = "";
+      }}>
+        <option value="">{t("Choose a provider preset…")}</option>
+        {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+      </select>
+    </label>
+    <small>{t("These presets use the OpenAI-compatible Chat Completions protocol. Anthropic Claude uses a different Messages protocol and needs a separate adapter; it is not enabled by these presets.")}</small>
     <label>Saved provider profiles
       <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
