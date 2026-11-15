@@ -494,6 +494,13 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 
 /* Saved provider profiles: compact, responsive controls inside Settings. */
 .provider-profiles { margin: 14px 0 18px; padding: 13px; border: 1px solid #2b3443; border-radius: 10px; background: #10151f; }
+.hosted-provider-setup { display: grid; gap: 8px; }
+.hosted-provider-setup > strong { color: #e4e8f0; font-size: 12px; font-weight: 600; }
+.hosted-provider-setup > small { margin-top: 0; }
+.hosted-provider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hosted-provider-grid .secondary-btn { min-width: 0; min-height: 38px; padding: 8px 10px; white-space: normal; text-align: center; line-height: 1.35; }
+@media (max-width: 420px) { .hosted-provider-grid { grid-template-columns: 1fr; } }
+
 .settings-modal .provider-profiles label { display: block; margin: 0; color: #aeb5c4; font-size: 11px; }
 .provider-profiles select { display: block; width: 100%; margin-top: 7px; padding: 10px; color: #e9ebf2; background: #0d1119; border: 1px solid #303748; border-radius: 8px; font-size: 12px; }
 .settings-modal .provider-profiles .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px; margin-top: 11px; }
