@@ -591,6 +591,49 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn handle_relative_move_ignores_swapped_source_and_destination_parent_paths() {
+        use std::os::unix::fs::symlink;
+        let (base, root, access) = fixture();
+        let source_directory = root.join("source");
+        let destination_directory = root.join("destination");
+        let outside_source = base.join("outside-source");
+        let outside_destination = base.join("outside-destination");
+        fs::create_dir_all(&source_directory).expect("create source directory");
+        fs::create_dir_all(&destination_directory).expect("create destination directory");
+        fs::create_dir_all(&outside_source).expect("create outside source");
+        fs::create_dir_all(&outside_destination).expect("create outside destination");
+        fs::write(source_directory.join("item.txt"), "approved source").expect("write source");
+        fs::write(outside_source.join("item.txt"), "outside source").expect("write outside source");
+        fs::write(outside_destination.join("item.txt"), "outside destination").expect("write outside destination");
+
+        let (source_handle, _) = access.open_approved_directory(&source_directory).expect("pin source directory");
+        let (destination_handle, _) = access.open_approved_directory(&destination_directory).expect("pin destination directory");
+        fs::rename(&source_directory, root.join("source-original")).expect("move original source directory");
+        fs::rename(&destination_directory, root.join("destination-original")).expect("move original destination directory");
+        symlink(&outside_source, &source_directory).expect("replace source path with symlink");
+        symlink(&outside_destination, &destination_directory).expect("replace destination path with symlink");
+
+        rename_no_replace_at(
+            &source_handle,
+            OsStr::new("item.txt"),
+            &destination_handle,
+            OsStr::new("item.txt"),
+            &source_directory.join("item.txt"),
+            &destination_directory.join("item.txt"),
+        ).expect("rename relative to pinned directory handles");
+
+        assert!(!root.join("source-original").join("item.txt").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("destination-original").join("item.txt")).unwrap(),
+            "approved source"
+        );
+        assert_eq!(fs::read_to_string(outside_source.join("item.txt")).unwrap(), "outside source");
+        assert_eq!(fs::read_to_string(outside_destination.join("item.txt")).unwrap(), "outside destination");
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
     #[test]
     fn image_preview_accepts_only_scoped_raster_files_with_matching_signatures() {
         let (base, root, access) = fixture();
