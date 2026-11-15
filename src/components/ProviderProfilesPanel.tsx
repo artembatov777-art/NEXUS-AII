@@ -174,7 +174,7 @@ export function ProviderProfilesPanel({
         {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
       </select>
     </label>}
-    <small>{t("Hosted providers: Gemini, DeepSeek and NVIDIA. Ollama remains available separately as a local no-key provider.")}</small>
+    <small>{t("Hosted providers: Gemini, Groq and NVIDIA. Ollama remains available separately as a local no-key provider.")}</small>
     <label>Saved provider profiles
       <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
