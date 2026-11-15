@@ -22,7 +22,7 @@ Add these in the Railway service's Variables section:
 
 - `NEXUS_API_TOKEN`: a random secret with at least 32 characters.
 - `GEMINI_API_KEY`: only if Gemini is a selected upstream provider.
-- `DEEPSEEK_API_KEY`: only if DeepSeek is a selected upstream provider.
+- `GROQ_API_KEY`: only if Groq is a selected upstream provider.
 - `NVIDIA_API_KEY`: only if NVIDIA NIM is a selected upstream provider.
 
 Never use a `VITE_*` variable for a secret. Vite variables are bundled into browser
@@ -33,7 +33,7 @@ assets and are not suitable for API keys or gateway tokens.
 After deployment, open `https://YOUR-RAILWAY-DOMAIN/api/health`. A healthy service
 returns JSON with `"status":"ok"`. Then configure the provider in NEXUS:
 
-- Gateway URL: `/api/provider/PROVIDER_ID` for Gemini, DeepSeek or NVIDIA. The older `/api/gemini` route remains only for existing saved configurations.
+- Gateway URL: `/api/provider/PROVIDER_ID` for Gemini, Groq or NVIDIA. The older `/api/gemini` route remains only for existing saved configurations.
 - Gateway Token: the value of `NEXUS_API_TOKEN` configured in Railway.
 - Model: select a model supported by the configured provider.
 
