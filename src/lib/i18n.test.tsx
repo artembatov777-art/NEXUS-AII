@@ -24,6 +24,15 @@ describe("NEXUS localization", () => {
     expect(translate("Проекты не найдены.", "en")).toBe("No projects found.");
   });
 
+  it("translates NEXUS Studio navigation and inbox controls", () => {
+    expect(translate("NEXUS Studio", "ru")).toBe("Студия NEXUS");
+    expect(translate("Universal Inbox", "ru")).toBe("Единый центр заметок");
+    expect(translate("Search inbox", "ru")).toBe("Поиск по заметкам");
+    expect(translate("Completed", "ru")).not.toBe("Completed");
+    expect(translate("Knowledge Graph", "ru")).toBe("Граф знаний");
+    expect(translate("NEXUS Studio", "en")).toBe("NEXUS Studio");
+  });
+
   it("does not alter unknown technical identifiers", () => {
     expect(translate("gemini-3.1-flash-lite", "ru")).toBe("gemini-3.1-flash-lite");
   });
