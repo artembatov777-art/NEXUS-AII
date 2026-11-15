@@ -29,7 +29,7 @@ describe("hosted provider gateway", () => {
   beforeEach(() => {
     vi.stubEnv("NEXUS_API_TOKEN", "test-access-token");
     vi.stubEnv("GEMINI_API_KEY", "server-side-gemini-key");
-    vi.stubEnv("DEEPSEEK_API_KEY", "server-side-deepseek-key");
+    vi.stubEnv("GROQ_API_KEY", "server-side-groq-key");
     vi.stubEnv("NVIDIA_API_KEY", "server-side-nvidia-key");
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -55,7 +55,7 @@ describe("hosted provider gateway", () => {
   });
 
   it("rejects removed providers without contacting an upstream host", async () => {
-    for (const provider of ["openai", "xai", "mistral", "anthropic", "openrouter", "groq", "sambanova", "omniroute"]) {
+    for (const provider of ["openai", "xai", "mistral", "anthropic", "openrouter", "deepseek", "sambanova", "omniroute"]) {
       const response = createResponse();
       await handler(createRequest({ provider }), response);
       expect(response.statusCode).toBe(404);
@@ -64,11 +64,11 @@ describe("hosted provider gateway", () => {
   });
 
   it("reports a missing server-side provider key without exposing configuration", async () => {
-    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    vi.stubEnv("GROQ_API_KEY", "");
     const response = createResponse();
-    await handler(createRequest({ provider: "deepseek", body: { action: "models" } }), response);
+    await handler(createRequest({ provider: "groq", body: { action: "models" } }), response);
     expect(response.statusCode).toBe(503);
-    expect(response.body).not.toContain("DEEPSEEK_API_KEY");
+    expect(response.body).not.toContain("GROQ_API_KEY");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -85,22 +85,22 @@ describe("hosted provider gateway", () => {
     expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
   });
 
-  it("routes DeepSeek chat through the shared secured gateway", async () => {
+  it("routes Groq chat through the shared secured gateway", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: "DEEPSEEK_OK" } }],
+      choices: [{ message: { content: "GROQ_OK" } }],
       usage: { prompt_tokens: 5, completion_tokens: 3 }
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const response = createResponse();
     await handler(createRequest({
-      provider: "deepseek",
-      body: { action: "chat", model: "deepseek-chat", messages: [{ role: "user", content: "Hello" }] }
+      provider: "groq",
+      body: { action: "chat", model: "openai/gpt-oss-20b", messages: [{ role: "user", content: "Hello" }] }
     }), response);
     expect(response.statusCode).toBe(200);
-    expect(response.json().text).toBe("DEEPSEEK_OK");
+    expect(response.json().text).toBe("GROQ_OK");
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
-    expect(url).toBe("https://api.deepseek.com/chat/completions");
-    expect(options.headers.Authorization).toBe("Bearer server-side-deepseek-key");
-    expect(response.body).not.toContain("server-side-deepseek-key");
+    expect(url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    expect(options.headers.Authorization).toBe("Bearer server-side-groq-key");
+    expect(response.body).not.toContain("server-side-groq-key");
   });
 
   it("routes NVIDIA chat through the shared secured gateway", async () => {
