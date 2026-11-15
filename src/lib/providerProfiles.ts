@@ -12,6 +12,7 @@ export interface ProviderProfileRecord {
 }
 
 const STORAGE_KEY = "nexus-au:provider-profiles:v1";
+const DELETED_STORAGE_KEY = "nexus-au:provider-profiles-deleted:v1";
 const MAX_PROFILES = 16;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,6 +83,34 @@ export async function requestPersistentProviderProfileStorage(): Promise<boolean
     return alreadyPersistent || await navigator.storage.persist();
   } catch {
     return false;
+  }
+}
+
+export function loadDeletedProviderProfileIds(storage: StorageAdapter = localStorage): string[] {
+  try {
+    const parsed: unknown = JSON.parse(storage.getItem(DELETED_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.filter((id): id is string =>
+      typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id)
+    ))].slice(-256);
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeletedProviderProfileIds(
+  ids: string[],
+  storage: StorageAdapter = localStorage
+): Result<void> {
+  if (!Array.isArray(ids) || ids.length > 256 ||
+      ids.some(id => typeof id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id))) {
+    return err("validation", "Deleted provider profile IDs are invalid.");
+  }
+  try {
+    storage.setItem(DELETED_STORAGE_KEY, JSON.stringify([...new Set(ids)]));
+    return ok(undefined);
+  } catch {
+    return err("storage_failed", "Deleted provider profile IDs could not be saved.");
   }
 }
 
