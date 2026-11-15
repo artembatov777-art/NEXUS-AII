@@ -64,6 +64,21 @@ describe("NEXUS Studio", () => {
     expect(container.textContent).toContain("Browser preview cannot access native file and credential services.");
   });
 
+  it("rejects oversized and duplicate persisted inbox records", () => {
+    act(() => root.unmount());
+    localStorage.setItem("nexus-au:studio-inbox:v1", JSON.stringify([
+      { id: "same", title: "Valid", body: "", createdAt: 1, done: false },
+      { id: "same", title: "Duplicate", body: "", createdAt: 2, done: false },
+      { id: "bad", title: "x".repeat(121), body: "", createdAt: 3, done: false }
+    ]));
+    root = createRoot(container);
+    act(() => root.render(<WorkspaceStudio {...actions} conversations={[]} projects={[]} providerConfigured={false} providerVerified={false} nativeRuntime={false} workspaceReady={true} focusMode={false}/>));
+    click("Inbox");
+    expect(container.textContent).toContain("Valid");
+    expect(container.textContent).not.toContain("Duplicate");
+    expect(container.textContent).not.toContain("x".repeat(121));
+  });
+
   it("ignores malformed persisted workflow progress", () => {
     act(() => root.unmount());
     localStorage.setItem("nexus-au:studio-workflows:v1", JSON.stringify([{
