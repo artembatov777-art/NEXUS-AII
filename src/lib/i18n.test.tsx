@@ -30,6 +30,12 @@ describe("NEXUS localization", () => {
     expect(translate("Search inbox", "ru")).toBe("Поиск по заметкам");
     expect(translate("Completed", "ru")).not.toBe("Completed");
     expect(translate("Knowledge Graph", "ru")).toBe("Граф знаний");
+    expect(translate("Daily Briefing", "ru")).toBe("Ежедневная сводка");
+    expect(translate("Focus Mode", "ru")).toBe("Режим фокуса");
+    expect(translate("Agent Command Center", "ru")).toBe("Центр управления агентами");
+    expect(translate("Smart File Intelligence", "ru")).toBe("Интеллектуальная работа с файлами");
+    expect(translate("Voice Control", "ru")).toBe("Голосовое управление");
+    expect(translate("System Guardian", "ru")).toBe("Контроль системы");
     expect(translate("NEXUS Studio", "en")).toBe("NEXUS Studio");
   });
 
