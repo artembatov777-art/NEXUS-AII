@@ -380,7 +380,7 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
             let child = match directory.open_dir_nofollow(&name) { Ok(value) => value, Err(_) => continue };
             let opened = child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?;
             let modified = opened.modified().ok()
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
             ("directory", opened.len(), modified)
         } else if metadata.is_file() {
@@ -389,7 +389,7 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
             if !opened.is_file() { continue; }
             ensure_no_external_hard_links(&file)?;
             let modified = opened.modified().ok()
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
             ("file", opened.len(), modified)
         } else {
@@ -452,7 +452,7 @@ fn search_workspace_entries_in(root: &Path, start: &Path, query: &str) -> Result
 
             if name.to_lowercase().contains(&needle) && results.len() < MAX_SEARCH_RESULTS {
                 let modified_at_ms = metadata.modified().ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
                 results.push(WorkspaceEntry {
                     name,
@@ -511,7 +511,7 @@ fn search_workspace_entries_capability(
                     }
                 }
                 let modified = metadata.modified().ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
                 ("directory", metadata.len(), modified)
             } else if metadata.is_file() {
@@ -523,7 +523,7 @@ fn search_workspace_entries_capability(
                 if !opened.is_file() { continue; }
                 ensure_no_external_hard_links(&file)?;
                 let modified = opened.modified().ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
                 ("file", opened.len(), modified)
             } else {
