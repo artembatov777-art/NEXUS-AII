@@ -4,7 +4,7 @@ import { getProviderPreset, PROVIDER_PRESETS } from "./providerPresets";
 
 describe("provider presets", () => {
   it("contains only known OpenAI Chat Completions-compatible endpoints", () => {
-    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual(["openai", "gemini", "deepseek", "mistral", "xai"]);
+    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual(["openai", "gemini", "deepseek", "mistral", "xai", "anthropic"]);
     for (const preset of PROVIDER_PRESETS) {
       const url = new URL(preset.baseUrl);
       expect(url.protocol).toBe("https:");
