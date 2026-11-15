@@ -43,6 +43,32 @@ test("Railway adapter keeps unknown API routes inside the API namespace", async 
   });
 });
 
+test("Railway routes Gemini through the shared provider gateway", async () => {
+  const previousToken = process.env.NEXUS_API_TOKEN;
+  const previousGeminiKey = process.env.GEMINI_API_KEY;
+  process.env.NEXUS_API_TOKEN = "railway-test-token";
+  delete process.env.GEMINI_API_KEY;
+  try {
+    await withServer(async baseUrl => {
+      const response = await fetch(baseUrl + "/api/provider/gemini", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer railway-test-token",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "models" })
+      });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "This provider is not configured in the NEXUS server environment." });
+    });
+  } finally {
+    if (previousToken === undefined) delete process.env.NEXUS_API_TOKEN;
+    else process.env.NEXUS_API_TOKEN = previousToken;
+    if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousGeminiKey;
+  }
+});
+
 test("session endpoint reports missing gateway configuration without exposing internals", async () => {
   const previousToken = process.env.NEXUS_API_TOKEN;
   delete process.env.NEXUS_API_TOKEN;
