@@ -9,6 +9,8 @@ export interface ImageGenerationRequest {
   aspectRatio: ImageAspectRatio;
   imageSize: ImageSize;
   allowRemoteProcessing: boolean;
+  /** Existing generated image to use as the visual source for an edit. */
+  sourceImage?: Pick<GeneratedImage, "mimeType" | "data" | "byteLength">;
 }
 
 export interface GeneratedImage {
@@ -78,7 +80,8 @@ export class ImageGenerationRouter {
     if (!validId(providerId) || !request || typeof request !== "object" ||
         typeof request.prompt !== "string" || !request.prompt.trim() || request.prompt.trim().length > 2_000 ||
         !ASPECT_RATIOS.includes(request.aspectRatio) || !IMAGE_SIZES.includes(request.imageSize) ||
-        typeof request.allowRemoteProcessing !== "boolean") {
+        typeof request.allowRemoteProcessing !== "boolean" ||
+        (request.sourceImage !== undefined && !isValidSourceImage(request.sourceImage))) {
       return err("validation", "Image-generation request is invalid.");
     }
     const provider = this.providers.get(providerId);
@@ -120,6 +123,17 @@ export class ImageGenerationRouter {
 
 const ASPECT_RATIOS: ImageAspectRatio[] = ["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"];
 const IMAGE_SIZES: ImageSize[] = ["1K", "2K"];
+
+function isValidSourceImage(value: unknown): value is ImageGenerationRequest["sourceImage"] {
+  if (!value || typeof value !== "object") return false;
+  const image = value as { mimeType?: unknown; data?: unknown; byteLength?: unknown };
+  if (!["image/png", "image/jpeg", "image/webp"].includes(String(image.mimeType)) ||
+      typeof image.data !== "string" || image.data.length > 4_300_000 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data) ||
+      !Number.isSafeInteger(image.byteLength) || Number(image.byteLength) <= 0 || Number(image.byteLength) > 3_200_000) return false;
+  const padding = image.data.endsWith("==") ? 2 : image.data.endsWith("=") ? 1 : 0;
+  return image.data.length % 4 === 0 && (image.data.length / 4) * 3 - padding === image.byteLength;
+}
 
 function validId(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= 160 && !/[\u0000-\u001f\u007f]/.test(value);
