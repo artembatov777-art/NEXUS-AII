@@ -30,8 +30,15 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   }
 
   const settings = value.settings;
+  // Browser-hosted presets intentionally use same-origin Railway gateway
+  // routes. Keep this exception narrow; native/custom provider endpoints must
+  // still pass the absolute HTTPS/loopback URL validator.
+  const isTrustedHostedGatewayRoute =
+    typeof settings.baseUrl === "string" &&
+    /^\\/api\\/provider\\/(?:gemini|deepseek|nvidia)$/.test(settings.baseUrl);
+
   if (typeof settings.baseUrl !== "string" || settings.baseUrl.length > 2048 ||
-      providerEndpointError(settings.baseUrl) ||
+      (!isTrustedHostedGatewayRoute && providerEndpointError(settings.baseUrl)) ||
       typeof settings.model !== "string" || settings.model.length > 128 ||
       new TextEncoder().encode(settings.model).byteLength > 128 ||
       (settings.model.length > 0 && !boundedText(settings.model, 128)) ||
