@@ -52,7 +52,7 @@ describe("ProviderProfilesPanel", () => {
       credentialHandle: "default",
       providerProtocol: "openai-chat-completions"
     }));
-    expect(container.textContent).toContain("Claude uses the native Anthropic Messages adapter");
+    expect(container.textContent).toContain("Hosted providers: Gemini, DeepSeek and NVIDIA.");
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
   });
 
