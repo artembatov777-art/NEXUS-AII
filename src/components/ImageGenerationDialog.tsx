@@ -13,6 +13,7 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const [image, setImage] = useState<GeneratedImage | null>(null);
+  const [sourceImage, setSourceImage] = useState<GeneratedImage | null>(null);
   const controller = useRef<AbortController | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -50,11 +51,13 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
         prompt,
         aspectRatio,
         imageSize,
-        allowRemoteProcessing: remoteApproved
+        allowRemoteProcessing: remoteApproved,
+        ...(sourceImage ? { sourceImage: { mimeType: sourceImage.mimeType, data: sourceImage.data, byteLength: sourceImage.byteLength } } : {})
       }, next.signal);
       if (!result.ok) throw new Error(result.error.message);
       if (!next.signal.aborted) {
         setImage(result.value);
+        setSourceImage(null);
         onGenerated(result.value, prompt.trim());
       }
     } catch (cause) {
@@ -84,9 +87,11 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
         <div><span className="eyebrow">NEXUS MULTIMODAL</span><h2 id="image-generation-title">Image generation</h2></div>
         <button type="button" className="icon-btn" onClick={onClose} disabled={working} aria-label={t("Close image generation")}><X size={18}/></button>
       </header>
-      <p className="image-generation-disclosure">Uses Gemini 3.1 Flash Image through the secured NEXUS server proxy. Your prompt and generated image are processed by Google. Do not send private or sensitive information.</p>
-      <label className="image-generation-prompt">Describe the image
-        <textarea value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={2000} rows={4} placeholder="A cinematic photograph of a quiet futuristic city at blue hour…"/>
+      <p className="image-generation-disclosure">Uses Gemini 3.1 Flash Image through the secured NEXUS server proxy. Your prompt and {sourceImage ? "source image" : "generated image"} are processed by Google. Do not send private or sensitive information.</p>
+      {image && !sourceImage && <button type="button" className="secondary-btn" onClick={() => { setSourceImage(image); setImage(null); setPrompt(""); setError(""); }}>Edit this image</button>}
+      {sourceImage && <div className="image-generation-result"><img src={`data:${sourceImage.mimeType};base64,${sourceImage.data}`} alt="Image selected as the source for editing"/><button type="button" className="secondary-btn" onClick={() => { setSourceImage(null); setPrompt(""); }}>Cancel edit</button></div>}
+      <label className="image-generation-prompt">Describe {sourceImage ? "the changes" : "the image"}
+        <textarea value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={2000} rows={4} placeholder={sourceImage ? "Describe how you want to change this image…" : "A cinematic photograph of a quiet futuristic city at blue hour…"}/>
         <small>{prompt.length}/2000</small>
       </label>
       <div className="image-generation-options">
@@ -113,7 +118,7 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
       <footer className="image-generation-actions">
         <button type="button" className="secondary-btn" onClick={onClose} disabled={working}>Close</button>
         <button type="button" className="primary-btn" onClick={() => void generate()} disabled={!working && (!prompt.trim() || !remoteApproved || (!accessToken.trim() && !useGatewayCookie))}>
-          {working ? "Stop generation" : <><ImagePlus size={15}/> Generate image</>}
+          {working ? "Stop generation" : <><ImagePlus size={15}/> {sourceImage ? "Edit image" : "Generate image"}</>}
         </button>
       </footer>
     </section>
