@@ -76,7 +76,9 @@ export default async function handler(req, res) {
       const store = await saveProviderProfilesToServer(payload.profiles, payload.deletedProfileIds);
       return sendJson(res, 200, { schemaVersion: 1, ...store, saved: true });
     } catch (error) {
-      if (error?.code === "STORAGE_NOT_CONFIGURED") return handleStoreError(res, error);
+      if (["STORAGE_NOT_CONFIGURED", "VOLUME_NOT_MOUNTED", "VOLUME_MOUNT_UNVERIFIED"].includes(error?.code)) {
+        return handleStoreError(res, error);
+      }
       return sendJson(res, 400, { error: error instanceof Error ? error.message : "Provider profiles are invalid." });
     }
   }
