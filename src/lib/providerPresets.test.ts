@@ -10,7 +10,11 @@ describe("provider presets", () => {
     ]);
     for (const preset of PROVIDER_PRESETS) {
       const url = new URL(preset.baseUrl);
-      expect(url.protocol).toBe("https:");
+      if (preset.id === "omniroute") {
+        expect(preset.baseUrl).toBe("http://localhost:20128/v1");
+      } else {
+        expect(url.protocol).toBe("https:");
+      }
       expect(url.username).toBe("");
       expect(url.password).toBe("");
       expect(["openai-chat-completions", "anthropic-messages"]).toContain(preset.protocol);
@@ -23,7 +27,8 @@ describe("provider presets", () => {
     expect(getProviderPreset("openrouter")?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(getProviderPreset("groq")?.baseUrl).toBe("https://api.groq.com/openai/v1");
     expect(getProviderPreset("sambanova")?.baseUrl).toBe("https://api.sambanova.ai/v1");
-    expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1", "http://localhost:20128/v1");
+    expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
+    expect(getProviderPreset("omniroute")?.baseUrl).toBe("http://localhost:20128/v1");
     expect(getProviderPreset("anthropic")).toMatchObject({
       baseUrl: "https://api.anthropic.com/v1",
       protocol: "anthropic-messages"
