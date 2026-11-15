@@ -242,25 +242,38 @@ class TaskAwareModelProvider implements ModelProvider {
     private readonly allowedLocation: ProviderSettings["inferenceLocation"] = "remote"
   ) {}
 
-  listModels() { return this.router.listModels(); }
+  private eligibleProfiles(): TauriProviderProfile[] {
+    const sameRoute = this.profiles.filter(profile => profile.settings.inferenceLocation === this.allowedLocation);
+    return this.routeMode === "manual" && this.preferredProviderId
+      ? sameRoute.filter(profile => profile.id === this.preferredProviderId)
+      : sameRoute;
+  }
+
+  private discoverEligible() {
+    return Promise.all(this.eligibleProfiles().map(async profile => {
+      const resolved = this.router.getProvider(profile.id);
+      if (!resolved.ok) return { profile, models: [] as ModelDescriptor[], error: resolved.error };
+      const result = await resolved.value.listModels();
+      return result.ok
+        ? { profile, models: result.value, error: null }
+        : { profile, models: [] as ModelDescriptor[], error: result.error };
+    }));
+  }
+
+  async listModels(): Promise<Result<ModelDescriptor[]>> {
+    const discoveries = await this.discoverEligible();
+    const models = discoveries.flatMap(item => item.models);
+    if (models.length) return ok(models);
+    const detail = discoveries.flatMap(item => item.error ? [item.profile.id + ": " + item.error.message] : []).join("\\n");
+    return err("provider_unavailable", detail || "No eligible provider returned a verified model catalog.", true);
+  }
 
   async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
     const task = classifyModelTask(request.messages);
     const candidates: ModelRouteCandidate[] = [];
-    const sameRoute = this.profiles.filter(profile => profile.settings.inferenceLocation === this.allowedLocation);
-    const eligible = this.routeMode === "manual" && this.preferredProviderId
-      ? sameRoute.filter(profile => profile.id === this.preferredProviderId)
-      : sameRoute;
     // Discover only eligible profiles. In manual mode or when the active route
     // is local, do not even probe unrelated cloud endpoints.
-    const discoveries = await Promise.all(eligible.map(async profile => {
-      const resolved = this.router.getProvider(profile.id);
-      if (!resolved.ok) return { profile, models: [], error: resolved.error };
-      const result = await resolved.value.listModels();
-      return result.ok
-        ? { profile, models: result.value, error: null }
-        : { profile, models: [], error: result.error };
-    }));
+    const discoveries = await this.discoverEligible();
     for (const discovery of discoveries) {
       const available = discovery.models;
       if (!available.length) continue;
