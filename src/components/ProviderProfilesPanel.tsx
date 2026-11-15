@@ -140,7 +140,7 @@ export function ProviderProfilesPanel({
     if (!preset) return;
     const currentHandle = currentSettings.credentialHandle ?? "default";
     const credentialHandle = isDedicatedCredentialHandle(currentHandle) ? currentHandle : "default";
-    const browserGatewayUrl = preset.id === "gemini" ? "/api/gemini" : "/api/provider/" + preset.id;
+    const browserGatewayUrl = "/api/provider/" + preset.id;
     onSelect({
       ...currentSettings,
       baseUrl: !isTauri() && preset.protocol === "openai-chat-completions" ? browserGatewayUrl : preset.baseUrl,
@@ -150,18 +150,18 @@ export function ProviderProfilesPanel({
       credentialHandle
     });
     setStatus(!isTauri() && preset.protocol === "openai-chat-completions"
-      ? "Hosted provider route selected. Add this provider's API key to Vercel Environment Variables, then use the NEXUS access token."
+      ? "Hosted provider route selected. Add this provider's API key to Railway Variables, then use the NEXUS access token."
       : t("Provider preset applied. Save a profile and add its API key in Provider settings."));
   }
 
   return <section className="provider-profiles" aria-label={t("Saved provider profiles")}>
     {!isTauri() ? <div className="hosted-provider-setup">
-      <strong>{t("Connect a model through Vercel")}</strong>
-      <small>{t("Choose a provider. NEXUS will use the same gateway token and remembered device session for every hosted provider.")}</small>
+      <strong>{t("Connect a model through Railway AI Gateway")}</strong>
+      <small>{t("Choose a provider. Every supported cloud provider uses the same protected Railway AI Gateway and remembered device session.")}</small>
       <div className="hosted-provider-grid">
         {PROVIDER_PRESETS.filter(preset => preset.protocol === "openai-chat-completions").map(preset =>
           <button key={preset.id} type="button" className="secondary-btn" onClick={() => applyPreset(preset.id)}>
-            {preset.id === "gemini" ? "Use Gemini on Vercel" : "Use " + preset.label + " on Vercel"}
+            {"Use " + preset.label + " on Railway"}
           </button>
         )}
       </div>
