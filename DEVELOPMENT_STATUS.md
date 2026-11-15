@@ -136,3 +136,10 @@ Do not mark the project complete until all seven phase exit criteria and owner-s
 - Fixed request parsing for Vercel's Node runtime: use its pre-parsed `req.body` when present, enforce the same 64 KiB limit, and retain bounded raw-stream parsing for runtimes that do not pre-parse JSON.
 - Corrected the deployment guide's example model so it matches the endpoint allowlist.
 - The isolated mobile demo remains disconnected from AI providers. The regular hosted browser chat now exposes image generation only when the configured provider is the same-origin `/api/gemini` proxy and a NEXUS access token is present in UI memory; the token is never embedded in the Vite bundle. The image route and UI require fresh Quality CI and deployed endpoint verification before being called complete.
+
+
+## Verified continuation update
+
+- Current working branch includes a handle-relative Windows rename attempt that requests `DELETE` access during the initial no-follow capability open; this replaces the earlier `ReOpenFile` approach that failed Windows sharing checks. The earlier Windows run still reports the old implementation's 10 failures; the new revision's native matrix is queued and must pass before this change is accepted.
+- Frontend Quality passed on `2f51e8e557719ee0b5f48ed6a907ab76add67f33`: 85 test files, TypeScript/Vite production build, and npm audit with 0 vulnerabilities. Native Windows/macOS/Linux verification for this revision is still pending.
+- Iterative image editing now supports both generated images and owner-selected PNG/JPEG/WebP source images, with client-side MIME/signature validation and a 3.2 MB source bound. The server independently validates image signatures and request limits. Live Gemini account verification remains an owner-side gate.

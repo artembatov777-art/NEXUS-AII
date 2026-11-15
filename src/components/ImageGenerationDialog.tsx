@@ -4,6 +4,7 @@ import { Download, ImagePlus, LoaderCircle, X } from "lucide-react";
 import { ImageGenerationRouter, type GeneratedImage, type ImageAspectRatio, type ImageSize } from "../core/imageGeneration";
 import { createGeminiImageProvider } from "../lib/geminiImageProvider";
 import "./image-generation.css";
+import { encodeImageSourceFile, type SourceImage } from "../lib/imageSource";
 
 export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, onClose, onGenerated }: { accessToken: string; useGatewayCookie?: boolean; onClose: () => void; onGenerated: (image: GeneratedImage, prompt: string) => void }) {
   const [prompt, setPrompt] = useState("");
@@ -13,7 +14,8 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const [image, setImage] = useState<GeneratedImage | null>(null);
-  const [sourceImage, setSourceImage] = useState<GeneratedImage | null>(null);
+  const [sourceImage, setSourceImage] = useState<SourceImage | null>(null);
+  const sourceFileInput = useRef<HTMLInputElement | null>(null);
   const controller = useRef<AbortController | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -68,6 +70,19 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
     }
   }
 
+  async function selectSourceFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const selected = await encodeImageSourceFile(file);
+      setSourceImage(selected);
+      setImage(null);
+      setPrompt("");
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not read the selected image.");
+    }
+  }
+
   function download() {
     if (!image) return;
     const binary = atob(image.data);
@@ -89,7 +104,25 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
       </header>
       <p className="image-generation-disclosure">Uses Gemini 3.1 Flash Image through the secured NEXUS server proxy. Your prompt and {sourceImage ? "source image" : "generated image"} are processed by Google. Do not send private or sensitive information.</p>
       {image && !sourceImage && <button type="button" className="secondary-btn" onClick={() => { setSourceImage(image); setImage(null); setPrompt(""); setError(""); }}>Edit this image</button>}
-      {sourceImage && <div className="image-generation-result"><img src={`data:${sourceImage.mimeType};base64,${sourceImage.data}`} alt="Image selected as the source for editing"/><button type="button" className="secondary-btn" onClick={() => { setSourceImage(null); setPrompt(""); }}>Cancel edit</button></div>}
+      {!sourceImage && !image && <button type="button" className="secondary-btn" onClick={() => sourceFileInput.current?.click()}>Choose an image to edit</button>}
+      {sourceImage && <div className="image-generation-result">
+        <img src={`data:${sourceImage.mimeType};base64,${sourceImage.data}`} alt="Image selected as the source for editing"/>
+        <div className="image-generation-source-actions">
+          <button type="button" className="secondary-btn" onClick={() => sourceFileInput.current?.click()}>Choose another image</button>
+          <button type="button" className="secondary-btn" onClick={() => { setSourceImage(null); setPrompt(""); }}>Cancel edit</button>
+        </div>
+      </div>}
+      <input
+        ref={sourceFileInput}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={event => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          void selectSourceFile(file);
+        }}
+      />
       <label className="image-generation-prompt">Describe {sourceImage ? "the changes" : "the image"}
         <textarea value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={2000} rows={4} placeholder={sourceImage ? "Describe how you want to change this image…" : "A cinematic photograph of a quiet futuristic city at blue hour…"}/>
         <small>{prompt.length}/2000</small>
@@ -106,7 +139,7 @@ export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, o
           </select>
         </label>
       </div>
-      <label className="image-generation-consent"><input type="checkbox" checked={remoteApproved} onChange={event => setRemoteApproved(event.target.checked)}/> I agree to send this prompt to Google Gemini for image generation.</label>
+      <label className="image-generation-consent"><input type="checkbox" checked={remoteApproved} onChange={event => setRemoteApproved(event.target.checked)}/> I agree to send this prompt and {sourceImage ? "source image" : "image request"} to Google Gemini for processing.</label>
       {error && <p className="image-generation-error" role="alert">{t(error)}</p>}
       {working && <p className="image-generation-status" role="status"><LoaderCircle size={16} className="image-generation-spinner"/> Generating image…</p>}
       {image && <div className="image-generation-result">
