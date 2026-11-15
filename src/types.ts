@@ -39,6 +39,8 @@ export interface ProviderSettings {
   credentialHandle?: string;
   /** Wire protocol implemented by the native provider adapter. */
   providerProtocol?: "openai-chat-completions" | "anthropic-messages";
+  /** Automatic task-aware selection across saved profiles, or a single selected profile. */
+  routeMode?: "auto" | "manual";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
   baseUrl: "http://127.0.0.1:11434/v1",
