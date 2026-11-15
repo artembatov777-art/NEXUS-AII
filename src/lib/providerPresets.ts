@@ -1,6 +1,6 @@
 export interface ProviderPreset {
   id: "openai" | "gemini" | "deepseek" | "mistral" | "xai" | "anthropic" |
-    "openrouter" | "groq" | "sambanova" | "nvidia";
+    "openrouter" | "groq" | "sambanova" | "nvidia" | "omniroute";
   label: string;
   baseUrl: string;
   protocol: "openai-chat-completions" | "anthropic-messages";
@@ -21,7 +21,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
   { id: "openrouter", label: "OpenRouter (including :free models)", baseUrl: "https://openrouter.ai/api/v1", protocol: "openai-chat-completions" },
   { id: "groq", label: "GroqCloud (free tier)", baseUrl: "https://api.groq.com/openai/v1", protocol: "openai-chat-completions" },
   { id: "sambanova", label: "SambaNova Cloud (free tier)", baseUrl: "https://api.sambanova.ai/v1", protocol: "openai-chat-completions" },
-  { id: "nvidia", label: "NVIDIA NIM (developer tier)", baseUrl: "https://integrate.api.nvidia.com/v1", protocol: "openai-chat-completions" }
+  { id: "nvidia", label: "NVIDIA NIM (developer tier)", baseUrl: "https://integrate.api.nvidia.com/v1", protocol: "openai-chat-completions" },
+  { id: "omniroute", label: "OmniRoute (hosted gateway)", baseUrl: "http://localhost:20128/v1", protocol: "openai-chat-completions" }
 ] as const;
 
 export function getProviderPreset(id: string): ProviderPreset | undefined {
