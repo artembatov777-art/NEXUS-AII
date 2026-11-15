@@ -32,10 +32,16 @@ async function invokeCatalogWithRetry(baseUrl: string, credentialHandle: string,
 
 class TauriModelProvider implements ModelProvider {
   private discoveredModels = new Set<string>();
+  private cachedModels: ModelDescriptor[] | null = null;
+  private catalogCheckedAt = 0;
+  private static readonly CATALOG_CACHE_MS = 30_000;
 
   constructor(readonly id: string, private readonly settings: ProviderSettings) {}
 
   async listModels(): Promise<Result<ModelDescriptor[]>> {
+    if (this.cachedModels && Date.now() - this.catalogCheckedAt < TauriModelProvider.CATALOG_CACHE_MS) {
+      return ok(this.cachedModels.map(model => ({ ...model, modalities: model.modalities ? [...model.modalities] : undefined })));
+    }
     if (this.settings.model && !isValidModelId(this.settings.model)) {
       return err("validation", "Configured model name is invalid.");
     }
@@ -49,7 +55,7 @@ class TauriModelProvider implements ModelProvider {
       );
       const uniqueIds = normalizeProviderModelIds(ids);
       this.discoveredModels = new Set(uniqueIds);
-      return ok(uniqueIds.map(id => ({
+      this.cachedModels = uniqueIds.map(id => ({
         id,
         providerId: this.id,
         displayName: id,
@@ -57,11 +63,15 @@ class TauriModelProvider implements ModelProvider {
         supportsTools: false,
         declaredLocation: this.settings.inferenceLocation,
         // The current native request contract accepts text only. Never infer
-        // image/audio support from an OpenAI-compatible endpoint's model IDs.
+        // image/audio support from a model ID.
         modalities: ["text"]
-      })));
+      }));
+      this.catalogCheckedAt = Date.now();
+      return ok(this.cachedModels.map(model => ({ ...model, modalities: [...(model.modalities ?? [])] })));
     } catch (cause) {
       this.discoveredModels.clear();
+      this.cachedModels = null;
+      this.catalogCheckedAt = 0;
       const failure = normalizeProviderFailure(cause);
       return err(failure.code, failure.message, failure.retryable);
     }
