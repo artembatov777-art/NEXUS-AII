@@ -277,7 +277,7 @@ class TaskAwareModelProvider implements ModelProvider {
     if (!ordered.length) {
       const detail = discoveries.flatMap(item => item.error
         ? [item.profile.id + ": " + item.error.message]
-        : []).join("\\n");
+        : []).join("\n");
       throw new Error(detail || "No eligible provider returned a verified model catalog.");
     }
     yield* streamWithModelFailover(this.router, ordered, {
