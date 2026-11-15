@@ -61,7 +61,7 @@ describe("authenticated cloud provider profile API", () => {
     const read = response();
     await handler(request("GET"), read);
     expect(read.statusCode).toBe(200);
-    expect(read.json()).toEqual({ schemaVersion: 1, profiles: [profile] });
+    expect(read.json()).toEqual({ schemaVersion: 1, profiles: [profile], deletedProfileIds: [] });
 
     const raw = await readFile(path.join(directory, "provider-profiles.json"), "utf8");
     expect(raw).not.toContain("apiKey");
@@ -79,6 +79,19 @@ describe("authenticated cloud provider profile API", () => {
     const read = response();
     await handler(request("GET"), read);
     expect(read.json().profiles).toEqual([profile]);
+  });
+
+  it("persists deletion tombstones so another device cannot restore deleted profiles", async () => {
+    const write = response();
+    await handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    }), write);
+    expect(write.statusCode).toBe(200);
+    const read = response();
+    await handler(request("GET"), read);
+    expect(read.json()).toMatchObject({ profiles: [], deletedProfileIds: ["nexus.groq"] });
   });
 
   it("fails closed when a persistent volume has not been configured", async () => {
