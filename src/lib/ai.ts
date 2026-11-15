@@ -26,7 +26,7 @@ export async function sendMessage(
   const requestMessages: ModelMessage[] = prepared.messages;
 
   if (!isTauri()) {
-    const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia)$/);
+    const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/);
     if (hostedProvider) {
       if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token configured in Vercel. It is separate from every provider API key.");
       const systemMessage = requestMessages.find(message => message.role === "system");
