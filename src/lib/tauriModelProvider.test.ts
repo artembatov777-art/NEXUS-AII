@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { createOllamaProviderProfile, createTauriModelRouter, createTauriModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
+import { createOllamaProviderProfile, createTauriModelRouter, createTauriModelRouterForProfiles, createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./tauriModelProvider";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -130,7 +130,7 @@ describe("TauriModelProvider", () => {
       .rejects.toThrow(/not present in the discovered provider catalog/i);
     expect(mockedInvoke).toHaveBeenCalledTimes(1);
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
-      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none"
+      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none", protocol: "openai-chat-completions"
     });
     expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
   });
@@ -198,6 +198,67 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
       baseUrl: "https://gateway.example/v1", model: "model-b", credentialHandle: "default"
     }));
+  });
+
+  it("uses the native Anthropic protocol for Claude model discovery and streaming", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      if (command === "list_provider_models") return Promise.resolve(["claude-sonnet-4"]);
+      if (command === "send_chat_stream") {
+        const channel = (args as { onEvent: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } }).onEvent;
+        channel.onmessage({ type: "text_delta", text: "Claude connected" });
+        channel.onmessage({ type: "completed", finishReason: "end_turn" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriModelRouter({
+      baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4",
+      inferenceLocation: "remote", credentialHandle: "default", providerProtocol: "anthropic-messages"
+    });
+    if (!router) throw new Error("Expected native Claude router.");
+    const events = [];
+    for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "claude-sonnet-4", messages: [{ role: "user", content: "hello" }]
+    })) events.push(event);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", expect.objectContaining({
+      baseUrl: "https://api.anthropic.com/v1", protocol: "anthropic-messages"
+    }));
+    expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
+      baseUrl: "https://api.anthropic.com/v1", protocol: "anthropic-messages", model: "claude-sonnet-4"
+    }));
+  });
+
+  it("routes coding tasks across saved profiles and fails over before output", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      const input = args as { baseUrl?: string; protocol?: string; onEvent?: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } };
+      if (command === "list_provider_models") {
+        return Promise.resolve(input.baseUrl?.includes("anthropic") ? ["claude-model"] : ["gpt-model"]);
+      }
+      if (command === "send_chat_stream") {
+        if (input.protocol === "anthropic-messages") return Promise.reject(new Error("Provider returned HTTP 503: temporary outage"));
+        input.onEvent?.onmessage({ type: "text_delta", text: "OpenAI fallback" });
+        input.onEvent?.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriAutoModelRouterForProfiles([
+      { id: "profile.openai", settings: { baseUrl: "https://api.openai.com/v1", model: "gpt-model", inferenceLocation: "remote", credentialHandle: "default" } },
+      { id: "profile.claude", settings: { baseUrl: "https://api.anthropic.com/v1", model: "claude-model", inferenceLocation: "remote", credentialHandle: "default", providerProtocol: "anthropic-messages" } }
+    ]);
+    if (!router) throw new Error("Expected automatic provider router.");
+    const events = [];
+    for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "auto", messages: [{ role: "user", content: "Исправь ошибку в функции" }]
+    })) events.push(event);
+    expect(events.map(event => event.type)).toEqual(["text_delta", "completed"]);
+    expect(events[0]).toMatchObject({ text: "OpenAI fallback" });
+    const generationCalls = mockedInvoke.mock.calls.filter(([command]) => command === "send_chat_stream");
+    expect(generationCalls.map(([, args]) => (args as { protocol: string }).protocol))
+      .toEqual(["anthropic-messages", "openai-chat-completions"]);
   });
 
   it("keeps browser preview disconnected from provider credentials", () => {
@@ -303,7 +364,7 @@ describe("TauriModelProvider", () => {
     expect(events.map(event => event.type)).toEqual(["text_delta", "usage", "completed"]);
     expect(events[1]).toMatchObject({ type: "usage", inputTokens: 12, outputTokens: 5 });
     expect(mockedInvoke).toHaveBeenCalledWith("send_chat_stream", expect.objectContaining({
-      baseUrl: "https://api.example/v1", credentialHandle: "default", model: "model-a",
+      baseUrl: "https://api.example/v1", credentialHandle: "default", protocol: "openai-chat-completions", model: "model-a",
       messages: [{ role: "user", content: "plan" }],
       temperature: 0.4, maxOutputTokens: 128,
       streamId: expect.any(String),
@@ -319,7 +380,7 @@ describe("TauriModelProvider", () => {
       baseUrl: "http://127.0.0.1:11434/v1",
       model: "",
       inferenceLocation: "local",
-      credentialHandle: "none"
+      credentialHandle: "none", protocol: "openai-chat-completions"
     });
     if (!router) throw new Error("Expected native model router.");
     await expect(router.listModels()).resolves.toMatchObject({
@@ -333,7 +394,7 @@ describe("TauriModelProvider", () => {
     mockedInvoke.mockResolvedValue(["model-a"]);
     const router = createTauriModelRouter({
       baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b",
-      inferenceLocation: "local", credentialHandle: "none"
+      inferenceLocation: "local", credentialHandle: "none", protocol: "openai-chat-completions"
     });
     if (!router) throw new Error("Expected native model router.");
     expect(await router.listModels()).toMatchObject({
@@ -344,7 +405,7 @@ describe("TauriModelProvider", () => {
     });
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
       baseUrl: "http://127.0.0.1:11434/v1",
-      credentialHandle: "none"
+      credentialHandle: "none", protocol: "openai-chat-completions"
     });
   });
 
