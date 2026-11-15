@@ -56,7 +56,8 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
       model: settings.model,
       inferenceLocation: settings.inferenceLocation as ProviderSettings["inferenceLocation"],
       credentialHandle: credentialHandle as NonNullable<ProviderSettings["credentialHandle"]>,
-      ...(settings.providerProtocol === "anthropic-messages" ? { providerProtocol: "anthropic-messages" as const } : {})
+      ...(settings.providerProtocol === "anthropic-messages" ? { providerProtocol: "anthropic-messages" as const } : {}),
+      routeMode: settings.routeMode === "manual" ? "manual" : "auto"
     }
   });
 }
