@@ -23,6 +23,23 @@ async function withServer(run) {
   }
 }
 
+test("persistent mount verification ignores the container root and accepts a mounted data volume", async () => {
+  const { isCoveredByPersistentMount } = await import("./persistentVolume.js");
+  const mountInfo = [
+    "24 1 0:22 / / rw,relatime - overlay overlay rw",
+    "25 24 0:31 / /data rw,relatime - ext4 /dev/volume rw"
+  ].join("\n");
+  assert.equal(isCoveredByPersistentMount("/data", mountInfo), true);
+  assert.equal(isCoveredByPersistentMount("/data/provider-profiles", mountInfo), true);
+  assert.equal(isCoveredByPersistentMount("/app/data", mountInfo), false);
+});
+
+test("persistent mount verification decodes escaped mount paths", async () => {
+  const { isCoveredByPersistentMount } = await import("./persistentVolume.js");
+  const mountInfo = "25 24 0:31 / /mnt/nexus\\040data rw,relatime - ext4 /dev/volume rw";
+  assert.equal(isCoveredByPersistentMount("/mnt/nexus data/profiles", mountInfo), true);
+});
+
 test("Railway adapter serves the SPA and health endpoint", async () => {
   await withServer(async baseUrl => {
     const health = await fetch(baseUrl + "/api/health");
