@@ -1630,8 +1630,8 @@ async fn send_chat_stream(
             "stream": true
         })
     };
-    if let Some(value) = temperature { payload["temperature"] = serde_json::json!(value); }
     if !anthropic_protocol {
+        if let Some(value) = temperature { payload["temperature"] = serde_json::json!(value); }
         if let Some(value) = max_output_tokens { payload["max_tokens"] = serde_json::json!(value); }
     }
     let client = reqwest::Client::builder()
