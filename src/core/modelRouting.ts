@@ -16,11 +16,11 @@ const TASK_PATTERNS: Record<ModelTask, RegExp> = {
 };
 
 export function classifyModelTask(messages: ModelRequest["messages"]): ModelTask {
-  const latest = [...messages].reverse().find(message => message.role === "user")?.content ?? "";
-  const text = latest.slice(0, 12_000);
-  for (const task of ["coding", "research", "creative", "analysis"] as const) {
-    if (TASK_PATTERNS[task].test(text)) return task;
-  }
+  const text = ([...messages].reverse().find(message => message.role === "user")?.content ?? "").slice(0, 12_000).toLocaleLowerCase();
+  if (/(\\b(code|coding|debug|bug|typescript|javascript|python|rust|sql|api|function|script)\\b|программ|код|ошибк|баг|функци|скрипт)/i.test(text)) return "coding";
+  if (/(\\b(research|sources|source|latest|current|compare prices|find information)\\b|найди|источник|исслед|актуальн|сравни цены|поищи)/i.test(text)) return "research";
+  if (/(\\b(write a story|story|poem|creative|brainstorm)\\b|придумай|история|рассказ|стих|сценар|креатив|иде[яи])/i.test(text)) return "creative";
+  if (/(\\b(analy[sz]e|analysis|reason|evaluate|explain|review|audit)\\b|разбер|анализ|объясни|оцени|проверь|сравни|почему)/i.test(text)) return "analysis";
   return "general";
 }
 
