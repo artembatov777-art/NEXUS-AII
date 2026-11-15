@@ -29,6 +29,7 @@ describe("hosted provider gateway", () => {
   beforeEach(() => {
     vi.stubEnv("NEXUS_API_TOKEN", "test-access-token");
     vi.stubEnv("OPENAI_API_KEY", "server-side-openai-key");
+    vi.stubEnv("GEMINI_API_KEY", "server-side-gemini-key");
     vi.stubEnv("XAI_API_KEY", "server-side-xai-key");
     vi.stubEnv("OMNIROUTE_API_KEY", "server-side-omniroute-key");
     vi.stubEnv("OMNIROUTE_BASE_URL", "https://gateway.example.test/v1");
@@ -107,6 +108,36 @@ describe("hosted provider gateway", () => {
     expect(response.json().text).toBe("OMNIROUTE_OK");
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("https://gateway.example.test/v1/chat/completions");
     expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers.Authorization).toBe("Bearer server-side-omniroute-key");
+  });
+
+  it("routes Gemini model discovery through the OpenAI-compatible Google endpoint", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "gemini-test" }] }), {
+      status: 200, headers: { "Content-Type": "application/json" }
+    }));
+    const response = createResponse();
+    await handler(createRequest({ provider: "gemini", body: { action: "models" } }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ provider: "gemini", models: ["gemini-test"] });
+    const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/openai/models");
+    expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
+  });
+
+  it("routes Gemini chat completions through the same secured provider handler", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: "GEMINI_GATEWAY_OK" } }],
+      usage: { prompt_tokens: 5, completion_tokens: 3 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      provider: "gemini",
+      body: { action: "chat", model: "gemini-test", messages: [{ role: "user", content: "Hello" }] }
+    }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().text).toBe("GEMINI_GATEWAY_OK");
+    const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
   });
 
   it("loads model IDs from the allowlisted provider endpoint", async () => {
