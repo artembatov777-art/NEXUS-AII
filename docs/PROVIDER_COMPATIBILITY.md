@@ -2,7 +2,7 @@
 
 ## Current adapter contract
 
-The native desktop host implements the OpenAI Chat Completions protocol for compatible providers. Browser preview uses one secured Railway route (`/api/provider/:provider`) for the three supported hosted providers: Gemini, Groq and NVIDIA. Provider API keys are read only from Railway environment variables.
+The native desktop host implements the OpenAI Chat Completions protocol for compatible providers. Browser preview uses one secured Railway route (`/api/provider/:provider`) for the three supported hosted providers: Gemini, Groq and NVIDIA. Legacy DeepSeek profiles are not a supported hosted provider and should be deleted or replaced. Provider API keys are read only from Railway environment variables.
 
 The native host also retains the Anthropic Messages protocol adapter for compatibility with existing custom profiles, but Anthropic is no longer offered as a built-in provider preset or accepted by the hosted Railway gateway.
 
