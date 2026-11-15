@@ -30,6 +30,8 @@ describe("hosted provider gateway", () => {
     vi.stubEnv("NEXUS_API_TOKEN", "test-access-token");
     vi.stubEnv("OPENAI_API_KEY", "server-side-openai-key");
     vi.stubEnv("XAI_API_KEY", "server-side-xai-key");
+    vi.stubEnv("OMNIROUTE_API_KEY", "server-side-omniroute-key");
+    vi.stubEnv("OMNIROUTE_BASE_URL", "https://gateway.example.test/v1");
     vi.stubGlobal("fetch", vi.fn());
   });
 
@@ -67,6 +69,30 @@ describe("hosted provider gateway", () => {
     expect(response.statusCode).toBe(503);
     expect(response.body).not.toContain("DEEPSEEK_API_KEY");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("requires a public HTTPS /v1 endpoint for hosted OmniRoute", async () => {
+    vi.stubEnv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1");
+    const response = createResponse();
+    await handler(createRequest({ provider: "omniroute", body: { action: "models" } }), response);
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toMatch(/public HTTPS/i);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("proxies hosted OmniRoute through its owner-configured HTTPS endpoint", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: "OMNIROUTE_OK" } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      provider: "omniroute",
+      body: { action: "chat", model: "openai/gpt-test", messages: [{ role: "user", content: "Hi" }] }
+    }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().text).toBe("OMNIROUTE_OK");
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("https://gateway.example.test/v1/chat/completions");
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers.Authorization).toBe("Bearer server-side-omniroute-key");
   });
 
   it("loads model IDs from the allowlisted provider endpoint", async () => {
