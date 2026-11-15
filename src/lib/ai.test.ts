@@ -71,6 +71,27 @@ describe("sendMessage AI Core integration", () => {
     vi.unstubAllGlobals();
   });
 
+  it("routes OpenAI-compatible browser chat through the server-side provider gateway", async () => {
+    native.mockReturnValue(false);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      text: "Hosted response",
+      usage: { inputTokens: 10, outputTokens: 5 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await sendMessage(
+      { ...settings, baseUrl: "/api/provider/openai", model: "gpt-test" },
+      messages, "", undefined, undefined, undefined, undefined, "session-only-token"
+    );
+    expect(result).toBe("Hosted response");
+    expect(fetchMock).toHaveBeenCalledWith("/api/provider/openai", expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer session-only-token" }),
+      body: expect.stringContaining('"action":"chat"')
+    }));
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("server-side-openai-key");
+    vi.unstubAllGlobals();
+  });
+
   it("rejects messages larger than the Gemini proxy limit before making a request", async () => {
     native.mockReturnValue(false);
     const fetchMock = vi.fn<typeof fetch>();
