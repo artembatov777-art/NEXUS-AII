@@ -1,4 +1,6 @@
-# Vercel Gemini API
+# Legacy: Vercel Gemini API
+
+> This document describes the retired Vercel-hosted provider setup. Do not use it for new NEXUS browser connections. New browser deployments must use the unified Railway AI Gateway documented in [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md). New provider profiles route through `/api/provider/:provider`; the old `/api/gemini` endpoint is retained only for compatibility with saved configurations. Vercel environment variables are not read by Railway.
 
 The Vercel function at `/api/gemini` proxies text generation to the Gemini API. The Google API key stays server-side and is sent in the `x-goog-api-key` header, never in a URL or browser bundle.
 
