@@ -12,7 +12,7 @@ function createResponse() {
   };
 }
 
-function createRequest({ provider = "openai", method = "POST", headers = {}, body = {} } = {}) {
+function createRequest({ provider = "gemini", method = "POST", headers = {}, body = {} } = {}) {
   return {
     method,
     query: { provider },
@@ -28,11 +28,9 @@ function createRequest({ provider = "openai", method = "POST", headers = {}, bod
 describe("hosted provider gateway", () => {
   beforeEach(() => {
     vi.stubEnv("NEXUS_API_TOKEN", "test-access-token");
-    vi.stubEnv("OPENAI_API_KEY", "server-side-openai-key");
     vi.stubEnv("GEMINI_API_KEY", "server-side-gemini-key");
-    vi.stubEnv("XAI_API_KEY", "server-side-xai-key");
-    vi.stubEnv("OMNIROUTE_API_KEY", "server-side-omniroute-key");
-    vi.stubEnv("OMNIROUTE_BASE_URL", "https://gateway.example.test/v1");
+    vi.stubEnv("DEEPSEEK_API_KEY", "server-side-deepseek-key");
+    vi.stubEnv("NVIDIA_API_KEY", "server-side-nvidia-key");
     vi.stubGlobal("fetch", vi.fn());
   });
 
@@ -56,24 +54,12 @@ describe("hosted provider gateway", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("accepts a remembered HttpOnly NEXUS session cookie", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      data: [{ id: "gpt-cookie" }]
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const request = createRequest({
-      headers: { authorization: "", cookie: "nexus_gateway=test-access-token" },
-      body: { action: "models" }
-    });
-    const response = createResponse();
-    await handler(request, response);
-    expect(response.statusCode).toBe(200);
-    expect(response.json().models).toEqual(["gpt-cookie"]);
-  });
-
-  it("rejects unknown provider IDs without contacting an upstream host", async () => {
-    const response = createResponse();
-    await handler(createRequest({ provider: "attacker-controlled-host" }), response);
-    expect(response.statusCode).toBe(404);
+  it("rejects removed providers without contacting an upstream host", async () => {
+    for (const provider of ["openai", "xai", "mistral", "anthropic", "openrouter", "groq", "sambanova", "omniroute"]) {
+      const response = createResponse();
+      await handler(createRequest({ provider }), response);
+      expect(response.statusCode).toBe(404);
+    }
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -84,30 +70,6 @@ describe("hosted provider gateway", () => {
     expect(response.statusCode).toBe(503);
     expect(response.body).not.toContain("DEEPSEEK_API_KEY");
     expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("requires a public HTTPS /v1 endpoint for hosted OmniRoute", async () => {
-    vi.stubEnv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1");
-    const response = createResponse();
-    await handler(createRequest({ provider: "omniroute", body: { action: "models" } }), response);
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error).toMatch(/public HTTPS/i);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("proxies hosted OmniRoute through its owner-configured HTTPS endpoint", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: "OMNIROUTE_OK" } }]
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const response = createResponse();
-    await handler(createRequest({
-      provider: "omniroute",
-      body: { action: "chat", model: "openai/gpt-test", messages: [{ role: "user", content: "Hi" }] }
-    }), response);
-    expect(response.statusCode).toBe(200);
-    expect(response.json().text).toBe("OMNIROUTE_OK");
-    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("https://gateway.example.test/v1/chat/completions");
-    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers.Authorization).toBe("Bearer server-side-omniroute-key");
   });
 
   it("routes Gemini model discovery through the OpenAI-compatible Google endpoint", async () => {
@@ -123,83 +85,57 @@ describe("hosted provider gateway", () => {
     expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
   });
 
-  it("routes Gemini chat completions through the same secured provider handler", async () => {
+  it("routes DeepSeek chat through the shared secured gateway", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: "GEMINI_GATEWAY_OK" } }],
+      choices: [{ message: { content: "DEEPSEEK_OK" } }],
       usage: { prompt_tokens: 5, completion_tokens: 3 }
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const response = createResponse();
     await handler(createRequest({
-      provider: "gemini",
-      body: { action: "chat", model: "gemini-test", messages: [{ role: "user", content: "Hello" }] }
+      provider: "deepseek",
+      body: { action: "chat", model: "deepseek-chat", messages: [{ role: "user", content: "Hello" }] }
     }), response);
     expect(response.statusCode).toBe(200);
-    expect(response.json().text).toBe("GEMINI_GATEWAY_OK");
+    expect(response.json().text).toBe("DEEPSEEK_OK");
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
-    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
-    expect(options.headers.Authorization).toBe("Bearer server-side-gemini-key");
+    expect(url).toBe("https://api.deepseek.com/chat/completions");
+    expect(options.headers.Authorization).toBe("Bearer server-side-deepseek-key");
+    expect(response.body).not.toContain("server-side-deepseek-key");
   });
 
-  it("loads model IDs from the allowlisted provider endpoint", async () => {
+  it("routes NVIDIA chat through the shared secured gateway", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      data: [{ id: "gpt-test" }, { id: "gpt-test" }, { id: "gpt-next" }, { id: "bad\nid" }]
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const response = createResponse();
-    await handler(createRequest({ body: { action: "models" } }), response);
-    expect(response.statusCode).toBe(200);
-    expect(response.json().models).toEqual(["gpt-test", "gpt-next"]);
-    const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
-    expect(url).toBe("https://api.openai.com/v1/models");
-    expect(options.headers.Authorization).toBe("Bearer server-side-openai-key");
-  });
-
-  it("proxies chat completions while keeping the provider key out of the browser response", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: "NEXUS_OK" } }],
-      usage: { prompt_tokens: 11, completion_tokens: 4 }
+      choices: [{ message: { content: "NVIDIA_OK" } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const response = createResponse();
     await handler(createRequest({
-      provider: "xai",
-      body: {
-        action: "chat",
-        model: "grok-test",
-        messages: [{ role: "system", content: "Be concise." }, { role: "user", content: "Reply NEXUS_OK." }],
-        temperature: 0.1,
-        maxOutputTokens: 32
-      }
+      provider: "nvidia",
+      body: { action: "chat", model: "nvidia-test", messages: [{ role: "user", content: "Hello" }] }
     }), response);
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      text: "NEXUS_OK",
-      usage: { inputTokens: 11, outputTokens: 4 },
-      model: "grok-test"
-    });
+    expect(response.json().text).toBe("NVIDIA_OK");
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
-    expect(url).toBe("https://api.x.ai/v1/chat/completions");
-    expect(options.headers.Authorization).toBe("Bearer server-side-xai-key");
-    expect(options.body).toContain('"max_tokens":32');
-    expect(response.body).not.toContain("server-side-xai-key");
-    expect(options.body).not.toContain("server-side-xai-key");
+    expect(url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(options.headers.Authorization).toBe("Bearer server-side-nvidia-key");
   });
 
   it("rejects malformed messages before upstream execution", async () => {
     const response = createResponse();
     await handler(createRequest({
-      body: { action: "chat", model: "gpt-test", messages: [{ role: "system", content: "Only system." }] }
+      body: { action: "chat", model: "gemini-test", messages: [{ role: "system", content: "Only system." }] }
     }), response);
     expect(response.statusCode).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it("does not return upstream diagnostics or secrets", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response("server-side-openai-key upstream diagnostic", { status: 500 }));
+    vi.mocked(fetch).mockResolvedValue(new Response("server-side-gemini-key upstream diagnostic", { status: 500 }));
     const response = createResponse();
     await handler(createRequest({
-      body: { action: "chat", model: "gpt-test", messages: [{ role: "user", content: "Hi" }] }
+      body: { action: "chat", model: "gemini-test", messages: [{ role: "user", content: "Hi" }] }
     }), response);
     expect(response.statusCode).toBe(502);
     expect(response.body).not.toContain("upstream diagnostic");
-    expect(response.body).not.toContain("server-side-openai-key");
+    expect(response.body).not.toContain("server-side-gemini-key");
   });
 });
