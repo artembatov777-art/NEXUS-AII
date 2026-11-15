@@ -40,13 +40,11 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 
 describe("ProviderProfilesPanel", () => {
-  it("routes browser-compatible provider presets through Vercel without connecting or storing a key", async () => {
+  it("routes browser-compatible provider presets through Railway without connecting or storing a key", async () => {
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
-    const select = container.querySelector<HTMLSelectElement>('[aria-label="Quick provider setup"]')!;
-    await act(async () => {
-      select.value = "deepseek";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const presetButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Use DeepSeek on Railway");
+    expect(presetButton).toBeTruthy();
+    await act(async () => { presetButton!.click(); });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
       baseUrl: "/api/provider/deepseek",
       model: "",
