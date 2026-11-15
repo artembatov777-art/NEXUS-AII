@@ -48,7 +48,6 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
     let mut pending: Vec<(PathBuf, usize)> = vec![(canonical_start, 0)];
     let mut matches_found = Vec::new();
     let mut scanned_files = 0usize;
-    let mut visited_entries = 0usize;
     let mut total_matches = 0usize;
     let mut truncated = false;
 
@@ -158,6 +157,7 @@ fn search_contents_in_capability(
         vec![(start_directory, start_relative.to_path_buf(), 0)];
     let mut matches_found = Vec::new();
     let mut scanned_files = 0usize;
+    let mut visited_entries = 0usize;
     let mut total_matches = 0usize;
     let mut truncated = false;
 
