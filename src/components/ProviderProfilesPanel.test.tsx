@@ -53,7 +53,7 @@ describe("ProviderProfilesPanel", () => {
       inferenceLocation: "remote",
       credentialHandle: "default"
     }));
-    expect(container.textContent).toContain("Anthropic Claude uses a different Messages protocol");
+    expect(container.textContent).toContain("Claude uses the native Anthropic Messages adapter");
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
   });
 
