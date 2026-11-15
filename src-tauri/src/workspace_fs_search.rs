@@ -180,7 +180,7 @@ fn search_contents_in_capability(
             if metadata.is_dir() {
                 if !excluded_directory(&name.to_string_lossy()) {
                     if depth < MAX_SEARCH_DEPTH {
-                        if let Ok(child) = directory.open_dir(&name) {
+                        if let Ok(child) = directory.open_dir_nofollow(&name) {
                             pending.push((child, relative_directory.join(&name), depth + 1));
                         }
                     } else {
