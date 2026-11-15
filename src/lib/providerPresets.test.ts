@@ -3,37 +3,24 @@ import { DEFAULT_PROVIDER } from "../types";
 import { getProviderPreset, PROVIDER_PRESETS } from "./providerPresets";
 
 describe("provider presets", () => {
-  it("contains known compatible and native-protocol provider endpoints", () => {
-    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual([
-      "openai", "gemini", "deepseek", "mistral", "xai", "anthropic",
-      "openrouter", "groq", "sambanova", "nvidia", "omniroute"
-    ]);
+  it("exposes only Gemini, DeepSeek and NVIDIA as hosted presets", () => {
+    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual(["gemini", "deepseek", "nvidia"]);
     for (const preset of PROVIDER_PRESETS) {
       const url = new URL(preset.baseUrl);
-      if (preset.id === "omniroute") {
-        expect(preset.baseUrl).toBe("http://localhost:20128/v1");
-      } else {
-        expect(url.protocol).toBe("https:");
-      }
+      expect(url.protocol).toBe("https:");
       expect(url.username).toBe("");
       expect(url.password).toBe("");
-      expect(["openai-chat-completions", "anthropic-messages"]).toContain(preset.protocol);
+      expect(preset.protocol).toBe("openai-chat-completions");
     }
   });
 
-  it("returns presets by stable ID and rejects unknown providers", () => {
+  it("returns supported presets by stable ID and rejects removed providers", () => {
+    expect(getProviderPreset("gemini")?.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
     expect(getProviderPreset("deepseek")?.baseUrl).toBe("https://api.deepseek.com");
-    expect(getProviderPreset("xai")?.baseUrl).toBe("https://api.x.ai/v1");
-    expect(getProviderPreset("openrouter")?.baseUrl).toBe("https://openrouter.ai/api/v1");
-    expect(getProviderPreset("groq")?.baseUrl).toBe("https://api.groq.com/openai/v1");
-    expect(getProviderPreset("sambanova")?.baseUrl).toBe("https://api.sambanova.ai/v1");
     expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
-    expect(getProviderPreset("omniroute")?.baseUrl).toBe("http://localhost:20128/v1");
-    expect(getProviderPreset("anthropic")).toMatchObject({
-      baseUrl: "https://api.anthropic.com/v1",
-      protocol: "anthropic-messages"
-    });
-    expect(getProviderPreset("unknown")).toBeUndefined();
+    for (const removed of ["openai", "xai", "mistral", "anthropic", "openrouter", "groq", "sambanova", "omniroute"]) {
+      expect(getProviderPreset(removed)).toBeUndefined();
+    }
   });
 
   it("keeps the local default separate from cloud provider presets", () => {
