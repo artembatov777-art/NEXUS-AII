@@ -7,7 +7,7 @@ import { WorkspaceStudio } from "./WorkspaceStudio";
 
 let container: HTMLDivElement;
 let root: Root;
-const actions = { onClose: vi.fn(), onToggleFocus: vi.fn(), onOpenAgents: vi.fn(), onOpenFiles: vi.fn(), onOpenKnowledge: vi.fn(), onOpenTools: vi.fn(), onOpenChat: vi.fn() };
+const actions = { onClose: vi.fn(), onToggleFocus: vi.fn(), onOpenAgents: vi.fn(), onOpenFiles: vi.fn(), onOpenKnowledge: vi.fn(), onOpenTools: vi.fn(), onOpenChat: vi.fn(), onRunWorkflow: vi.fn() };
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 function click(label: string) {
@@ -143,6 +143,26 @@ describe("NEXUS Studio", () => {
     click("Create workflow");
     expect(container.textContent).toContain("Morning review");
     expect(JSON.parse(localStorage.getItem("nexus-au:studio-workflows:v1") ?? "[]")).toHaveLength(1);
+  });
+
+  it("hands a saved workflow to the approval-gated agent runtime", () => {
+    click("Workflows");
+    const name = container.querySelector<HTMLInputElement>('input[aria-label="Workflow name"]');
+    const steps = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Workflow steps"]');
+    if (!name || !steps) throw new Error("Workflow fields missing");
+    const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    const textSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (!inputSetter || !textSetter) throw new Error("Native form setters unavailable");
+    act(() => {
+      inputSetter.call(name, "Release prep");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      textSetter.call(steps, "Review changes\\nPrepare release notes");
+      steps.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click("Create workflow");
+    click("Prepare agent run");
+    expect(actions.onRunWorkflow).toHaveBeenCalledWith(expect.stringContaining("Review changes"));
+    expect(actions.onRunWorkflow).toHaveBeenCalledWith(expect.stringContaining("Ask for approval"));
   });
 
   it("routes connected features to their real modules", () => {
