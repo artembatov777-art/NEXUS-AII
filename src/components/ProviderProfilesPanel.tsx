@@ -143,6 +143,7 @@ export function ProviderProfilesPanel({
           ...currentSettings,
           baseUrl: preset.baseUrl,
           model: "",
+          providerProtocol: preset.protocol,
           inferenceLocation: "remote",
           credentialHandle
         });
@@ -153,7 +154,7 @@ export function ProviderProfilesPanel({
         {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
       </select>
     </label>
-    <small>{t("These presets use the OpenAI-compatible Chat Completions protocol. Anthropic Claude uses a different Messages protocol and needs a separate adapter; it is not enabled by these presets.")}</small>
+    <small>{t("Provider presets declare their API protocol. Claude uses the native Anthropic Messages adapter; the other presets use OpenAI-compatible Chat Completions.")}</small>
     <label>Saved provider profiles
       <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
         const profile = profiles.find(item => item.id === event.target.value);
