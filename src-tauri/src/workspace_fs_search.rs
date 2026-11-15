@@ -1,7 +1,10 @@
-use crate::workspace_fs::{ensure_no_external_hard_links, open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use crate::workspace_fs::{ensure_no_external_hard_links, open_capability_file, WorkspaceAccess};
+#[cfg(test)]
+use crate::workspace_fs::open_regular_file_readonly;
 use cap_fs_ext::DirExt;
 use cap_std::fs::Dir as CapabilityDir;
 use serde::Serialize;
+#[cfg(test)]
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -34,6 +37,7 @@ fn excluded_directory(name: &str) -> bool {
     matches!(name, ".git" | "node_modules" | "target" | "dist" | ".next" | ".cache" | "vendor")
 }
 
+#[cfg(test)]
 fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<WorkspaceContentSearch, String> {
     if query.trim().is_empty() || query.len() > 256 {
         return Err("Search query must contain 1 to 256 characters.".into());
