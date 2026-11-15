@@ -145,6 +145,25 @@ describe("authenticated cloud provider profile API", () => {
     });
   });
 
+  it("does not let a delayed stale profile update overwrite a newer revision", async () => {
+    const newer = response();
+    await handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [{ ...profile, label: "Newer profile", settings: { ...profile.settings, model: "new-model" }, updatedAt: 200 }]
+    }), newer);
+    expect(newer.statusCode).toBe(200);
+
+    const delayed = response();
+    await handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [{ ...profile, label: "Older profile", settings: { ...profile.settings, model: "old-model" }, updatedAt: 100 }]
+    }), delayed);
+    expect(delayed.statusCode).toBe(200);
+    expect(delayed.json().profiles).toMatchObject([
+      { label: "Newer profile", settings: { model: "new-model" }, updatedAt: 200 }
+    ]);
+  });
+
   it("fails closed when a persistent volume has not been configured", async () => {
     vi.stubEnv("NEXUS_DATA_DIR", "");
     const read = response();
