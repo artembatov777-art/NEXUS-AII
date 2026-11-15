@@ -4,7 +4,7 @@
 
 The native desktop host implements two explicit protocol adapters:
 
-- **OpenAI Chat Completions:** `GET {baseUrl}/models`, `POST {baseUrl}/chat/completions`, bearer-token authentication.
+- **OpenAI Chat Completions:** `GET {baseUrl}/models`, `POST {baseUrl}/chat/completions`, bearer-token authentication. Browser preview uses one secured Railway route (`/api/provider/:provider`) for OpenAI, Gemini, DeepSeek, Mistral, xAI/Grok, Groq, OpenRouter, SambaNova, NVIDIA, and owner-configured OmniRoute. Provider API keys are read only from Railway environment variables.
 - **Anthropic Messages:** `GET {baseUrl}/models`, `POST {baseUrl}/messages`, `x-api-key` plus `anthropic-version` headers, Anthropic typed SSE parsing.
 
 Both adapters use bounded responses, no redirects, HTTPS for remote endpoints, HTTP only for loopback hosts, and OS credential-vault handles.
@@ -20,10 +20,15 @@ A built-in preset only fills a documented endpoint. It does not validate a user'
 | DeepSeek | `https://api.deepseek.com` | OpenAI-compatible endpoint preset; live verification required |
 | Mistral AI | `https://api.mistral.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
 | xAI / Grok | `https://api.x.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
+| Groq | `https://api.groq.com/openai/v1` | OpenAI-compatible endpoint preset; live verification required |
+| OpenRouter | `https://openrouter.ai/api/v1` | OpenAI-compatible endpoint preset; live verification required |
+| SambaNova | `https://api.sambanova.ai/v1` | OpenAI-compatible endpoint preset; live verification required |
+| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible endpoint preset; live verification required |
+| OmniRoute | Owner-configured public HTTPS `/v1` endpoint | Hosted through Railway gateway; endpoint and key required |
 | Anthropic Claude | `https://api.anthropic.com/v1` | Native Messages adapter; model discovery and streaming implemented, live verification required |
 | Ollama | `http://127.0.0.1:11434/v1` | Existing local OpenAI-compatible profile; owner must run Ollama |
 
-The presets are convenience configuration, not provider-specific feature adapters. Capabilities such as tools, image input, JSON mode, reasoning controls, and image generation must be declared and tested separately; NEXUS must not infer them from a model name.
+The presets are convenience configuration, not provider-specific feature adapters. `NEXUS Public` is the public NEXUS deployment identity/URL, not an upstream model provider or a separate API-key slot. Capabilities such as tools, image input, JSON mode, reasoning controls, and image generation must be declared and tested separately; NEXUS must not infer them from a model name.
 
 ## Protocol adapters
 
@@ -39,7 +44,7 @@ Other providers that issue API keys are not automatically compatible. They need 
 - Automatic mode is restricted to profiles with the same owner-declared inference location as the active profile. It does not silently cross from a declared local route to remote cloud profiles or vice versa.
 - Safe failover is allowed only for retryable failures that occur before the first user-visible text delta. Once output has started, NEXUS never silently switches models and risks duplicating or contradicting the answer.
 - Task classification and default provider ordering are heuristics, not benchmark claims. Provider order should be owner-configurable in a later routing policy editor.
-- Browser preview is isolated and does not accept arbitrary provider keys. Its supported remote route remains the secured Gemini Vercel proxy with a separate NEXUS access token.
+- Browser preview is isolated and does not accept arbitrary provider keys. Supported cloud providers use the secured Railway AI Gateway with a separate NEXUS access token; provider keys never enter browser storage or requests. Gemini text requests use its OpenAI-compatible endpoint through the same provider route. Gemini image generation remains a dedicated server-side image endpoint.
 - API keys are never stored in browser profile records or workspace backups. Native desktop requests pass only the credential handle to Rust; Rust retrieves the secret from the OS credential vault.
 
 ## Release verification still required
