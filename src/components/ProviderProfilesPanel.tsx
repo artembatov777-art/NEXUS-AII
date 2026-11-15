@@ -135,31 +135,45 @@ export function ProviderProfilesPanel({
     }
   }
 
+  function applyPreset(presetId: string) {
+    const preset = getProviderPreset(presetId);
+    if (!preset) return;
+    const currentHandle = currentSettings.credentialHandle ?? "default";
+    const credentialHandle = isDedicatedCredentialHandle(currentHandle) ? currentHandle : "default";
+    const browserGatewayUrl = preset.id === "gemini" ? "/api/gemini" : "/api/provider/" + preset.id;
+    onSelect({
+      ...currentSettings,
+      baseUrl: !isTauri() && preset.protocol === "openai-chat-completions" ? browserGatewayUrl : preset.baseUrl,
+      model: "",
+      providerProtocol: preset.protocol,
+      inferenceLocation: "remote",
+      credentialHandle
+    });
+    setStatus(!isTauri() && preset.protocol === "openai-chat-completions"
+      ? "Hosted provider route selected. Add this provider's API key to Vercel Environment Variables, then use the NEXUS access token."
+      : t("Provider preset applied. Save a profile and add its API key in Provider settings."));
+  }
+
   return <section className="provider-profiles" aria-label={t("Saved provider profiles")}>
-    <label>{t("Quick provider setup")}
+    {!isTauri() ? <div className="hosted-provider-setup">
+      <strong>{t("Connect a model through Vercel")}</strong>
+      <small>{t("Choose a provider. NEXUS will use the same gateway token and remembered device session for every hosted provider.")}</small>
+      <div className="hosted-provider-grid">
+        {PROVIDER_PRESETS.filter(preset => preset.protocol === "openai-chat-completions").map(preset =>
+          <button key={preset.id} type="button" className="secondary-btn" onClick={() => applyPreset(preset.id)}>
+            {preset.id === "gemini" ? "Use Gemini on Vercel" : "Use " + preset.label + " on Vercel"}
+          </button>
+        )}
+      </div>
+    </div> : <label>{t("Quick provider setup")}
       <select aria-label={t("Quick provider setup")} defaultValue="" onChange={event => {
-        const preset = getProviderPreset(event.target.value);
-        if (!preset) return;
-        const currentHandle = currentSettings.credentialHandle ?? "default";
-        const credentialHandle = isDedicatedCredentialHandle(currentHandle) ? currentHandle : "default";
-        const browserGatewayUrl = preset.id === "gemini" ? "/api/gemini" : "/api/provider/" + preset.id;
-        onSelect({
-          ...currentSettings,
-          baseUrl: !isTauri() && preset.protocol === "openai-chat-completions" ? browserGatewayUrl : preset.baseUrl,
-          model: "",
-          providerProtocol: preset.protocol,
-          inferenceLocation: "remote",
-          credentialHandle
-        });
-        setStatus(!isTauri() && preset.protocol === "openai-chat-completions"
-          ? "Hosted provider route selected. Add this provider's API key to Vercel Environment Variables, then use the NEXUS access token."
-          : t("Provider preset applied. Save a profile and add its API key in Provider settings."));
+        applyPreset(event.target.value);
         event.currentTarget.value = "";
       }}>
         <option value="">{t("Choose a provider preset…")}</option>
-        {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id} disabled={!isTauri() && preset.protocol === "anthropic-messages"}>{preset.label}{!isTauri() && preset.protocol === "anthropic-messages" ? " (desktop only)" : ""}</option>)}
+        {PROVIDER_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
       </select>
-    </label>
+    </label>}
     <small>{t("Provider presets declare their API protocol. Claude uses the native Anthropic Messages adapter; the other presets use OpenAI-compatible Chat Completions.")}</small>
     <label>Saved provider profiles
       <select aria-label={t("Saved provider profiles")} value={selectedId} onChange={event => {
