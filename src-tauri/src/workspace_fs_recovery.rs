@@ -1,6 +1,7 @@
 use crate::workspace_fs::WorkspaceAccess;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
