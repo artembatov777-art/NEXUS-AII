@@ -14,10 +14,24 @@ const WORKFLOW_KEY = "nexus-au:studio-workflows:v1";
 const GRAPH_EDGE_KEY = "nexus-au:studio-graph-edges:v1";
 const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `nx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const MAX_STUDIO_STORAGE_BYTES = 1_048_576;
 function readList<T>(key: string, validate: (value: unknown) => value is T): T[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(value) ? value.filter(validate).slice(0, 500) : [];
+    const raw = localStorage.getItem(key);
+    if (!raw || raw.length > MAX_STUDIO_STORAGE_BYTES) return [];
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value) || value.length > 2_000) return [];
+    const seen = new Set<string>();
+    const result: T[] = [];
+    for (const item of value) {
+      if (!validate(item)) continue;
+      const id = (item as { id?: unknown }).id;
+      if (typeof id !== "string" || !id || seen.has(id)) continue;
+      seen.add(id);
+      result.push(item);
+      if (result.length >= 500) break;
+    }
+    return result;
   } catch { return []; }
 }
 function saveList<T>(key: string, value: T[]) {
@@ -25,13 +39,20 @@ function saveList<T>(key: string, value: T[]) {
   catch { return false; }
 }
 const isInboxItem = (value: unknown): value is InboxItem => !!value && typeof value === "object" &&
-  typeof (value as InboxItem).id === "string" && typeof (value as InboxItem).title === "string" &&
-  typeof (value as InboxItem).body === "string" && typeof (value as InboxItem).createdAt === "number" &&
+  typeof (value as InboxItem).id === "string" && (value as InboxItem).id.length <= 128 &&
+  typeof (value as InboxItem).title === "string" && (value as InboxItem).title.length <= 120 &&
+  typeof (value as InboxItem).body === "string" && (value as InboxItem).body.length <= 4000 &&
+  typeof (value as InboxItem).createdAt === "number" && Number.isFinite((value as InboxItem).createdAt) &&
   typeof (value as InboxItem).done === "boolean";
 const isGraphNode = (value: unknown): value is GraphNode => !!value && typeof value === "object" &&
-  typeof (value as GraphNode).id === "string" && typeof (value as GraphNode).label === "string" &&
+  typeof (value as GraphNode).id === "string" && (value as GraphNode).id.length <= 128 &&
+  typeof (value as GraphNode).label === "string" && (value as GraphNode).label.length > 0 && (value as GraphNode).label.length <= 100 &&
   ["idea", "project", "conversation"].includes((value as GraphNode).kind);
-const isGraphEdge = (value: unknown): value is GraphEdge => !!value && typeof value === "object" && typeof (value as GraphEdge).id === "string" && typeof (value as GraphEdge).from === "string" && typeof (value as GraphEdge).to === "string" && (value as GraphEdge).from !== (value as GraphEdge).to;
+const isGraphEdge = (value: unknown): value is GraphEdge => !!value && typeof value === "object" &&
+  typeof (value as GraphEdge).id === "string" && (value as GraphEdge).id.length <= 128 &&
+  typeof (value as GraphEdge).from === "string" && (value as GraphEdge).from.length <= 256 &&
+  typeof (value as GraphEdge).to === "string" && (value as GraphEdge).to.length <= 256 &&
+  (value as GraphEdge).from !== (value as GraphEdge).to;
 const isWorkflow = (value: unknown): value is WorkflowDraft => {
   if (!value || typeof value !== "object") return false;
   const workflow = value as WorkflowDraft;
@@ -213,7 +234,6 @@ export function WorkspaceStudio(props: Props) {
         <div className="studio-graph">
           {contextNodes.map(node => <article key={node.id} data-kind={node.kind}><span/><strong>{node.label}</strong><small>{t(node.kind)}</small>{node.kind === "idea" && <button onClick={() => setNodes(current => current.filter(item => item.id !== node.id))} aria-label={t("Remove node")}><X size={13}/></button>}</article>)}
         </div>
-        <button className="secondary-btn" onClick={props.onOpenKnowledge}>{t("Open full knowledge base")}</button>
         <div className="studio-edge-builder"><select aria-label={t("Relationship source")} value={edgeFrom} onChange={event => setEdgeFrom(event.target.value)}><option value="">{t("Choose first node")}</option>{contextNodes.map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select aria-label={t("Relationship target")} value={edgeTo} onChange={event => setEdgeTo(event.target.value)}><option value="">{t("Choose related node")}</option>{contextNodes.map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select><button className="secondary-btn" onClick={addGraphEdge} disabled={!edgeFrom || !edgeTo || edgeFrom === edgeTo}>{t("Connect nodes")}</button></div>
         <div className="studio-edge-list">{edges.map(edge => { const from = contextNodes.find(node => node.id === edge.from); const to = contextNodes.find(node => node.id === edge.to); return from && to ? <article key={edge.id}><span>{from.label}</span><ArrowRight size={13}/><span>{to.label}</span><button onClick={() => setEdges(current => current.filter(item => item.id !== edge.id))} aria-label={t("Remove relationship")}><X size={13}/></button></article> : null; })}</div>
         <button className="secondary-btn" onClick={props.onOpenKnowledge}>{t("Open full knowledge base")}</button>
