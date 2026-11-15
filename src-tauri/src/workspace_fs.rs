@@ -890,24 +890,27 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn approved_directory_open_rejects_intermediate_symlinks() {
+    fn approved_directory_open_rejects_intermediate_symlinks_even_when_target_is_inside_root() {
         use std::os::unix::fs::symlink;
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
             .expect("clock").as_nanos();
         let base = std::env::temp_dir().join(format!("nexus-fs-intermediate-symlink-{}-{nonce}", std::process::id()));
         let root = base.join("approved");
-        let outside = base.join("outside");
-        fs::create_dir_all(&root).expect("create approved root");
-        fs::create_dir_all(outside.join("nested")).expect("create outside nested directory");
-        symlink(&outside, root.join("redirect")).expect("create intermediate symlink");
+        let real_directory = root.join("real");
+        fs::create_dir_all(real_directory.join("nested")).expect("create approved nested directory");
+        symlink(&real_directory, root.join("redirect")).expect("create in-root intermediate symlink");
         let access = WorkspaceAccess {
             roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
             persistence_path: base.join("permissions.json"),
         };
 
+        // Canonical containment alone accepts this path because the link target
+        // remains inside the approved root. Every component must still be opened
+        // without following the intermediate link.
+        assert!(access.allowed_root_for(&root.join("redirect").join("nested")).is_ok());
         let result = access.open_approved_directory(&root.join("redirect").join("nested"));
-        assert!(result.is_err(), "an intermediate symlink must not be followed even when its target is outside the approved root");
-        assert!(outside.join("nested").is_dir());
+        assert!(result.is_err(), "an intermediate symlink must not be followed even when its target remains inside the approved root");
+        assert!(real_directory.join("nested").is_dir());
         fs::remove_dir_all(base).expect("cleanup");
     }
 
