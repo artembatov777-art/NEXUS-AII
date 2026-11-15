@@ -24,7 +24,7 @@ export function createGeminiImageProvider(accessToken: string, useGatewayCookie 
           imageSize: request.imageSize,
           remoteConsent: request.allowRemoteProcessing,
           useGatewayCookie,
-          sourceImage: request.sourceImage,
+          ...(request.sourceImage ? { sourceImage: request.sourceImage } : {}),
           signal
         });
         return ok(image);
