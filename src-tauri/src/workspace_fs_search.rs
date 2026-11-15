@@ -1,4 +1,4 @@
-use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use crate::workspace_fs::{ensure_no_external_hard_links, open_capability_file, open_regular_file_readonly, WorkspaceAccess};
 use cap_std::fs::Dir as CapabilityDir;
 use serde::Serialize;
 use std::fs;
@@ -47,6 +47,7 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
     let mut pending: Vec<(PathBuf, usize)> = vec![(canonical_start, 0)];
     let mut matches_found = Vec::new();
     let mut scanned_files = 0usize;
+    let mut visited_entries = 0usize;
     let mut total_matches = 0usize;
     let mut truncated = false;
 
@@ -106,6 +107,7 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
                 _ => continue,
             };
             if opened_metadata.len() > MAX_FILE_BYTES { continue; }
+            if ensure_no_external_hard_links(&file).is_err() { continue; }
             let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
             if file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).is_err() || bytes.len() as u64 > MAX_FILE_BYTES {
                 continue;
@@ -164,7 +166,8 @@ fn search_contents_in_capability(
             Err(_) => { truncated = true; continue; }
         };
         for entry in iterator {
-            if scanned_files + pending.len() >= MAX_SEARCH_FILES {
+            visited_entries += 1;
+            if visited_entries > 5_000 {
                 truncated = true;
                 break 'walk;
             }
