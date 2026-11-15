@@ -37,6 +37,8 @@ export interface ProviderSettings {
   inferenceLocation: "local" | "remote";
   /** Shared slots, no-key loopback mode, or a strictly validated per-profile OS-vault handle. */
   credentialHandle?: string;
+  /** Wire protocol implemented by the native provider adapter. */
+  providerProtocol?: "openai-chat-completions" | "anthropic-messages";
 }
 export const DEFAULT_PROVIDER: ProviderSettings = {
   baseUrl: "http://127.0.0.1:11434/v1",
