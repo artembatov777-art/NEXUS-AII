@@ -89,6 +89,29 @@ describe("ProviderProfilesPanel", () => {
     expect(container.textContent).toContain("Enter and save its API key");
   });
 
+  it("imports existing local profiles into the authenticated cloud store", async () => {
+    saveProviderProfiles([{ id: "nexus.cloud", label: "Cloud", settings: cloudSettings, updatedAt: 123 }]);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ schemaVersion: 1, profiles: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ saved: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => {
+      root.render(<ProviderProfilesPanel
+        currentSettings={localSettings}
+        gatewaySessionReady
+        onSelect={onSelect}
+        onDeleteCredential={onDeleteCredential}
+      />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/profiles");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "PUT", credentials: "same-origin" });
+    expect(fetchMock.mock.calls[1][1].body).toContain("nexus.cloud");
+    expect(container.querySelector('option[value="nexus.cloud"]')).toBeTruthy();
+  });
+
   it("deletes a dedicated vault key together with its profile", async () => {
     const handle = "profile-0123456789abcdef0123456789abcdef";
     const settings = { ...cloudSettings, credentialHandle: handle };
