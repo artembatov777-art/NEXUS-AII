@@ -5,16 +5,9 @@ const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 12_000;
 const MAX_SYSTEM_CHARS = 24_000;
 const PROVIDERS = Object.freeze({
-  openai: { baseUrl: "https://api.openai.com/v1", keyName: "OPENAI_API_KEY" },
   gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", keyName: "GEMINI_API_KEY" },
-  xai: { baseUrl: "https://api.x.ai/v1", keyName: "XAI_API_KEY" },
   deepseek: { baseUrl: "https://api.deepseek.com", keyName: "DEEPSEEK_API_KEY" },
-  mistral: { baseUrl: "https://api.mistral.ai/v1", keyName: "MISTRAL_API_KEY" },
-  openrouter: { baseUrl: "https://openrouter.ai/api/v1", keyName: "OPENROUTER_API_KEY" },
-  groq: { baseUrl: "https://api.groq.com/openai/v1", keyName: "GROQ_API_KEY" },
-  sambanova: { baseUrl: "https://api.sambanova.ai/v1", keyName: "SAMBANOVA_API_KEY" },
-  nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" },
-  omniroute: { baseUrl: "", keyName: "OMNIROUTE_API_KEY", hostedEndpoint: true }
+  nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" }
 });
 function sendJson(res, status, payload) {
   res.statusCode = status;
