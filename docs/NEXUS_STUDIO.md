@@ -7,7 +7,7 @@ NEXUS Studio is a workspace layer, not a claim that every card is an autonomous 
 | Feature | Current behavior | Data / integration boundary |
 |---|---|---|
 | Daily Briefing | Builds a live summary from open inbox items, projects, and the three most recently updated conversations | Derived locally from loaded workspace state; no scheduled background report |
-| Universal Inbox | Captures titled notes and ideas, marks items complete, deletes items, and persists the list | Browser local storage on the current device; not yet synchronized with native SQLite or other devices |
+| Universal Inbox | Captures titled notes and ideas, searches saved titles and bodies, filters open/completed items, marks items complete, deletes items, and persists the list | Browser local storage on the current device; not yet synchronized with native SQLite or other devices |
 | Knowledge Graph | Combines current project/conversation context with owner-created concept nodes and manually created relationships | Owner-created nodes and edges persist in browser local storage; project/conversation context is read-only |
 | Workflow Studio | Creates reusable checklists, tracks step completion, and persists workflow definitions | Checklist tracking only; it does not execute arbitrary tools or automation jobs |
 | Focus Mode | Toggles the existing distraction-reduced workspace presentation | Uses the app's existing focus-mode state |
