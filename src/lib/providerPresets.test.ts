@@ -6,7 +6,7 @@ describe("provider presets", () => {
   it("contains known compatible and native-protocol provider endpoints", () => {
     expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual([
       "openai", "gemini", "deepseek", "mistral", "xai", "anthropic",
-      "openrouter", "groq", "sambanova", "nvidia"
+      "openrouter", "groq", "sambanova", "nvidia", "omniroute"
     ]);
     for (const preset of PROVIDER_PRESETS) {
       const url = new URL(preset.baseUrl);
@@ -23,7 +23,7 @@ describe("provider presets", () => {
     expect(getProviderPreset("openrouter")?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(getProviderPreset("groq")?.baseUrl).toBe("https://api.groq.com/openai/v1");
     expect(getProviderPreset("sambanova")?.baseUrl).toBe("https://api.sambanova.ai/v1");
-    expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
+    expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1", "http://localhost:20128/v1");
     expect(getProviderPreset("anthropic")).toMatchObject({
       baseUrl: "https://api.anthropic.com/v1",
       protocol: "anthropic-messages"
