@@ -5,7 +5,7 @@ import { ImageGenerationRouter, type GeneratedImage, type ImageAspectRatio, type
 import { createGeminiImageProvider } from "../lib/geminiImageProvider";
 import "./image-generation.css";
 
-export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { accessToken: string; onClose: () => void; onGenerated: (image: GeneratedImage, prompt: string) => void }) {
+export function ImageGenerationDialog({ accessToken, useGatewayCookie = false, onClose, onGenerated }: { accessToken: string; useGatewayCookie?: boolean; onClose: () => void; onGenerated: (image: GeneratedImage, prompt: string) => void }) {
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("1:1");
   const [imageSize, setImageSize] = useState<ImageSize>("1K");
@@ -44,7 +44,7 @@ export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { a
     setImage(null);
     try {
       const router = new ImageGenerationRouter();
-      const registered = router.register(createGeminiImageProvider(accessToken));
+      const registered = router.register(createGeminiImageProvider(accessToken, useGatewayCookie));
       if (!registered.ok) throw new Error(registered.error.message);
       const result = await router.generate("gemini-image", {
         prompt,
@@ -112,7 +112,7 @@ export function ImageGenerationDialog({ accessToken, onClose, onGenerated }: { a
       </div>}
       <footer className="image-generation-actions">
         <button type="button" className="secondary-btn" onClick={onClose} disabled={working}>Close</button>
-        <button type="button" className="primary-btn" onClick={() => void generate()} disabled={!working && (!prompt.trim() || !remoteApproved || !accessToken.trim())}>
+        <button type="button" className="primary-btn" onClick={() => void generate()} disabled={!working && (!prompt.trim() || !remoteApproved || (!accessToken.trim() && !useGatewayCookie))}>
           {working ? "Stop generation" : <><ImagePlus size={15}/> Generate image</>}
         </button>
       </footer>
