@@ -310,6 +310,11 @@ impl WorkspaceAccess {
             .map_err(|error| format!("Could not verify the approved root alias: {error}"))? != root {
             return Err("The requested path does not resolve beneath its approved root.".into());
         }
+        let alias_metadata = fs::symlink_metadata(&alias_root)
+            .map_err(|error| format!("Could not inspect the approved root alias: {error}"))?;
+        if !alias_metadata.is_dir() || alias_metadata.file_type().is_symlink() {
+            return Err("The requested path uses a symbolic link for its approved root.".into());
+        }
         let mut relative = PathBuf::new();
         for name in names.into_iter().rev() { relative.push(name); }
 
@@ -914,6 +919,27 @@ mod tests {
         let result = write_workspace_file_inner(target.to_str().unwrap(), "stale draft", Some("original"), &access);
         assert!(result.unwrap_err().contains("removed or moved"));
         assert!(!target.exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn approved_directory_open_rejects_a_symlink_alias_to_the_root() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-root-alias-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        let alias = base.join("approved-alias");
+        fs::create_dir_all(&root).expect("create approved root");
+        symlink(&root, &alias).expect("create root alias symlink");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        assert!(access.allowed_root_for(&alias).is_ok());
+        assert!(access.open_approved_directory(&alias).is_err());
         fs::remove_dir_all(base).expect("cleanup");
     }
 
