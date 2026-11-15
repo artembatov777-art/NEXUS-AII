@@ -9,10 +9,10 @@ NEXUS uses a provider-neutral `ModelRouter`. The native desktop adapter connects
 | `nexus.native-provider` | Owner-configured compatible endpoint | OS credential vault or loopback-only no-key | Active Settings/chat route |
 | `nexus.ollama` | `http://127.0.0.1:11434/v1` | No key | Local provider option |
 | Gemini | Google OpenAI-compatible API | Railway key or OS credential vault | Hosted gateway / native adapter |
-| DeepSeek | DeepSeek API | Railway key or OS credential vault | Hosted gateway / native adapter |
+| Groq | Groq OpenAI-compatible API | Railway key or OS credential vault | Hosted gateway / native adapter |
 | NVIDIA NIM | NVIDIA API | Railway key or OS credential vault | Hosted gateway / native adapter |
 
-The browser-hosted provider selector intentionally exposes only Gemini, DeepSeek and NVIDIA. Ollama remains a separate local option. Removed hosted providers are not accepted by the Railway gateway.
+The browser-hosted provider selector intentionally exposes only Gemini, Groq and NVIDIA. Ollama remains a separate local option. Removed hosted providers are not accepted by the Railway gateway.
 
 The generic `createTauriModelRouterForProfiles` factory can register multiple direct compatible endpoints without contacting them. The current chat UI selects one active profile at a time. Saving or selecting a profile does not start a network request.
 
