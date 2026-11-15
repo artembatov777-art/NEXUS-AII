@@ -83,6 +83,51 @@ function extractText(value) {
   if (!Array.isArray(value)) return "";
   return value.map(part => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "").join("");
 }
+function extractUpstreamErrorMessage(payload) {
+  const error = payload?.error;
+  if (typeof error === "string") return error;
+  if (typeof error?.message === "string") return error.message;
+  if (typeof payload?.message === "string") return payload.message;
+  return "";
+}
+async function upstreamFailure(upstream, provider, apiKey, action) {
+  let message = "";
+  let code = "";
+  try {
+    const raw = await upstream.text();
+    if (raw) {
+      try {
+        const payload = JSON.parse(raw);
+        message = extractUpstreamErrorMessage(payload);
+        const upstreamCode = payload?.error?.code ?? payload?.error?.status ?? payload?.code;
+        if (typeof upstreamCode === "string" || typeof upstreamCode === "number") {
+          code = String(upstreamCode).replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 64);
+        }
+      } catch {
+        message = raw;
+      }
+    }
+  } catch {
+    // Preserve the HTTP status even when the upstream error body cannot be read.
+  }
+  message = message
+    .replaceAll(apiKey, "[redacted]")
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
+    .replace(/Bearer\\s+\\S+/gi, "Bearer [redacted]")
+    .replace(/[\\u0000-\\u001f\\u007f]+/g, " ")
+    .replace(/\\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+  const status = upstream.status === 401 || upstream.status === 403 ? 401
+    : upstream.status === 429 ? 429
+      : upstream.status >= 500 ? 502 : 400;
+  const label = provider === "gemini" ? "Google Gemini" : provider === "deepseek" ? "DeepSeek" : "NVIDIA";
+  const context = action === "models" ? "model catalog" : "generation";
+  const diagnostic = message ? `: ${message}` : "";
+  const codeLabel = code ? ` [${code}]` : "";
+  const error = `${label} rejected the ${context} request (HTTP ${upstream.status})${codeLabel}${diagnostic}`;
+  return { status, payload: { error, provider, upstreamStatus: upstream.status } };
+}
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -127,8 +172,8 @@ export default async function handler(req, res) {
         signal: controller.signal
       });
       if (!upstream.ok) {
-        const status = upstream.status === 401 || upstream.status === 403 ? 401 : upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 400;
-        return sendJson(res, status, { error: status === 401 ? "The provider rejected its configured credentials." : status === 429 ? "The provider rate limit was reached." : status === 502 ? "The provider is temporarily unavailable." : "The provider rejected the model-catalog request." });
+        const failure = await upstreamFailure(upstream, provider.id, apiKey, "models");
+        return sendJson(res, failure.status, failure.payload);
       }
       const data = await upstream.json();
       const seen = new Set();
@@ -159,8 +204,8 @@ export default async function handler(req, res) {
       method: "POST", headers, body: JSON.stringify(requestBody), signal: controller.signal
     });
     if (!upstream.ok) {
-      const status = upstream.status === 401 || upstream.status === 403 ? 401 : upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 400;
-      return sendJson(res, status, { error: status === 401 ? "The provider rejected its configured credentials." : status === 429 ? "The provider rate limit was reached." : status === 502 ? "The provider is temporarily unavailable." : "The provider rejected the model or generation request." });
+      const failure = await upstreamFailure(upstream, provider.id, apiKey, "chat");
+      return sendJson(res, failure.status, failure.payload);
     }
     const data = await upstream.json();
     const text = extractText(data?.choices?.[0]?.message?.content);
