@@ -142,7 +142,7 @@ describe("TauriModelProvider", () => {
       .rejects.toThrow(/not present in the discovered provider catalog/i);
     expect(mockedInvoke).toHaveBeenCalledTimes(1);
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
-      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none"
+      baseUrl: "http://127.0.0.1:11434/v1", credentialHandle: "none", protocol: "openai-chat-completions"
     });
     expect(mockedInvoke).not.toHaveBeenCalledWith("send_chat_stream", expect.anything());
   });
@@ -447,7 +447,8 @@ describe("TauriModelProvider", () => {
     });
     expect(mockedInvoke).toHaveBeenCalledWith("list_provider_models", {
       baseUrl: "http://127.0.0.1:11434/v1",
-      credentialHandle: "none"
+      credentialHandle: "none",
+      protocol: "openai-chat-completions"
     });
   });
 
