@@ -154,7 +154,7 @@ fn open_approved_root_handle(root: &Path) -> Result<CapabilityDir, String> {
     Ok(CapabilityDir::from_std_file(file))
 }
 
-fn open_capability_file(
+pub(crate) fn open_capability_file(
     directory: &CapabilityDir,
     name: &std::ffi::OsStr,
     read: bool,
