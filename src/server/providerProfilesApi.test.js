@@ -52,6 +52,13 @@ describe("authenticated cloud provider profile API", () => {
     expect(write.statusCode).toBe(401);
   });
 
+  it("returns a valid empty collection before the first profile is saved", async () => {
+    const read = response();
+    await handler(request("GET"), read);
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toEqual({ schemaVersion: 1, profiles: [], deletedProfileIds: [] });
+  });
+
   it("saves profiles durably and returns them to another device session", async () => {
     const write = response();
     await handler(request("PUT", { schemaVersion: 1, profiles: [profile] }), write);
