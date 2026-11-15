@@ -245,7 +245,7 @@ export default function App() {
   // inference locality from the gateway hostname; use the owner's explicit model route.
   const providerRoute = provider.inferenceLocation;
   const localNoAuth = provider.credentialHandle === "none";
-  const browserGatewaySelected = !isTauri() && /^\/api\/provider\/(openai|gemini|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/.test(provider.baseUrl);
+  const browserGatewaySelected = !isTauri() && (provider.baseUrl === "/api/gemini" || /^\/api\/provider\/(openai|gemini|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/.test(provider.baseUrl));
   const browserGeminiSelected = !isTauri() && (provider.baseUrl === "/api/gemini" || provider.baseUrl === "/api/provider/gemini");
 
   function closeMobileNavigation() {
@@ -524,6 +524,17 @@ export default function App() {
       }
       if (!gatewayToken.trim() && !gatewaySessionReady) {
         setError("Enter the NEXUS access token once, or remember this device after connecting.");
+        return;
+      }
+      if (provider.baseUrl === "/api/gemini") {
+        const models = ["gemini-3.1-flash-lite", "gemini-3.8-flash"];
+        setAvailableModels(models);
+        if (!models.includes(provider.model)) setProvider(current => ({ ...current, model: models[0] }));
+        setProviderConnectionState("reachable");
+        setProviderConnectionMessage("Legacy Gemini route selected. New profiles use the unified Railway AI Gateway.");
+        setModelTestState("unchecked");
+        setModelTestMessage("Run the generation test to verify the legacy route.");
+        setError("");
         return;
       }
       const endpoint = provider.baseUrl;
