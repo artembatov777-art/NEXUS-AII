@@ -4,7 +4,7 @@ import {
   saveProviderProfilesToServer
 } from "../server/providerProfileStore.js";
 
-const MAX_BODY_BYTES = 32 * 1024;
+const MAX_BODY_BYTES = 64 * 1024;
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
