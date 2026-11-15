@@ -92,6 +92,8 @@ export function WorkspaceStudio(props: Props) {
   const [edgeTo, setEdgeTo] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [inboxQuery, setInboxQuery] = useState("");
+  const [inboxFilter, setInboxFilter] = useState<"all" | "open" | "done">("all");
   const [nodeLabel, setNodeLabel] = useState("");
   const [workflowName, setWorkflowName] = useState("");
   const [workflowSteps, setWorkflowSteps] = useState("");
@@ -113,6 +115,15 @@ export function WorkspaceStudio(props: Props) {
   }, [conversations, projects.length, now]);
 
   const contextNodes = useMemo(() => [...projects.map(item => ({ id: `project:${item.id}`, label: item.name, kind: "project" as const })), ...conversations.slice(0, 12).map(item => ({ id: `conversation:${item.id}`, label: item.title, kind: "conversation" as const })), ...nodes], [projects, conversations, nodes]);
+
+  const filteredInbox = useMemo(() => {
+    const query = inboxQuery.trim().toLocaleLowerCase();
+    return inbox.filter(item => {
+      const matchesStatus = inboxFilter === "all" || (inboxFilter === "open" ? !item.done : item.done);
+      const matchesQuery = !query || item.title.toLocaleLowerCase().includes(query) || item.body.toLocaleLowerCase().includes(query);
+      return matchesStatus && matchesQuery;
+    });
+  }, [inbox, inboxFilter, inboxQuery]);
 
   const briefing = useMemo(() => {
     const latest = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
@@ -224,8 +235,17 @@ export function WorkspaceStudio(props: Props) {
       {activeTab === "inbox" && <section className="studio-content">
         <div className="studio-section-kicker"><Inbox size={14}/> {t("CAPTURE CENTER")}</div><h3>{t("Universal Inbox")}</h3>
         <div className="studio-form"><input aria-label={t("Inbox title")} value={title} onChange={event => setTitle(event.target.value)} placeholder={t("Short title")}/><textarea aria-label={t("Inbox note")} value={body} onChange={event => setBody(event.target.value)} placeholder={t("Capture an idea, link or note…")} rows={3}/><button className="primary-btn" onClick={addInboxItem} disabled={!title.trim() && !body.trim()}><Plus size={15}/> {t("Save to inbox")}</button></div>
-        <div className="studio-list">{inbox.map(item => <article key={item.id} className={item.done ? "done" : ""}><button className="studio-check" onClick={() => setInbox(current => current.map(entry => entry.id === item.id ? { ...entry, done: !entry.done } : entry))} aria-label={item.done ? t("Mark as open") : t("Mark as complete")}><Check size={15}/></button><div><strong>{item.title}</strong>{item.body && <p>{item.body}</p>}<small>{new Date(item.createdAt).toLocaleString()}</small></div><button className="icon-btn" onClick={() => setInbox(current => current.filter(entry => entry.id !== item.id))} aria-label={t("Delete inbox item")}><Trash2 size={15}/></button></article>)}</div>
+        <div className="studio-inbox-tools">
+          <input aria-label={t("Search inbox")} value={inboxQuery} onChange={event => setInboxQuery(event.target.value)} placeholder={t("Search saved notes…")}/>
+          <div role="group" aria-label={t("Inbox filters")}>
+            <button className={inboxFilter === "all" ? "active" : ""} onClick={() => setInboxFilter("all")}>{t("All")} ({inbox.length})</button>
+            <button className={inboxFilter === "open" ? "active" : ""} onClick={() => setInboxFilter("open")}>{t("Open")} ({inbox.filter(item => !item.done).length})</button>
+            <button className={inboxFilter === "done" ? "active" : ""} onClick={() => setInboxFilter("done")}>{t("Completed")} ({inbox.filter(item => item.done).length})</button>
+          </div>
+        </div>
+        <div className="studio-list">{filteredInbox.map(item => <article key={item.id} className={item.done ? "done" : ""}><button className="studio-check" onClick={() => setInbox(current => current.map(entry => entry.id === item.id ? { ...entry, done: !entry.done } : entry))} aria-label={item.done ? t("Mark as open") : t("Mark as complete")}><Check size={15}/></button><div><strong>{item.title}</strong>{item.body && <p>{item.body}</p>}<small>{new Date(item.createdAt).toLocaleString()}</small></div><button className="icon-btn" onClick={() => setInbox(current => current.filter(entry => entry.id !== item.id))} aria-label={t("Delete inbox item")}><Trash2 size={15}/></button></article>)}</div>
         {!inbox.length && <p className="studio-empty">{t("Your inbox is empty. Capture something worth keeping.")}</p>}
+        {inbox.length > 0 && !filteredInbox.length && <p className="studio-empty">{t("No inbox items match this filter.")}</p>}
       </section>}
       {activeTab === "graph" && <section className="studio-content">
         <div className="studio-section-kicker"><GitBranch size={14}/> {t("CONNECTED KNOWLEDGE")}</div><h3>{t("Knowledge Graph")}</h3>
