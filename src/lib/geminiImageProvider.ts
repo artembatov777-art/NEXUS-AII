@@ -6,7 +6,7 @@ const ASPECT_RATIOS: ImageGenerationProvider["capabilities"]["aspectRatios"] = [
   "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"
 ];
 
-export function createGeminiImageProvider(accessToken: string): ImageGenerationProvider {
+export function createGeminiImageProvider(accessToken: string, useGatewayCookie = false): ImageGenerationProvider {
   return {
     capabilities: {
       id: "gemini-image",
@@ -23,6 +23,7 @@ export function createGeminiImageProvider(accessToken: string): ImageGenerationP
           aspectRatio: request.aspectRatio,
           imageSize: request.imageSize,
           remoteConsent: request.allowRemoteProcessing,
+          useGatewayCookie,
           signal
         });
         return ok(image);
