@@ -11,7 +11,8 @@ const PROVIDERS = Object.freeze({
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", keyName: "OPENROUTER_API_KEY" },
   groq: { baseUrl: "https://api.groq.com/openai/v1", keyName: "GROQ_API_KEY" },
   sambanova: { baseUrl: "https://api.sambanova.ai/v1", keyName: "SAMBANOVA_API_KEY" },
-  nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" }
+  nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" },
+  omniroute: { baseUrl: process.env.OMNIROUTE_BASE_URL || "", keyName: "OMNIROUTE_API_KEY", hostedEndpoint: true }
 });
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -106,6 +107,23 @@ export default async function handler(req, res) {
   if (!provider) return sendJson(res, 404, { error: "Unsupported hosted provider." });
   const apiKey = process.env[provider.keyName];
   if (!apiKey) return sendJson(res, 503, { error: "This provider is not configured in the NEXUS Vercel environment." });
+  let baseUrl = provider.baseUrl;
+  if (provider.hostedEndpoint) {
+    try {
+      const endpoint = new URL(baseUrl);
+      const host = endpoint.hostname.toLowerCase();
+      const privateHost = host === "localhost" || host === "::1" || host === "[::1]" ||
+        /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+      if (endpoint.protocol !== "https:" || privateHost || endpoint.username || endpoint.password ||
+          endpoint.search || endpoint.hash || !/\/v1\/?$/.test(endpoint.pathname)) {
+        return sendJson(res, 503, { error: "OmniRoute requires a public HTTPS /v1 endpoint configured by the deployment owner." });
+      }
+      baseUrl = endpoint.toString().replace(/\/$/, "");
+    } catch {
+      return sendJson(res, 503, { error: "OmniRoute requires a public HTTPS /v1 endpoint configured by the deployment owner." });
+    }
+  }
   let body;
   try { body = await readBody(req); }
   catch (error) { return sendJson(res, error.statusCode || 400, { error: error.message || "Invalid request." }); }
@@ -114,7 +132,7 @@ export default async function handler(req, res) {
   const timeout = setTimeout(() => controller.abort(), body.action === "models" ? 15_000 : 45_000);
   try {
     if (body.action === "models") {
-      const upstream = await fetch(provider.baseUrl + "/models", {
+      const upstream = await fetch(baseUrl + "/models", {
         method: "GET",
         headers: { Authorization: "Bearer " + apiKey, Accept: "application/json" },
         signal: controller.signal
@@ -148,7 +166,7 @@ export default async function handler(req, res) {
       headers["X-Title"] = "NEXUS AU";
       if (process.env.NEXUS_PUBLIC_URL) headers["HTTP-Referer"] = process.env.NEXUS_PUBLIC_URL;
     }
-    const upstream = await fetch(provider.baseUrl + "/chat/completions", {
+    const upstream = await fetch(baseUrl + "/chat/completions", {
       method: "POST", headers, body: JSON.stringify(requestBody), signal: controller.signal
     });
     if (!upstream.ok) {
