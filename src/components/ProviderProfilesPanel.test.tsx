@@ -106,9 +106,9 @@ describe("ProviderProfilesPanel", () => {
       await Promise.resolve();
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1][0]).toBe("/api/profiles");
-    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "PUT", credentials: "same-origin" });
-    expect(fetchMock.mock.calls[1][1].body).toContain("nexus.cloud");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/profiles");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "PUT", credentials: "same-origin" });
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain("nexus.cloud");
     expect(container.querySelector('option[value="nexus.cloud"]')).toBeTruthy();
   });
 
