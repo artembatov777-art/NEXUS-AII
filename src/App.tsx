@@ -5,7 +5,8 @@ import { sendMessage, testProviderGeneration } from "./lib/ai";
 import { ModelRegistry, type ModelMessage } from "./core/model";
 import { ConversationService } from "./core/conversation";
 import { NexusApplication } from "./core/application";
-import { createOllamaProviderProfile, createTauriModelRouter, NATIVE_MODEL_PROVIDER_ID } from "./lib/tauriModelProvider";
+import { createOllamaProviderProfile, createTauriModelRouter, createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "./lib/tauriModelProvider";
+import { loadProviderProfiles } from "./lib/providerProfiles";
 const MemoryPanel = lazy(() => import("./components/MemoryPanel").then(module => ({ default: module.MemoryPanel })));
 const GlobalSearchPanel = lazy(() => import("./components/GlobalSearchPanel").then(module => ({ default: module.GlobalSearchPanel })));
 const AgentControlCenter = lazy(() => import("./components/AgentControlCenter").then(module => ({ default: module.AgentControlCenter })));
@@ -140,14 +141,29 @@ export default function App() {
   ), [knowledgeRepository, embeddings, vectors]);
   const conversationRepository = useMemo(() => new WorkspaceConversationRepository(window.localStorage), []);
   const chatApplication = useMemo(() => {
-    const router = createTauriModelRouter(provider);
+    const saved = loadProviderProfiles(window.localStorage);
+    const records = saved.ok ? saved.value : [];
+    const sameSettings = (left: ProviderSettings, right: ProviderSettings) =>
+      left.baseUrl === right.baseUrl && left.model === right.model &&
+      left.inferenceLocation === right.inferenceLocation &&
+      (left.credentialHandle ?? "default") === (right.credentialHandle ?? "default") &&
+      (left.providerProtocol ?? "openai-chat-completions") === (right.providerProtocol ?? "openai-chat-completions");
+    const activeProfile = records.find(profile => sameSettings(profile.settings, provider));
+    const profiles = records.map(profile => ({ id: profile.id, settings: profile.settings }));
+    if (!activeProfile) profiles.unshift({ id: "nexus.current", settings: provider });
+    const activeId = activeProfile?.id ?? "nexus.current";
+    const router = createTauriAutoModelRouterForProfiles(
+      profiles,
+      activeId,
+      provider.routeMode === "manual" ? "manual" : "auto"
+    );
     if (!router) return null;
     const service = new ConversationService(conversationRepository, {
       conversationId: () => crypto.randomUUID() as import("./core/domain").ConversationId,
       messageId: () => crypto.randomUUID() as import("./core/domain").Message["id"]
     }, { now: () => Date.now() });
     return new NexusApplication(service, router);
-  }, [conversationRepository, provider.baseUrl, provider.model, provider.credentialHandle, provider.inferenceLocation]);
+  }, [conversationRepository, provider.baseUrl, provider.model, provider.credentialHandle, provider.inferenceLocation, provider.providerProtocol, provider.routeMode]);
   const memoryRepository = useMemo(() => new WorkspaceMemoryRepository(window.localStorage), []);
   const memoryVectors = useMemo(() => new IndexedDbMemoryVectorIndex(), []);
   const memoryRetriever = useMemo(() => new HybridMemoryRetriever(memoryRepository, embeddings, memoryVectors), [memoryRepository, embeddings, memoryVectors]);
