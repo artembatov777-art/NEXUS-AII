@@ -11,7 +11,7 @@ const actions = { onClose: vi.fn(), onToggleFocus: vi.fn(), onOpenAgents: vi.fn(
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 function click(label: string) {
-  const button = Array.from(container.querySelectorAll("button")).find(item => item.textContent?.includes(label));
+  const button = Array.from(container.querySelectorAll("button")).find(item => item.textContent?.includes(label) || item.getAttribute("aria-label")?.includes(label));
   if (!button) throw new Error(`Button not found: ${label}`);
   act(() => button.click());
 }
