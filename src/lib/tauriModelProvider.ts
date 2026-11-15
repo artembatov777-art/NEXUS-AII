@@ -228,7 +228,8 @@ class TaskAwareModelProvider implements ModelProvider {
     private readonly router: ModelRouter,
     private readonly profiles: TauriProviderProfile[],
     private readonly preferredProviderId?: string,
-    private readonly routeMode: "auto" | "manual" = "auto"
+    private readonly routeMode: "auto" | "manual" = "auto",
+    private readonly allowedLocation: ProviderSettings["inferenceLocation"] = "remote"
   ) {}
 
   listModels() { return this.router.listModels(); }
@@ -240,9 +241,10 @@ class TaskAwareModelProvider implements ModelProvider {
     });
     const task = classifyModelTask(request.messages);
     const candidates: ModelRouteCandidate[] = [];
+    const sameRoute = this.profiles.filter(profile => profile.settings.inferenceLocation === this.allowedLocation);
     const eligible = this.routeMode === "manual" && this.preferredProviderId
-      ? this.profiles.filter(profile => profile.id === this.preferredProviderId)
-      : this.profiles;
+      ? sameRoute.filter(profile => profile.id === this.preferredProviderId)
+      : sameRoute;
     for (const profile of eligible) {
       const available = catalog.value.filter(model => model.providerId === profile.id);
       if (!available.length) continue;
@@ -290,7 +292,8 @@ function providerFamily(settings: ProviderSettings): string {
 export function createTauriAutoModelRouterForProfiles(
   profiles: TauriProviderProfile[],
   preferredProviderId?: string,
-  routeMode: "auto" | "manual" = "auto"
+  routeMode: "auto" | "manual" = "auto",
+  allowedLocation: ProviderSettings["inferenceLocation"] = "remote"
 ): ModelRouter | null {
   if (!isTauri() || profiles.length === 0) return null;
   const providerRouter = new ModelRouter();
@@ -302,7 +305,7 @@ export function createTauriAutoModelRouterForProfiles(
     if (!registered.ok) throw new Error(registered.error.message);
   }
   const applicationRouter = new ModelRouter();
-  const aggregate = applicationRouter.register(new TaskAwareModelProvider(providerRouter, profiles, preferredProviderId, routeMode));
+  const aggregate = applicationRouter.register(new TaskAwareModelProvider(providerRouter, profiles, preferredProviderId, routeMode, allowedLocation));
   if (!aggregate.ok) throw new Error(aggregate.error.message);
   return applicationRouter;
 }
