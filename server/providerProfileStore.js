@@ -187,7 +187,19 @@ export async function saveProviderProfilesToServer(profiles, deletedIds) {
       ...requestedDeletedIds
     ]);
     const deleted = new Set(deletedProfileIds);
-    const normalized = requestedProfiles.filter(profile => !deleted.has(profile.id));
+    const mergedById = new Map(existing.profiles.map(profile => [profile.id, profile]));
+    for (const incoming of requestedProfiles) {
+      if (deleted.has(incoming.id)) continue;
+      const current = mergedById.get(incoming.id);
+      // Profile writes are upserts. A delayed request from another tab/device
+      // must not roll a newer saved revision back to older settings.
+      if (!current || (incoming.updatedAt ?? 0) > (current.updatedAt ?? 0)) {
+        mergedById.set(incoming.id, incoming);
+      }
+    }
+    const normalized = normalizeProviderProfiles(
+      [...mergedById.values()].filter(profile => !deleted.has(profile.id))
+    );
     await writeStore(normalized, deletedProfileIds);
     return { profiles: normalized, deletedProfileIds };
   });
