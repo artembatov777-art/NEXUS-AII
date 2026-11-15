@@ -12,7 +12,8 @@ export async function sendMessage(
   signal?: AbortSignal,
   onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void,
   generation?: { temperature?: number; maxOutputTokens?: number },
-  gatewayToken?: string
+  gatewayToken?: string,
+  useGatewayCookie = false
 ): Promise<string> {
   if (signal?.aborted) throw new Error("Model request was cancelled.");
   if (!settings.baseUrl.trim() || !settings.model.trim()) {
@@ -28,7 +29,7 @@ export async function sendMessage(
   if (!isTauri()) {
     const hostedProvider = settings.baseUrl.match(/^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/);
     if (hostedProvider) {
-      if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token configured in Vercel. It is separate from every provider API key.");
+      if (!gatewayToken?.trim() && !useGatewayCookie) throw new Error("Enter the NEXUS access token once, or remember this device after connecting.");
       const systemMessage = requestMessages.find(message => message.role === "system");
       const turns = requestMessages.filter(message => message.role !== "system").slice(-39);
       if (turns.some(message => message.content.length > 12_000)) {
@@ -50,7 +51,11 @@ export async function sendMessage(
       }
       const response = await fetch(settings.baseUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + gatewayToken.trim() },
+        headers: {
+          "Content-Type": "application/json",
+          ...(gatewayToken?.trim() ? { Authorization: "Bearer " + gatewayToken.trim() } : {})
+        },
+        credentials: "same-origin",
         body: JSON.stringify(requestPayload),
         signal
       });
@@ -79,7 +84,7 @@ export async function sendMessage(
     if (settings.baseUrl !== "/api/gemini") {
       throw new Error("Browser preview supports Gemini through the secured Vercel proxy only. Select “Use Gemini on Vercel” in provider settings.");
     }
-    if (!gatewayToken?.trim()) throw new Error("Enter the NEXUS access token from Vercel settings. This is separate from your Gemini API key.");
+    if (!gatewayToken?.trim() && !useGatewayCookie) throw new Error("Enter the NEXUS access token once, or remember this device after connecting.");
     const systemMessage = requestMessages.find(message => message.role === "system");
     let turns = requestMessages.filter(message => message.role !== "system").slice(-40);
     if (turns.some(message => message.content.length > 12_000)) {
@@ -107,8 +112,9 @@ export async function sendMessage(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${gatewayToken.trim()}`
+        ...(gatewayToken?.trim() ? { Authorization: `Bearer ${gatewayToken.trim()}` } : {})
       },
+      credentials: "same-origin",
       body: JSON.stringify(requestPayload),
       signal
     });
@@ -169,7 +175,8 @@ export interface ProviderGenerationCheck {
 export async function testProviderGeneration(
   settings: ProviderSettings,
   signal?: AbortSignal,
-  gatewayToken?: string
+  gatewayToken?: string,
+  useGatewayCookie = false
 ): Promise<ProviderGenerationCheck> {
   const usage: { value: ProviderGenerationCheck["usage"] } = { value: null };
   const response = await sendMessage(
@@ -185,7 +192,8 @@ export async function testProviderGeneration(
     signal,
     value => { usage.value = value; },
     { temperature: 0, maxOutputTokens: 16 },
-    gatewayToken
+    gatewayToken,
+    useGatewayCookie
   );
   return { response, usage: usage.value };
 }
