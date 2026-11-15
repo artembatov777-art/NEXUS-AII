@@ -1,4 +1,4 @@
-import { isGatewayAuthorized } from "../_lib/gatewayAuth.js";
+import { isGatewayAuthorized } from "../../server/gatewayAuth.js";
 export const config = { maxDuration: 60 };
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGES = 40;
