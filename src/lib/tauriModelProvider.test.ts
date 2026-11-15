@@ -37,6 +37,18 @@ describe("TauriModelProvider", () => {
     expect(mockedInvoke).toHaveBeenCalledTimes(2);
   });
 
+  it("caches a recently verified provider catalog between turns", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValue(["model-a"]);
+    const router = createTauriModelRouter({
+      baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote"
+    });
+    if (!router) throw new Error("Expected native model router.");
+    await expect(router.listModels()).resolves.toMatchObject({ ok: true });
+    await expect(router.listModels()).resolves.toMatchObject({ ok: true });
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+  });
+
   it("declares only verified text capability for compatible native providers", async () => {
     mockedIsTauri.mockReturnValue(true);
     mockedInvoke.mockResolvedValue(["model-a"]);
