@@ -361,31 +361,38 @@ pub fn revoke_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 
 #[tauri::command]
 pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) -> Result<Vec<WorkspaceEntry>, String> {
-    let root = access.allowed_root_for(Path::new(&path))?;
-    let directory = fs::canonicalize(&path).map_err(|e| format!("Could not open directory: {e}"))?;
-    if !directory.is_dir() || !directory.starts_with(&root) {
-        return Err("The requested location is not an allowed directory.".into());
-    }
+    let requested = Path::new(&path);
+    let (directory, root) = access.open_approved_directory(requested)?;
+    let relative = requested.strip_prefix(&root)
+        .map_err(|_| "The requested location is outside an approved directory.")?;
+    let visible_directory = root.join(relative);
     let mut entries = Vec::new();
-    let iterator = fs::read_dir(&directory).map_err(|e| format!("Could not read directory: {e}"))?;
+    let iterator = directory.entries().map_err(|e| format!("Could not read directory: {e}"))?;
     for item in iterator.take(MAX_DIRECTORY_ENTRIES) {
-        let item = item.map_err(|e| format!("Could not inspect a directory entry: {e}"))?;
-        let entry_path = item.path();
-        let metadata = match fs::symlink_metadata(&entry_path) {
+        let name = item.file_name();
+        let metadata = match directory.symlink_metadata(&name) {
             Ok(value) => value,
             Err(_) => continue,
         };
         if metadata.file_type().is_symlink() { continue; }
-        let canonical = match fs::canonicalize(&entry_path) {
-            Ok(value) if value.starts_with(&root) => value,
-            _ => continue,
+        let (kind, metadata) = if metadata.is_dir() {
+            let child = match directory.open_dir(&name) { Ok(value) => value, Err(_) => continue };
+            ("directory", child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?)
+        } else if metadata.is_file() {
+            let file = match open_capability_file(&directory, &name, true, false, false) { Ok(value) => value, Err(_) => continue };
+            let opened = file.metadata().map_err(|e| format!("Could not inspect file entry: {e}"))?;
+            if !opened.is_file() { continue; }
+            ensure_no_external_hard_links(&file)?;
+            ("file", opened)
+        } else {
+            continue;
         };
-        let metadata = fs::metadata(&canonical).map_err(|e| format!("Could not inspect {}: {e}", item.file_name().to_string_lossy()))?;
-        let kind = if metadata.is_dir() { "directory" } else if metadata.is_file() { "file" } else { "other" };
-        let modified_at_ms = metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
+        let modified_at_ms = metadata.modified().ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64);
         entries.push(WorkspaceEntry {
-            name: item.file_name().to_string_lossy().into_owned(),
-            path: canonical.to_string_lossy().into_owned(),
+            name: name.to_string_lossy().into_owned(),
+            path: visible_directory.join(&name).to_string_lossy().into_owned(),
             kind: kind.into(),
             size_bytes: metadata.len(),
             modified_at_ms,
@@ -473,8 +480,6 @@ fn read_workspace_file_inner(path: &str, access: &WorkspaceAccess) -> Result<Str
         return Err("The selected file path is invalid.".into());
     }
     let requested = Path::new(path);
-    let parent = requested.parent()
-        .ok_or_else(|| "The file must be inside an approved directory.".to_string())?;
     let (parent_directory, name, _root) = access.open_approved_parent(requested)?;
     let file = open_capability_file(&parent_directory, &name, true, false, false)?;
     let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
@@ -514,8 +519,6 @@ fn write_workspace_file_inner(
     }
 
     let requested = PathBuf::from(path);
-    let parent = requested.parent()
-        .ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
     let (parent_directory, name, _root) = access.open_approved_parent(&requested)?;
     match parent_directory.symlink_metadata(Path::new(&name)) {
         Ok(metadata) => {
@@ -797,6 +800,39 @@ mod tests {
         let result = write_workspace_file_inner(target.to_str().unwrap(), "stale draft", Some("original"), &access);
         assert!(result.unwrap_err().contains("removed or moved"));
         assert!(!target.exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pinned_workspace_directory_handles_ignore_parent_path_replacement() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-pinned-parent-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        let parent = root.join("documents");
+        let outside = base.join("outside");
+        fs::create_dir_all(&parent).expect("create approved parent");
+        fs::create_dir_all(&outside).expect("create outside directory");
+        fs::write(parent.join("note.txt"), "approved contents").expect("write approved file");
+        fs::write(outside.join("note.txt"), "outside contents").expect("write outside file");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let (pinned, _) = access.open_approved_directory(&parent).expect("open pinned parent");
+        fs::rename(&parent, root.join("documents-original")).expect("move original parent");
+        symlink(&outside, &parent).expect("replace parent path with outside symlink");
+
+        let file = open_capability_file(&pinned, std::ffi::OsStr::new("note.txt"), true, false, false)
+            .expect("open file relative to pinned directory handle");
+        let mut contents = String::new();
+        file.take(MAX_TEXT_FILE_BYTES + 1).read_to_string(&mut contents).expect("read pinned file");
+        assert_eq!(contents, "approved contents");
+        assert_eq!(fs::read_to_string(outside.join("note.txt")).unwrap(), "outside contents");
+
         fs::remove_dir_all(base).expect("cleanup");
     }
 
