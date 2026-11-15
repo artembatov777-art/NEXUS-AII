@@ -180,6 +180,10 @@ export default async function handler(req, res) {
       const models = Array.isArray(data?.data) ? data.data.flatMap(item => {
         const id = typeof item?.id === "string" ? item.id.trim() : "";
         if (!id || id.length > 128 || /[\u0000-\u001f\u007f]/.test(id) || seen.has(id)) return [];
+        // Groq's /models endpoint also lists speech transcription and audio
+        // generation models. NEXUS currently sends chat/completions requests,
+        // so keep audio-only model families out of the selectable chat catalog.
+        if (provider.id === "groq" && /(whisper|\btts\b|text-to-speech|orpheus)/i.test(id)) return [];
         seen.add(id);
         return [id];
       }).slice(0, 200) : [];
@@ -190,6 +194,9 @@ export default async function handler(req, res) {
     if (!messages) return sendJson(res, 400, { error: "Messages must contain 1–40 valid turns, with at most one system message, and end with a user message." });
     const model = typeof body.model === "string" ? body.model.trim() : "";
     if (!model || model.length > 128 || /[\u0000-\u001f\u007f]/.test(model)) return sendJson(res, 400, { error: "A valid model ID is required." });
+    if (provider.id === "groq" && /(whisper|\btts\b|text-to-speech|orpheus)/i.test(model)) {
+      return sendJson(res, 400, { error: `Groq model "${model}" is an audio model and cannot be used for chat completions. Select a text chat model instead.` });
+    }
     const requestBody = { model, messages };
     const temperature = boundedNumber(body.temperature, 0, 2);
     const maxTokens = Number.isInteger(body.maxOutputTokens) ? Math.min(8192, Math.max(1, body.maxOutputTokens)) : undefined;
