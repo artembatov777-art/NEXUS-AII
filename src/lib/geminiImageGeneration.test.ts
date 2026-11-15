@@ -19,12 +19,13 @@ describe("generateGeminiImage", () => {
       text: "Generated",
       model: "gemini-3.1-flash-image"
     }), { status: 200 })));
-    const result = await generateGeminiImage("  A quiet lake  ", "token", { aspectRatio: "16:9", imageSize: "2K", remoteConsent: true });
+    const sourceImage = { mimeType: "image/png" as const, data: "iVBORw0KGgo=", byteLength: 8 };
+    const result = await generateGeminiImage("  A quiet lake  ", "token", { aspectRatio: "16:9", imageSize: "2K", remoteConsent: true, sourceImage });
     expect(result).toMatchObject({ mimeType: "image/png", byteLength: 8, aspectRatio: "16:9", imageSize: "2K" });
     expect(fetch).toHaveBeenCalledWith("/api/gemini-image", expect.objectContaining({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer token" },
-      body: JSON.stringify({ prompt: "A quiet lake", aspectRatio: "16:9", imageSize: "2K", allowRemoteProcessing: true })
+      body: JSON.stringify({ prompt: "A quiet lake", aspectRatio: "16:9", imageSize: "2K", allowRemoteProcessing: true, sourceImage })
     }));
   });
 
