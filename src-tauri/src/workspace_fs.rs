@@ -1,5 +1,5 @@
 use serde::Serialize;
-use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -285,7 +285,7 @@ impl WorkspaceAccess {
         let directory = if relative.as_os_str().is_empty() {
             root_handle
         } else {
-            root_handle.open_dir(relative)
+            root_handle.open_dir_nofollow(relative)
                 .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?
         };
         Ok((directory, root))
@@ -376,7 +376,7 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
         };
         if metadata.file_type().is_symlink() { continue; }
         let (kind, metadata) = if metadata.is_dir() {
-            let child = match directory.open_dir(&name) { Ok(value) => value, Err(_) => continue };
+            let child = match directory.open_dir_nofollow(&name) { Ok(value) => value, Err(_) => continue };
             ("directory", child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?)
         } else if metadata.is_file() {
             let file = match open_capability_file(&directory, &name, true, false, false) { Ok(value) => value, Err(_) => continue };
