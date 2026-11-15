@@ -101,6 +101,22 @@ describe("authenticated cloud provider profile API", () => {
     expect(read.json()).toMatchObject({ profiles: [], deletedProfileIds: ["nexus.groq"] });
   });
 
+  it("preserves deletion markers when an older client omits tombstone metadata", async () => {
+    const deletion = response();
+    await handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    }), deletion);
+    const staleClientWrite = response();
+    await handler(request("PUT", { schemaVersion: 1, profiles: [profile] }), staleClientWrite);
+    expect(staleClientWrite.statusCode).toBe(200);
+    expect(staleClientWrite.json()).toMatchObject({
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    });
+  });
+
   it("fails closed when a persistent volume has not been configured", async () => {
     vi.stubEnv("NEXUS_DATA_DIR", "");
     const read = response();
