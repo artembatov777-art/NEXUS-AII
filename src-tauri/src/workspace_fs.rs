@@ -182,6 +182,11 @@ pub struct WorkspaceAccess {
 }
 
 impl WorkspaceAccess {
+    #[cfg(test)]
+    pub(crate) fn for_test(roots: Vec<PathBuf>, persistence_path: PathBuf) -> Self {
+        Self { roots: Mutex::new(roots), persistence_path }
+    }
+
     pub fn load(persistence_path: PathBuf) -> Self {
         let persisted = open_regular_file_readonly(&persistence_path).ok()
             .and_then(|file| {
@@ -315,9 +320,6 @@ impl WorkspaceAccess {
             .ok_or_else(|| "This path is outside the directories explicitly allowed in NEXUS.".to_string())
     }
 
-    fn ensure_new_path_allowed(&self, parent: &Path) -> Result<PathBuf, String> {
-        self.allowed_root_for(parent)
-    }
 }
 
 #[derive(Debug, Serialize)]
