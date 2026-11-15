@@ -6,7 +6,7 @@ const MAX_MESSAGE_CHARS = 12_000;
 const MAX_SYSTEM_CHARS = 24_000;
 const PROVIDERS = Object.freeze({
   gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", keyName: "GEMINI_API_KEY" },
-  deepseek: { baseUrl: "https://api.deepseek.com", keyName: "DEEPSEEK_API_KEY" },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", keyName: "GROQ_API_KEY" },
   nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", keyName: "NVIDIA_API_KEY" }
 });
 function sendJson(res, status, payload) {
@@ -121,7 +121,7 @@ async function upstreamFailure(upstream, provider, apiKey, action) {
   const status = upstream.status === 401 || upstream.status === 403 ? 401
     : upstream.status === 429 ? 429
       : upstream.status >= 500 ? 502 : 400;
-  const label = provider === "gemini" ? "Google Gemini" : provider === "deepseek" ? "DeepSeek" : "NVIDIA";
+  const label = provider === "gemini" ? "Google Gemini" : provider === "groq" ? "Groq" : "NVIDIA";
   const context = action === "models" ? "model catalog" : "generation";
   const diagnostic = message ? `: ${message}` : "";
   const codeLabel = code ? ` [${code}]` : "";
