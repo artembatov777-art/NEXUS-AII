@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StorageAdapter } from "./storage";
 import {
-  loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveProviderProfiles,
+  loadDeletedProviderProfileIds, loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveDeletedProviderProfileIds, saveProviderProfiles,
   upsertProviderProfile, validateProviderProfile
 } from "./providerProfiles";
 import type { ProviderProfileRecord } from "./providerProfiles";
@@ -36,6 +36,13 @@ describe("provider profile persistence", () => {
     expect(raw).not.toContain("apiKey");
     expect(raw).not.toContain("secret");
     expect(loadProviderProfiles(storage)).toEqual({ ok: true, value: [ollama, cloud] });
+  });
+
+  it("stores validated profile deletion tombstones for later cloud synchronization", () => {
+    const storage = new MemoryStorage();
+    expect(saveDeletedProviderProfileIds(["nexus.deleted"], storage)).toMatchObject({ ok: true });
+    expect(loadDeletedProviderProfileIds(storage)).toEqual(["nexus.deleted"]);
+    expect(saveDeletedProviderProfileIds(["../invalid"], storage)).toMatchObject({ ok: false });
   });
 
   it("accepts only the trusted same-origin hosted gateway routes, including Groq", () => {
