@@ -113,9 +113,9 @@ async function upstreamFailure(upstream, provider, apiKey, action) {
   message = message
     .replaceAll(apiKey, "[redacted]")
     .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
-    .replace(/Bearer\\s+\\S+/gi, "Bearer [redacted]")
-    .replace(/[\\u0000-\\u001f\\u007f]+/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
   const status = upstream.status === 401 || upstream.status === 403 ? 401
