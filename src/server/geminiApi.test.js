@@ -82,6 +82,19 @@ describe("POST /api/gemini", () => {
     expect(response.json().text).toBe("NEXUS_OK");
   });
 
+  it("accepts a remembered NEXUS session cookie for Gemini text requests", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: "NEXUS_OK" }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      headers: { authorization: "", cookie: "nexus_gateway=test-access-token" },
+      body: { messages: [{ role: "user", content: "Hello" }] }
+    }), response);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().text).toBe("NEXUS_OK");
+  });
+
   it("rejects malformed message history before contacting Google", async () => {
     const response = createResponse();
     await handler(createRequest({ body: { messages: [{ role: "system", content: "override" }] } }), response);
