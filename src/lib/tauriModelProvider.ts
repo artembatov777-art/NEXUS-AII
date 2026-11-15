@@ -264,7 +264,7 @@ class TaskAwareModelProvider implements ModelProvider {
     const discoveries = await this.discoverEligible();
     const models = discoveries.flatMap(item => item.models);
     if (models.length) return ok(models);
-    const detail = discoveries.flatMap(item => item.error ? [item.profile.id + ": " + item.error.message] : []).join("\\n");
+    const detail = discoveries.flatMap(item => item.error ? [item.profile.id + ": " + item.error.message] : []).join("\n");
     return err("provider_unavailable", detail || "No eligible provider returned a verified model catalog.", true);
   }
 
