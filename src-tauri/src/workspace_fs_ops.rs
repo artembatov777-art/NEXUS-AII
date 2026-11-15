@@ -141,7 +141,7 @@ pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> std::io::R
     }
 }
 
-fn rename_no_replace_at(
+pub(crate) fn rename_no_replace_at(
     source_directory: &CapabilityDir,
     source_name: &OsStr,
     destination_directory: &CapabilityDir,
