@@ -21,7 +21,7 @@ These settings are also declared in `railway.json`.
 Add these in the Railway service's Variables section:
 
 - `NEXUS_API_TOKEN`: a random secret with at least 32 characters.
-- `GEMINI_API_KEY`: only if Gemini is the selected upstream provider.
+- `GEMINI_API_KEY`: only if Gemini is a selected upstream provider.
 
 For other hosted providers, add only the corresponding server-side key:
 `OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`,
@@ -36,13 +36,11 @@ assets and are not suitable for API keys or gateway tokens.
 After deployment, open `https://YOUR-RAILWAY-DOMAIN/api/health`. A healthy service
 returns JSON with `"status":"ok"`. Then configure the provider in NEXUS:
 
-- Gateway URL: `/api/gemini` for Gemini, or `/api/provider/PROVIDER_ID` for
-  an OpenAI-compatible provider.
+- Gateway URL: `/api/provider/PROVIDER_ID` for every supported OpenAI-compatible provider, including Gemini. The older `/api/gemini` route remains only for existing saved configurations.
 - Gateway Token: the value of `NEXUS_API_TOKEN` configured in Railway.
 - Model: select a model supported by the configured provider.
 
-The browser remembers the gateway session using an HttpOnly cookie. Provider API keys
-remain on the server and are never sent to the browser.
+The browser remembers the shared Railway gateway session using an HttpOnly cookie. Every hosted provider request is dispatched through the same `/api/provider/:provider` handler. Provider API keys remain in Railway Variables and are never sent to the browser.
 
 ## Important
 
