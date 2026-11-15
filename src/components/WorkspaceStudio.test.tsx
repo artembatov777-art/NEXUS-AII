@@ -156,7 +156,7 @@ describe("NEXUS Studio", () => {
     act(() => {
       inputSetter.call(name, "Release prep");
       name.dispatchEvent(new Event("input", { bubbles: true }));
-      textSetter.call(steps, "Review changes\\nPrepare release notes");
+      textSetter.call(steps, "Review changes\nPrepare release notes");
       steps.dispatchEvent(new Event("input", { bubbles: true }));
     });
     click("Create workflow");
