@@ -111,6 +111,27 @@ describe("ProviderProfilesPanel", () => {
     expect(container.querySelector('option[value="nexus.cloud"]')).toBeTruthy();
   });
 
+  it("restores cloud profiles into a fresh Home Screen app storage", async () => {
+    const cloudProfile = { id: "nexus.cloud", label: "Cloud", settings: cloudSettings, updatedAt: 456 };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ schemaVersion: 1, profiles: [cloudProfile], deletedProfileIds: [] })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => {
+      root.render(<ProviderProfilesPanel
+        currentSettings={localSettings}
+        gatewaySessionReady
+        onSelect={onSelect}
+        onDeleteCredential={onDeleteCredential}
+      />);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('option[value="nexus.cloud"]')).toBeTruthy();
+    expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toContain("Cloud");
+  });
+
   it("deletes a dedicated vault key together with its profile", async () => {
     const handle = "profile-0123456789abcdef0123456789abcdef";
     const settings = { ...cloudSettings, credentialHandle: handle };
