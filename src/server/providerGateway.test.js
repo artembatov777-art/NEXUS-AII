@@ -128,14 +128,34 @@ describe("hosted provider gateway", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("does not return upstream diagnostics or secrets", async () => {
+  it("returns the provider's model rejection reason for Gemini generation failures", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      error: {
+        code: 400,
+        message: "Model gemini-2.5-flash is not available for this API version."
+      }
+    }), { status: 400, headers: { "Content-Type": "application/json" } }));
+    const response = createResponse();
+    await handler(createRequest({
+      body: { action: "chat", model: "gemini-2.5-flash", messages: [{ role: "user", content: "Hi" }] }
+    }), response);
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      provider: "gemini",
+      upstreamStatus: 400
+    });
+    expect(response.json().error).toContain("gemini-2.5-flash");
+    expect(response.json().error).toContain("not available for this API version");
+  });
+
+  it("returns sanitized upstream diagnostics without exposing provider secrets", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("server-side-gemini-key upstream diagnostic", { status: 500 }));
     const response = createResponse();
     await handler(createRequest({
       body: { action: "chat", model: "gemini-test", messages: [{ role: "user", content: "Hi" }] }
     }), response);
     expect(response.statusCode).toBe(502);
-    expect(response.body).not.toContain("upstream diagnostic");
+    expect(response.body).toContain("upstream diagnostic");
     expect(response.body).not.toContain("server-side-gemini-key");
   });
 });
