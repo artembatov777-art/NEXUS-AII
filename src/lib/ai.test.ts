@@ -33,7 +33,7 @@ describe("sendMessage AI Core integration", () => {
 
   it("keeps browser preview disconnected from the native model runtime", async () => {
     native.mockReturnValue(false);
-    await expect(sendMessage(settings, messages)).rejects.toThrow(/Browser preview supports Gemini through the secured Vercel proxy/i);
+    await expect(sendMessage(settings, messages)).rejects.toThrow(/secured Railway AI Gateway/i);
     expect(createRouter).not.toHaveBeenCalled();
   });
 
@@ -89,6 +89,25 @@ describe("sendMessage AI Core integration", () => {
       body: expect.stringContaining('"action":"chat"')
     }));
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("server-side-openai-key");
+    vi.unstubAllGlobals();
+  });
+
+  it("routes Gemini browser chat through the unified Railway provider endpoint", async () => {
+    native.mockReturnValue(false);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      text: "Gemini via Railway", usage: { inputTokens: 7, outputTokens: 4 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await sendMessage(
+      { ...settings, baseUrl: "/api/provider/gemini", model: "gemini-test" },
+      messages, "", undefined, undefined, undefined, undefined, "session-only-token"
+    );
+    expect(result).toBe("Gemini via Railway");
+    expect(fetchMock).toHaveBeenCalledWith("/api/provider/gemini", expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer session-only-token" }),
+      body: expect.stringContaining('"action":"chat"')
+    }));
     vi.unstubAllGlobals();
   });
 
