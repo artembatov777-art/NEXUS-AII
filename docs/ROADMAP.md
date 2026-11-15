@@ -60,6 +60,9 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 
 
 - [x] Implement the provider-neutral model runtime and model registry lifecycle; live provider verification remains pending until the owner supplies credentials.
+- [x] Add a separate native Anthropic Messages adapter for Claude, including model discovery, request mapping, API-key headers, streaming text/usage parsing, cancellation, and protocol tests. Live account verification remains an owner-side gate.
+- [x] Register multiple saved provider profiles in one task-aware router; classify coding, analysis, research, creative, and general requests; keep automatic routing within the active profile's declared local/remote route.
+- [x] Add bounded failover to the next eligible provider only for retryable errors before the first visible text delta. Never switch silently after partial output.
 - [ ] Evaluate an optional OmniRoute adapter during final integration only if the owner explicitly chooses to add it; no OmniRoute UI, profile setup, or connection is part of current development.
 - [x] Add model discovery, selection, status, health checks, normalized errors, usage, streaming, and cancellation.
 - [x] Prepare the Ollama OpenAI-compatible `/v1` adapter and separate credential slot; live verification requires a running owner-side Ollama service.
