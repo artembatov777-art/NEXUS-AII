@@ -1,3 +1,4 @@
+import { isGatewayAuthorized } from "./_lib/gatewayAuth.js";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 12_000;
@@ -15,12 +16,6 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function constantTimeEqual(left, right) {
-  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < left.length; i += 1) mismatch |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  return mismatch === 0;
-}
 
 function readBody(req) {
   // Vercel's Node runtime may parse JSON before invoking the function.
@@ -104,11 +99,7 @@ export default async function handler(req, res) {
   if (!apiKey) return sendJson(res, 503, { error: "Gemini provider is not configured." });
   if (!accessToken) return sendJson(res, 503, { error: "NEXUS API access is not configured." });
 
-  const authorization = req.headers.authorization || "";
-  const suppliedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!constantTimeEqual(suppliedToken, accessToken)) {
-    return sendJson(res, 401, { error: "Unauthorized." });
-  }
+  if (!isGatewayAuthorized(req, accessToken)) return sendJson(res, 401, { error: "Unauthorized." });
 
   const contentType = req.headers["content-type"] || "";
   if (!contentType.toLowerCase().startsWith("application/json")) {
