@@ -35,7 +35,7 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
   // still pass the absolute HTTPS/loopback URL validator.
   const isTrustedHostedGatewayRoute =
     typeof settings.baseUrl === "string" &&
-    ["/api/provider/gemini", "/api/provider/deepseek", "/api/provider/nvidia"].includes(settings.baseUrl);
+    ["/api/provider/gemini", "/api/provider/groq", "/api/provider/nvidia"].includes(settings.baseUrl);
 
   if (typeof settings.baseUrl !== "string" || settings.baseUrl.length > 2048 ||
       (!isTrustedHostedGatewayRoute && providerEndpointError(settings.baseUrl)) ||
@@ -67,6 +67,20 @@ export function validateProviderProfile(value: unknown): Result<ProviderProfileR
       ...(settings.routeMode === "manual" ? { routeMode: "manual" as const } : {})
     }
   });
+}
+
+/**
+ * Ask browsers to protect this origin's local data from automatic storage eviction.
+ * This does not override a user's explicit "clear site data" action.
+ */
+export async function requestPersistentProviderProfileStorage(): Promise<boolean | null> {
+  if (typeof navigator === "undefined" || typeof navigator.storage?.persist !== "function") return null;
+  try {
+    const alreadyPersistent = await navigator.storage.persisted();
+    return alreadyPersistent || await navigator.storage.persist();
+  } catch {
+    return false;
+  }
 }
 
 export function loadProviderProfiles(storage: StorageAdapter = localStorage): Result<ProviderProfileRecord[]> {
