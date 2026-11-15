@@ -117,6 +117,34 @@ describe("authenticated cloud provider profile API", () => {
     });
   });
 
+  it("keeps deletion tombstones monotonic when stale device writes race", async () => {
+    const deletion = handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    }), response());
+    const staleWriteResponse = response();
+    const staleWrite = handler(request("PUT", {
+      schemaVersion: 1,
+      profiles: [profile],
+      deletedProfileIds: []
+    }), staleWriteResponse);
+
+    await Promise.all([deletion, staleWrite]);
+    expect(staleWriteResponse.statusCode).toBe(200);
+    expect(staleWriteResponse.json()).toMatchObject({
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    });
+
+    const read = response();
+    await handler(request("GET"), read);
+    expect(read.json()).toMatchObject({
+      profiles: [],
+      deletedProfileIds: ["nexus.groq"]
+    });
+  });
+
   it("fails closed when a persistent volume has not been configured", async () => {
     vi.stubEnv("NEXUS_DATA_DIR", "");
     const read = response();
