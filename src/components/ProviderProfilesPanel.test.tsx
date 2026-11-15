@@ -111,6 +111,37 @@ describe("ProviderProfilesPanel", () => {
     expect(container.querySelector('option[value="nexus.cloud"]')).toBeTruthy();
   });
 
+  it("retries cloud profile synchronization after the Railway volume becomes available", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: "Railway persistent Volume is not mounted." })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ schemaVersion: 1, profiles: [], deletedProfileIds: [] })
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => {
+      root.render(<ProviderProfilesPanel
+        currentSettings={localSettings}
+        gatewaySessionReady
+        onSelect={onSelect}
+        onDeleteCredential={onDeleteCredential}
+      />);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain("cloud synchronization failed");
+    const retry = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Sync profiles now");
+    expect(retry).toBeTruthy();
+    await act(async () => {
+      retry!.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("synchronized with your NEXUS account and this device");
+  });
+
   it("restores cloud profiles into a fresh Home Screen app storage", async () => {
     const cloudProfile = { id: "nexus.cloud", label: "Cloud", settings: cloudSettings, updatedAt: 456 };
     const fetchMock = vi.fn().mockResolvedValue({
