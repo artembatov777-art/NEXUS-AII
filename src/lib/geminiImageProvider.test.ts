@@ -28,7 +28,7 @@ describe("createGeminiImageProvider", () => {
     }, controller.signal);
     expect(result).toMatchObject({ ok: true, value: image });
     expect(generateGeminiImage).toHaveBeenCalledWith("A lake", "token", {
-      aspectRatio: "1:1", imageSize: "1K", remoteConsent: true, signal: controller.signal
+      aspectRatio: "1:1", imageSize: "1K", remoteConsent: true, useGatewayCookie: false, signal: controller.signal
     });
   });
 

@@ -497,6 +497,7 @@ export default function App() {
       const payload = await response.json() as { authenticated?: boolean; error?: string };
       if (!response.ok || payload.authenticated !== true) throw new Error(payload.error || "Could not remember this device.");
       setGatewaySessionReady(true);
+      setGatewayToken("");
       setError("");
       setProviderConnectionMessage("This device is remembered securely. The browser stores only an HttpOnly session cookie.");
     } catch (cause) {
