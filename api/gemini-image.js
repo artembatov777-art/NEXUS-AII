@@ -1,7 +1,7 @@
 import { isGatewayAuthorized } from "../server/gatewayAuth.js";
 export const config = { maxDuration: 60 };
 
-const MAX_BODY_BYTES = 8 * 1024;
+const MAX_BODY_BYTES = 4_400_000;
 const MAX_PROMPT_CHARS = 2_000;
 const MODEL = "gemini-3.1-flash-image";
 const ASPECT_RATIOS = new Set(["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "21:9"]);
@@ -74,6 +74,28 @@ export default async function handler(req, res) {
   }
   const aspectRatio = body.aspectRatio ?? "1:1";
   const imageSize = body.imageSize ?? "1K";
+  let sourceImage;
+  if (body.sourceImage !== undefined) {
+    const candidate = body.sourceImage;
+    if (!candidate || typeof candidate !== "object" ||
+        !["image/png", "image/jpeg", "image/webp"].includes(candidate.mimeType) ||
+        typeof candidate.data !== "string" || candidate.data.length > 4_300_000 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(candidate.data)) {
+      return sendJson(res, 400, { error: "Source image is invalid or unsupported." });
+    }
+    const padding = candidate.data.endsWith("==") ? 2 : candidate.data.endsWith("=") ? 1 : 0;
+    const decodedLength = candidate.data.length % 4 === 0 ? (candidate.data.length / 4) * 3 - padding : -1;
+    if (!Number.isSafeInteger(candidate.byteLength) || candidate.byteLength <= 0 ||
+        candidate.byteLength > 3_200_000 || decodedLength !== candidate.byteLength) {
+      return sendJson(res, 400, { error: "Source image exceeds the supported size limit." });
+    }
+    const bytes = Buffer.from(candidate.data, "base64");
+    const signatureValid = candidate.mimeType === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      : candidate.mimeType === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+        : bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+    if (!signatureValid) return sendJson(res, 400, { error: "Source image signature does not match its media type." });
+    sourceImage = { mimeType: candidate.mimeType, data: candidate.data };
+  }
   if (!ASPECT_RATIOS.has(aspectRatio)) return sendJson(res, 400, { error: "Unsupported image aspect ratio." });
   if (!IMAGE_SIZES.has(imageSize)) return sendJson(res, 400, { error: "Unsupported image size." });
 
@@ -97,7 +119,10 @@ export default async function handler(req, res) {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: [
+            ...(sourceImage ? [{ inlineData: sourceImage }] : []),
+            { text: prompt }
+          ] }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
             responseFormat: { image: { aspectRatio, imageSize } }
