@@ -154,7 +154,9 @@ fn search_contents_in_capability(
         return Err("Search query must contain 1 to 256 characters.".into());
     }
     let (start_directory, root) = access.open_approved_directory(start)?;
-    let start_relative = start.strip_prefix(&root)
+    let canonical_start = std::fs::canonicalize(start)
+        .map_err(|error| format!("Could not resolve the search directory: {error}"))?;
+    let start_relative = canonical_start.strip_prefix(&root)
         .map_err(|_| "Search location is outside an approved directory.")?;
     let needle = query.to_lowercase();
     let mut pending: Vec<(CapabilityDir, PathBuf, usize)> =

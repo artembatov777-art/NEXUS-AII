@@ -399,11 +399,14 @@ pub fn revoke_workspace_directory(path: String, access: State<'_, WorkspaceAcces
     Ok(roots.iter().map(|root| root.to_string_lossy().into_owned()).collect())
 }
 
-#[tauri::command]
-pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) -> Result<Vec<WorkspaceEntry>, String> {
-    let requested = Path::new(&path);
+fn list_workspace_entries_capability(
+    access: &WorkspaceAccess,
+    requested: &Path,
+) -> Result<Vec<WorkspaceEntry>, String> {
     let (directory, root) = access.open_approved_directory(requested)?;
-    let relative = requested.strip_prefix(&root)
+    let canonical_requested = fs::canonicalize(requested)
+        .map_err(|error| format!("Could not resolve the requested directory: {error}"))?;
+    let relative = canonical_requested.strip_prefix(&root)
         .map_err(|_| "The requested location is outside an approved directory.")?;
     let visible_directory = root.join(relative);
     let mut entries = Vec::new();
@@ -445,6 +448,11 @@ pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) 
     }
     entries.sort_by(|a, b| (a.kind != "directory").cmp(&(b.kind != "directory")).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
     Ok(entries)
+}
+
+#[tauri::command]
+pub fn list_workspace_entries(path: String, access: State<'_, WorkspaceAccess>) -> Result<Vec<WorkspaceEntry>, String> {
+    list_workspace_entries_capability(&access, Path::new(&path))
 }
 
 const MAX_SEARCH_VISITED_ENTRIES: usize = 5_000;
@@ -524,7 +532,9 @@ fn search_workspace_entries_capability(
         return Err("Search query must contain 1 to 256 characters.".into());
     }
     let (start_directory, root) = access.open_approved_directory(start)?;
-    let start_relative = start.strip_prefix(&root)
+    let canonical_start = fs::canonicalize(start)
+        .map_err(|error| format!("Could not resolve the search directory: {error}"))?;
+    let start_relative = canonical_start.strip_prefix(&root)
         .map_err(|_| "Search location is outside an approved directory.")?;
     let needle = query.to_lowercase();
     let mut pending: Vec<(CapabilityDir, PathBuf, usize)> =
@@ -1198,6 +1208,28 @@ mod tests {
         let access = WorkspaceAccess::load(persistence_path);
         assert!(access.roots.lock().expect("lock roots").is_empty());
         fs::remove_dir_all(&base).expect("cleanup");
+    }
+
+    #[test]
+    fn workspace_listing_and_name_search_accept_canonical_root_aliases() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-canonical-alias-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        fs::create_dir_all(root.join("notes")).expect("create approved directory");
+        fs::write(root.join("notes").join("meeting.md"), "needle").expect("write note");
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).expect("canonical root")],
+            base.join("permissions.json"),
+        );
+
+        let entries = list_workspace_entries_capability(&access, &root).expect("list approved directory");
+        assert!(entries.iter().any(|entry| entry.name == "notes"));
+        let results = search_workspace_entries_capability(&access, &root, "meeting")
+            .expect("search approved directory");
+        assert!(results.iter().any(|entry| entry.name == "meeting.md"));
+
+        fs::remove_dir_all(base).expect("cleanup");
     }
 
     #[test]

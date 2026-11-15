@@ -269,10 +269,12 @@ fn relocate_entry(
     // path follows a final symlink and can redirect a rename to a different file.
     let source_name = source_path.file_name()
         .ok_or_else(|| "The selected entry has no valid name.".to_string())?;
-    let (source_directory, source_root) = access.open_approved_directory(
-        source_path.parent().ok_or_else(|| "The selected entry has no parent directory.".to_string())?
-    )?;
-    let source = source_path.to_path_buf();
+    let source_parent = source_path.parent()
+        .ok_or_else(|| "The selected entry has no parent directory.".to_string())?;
+    let (source_directory, source_root) = access.open_approved_directory(source_parent)?;
+    let canonical_source_parent = fs::canonicalize(source_parent)
+        .map_err(|error| format!("Could not resolve the selected entry's parent directory: {error}"))?;
+    let source = canonical_source_parent.join(source_name);
     let source_metadata = source_directory.symlink_metadata(source_name)
         .map_err(|error| format!("Could not inspect the selected entry: {error}"))?;
     if source_metadata.file_type().is_symlink() || (!source_metadata.is_file() && !source_metadata.is_dir()) {
@@ -286,7 +288,11 @@ fn relocate_entry(
     if destination_root != source_root {
         return Err("Move and rename operations must stay inside the same approved directory.".into());
     }
-    let destination = destination_directory.to_path_buf();
+    let destination = fs::canonicalize(destination_directory)
+        .map_err(|error| format!("Could not resolve the destination directory: {error}"))?;
+    if !destination.starts_with(&source_root) {
+        return Err("Move and rename operations must stay inside the same approved directory.".into());
+    }
     if source_metadata.is_dir() && destination.starts_with(&source) {
         return Err("A directory cannot be moved into itself or one of its subdirectories.".into());
     }
