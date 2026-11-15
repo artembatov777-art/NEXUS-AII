@@ -274,19 +274,13 @@ fn describe_journaled_path(access: &WorkspaceAccess, path: &Path) -> String {
     let Some(parent) = path.parent() else {
         return "invalid path".into();
     };
-    let Ok(root) = access.allowed_root_for(parent) else {
-        return "outside approved directory or unavailable".into();
-    };
-    let Ok(canonical_parent) = fs::canonicalize(parent) else {
-        return "parent directory unavailable".into();
-    };
-    if !canonical_parent.starts_with(&root) {
-        return "outside approved directory".into();
-    }
     let Some(name) = path.file_name() else {
         return "invalid path".into();
     };
-    match fs::symlink_metadata(canonical_parent.join(name)) {
+    let Ok((directory, _root)) = access.open_approved_directory(parent) else {
+        return "outside approved directory or unavailable".into();
+    };
+    match directory.symlink_metadata(name) {
         Ok(metadata) if metadata.file_type().is_symlink() => "link (not followed)".into(),
         Ok(metadata) if metadata.is_file() => "regular file".into(),
         Ok(metadata) if metadata.is_dir() => "directory".into(),
@@ -301,15 +295,9 @@ fn rollback_entry(access: &WorkspaceAccess, entry: &RenameEntry) -> Result<(), S
         .ok_or_else(|| "A journaled source has no parent directory.".to_string())?;
     let destination_parent = entry.destination.parent()
         .ok_or_else(|| "A journaled destination has no parent directory.".to_string())?;
-    let source_root = access.allowed_root_for(source_parent)?;
-    let destination_root = access.allowed_root_for(destination_parent)?;
-    let canonical_source_parent = fs::canonicalize(source_parent)
-        .map_err(|error| format!("Could not resolve a journaled source directory: {error}"))?;
-    let canonical_destination_parent = fs::canonicalize(destination_parent)
-        .map_err(|error| format!("Could not resolve a journaled destination directory: {error}"))?;
-    if source_root != destination_root
-        || !canonical_source_parent.starts_with(&source_root)
-        || !canonical_destination_parent.starts_with(&source_root) {
+    let (source_directory, source_root) = access.open_approved_directory(source_parent)?;
+    let (destination_directory, destination_root) = access.open_approved_directory(destination_parent)?;
+    if source_root != destination_root {
         return Err("A journaled operation no longer resolves inside its original approved directory.".into());
     }
 
@@ -317,11 +305,9 @@ fn rollback_entry(access: &WorkspaceAccess, entry: &RenameEntry) -> Result<(), S
         .ok_or_else(|| "A journaled source has no valid name.".to_string())?;
     let destination_name = entry.destination.file_name()
         .ok_or_else(|| "A journaled destination has no valid name.".to_string())?;
-    let source = canonical_source_parent.join(source_name);
-    let destination = canonical_destination_parent.join(destination_name);
 
-    let source_metadata = fs::symlink_metadata(&source);
-    let destination_metadata = fs::symlink_metadata(&destination);
+    let source_metadata = source_directory.symlink_metadata(source_name);
+    let destination_metadata = destination_directory.symlink_metadata(destination_name);
     match (source_metadata, destination_metadata) {
         (Ok(source_meta), Err(destination_error))
             if destination_error.kind() == std::io::ErrorKind::NotFound
@@ -329,8 +315,11 @@ fn rollback_entry(access: &WorkspaceAccess, entry: &RenameEntry) -> Result<(), S
         (Err(source_error), Ok(destination_meta))
             if source_error.kind() == std::io::ErrorKind::NotFound
                 && destination_meta.is_file() && !destination_meta.file_type().is_symlink() => {
-                    crate::workspace_fs_ops::rename_no_replace(&destination, &source)
-                        .map_err(|error| format!("Could not restore a renamed file to its original name: {error}"))
+                    crate::workspace_fs_ops::rename_no_replace_at(
+                        &destination_directory, destination_name,
+                        &source_directory, source_name,
+                        &entry.destination, &entry.source,
+                    ).map_err(|error| format!("Could not restore a renamed file to its original name: {error}"))
                 }
         (Ok(_), Ok(_)) => Err("Both original and renamed paths exist; recovery will not overwrite either file.".into()),
         (Err(source_error), Err(destination_error))
