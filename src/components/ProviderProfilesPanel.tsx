@@ -6,7 +6,7 @@ import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../l
 import { PROVIDER_PRESETS, getProviderPreset } from "../lib/providerPresets";
 import {
   loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveProviderProfiles,
-  upsertProviderProfile, type ProviderProfileRecord
+  upsertProviderProfile, validateProviderProfile, type ProviderProfileRecord
 } from "../lib/providerProfiles";
 
 export function ProviderProfilesPanel({
