@@ -86,6 +86,9 @@ export function VoiceControls({
         if (recognition.current === instance) setListening(true);
       };
       instance.onresult = event => {
+        // Some browser speech engines can deliver a late result after stop/abort.
+        // Ignore callbacks from a recognition session that is no longer active.
+        if (recognition.current !== instance) return;
         let finalText = "";
         let partialText = "";
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -247,6 +250,9 @@ export function VoiceControls({
       instance.interimResults = true;
       instance.onstart = () => { if (recognition.current === instance) setListening(true); };
       instance.onresult = event => {
+        // Some browser speech engines can deliver a late result after stop/abort.
+        // Ignore callbacks from a recognition session that is no longer active.
+        if (recognition.current !== instance) return;
         let finalText = "";
         let partialText = "";
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
