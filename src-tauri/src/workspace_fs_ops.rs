@@ -205,7 +205,11 @@ pub(crate) fn rename_no_replace_at(
         if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Only regular files and directories can be moved."));
         }
-        let flags = 0x0020_0000 | if metadata.is_dir() { 0x0200_0000 } else { 0 };
+        // The source handle was already opened with FollowSymlinks::No, so
+        // ReOpenFile must not request OPEN_REPARSE_POINT again. Windows rejects
+        // that flag for some existing handles with ERROR_SHARING_VIOLATION.
+        // ReOpenFile only needs BACKUP_SEMANTICS for directories.
+        let flags = if metadata.is_dir() { 0x0200_0000 } else { 0 };
         let renamed_handle = unsafe {
             ReOpenFile(
                 source_file.as_raw_handle() as HANDLE,
