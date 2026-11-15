@@ -293,17 +293,18 @@ export function createTauriAutoModelRouterForProfiles(
   routeMode: "auto" | "manual" = "auto"
 ): ModelRouter | null {
   if (!isTauri() || profiles.length === 0) return null;
-  const router = new ModelRouter();
+  const providerRouter = new ModelRouter();
   for (const profile of profiles) {
     if (!profile.id.trim() || profile.id.length > 128 || !profile.settings.baseUrl.trim()) {
       throw new Error("Provider profile ID and endpoint are required.");
     }
-    const registered = router.register(new TauriModelProvider(profile.id, { ...profile.settings }));
+    const registered = providerRouter.register(new TauriModelProvider(profile.id, { ...profile.settings }));
     if (!registered.ok) throw new Error(registered.error.message);
   }
-  const aggregate = router.register(new TaskAwareModelProvider(router, profiles, preferredProviderId, routeMode));
+  const applicationRouter = new ModelRouter();
+  const aggregate = applicationRouter.register(new TaskAwareModelProvider(providerRouter, profiles, preferredProviderId, routeMode));
   if (!aggregate.ok) throw new Error(aggregate.error.message);
-  return router;
+  return applicationRouter;
 }
 
 /** Default single-endpoint adapter retained for explicit provider checks and tests. */
