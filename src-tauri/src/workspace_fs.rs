@@ -420,6 +420,7 @@ const MAX_SEARCH_VISITED_ENTRIES: usize = 5_000;
 const MAX_SEARCH_RESULTS: usize = 100;
 const MAX_SEARCH_DEPTH: usize = 12;
 
+#[cfg(test)]
 fn search_workspace_entries_in(root: &Path, start: &Path, query: &str) -> Result<Vec<WorkspaceEntry>, String> {
     if query.trim().is_empty() || query.len() > 256 {
         return Err("Search query must contain 1 to 256 characters.".into());
