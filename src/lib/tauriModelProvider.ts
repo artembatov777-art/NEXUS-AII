@@ -235,33 +235,40 @@ class TaskAwareModelProvider implements ModelProvider {
   listModels() { return this.router.listModels(); }
 
   async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
-    const catalog = await this.router.listModels();
-    if (!catalog.ok) throw Object.assign(new Error(catalog.error.message), {
-      code: catalog.error.code, retryable: catalog.error.retryable
-    });
     const task = classifyModelTask(request.messages);
     const candidates: ModelRouteCandidate[] = [];
     const sameRoute = this.profiles.filter(profile => profile.settings.inferenceLocation === this.allowedLocation);
     const eligible = this.routeMode === "manual" && this.preferredProviderId
       ? sameRoute.filter(profile => profile.id === this.preferredProviderId)
       : sameRoute;
-    for (const profile of eligible) {
-      const available = catalog.value.filter(model => model.providerId === profile.id);
+    // Discover only eligible profiles. In manual mode or when the active route
+    // is local, do not even probe unrelated cloud endpoints.
+    const discoveries = await Promise.all(eligible.map(async profile => {
+      const resolved = this.router.getProvider(profile.id);
+      if (!resolved.ok) return { profile, models: [], error: resolved.error };
+      const result = await resolved.value.listModels();
+      return result.ok
+        ? { profile, models: result.value, error: null }
+        : { profile, models: [], error: result.error };
+    }));
+    for (const discovery of discoveries) {
+      const available = discovery.models;
       if (!available.length) continue;
-      const chosen = available.find(model => model.id === profile.settings.model) ?? available[0];
+      const chosen = available.find(model => model.id === discovery.profile.settings.model) ?? available[0];
       if (!chosen) continue;
       candidates.push({
-        providerId: profile.id,
+        providerId: discovery.profile.id,
         modelId: chosen.id,
-        family: providerFamily(profile.settings)
+        family: providerFamily(discovery.profile.settings)
       });
     }
     const ordered = orderModelRouteCandidates(candidates, task,
       this.routeMode === "manual" ? this.preferredProviderId : undefined);
     if (!ordered.length) {
-      const failed = this.router.getProviderFailures();
-      const detail = failed.map(item => item.providerId + ": " + item.message).join("\\n");
-      throw new Error(detail || "No configured provider returned a verified model catalog.");
+      const detail = discoveries.flatMap(item => item.error
+        ? [item.profile.id + ": " + item.error.message]
+        : []).join("\\n");
+      throw new Error(detail || "No eligible provider returned a verified model catalog.");
     }
     yield* streamWithModelFailover(this.router, ordered, {
       messages: request.messages,
