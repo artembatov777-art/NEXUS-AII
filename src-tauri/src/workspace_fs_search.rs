@@ -1,4 +1,5 @@
-use crate::workspace_fs::open_regular_file_readonly;
+use crate::workspace_fs::{open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use cap_std::fs::Dir as CapabilityDir;
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -138,14 +139,107 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
     Ok(WorkspaceContentSearch { matches: matches_found, total_matches, scanned_files, truncated })
 }
 
+fn search_contents_in_capability(
+    access: &WorkspaceAccess,
+    start: &Path,
+    query: &str,
+) -> Result<WorkspaceContentSearch, String> {
+    if query.trim().is_empty() || query.len() > 256 {
+        return Err("Search query must contain 1 to 256 characters.".into());
+    }
+    let (start_directory, root) = access.open_approved_directory(start)?;
+    let start_relative = start.strip_prefix(&root)
+        .map_err(|_| "Search location is outside an approved directory.")?;
+    let needle = query.to_lowercase();
+    let mut pending: Vec<(CapabilityDir, PathBuf, usize)> =
+        vec![(start_directory, start_relative.to_path_buf(), 0)];
+    let mut matches_found = Vec::new();
+    let mut scanned_files = 0usize;
+    let mut total_matches = 0usize;
+    let mut truncated = false;
+
+    'walk: while let Some((directory, relative_directory, depth)) = pending.pop() {
+        let iterator = match directory.entries() {
+            Ok(value) => value,
+            Err(_) => { truncated = true; continue; }
+        };
+        for entry in iterator {
+            if scanned_files + pending.len() >= MAX_SEARCH_FILES {
+                truncated = true;
+                break 'walk;
+            }
+            let name = entry.file_name();
+            let metadata = match directory.symlink_metadata(&name) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if metadata.file_type().is_symlink() { continue; }
+            if metadata.is_dir() {
+                if !excluded_directory(&name.to_string_lossy()) {
+                    if depth < MAX_SEARCH_DEPTH {
+                        if let Ok(child) = directory.open_dir(&name) {
+                            pending.push((child, relative_directory.join(&name), depth + 1));
+                        }
+                    } else {
+                        truncated = true;
+                    }
+                }
+                continue;
+            }
+            if !metadata.is_file() { continue; }
+            if scanned_files >= MAX_SEARCH_FILES {
+                truncated = true;
+                break 'walk;
+            }
+            scanned_files += 1;
+            if metadata.len() > MAX_FILE_BYTES { continue; }
+
+            let file = match open_capability_file(&directory, &name, true, false, false) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            let opened_metadata = match file.metadata() {
+                Ok(value) if value.is_file() => value,
+                _ => continue,
+            };
+            if opened_metadata.len() > MAX_FILE_BYTES { continue; }
+            let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
+            if file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).is_err()
+                || bytes.len() as u64 > MAX_FILE_BYTES {
+                continue;
+            }
+            let content = match String::from_utf8(bytes) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+
+            for (index, line) in content.lines().enumerate() {
+                if line.to_lowercase().contains(&needle) {
+                    total_matches += 1;
+                    if matches_found.len() < MAX_SEARCH_RESULTS {
+                        let preview: String = line.trim().chars().take(MAX_PREVIEW_CHARS).collect();
+                        matches_found.push(WorkspaceContentMatch {
+                            path: root.join(&relative_directory).join(&name).to_string_lossy().into_owned(),
+                            line_number: index + 1,
+                            preview,
+                        });
+                    } else {
+                        truncated = true;
+                    }
+                }
+            }
+        }
+    }
+    Ok(WorkspaceContentSearch { matches: matches_found, total_matches, scanned_files, truncated })
+}
+
 #[tauri::command]
 pub fn search_workspace_contents(
     path: String,
     query: String,
     access: State<'_, crate::workspace_fs::WorkspaceAccess>,
 ) -> Result<WorkspaceContentSearch, String> {
-    let root = access.allowed_root_for(Path::new(&path))?;
-    search_contents_in(&root, Path::new(&path), &query)
+    search_contents_in_capability(&access, Path::new(&path), &query)
 }
 
 #[cfg(test)]
@@ -185,6 +279,29 @@ mod tests {
         fs::remove_dir_all(root).expect("cleanup");
     }
 
+
+    #[cfg(unix)]
+    #[test]
+    fn capability_content_search_rejects_parent_symlink_replacement() {
+        use std::sync::Mutex;
+        use std::os::unix::fs::symlink;
+        let root = temporary_root("capability-parent");
+        let parent = root.join("documents");
+        let outside = temporary_root("capability-outside");
+        fs::create_dir_all(&parent).expect("create approved parent");
+        fs::write(parent.join("inside.txt"), "needle inside").expect("write approved file");
+        fs::write(outside.join("outside.txt"), "needle outside").expect("write outside file");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: root.join("permissions.json"),
+        };
+        fs::rename(&parent, root.join("documents-original")).expect("move approved parent");
+        symlink(&outside, &parent).expect("replace parent with outside symlink");
+        assert!(search_contents_in_capability(&access, &parent, "needle").is_err());
+        assert_eq!(fs::read_to_string(outside.join("outside.txt")).unwrap(), "needle outside");
+        fs::remove_dir_all(root).expect("cleanup approved root");
+        fs::remove_dir_all(outside).expect("cleanup outside root");
+    }
 
     #[cfg(unix)]
     #[test]
