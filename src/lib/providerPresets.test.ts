@@ -16,6 +16,7 @@ describe("provider presets", () => {
 
   it("returns a preset by stable ID and rejects unknown providers", () => {
     expect(getProviderPreset("deepseek")?.baseUrl).toBe("https://api.deepseek.com");
+    expect(getProviderPreset("xai")?.baseUrl).toBe("https://api.x.ai/v1");
     expect(getProviderPreset("anthropic")).toMatchObject({
       baseUrl: "https://api.anthropic.com/v1",
       protocol: "anthropic-messages"
