@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 const FILE_NAME = "provider-profiles.json";
 const MAX_PROFILES = 16;
 const MAX_FILE_BYTES = 64 * 1024;
+const MAX_DELETED_IDS = 256;
 let writeQueue = Promise.resolve();
 
 function isRecord(value) {
@@ -92,6 +93,21 @@ export function normalizeProviderProfiles(value) {
   return profiles;
 }
 
+function normalizeDeletedIds(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_DELETED_IDS) {
+    throw new Error("The deleted provider profile list is invalid.");
+  }
+  const ids = new Set();
+  for (const id of value) {
+    if (!validText(id, 128) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id)) {
+      throw new Error("The deleted provider profile list contains an invalid ID.");
+    }
+    ids.add(id);
+  }
+  return [...ids];
+}
+
 function dataFile() {
   const configured = process.env.NEXUS_DATA_DIR;
   if (!configured || !path.isAbsolute(configured)) {
@@ -121,14 +137,19 @@ async function readStore() {
   if (!isRecord(parsed) || parsed.schemaVersion !== 1) {
     throw new Error("The saved provider profile store has an unsupported schema.");
   }
-  return normalizeProviderProfiles(parsed.profiles);
+  const deletedProfileIds = normalizeDeletedIds(parsed.deletedProfileIds);
+  const deleted = new Set(deletedProfileIds);
+  return {
+    profiles: normalizeProviderProfiles(parsed.profiles).filter(profile => !deleted.has(profile.id)),
+    deletedProfileIds
+  };
 }
 
-async function writeStore(profiles) {
+async function writeStore(profiles, deletedProfileIds) {
   const file = dataFile();
   const directory = path.dirname(file);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const payload = JSON.stringify({ schemaVersion: 1, profiles });
+  const payload = JSON.stringify({ schemaVersion: 1, profiles, deletedProfileIds });
   if (Buffer.byteLength(payload, "utf8") > MAX_FILE_BYTES) {
     throw new Error("The saved provider profiles exceed the storage size limit.");
   }
@@ -147,10 +168,12 @@ export async function loadProviderProfilesFromServer() {
   return readStore();
 }
 
-export async function saveProviderProfilesToServer(profiles) {
-  const normalized = normalizeProviderProfiles(profiles);
-  const operation = writeQueue.then(() => writeStore(normalized));
+export async function saveProviderProfilesToServer(profiles, deletedIds = []) {
+  const deletedProfileIds = normalizeDeletedIds(deletedIds);
+  const deleted = new Set(deletedProfileIds);
+  const normalized = normalizeProviderProfiles(profiles).filter(profile => !deleted.has(profile.id));
+  const operation = writeQueue.then(() => writeStore(normalized, deletedProfileIds));
   writeQueue = operation.catch(() => undefined);
   await operation;
-  return normalized;
+  return { profiles: normalized, deletedProfileIds };
 }
