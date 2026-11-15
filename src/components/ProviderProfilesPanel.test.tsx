@@ -102,8 +102,7 @@ describe("ProviderProfilesPanel", () => {
         onSelect={onSelect}
         onDeleteCredential={onDeleteCredential}
       />);
-      await Promise.resolve();
-      await Promise.resolve();
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/profiles");
