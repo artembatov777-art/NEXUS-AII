@@ -289,7 +289,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn capability_content_search_rejects_parent_symlink_replacement() {
-        use std::sync::Mutex;
         use std::os::unix::fs::symlink;
         let root = temporary_root("capability-parent");
         let parent = root.join("documents");
@@ -297,10 +296,10 @@ mod tests {
         fs::create_dir_all(&parent).expect("create approved parent");
         fs::write(parent.join("inside.txt"), "needle inside").expect("write approved file");
         fs::write(outside.join("outside.txt"), "needle outside").expect("write outside file");
-        let access = WorkspaceAccess {
-            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
-            persistence_path: root.join("permissions.json"),
-        };
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).expect("canonical root")],
+            root.join("permissions.json"),
+        );
         fs::rename(&parent, root.join("documents-original")).expect("move approved parent");
         symlink(&outside, &parent).expect("replace parent with outside symlink");
         assert!(search_contents_in_capability(&access, &parent, "needle").is_err());
