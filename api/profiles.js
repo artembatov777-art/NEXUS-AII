@@ -49,8 +49,8 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     try {
-      const profiles = await loadProviderProfilesFromServer();
-      return sendJson(res, 200, { schemaVersion: 1, profiles });
+      const store = await loadProviderProfilesFromServer();
+      return sendJson(res, 200, { schemaVersion: 1, ...store });
     } catch (error) {
       return handleStoreError(res, error);
     }
@@ -68,12 +68,13 @@ export default async function handler(req, res) {
       return sendJson(res, error?.statusCode || 400, { error: error?.statusCode === 413 ? error.message : "Request body must contain valid JSON." });
     }
     if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
-        payload.schemaVersion !== 1 || !Array.isArray(payload.profiles)) {
+        payload.schemaVersion !== 1 || !Array.isArray(payload.profiles) ||
+        (payload.deletedProfileIds !== undefined && !Array.isArray(payload.deletedProfileIds))) {
       return sendJson(res, 400, { error: "Provider profile payload has an unsupported schema." });
     }
     try {
-      const profiles = await saveProviderProfilesToServer(payload.profiles);
-      return sendJson(res, 200, { schemaVersion: 1, profiles, saved: true });
+      const store = await saveProviderProfilesToServer(payload.profiles, payload.deletedProfileIds ?? []);
+      return sendJson(res, 200, { schemaVersion: 1, ...store, saved: true });
     } catch (error) {
       if (error?.code === "STORAGE_NOT_CONFIGURED") return handleStoreError(res, error);
       return sendJson(res, 400, { error: error instanceof Error ? error.message : "Provider profiles are invalid." });
