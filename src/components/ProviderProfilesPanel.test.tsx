@@ -40,7 +40,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 
 describe("ProviderProfilesPanel", () => {
-  it("applies a built-in compatible provider preset without connecting or storing a key", async () => {
+  it("routes browser-compatible provider presets through Vercel without connecting or storing a key", async () => {
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
     const select = container.querySelector<HTMLSelectElement>('[aria-label="Quick provider setup"]')!;
     await act(async () => {
@@ -48,10 +48,11 @@ describe("ProviderProfilesPanel", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: "https://api.deepseek.com",
+      baseUrl: "/api/provider/deepseek",
       model: "",
       inferenceLocation: "remote",
-      credentialHandle: "default"
+      credentialHandle: "default",
+      providerProtocol: "openai-chat-completions"
     }));
     expect(container.textContent).toContain("Claude uses the native Anthropic Messages adapter");
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
