@@ -92,7 +92,7 @@ export function ProviderProfilesPanel({
       setStatus(next.error.message);
       return;
     }
-    persist(next.value, selectedProfile.id);
+    if (persist(next.value, selectedProfile.id)) onSelect({ ...currentSettings });
   }
 
   async function deleteSelected() {
@@ -129,6 +129,8 @@ export function ProviderProfilesPanel({
     setStatus("Provider profile deleted.");
     if (hasDedicatedKey && currentSettings.credentialHandle === credentialHandle) {
       onSelect(DEFAULT_PROVIDER);
+    } else {
+      onSelect({ ...currentSettings });
     }
   }
 
