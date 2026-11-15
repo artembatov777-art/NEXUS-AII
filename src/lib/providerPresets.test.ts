@@ -3,8 +3,8 @@ import { DEFAULT_PROVIDER } from "../types";
 import { getProviderPreset, PROVIDER_PRESETS } from "./providerPresets";
 
 describe("provider presets", () => {
-  it("exposes only Gemini, DeepSeek and NVIDIA as hosted presets", () => {
-    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual(["gemini", "deepseek", "nvidia"]);
+  it("exposes Gemini, Groq and NVIDIA as hosted presets", () => {
+    expect(PROVIDER_PRESETS.map(preset => preset.id)).toEqual(["gemini", "groq", "nvidia"]);
     for (const preset of PROVIDER_PRESETS) {
       const url = new URL(preset.baseUrl);
       expect(url.protocol).toBe("https:");
@@ -16,9 +16,9 @@ describe("provider presets", () => {
 
   it("returns supported presets by stable ID and rejects removed providers", () => {
     expect(getProviderPreset("gemini")?.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
-    expect(getProviderPreset("deepseek")?.baseUrl).toBe("https://api.deepseek.com");
+    expect(getProviderPreset("groq")?.baseUrl).toBe("https://api.groq.com/openai/v1");
     expect(getProviderPreset("nvidia")?.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
-    for (const removed of ["openai", "xai", "mistral", "anthropic", "openrouter", "groq", "sambanova", "omniroute"]) {
+    for (const removed of ["openai", "xai", "mistral", "anthropic", "openrouter", "deepseek", "sambanova", "omniroute"]) {
       expect(getProviderPreset(removed)).toBeUndefined();
     }
   });
