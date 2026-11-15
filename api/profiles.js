@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "Provider profile payload has an unsupported schema." });
     }
     try {
-      const store = await saveProviderProfilesToServer(payload.profiles, payload.deletedProfileIds ?? []);
+      const store = await saveProviderProfilesToServer(payload.profiles, payload.deletedProfileIds);
       return sendJson(res, 200, { schemaVersion: 1, ...store, saved: true });
     } catch (error) {
       if (error?.code === "STORAGE_NOT_CONFIGURED") return handleStoreError(res, error);
