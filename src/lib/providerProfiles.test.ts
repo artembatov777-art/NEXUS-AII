@@ -38,6 +38,33 @@ describe("provider profile persistence", () => {
     expect(loadProviderProfiles(storage)).toEqual({ ok: true, value: [ollama, cloud] });
   });
 
+  it("accepts only the trusted same-origin hosted gateway routes", () => {
+    for (const provider of ["gemini", "deepseek", "nvidia"]) {
+      expect(validateProviderProfile({
+        id: `nexus.${provider}`,
+        label: provider,
+        settings: {
+          baseUrl: `/api/provider/${provider}`,
+          model: "model-a",
+          inferenceLocation: "remote",
+          credentialHandle: "default",
+          providerProtocol: "openai-chat-completions"
+        }
+      })).toMatchObject({ ok: true });
+    }
+
+    expect(validateProviderProfile({
+      id: "nexus.untrusted",
+      label: "Untrusted",
+      settings: {
+        baseUrl: "/api/other/route",
+        model: "model-a",
+        inferenceLocation: "remote",
+        credentialHandle: "default"
+      }
+    })).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+
   it("rejects non-loopback no-key profiles and insecure remote HTTP endpoints", () => {
     expect(validateProviderProfile({
       ...ollama, settings: { ...ollama.settings, baseUrl: "https://api.example/v1" }
