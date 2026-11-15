@@ -5,7 +5,7 @@ import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
 import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
 import { PROVIDER_PRESETS, getProviderPreset } from "../lib/providerPresets";
 import {
-  loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveProviderProfiles,
+  loadDeletedProviderProfileIds, loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveDeletedProviderProfileIds, saveProviderProfiles,
   upsertProviderProfile, validateProviderProfile, type ProviderProfileRecord
 } from "../lib/providerProfiles";
 
@@ -43,30 +43,40 @@ export function ProviderProfilesPanel({
       void (async () => {
         try {
           const response = await fetch("/api/profiles", { credentials: "same-origin" });
-          const payload = await response.json() as { profiles?: unknown[]; error?: string };
+          const payload = await response.json() as { profiles?: unknown[]; deletedProfileIds?: unknown[]; error?: string };
           if (!response.ok || !Array.isArray(payload.profiles)) {
             throw new Error(payload.error || "Cloud profile storage is unavailable.");
           }
+          const remoteDeleted = Array.isArray(payload.deletedProfileIds)
+            ? payload.deletedProfileIds.filter((id): id is string =>
+              typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id))
+            : [];
+          const deletedProfileIds = [...new Set([...loadDeletedProviderProfileIds(), ...remoteDeleted])].slice(-256);
+          const tombstonesSaved = saveDeletedProviderProfileIds(deletedProfileIds);
+          if (!tombstonesSaved.ok) throw new Error(tombstonesSaved.error.message);
+          const deleted = new Set(deletedProfileIds);
           const remote: ProviderProfileRecord[] = [];
           for (const item of payload.profiles) {
             const validated = validateProviderProfile(item);
             if (!validated.ok) throw new Error("The cloud profile store contains an invalid profile.");
-            remote.push(validated.value);
+            if (!deleted.has(validated.value.id)) remote.push(validated.value);
           }
           const mergedById = new Map(remote.map(profile => [profile.id, profile]));
           for (const local of loaded.value) {
+            if (deleted.has(local.id)) continue;
             const cloud = mergedById.get(local.id);
             if (!cloud || (local.updatedAt ?? 0) > (cloud.updatedAt ?? 0)) mergedById.set(local.id, local);
           }
           const merged = [...mergedById.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
           const localSaved = saveProviderProfiles(merged);
           if (!localSaved.ok) throw new Error(localSaved.error.message);
-          if (JSON.stringify(merged) !== JSON.stringify(remote)) {
+          if (JSON.stringify(merged) !== JSON.stringify(remote) ||
+              JSON.stringify(deletedProfileIds) !== JSON.stringify(remoteDeleted)) {
             const uploaded = await fetch("/api/profiles", {
               method: "PUT",
               credentials: "same-origin",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ schemaVersion: 1, profiles: merged })
+              body: JSON.stringify({ schemaVersion: 1, profiles: merged, deletedProfileIds })
             });
             const result = await uploaded.json() as { error?: string };
             if (!uploaded.ok) throw new Error(result.error || "Could not upload local profiles to cloud storage.");
@@ -107,7 +117,7 @@ export function ProviderProfilesPanel({
         method: "PUT",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schemaVersion: 1, profiles: next })
+        body: JSON.stringify({ schemaVersion: 1, profiles: next, deletedProfileIds: loadDeletedProviderProfileIds() })
       }).then(async response => {
         const payload = await response.json() as { error?: string };
         if (!response.ok) throw new Error(payload.error || "Cloud synchronization failed.");
@@ -189,6 +199,13 @@ export function ProviderProfilesPanel({
         return;
       }
     }
+    const deletedProfileIds = [...new Set([...loadDeletedProviderProfileIds(), selectedProfile.id])].slice(-256);
+    const tombstonesSaved = saveDeletedProviderProfileIds(deletedProfileIds);
+    if (!tombstonesSaved.ok) {
+      saveProviderProfiles(profiles);
+      setStatus(tombstonesSaved.error.message);
+      return;
+    }
     setProfiles(next.value);
     setSelectedId("");
     setStatus("Provider profile deleted on this device.");
@@ -197,7 +214,7 @@ export function ProviderProfilesPanel({
         method: "PUT",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schemaVersion: 1, profiles: next.value })
+        body: JSON.stringify({ schemaVersion: 1, profiles: next.value, deletedProfileIds })
       }).then(async response => {
         const payload = await response.json() as { error?: string };
         if (!response.ok) throw new Error(payload.error || "Cloud synchronization failed.");
