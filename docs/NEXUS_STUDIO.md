@@ -9,7 +9,7 @@ NEXUS Studio is a workspace layer, not a claim that every card is an autonomous 
 | Daily Briefing | Builds a live summary from open inbox items, projects, and the three most recently updated conversations | Derived locally from loaded workspace state; no scheduled background report |
 | Universal Inbox | Captures titled notes and ideas, searches saved titles and bodies, filters open/completed items, marks items complete, deletes items, and persists the list | Browser local storage on the current device; not yet synchronized with native SQLite or other devices |
 | Knowledge Graph | Combines current project/conversation context with owner-created concept nodes and manually created relationships | Owner-created nodes and edges persist in browser local storage; project/conversation context is read-only |
-| Workflow Studio | Creates reusable checklists, tracks step completion, and persists workflow definitions | Checklist tracking only; it does not execute arbitrary tools or automation jobs |
+| Workflow Studio | Creates reusable checklists, tracks step completion, persists workflow definitions, and hands a checklist to the existing Agent Command Center as an explicit task | The handoff pre-fills an agent goal; the owner must start the run and approve tool actions. It does not run unattended workflows |
 | Focus Mode | Toggles the existing distraction-reduced workspace presentation | Uses the app's existing focus-mode state |
 | Workspace Analytics | Calculates conversation, message, project, and inbox counts from loaded local records | No external analytics service; no inferred productivity score |
 | Agent Command Center | Opens the existing agent runtime, approval, checkpoint, and trace interface | Execution is governed by existing agent budgets, tool permissions, and approval gates |
@@ -31,7 +31,7 @@ The following are not implemented by the current Studio UI and must not be descr
 - scheduled/background Daily Briefing delivery;
 - cross-device inbox or graph synchronization;
 - automatic semantic graph extraction from all documents;
-- arbitrary workflow execution or unattended tool access;
+- unattended workflow execution or automatic tool approval;
 - productivity scoring or external telemetry;
 - always-on voice listening or offline speech recognition;
 - background health monitoring and automatic remediation.
