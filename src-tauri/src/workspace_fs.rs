@@ -281,13 +281,20 @@ impl WorkspaceAccess {
         )) {
             return Err("The requested path contains an invalid directory traversal.".into());
         }
-        let root_handle = open_approved_root_handle(&root)?;
-        let directory = if relative.as_os_str().is_empty() {
-            root_handle
-        } else {
-            root_handle.open_dir_nofollow(relative)
-                .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?
-        };
+        let mut directory = open_approved_root_handle(&root)?;
+        // Resolve one component at a time. open_dir_nofollow only rejects the
+        // component it opens, so passing a multi-component path could still
+        // traverse an intermediate symlink on some hosts.
+        for component in relative.components() {
+            match component {
+                std::path::Component::Normal(name) => {
+                    directory = directory.open_dir_nofollow(name)
+                        .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?;
+                }
+                std::path::Component::CurDir => {}
+                _ => return Err("The requested path contains an invalid directory traversal.".into()),
+            }
+        }
         Ok((directory, root))
     }
 
@@ -878,6 +885,29 @@ mod tests {
         let result = write_workspace_file_inner(target.to_str().unwrap(), "stale draft", Some("original"), &access);
         assert!(result.unwrap_err().contains("removed or moved"));
         assert!(!target.exists());
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn approved_directory_open_rejects_intermediate_symlinks() {
+        use std::os::unix::fs::symlink;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-intermediate-symlink-{}-{nonce}", std::process::id()));
+        let root = base.join("approved");
+        let outside = base.join("outside");
+        fs::create_dir_all(&root).expect("create approved root");
+        fs::create_dir_all(outside.join("nested")).expect("create outside nested directory");
+        symlink(&outside, root.join("redirect")).expect("create intermediate symlink");
+        let access = WorkspaceAccess {
+            roots: Mutex::new(vec![fs::canonicalize(&root).expect("canonical root")]),
+            persistence_path: base.join("permissions.json"),
+        };
+
+        let result = access.open_approved_directory(&root.join("redirect").join("nested"));
+        assert!(result.is_err(), "an intermediate symlink must not be followed even when its target is outside the approved root");
+        assert!(outside.join("nested").is_dir());
         fs::remove_dir_all(base).expect("cleanup");
     }
 
