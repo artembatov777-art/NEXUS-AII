@@ -14,7 +14,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
   { id: "gemini", label: "Google Gemini API", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", protocol: "openai-chat-completions" },
   { id: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com", protocol: "openai-chat-completions" },
   { id: "mistral", label: "Mistral AI", baseUrl: "https://api.mistral.ai/v1", protocol: "openai-chat-completions" },
-  { id: "xai", label: "xAI / Grok", baseUrl: "https://api.x.ai", protocol: "openai-chat-completions" },
+  { id: "xai", label: "xAI / Grok", baseUrl: "https://api.x.ai/v1", protocol: "openai-chat-completions" },
   { id: "anthropic", label: "Anthropic Claude", baseUrl: "https://api.anthropic.com/v1", protocol: "anthropic-messages" }
 ] as const;
 
