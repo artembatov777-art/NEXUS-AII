@@ -171,7 +171,10 @@ fn search_contents_in_capability(
             Err(_) => { truncated = true; continue; }
         };
         for entry in iterator {
-            let entry = match entry { Ok(value) => value, Err(_) => continue };
+            let entry = match entry {
+                Ok(value) => value,
+                Err(_) => { truncated = true; continue; }
+            };
             visited_entries += 1;
             if visited_entries > 5_000 {
                 truncated = true;
@@ -180,14 +183,15 @@ fn search_contents_in_capability(
             let name = entry.file_name();
             let metadata = match directory.symlink_metadata(&name) {
                 Ok(value) => value,
-                Err(_) => continue,
+                Err(_) => { truncated = true; continue; }
             };
             if metadata.file_type().is_symlink() { continue; }
             if metadata.is_dir() {
                 if !excluded_directory(&name.to_string_lossy()) {
                     if depth < MAX_SEARCH_DEPTH {
-                        if let Ok(child) = directory.open_dir_nofollow(&name) {
-                            pending.push((child, relative_directory.join(&name), depth + 1));
+                        match directory.open_dir_nofollow(&name) {
+                            Ok(child) => pending.push((child, relative_directory.join(&name), depth + 1)),
+                            Err(_) => truncated = true,
                         }
                     } else {
                         truncated = true;
@@ -201,21 +205,32 @@ fn search_contents_in_capability(
                 break 'walk;
             }
             scanned_files += 1;
-            if metadata.len() > MAX_FILE_BYTES { continue; }
+            if metadata.len() > MAX_FILE_BYTES {
+                truncated = true;
+                continue;
+            }
 
             let file = match open_capability_file(&directory, &name, true, false, false) {
                 Ok(value) => value,
-                Err(_) => continue,
+                Err(_) => { truncated = true; continue; }
             };
             let opened_metadata = match file.metadata() {
                 Ok(value) if value.is_file() => value,
-                _ => continue,
+                Ok(_) => continue,
+                Err(_) => { truncated = true; continue; }
             };
-            if opened_metadata.len() > MAX_FILE_BYTES { continue; }
-            if ensure_no_external_hard_links(&file).is_err() { continue; }
+            if opened_metadata.len() > MAX_FILE_BYTES {
+                truncated = true;
+                continue;
+            }
+            if ensure_no_external_hard_links(&file).is_err() {
+                truncated = true;
+                continue;
+            }
             let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
             if file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).is_err()
                 || bytes.len() as u64 > MAX_FILE_BYTES {
+                truncated = true;
                 continue;
             }
             let content = match String::from_utf8(bytes) {
@@ -328,6 +343,24 @@ mod tests {
 
         fs::remove_dir_all(root).expect("cleanup approved root");
         fs::remove_dir_all(outside).expect("cleanup outside root");
+    }
+
+    #[test]
+    fn reports_truncated_when_oversized_files_are_skipped() {
+        let root = temporary_root("oversized");
+        fs::write(root.join("large.txt"), vec![b'x'; MAX_FILE_BYTES as usize + 1])
+            .expect("write oversized text file");
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).expect("canonical root")],
+            root.join("permissions.json"),
+        );
+
+        let result = search_contents_in_capability(&access, &root, "needle").expect("search");
+        assert_eq!(result.scanned_files, 1);
+        assert!(result.matches.is_empty());
+        assert!(result.truncated, "skipping a file outside the search size budget must be disclosed");
+
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]
