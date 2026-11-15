@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertPersistentVolumeMounted } from "./persistentVolume.js";
 import { randomUUID } from "node:crypto";
 
 const FILE_NAME = "provider-profiles.json";
@@ -121,6 +122,7 @@ function dataFile() {
 async function readStore() {
   const file = dataFile();
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  await assertPersistentVolumeMounted(path.dirname(file));
   let raw;
   try {
     raw = await readFile(file, "utf8");
@@ -149,6 +151,7 @@ async function writeStore(profiles, deletedProfileIds) {
   const file = dataFile();
   const directory = path.dirname(file);
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  await assertPersistentVolumeMounted(directory);
   const payload = JSON.stringify({ schemaVersion: 1, profiles, deletedProfileIds });
   if (Buffer.byteLength(payload, "utf8") > MAX_FILE_BYTES) {
     throw new Error("The saved provider profiles exceed the storage size limit.");
