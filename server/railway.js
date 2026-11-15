@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import sessionHandler from "../api/session.js";
+import profilesHandler from "../api/profiles.js";
 import geminiHandler from "../api/gemini.js";
 import geminiImageHandler from "../api/gemini-image.js";
 import providerHandler from "../api/provider/[provider].js";
@@ -125,6 +126,7 @@ export function createNexusServer({ staticDir = DEFAULT_STATIC_DIR } = {}) {
 
     let handler;
     if (pathname === "/api/session") handler = sessionHandler;
+    else if (pathname === "/api/profiles") handler = profilesHandler;
     else if (pathname === "/api/gemini") handler = geminiHandler;
     else if (pathname === "/api/gemini-image") handler = geminiImageHandler;
     else if (/^\/api\/provider\/[a-z0-9_-]+$/i.test(pathname)) handler = providerHandler;
