@@ -290,6 +290,7 @@ describe("TauriModelProvider", () => {
       { id: "profile.remote", settings: { baseUrl: "https://api.anthropic.com/v1", model: "remote-model", inferenceLocation: "remote", credentialHandle: "default", providerProtocol: "anthropic-messages" } }
     ], "profile.local", "auto", "local");
     if (!router) throw new Error("Expected automatic provider router.");
+    await expect(router.listModels()).resolves.toMatchObject({ ok: true, value: [{ providerId: "profile.local", id: "local-model" }] });
     const events = [];
     for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
       model: "auto", messages: [{ role: "user", content: "Explain this code" }]
