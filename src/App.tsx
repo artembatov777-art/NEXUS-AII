@@ -155,7 +155,8 @@ export default function App() {
     const router = createTauriAutoModelRouterForProfiles(
       profiles,
       activeId,
-      provider.routeMode === "manual" ? "manual" : "auto"
+      provider.routeMode === "manual" ? "manual" : "auto",
+      provider.inferenceLocation
     );
     if (!router) return null;
     const service = new ConversationService(conversationRepository, {
