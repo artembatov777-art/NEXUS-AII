@@ -42,17 +42,17 @@ afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlo
 describe("ProviderProfilesPanel", () => {
   it("routes browser-compatible provider presets through Railway without connecting or storing a key", async () => {
     await act(async () => { root.render(<ProviderProfilesPanel currentSettings={localSettings} onSelect={onSelect} onDeleteCredential={onDeleteCredential}/>); });
-    const presetButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Use DeepSeek on Railway");
+    const presetButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Use Groq (free tier) on Railway");
     expect(presetButton).toBeTruthy();
     await act(async () => { presetButton!.click(); });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: "/api/provider/deepseek",
+      baseUrl: "/api/provider/groq",
       model: "",
       inferenceLocation: "remote",
       credentialHandle: "default",
       providerProtocol: "openai-chat-completions"
     }));
-    expect(container.textContent).toContain("Hosted providers: Gemini, DeepSeek and NVIDIA.");
+    expect(container.textContent).toContain("Hosted providers: Gemini, Groq and NVIDIA.");
     expect(window.localStorage.getItem("nexus-au:provider-profiles:v1")).toBeNull();
   });
 
