@@ -261,6 +261,36 @@ describe("TauriModelProvider", () => {
       .toEqual(["anthropic-messages", "openai-chat-completions"]);
   });
 
+  it("does not discover or send prompts to providers outside the declared privacy route", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockImplementation((command, args) => {
+      const input = args as { baseUrl?: string; onEvent?: { onmessage: (event: { type: "text_delta"; text: string } | { type: "completed"; finishReason: string }) => void } };
+      if (command === "list_provider_models") return Promise.resolve([input.baseUrl?.includes("11434") ? "local-model" : "remote-model"]);
+      if (command === "send_chat_stream") {
+        input.onEvent?.onmessage({ type: "text_delta", text: "Local only" });
+        input.onEvent?.onmessage({ type: "completed", finishReason: "stop" });
+        return Promise.resolve();
+      }
+      return Promise.resolve(true);
+    });
+    const router = createTauriAutoModelRouterForProfiles([
+      { id: "profile.local", settings: { baseUrl: "http://127.0.0.1:11434/v1", model: "local-model", inferenceLocation: "local", credentialHandle: "none" } },
+      { id: "profile.remote", settings: { baseUrl: "https://api.anthropic.com/v1", model: "remote-model", inferenceLocation: "remote", credentialHandle: "default", providerProtocol: "anthropic-messages" } }
+    ], "profile.local", "auto", "local");
+    if (!router) throw new Error("Expected automatic provider router.");
+    const events = [];
+    for await (const event of router.stream(NATIVE_MODEL_PROVIDER_ID, {
+      model: "auto", messages: [{ role: "user", content: "Explain this code" }]
+    })) events.push(event);
+    expect(events[0]).toMatchObject({ type: "text_delta", text: "Local only" });
+    const catalogCalls = mockedInvoke.mock.calls.filter(([command]) => command === "list_provider_models");
+    expect(catalogCalls).toHaveLength(1);
+    expect((catalogCalls[0][1] as { baseUrl: string }).baseUrl).toContain("11434");
+    const generationCalls = mockedInvoke.mock.calls.filter(([command]) => command === "send_chat_stream");
+    expect(generationCalls).toHaveLength(1);
+    expect((generationCalls[0][1] as { baseUrl: string }).baseUrl).toContain("11434");
+  });
+
   it("keeps browser preview disconnected from provider credentials", () => {
     mockedIsTauri.mockReturnValue(false);
     expect(createTauriModelRouter({ baseUrl: "https://api.example/v1", model: "model-a", inferenceLocation: "remote" })).toBeNull();
