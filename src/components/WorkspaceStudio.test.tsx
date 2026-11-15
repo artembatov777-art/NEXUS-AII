@@ -41,6 +41,33 @@ describe("NEXUS Studio", () => {
     expect(JSON.parse(localStorage.getItem("nexus-au:studio-inbox:v1") ?? "[]")).toHaveLength(1);
   });
 
+  it("filters inbox records by text and completion status", () => {
+    click("Inbox");
+    const title = container.querySelector<HTMLInputElement>('input[aria-label="Inbox title"]');
+    const note = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inbox note"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    const textSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (!title || !note || !setter || !textSetter) throw new Error("Inbox form is unavailable");
+    act(() => {
+      setter.call(title, "Project launch");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+      textSetter.call(note, "Prepare release notes");
+      note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click("Save to inbox");
+    expect(container.textContent).toContain("Project launch");
+    const search = container.querySelector<HTMLInputElement>('input[aria-label="Search inbox"]');
+    if (!search) throw new Error("Inbox search is unavailable");
+    act(() => { setter.call(search, "nonexistent"); search.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(container.textContent).toContain("No inbox items match this filter.");
+    act(() => { setter.call(search, ""); search.dispatchEvent(new Event("input", { bubbles: true })); });
+    click("Mark as complete");
+    click("Open (0)");
+    expect(container.textContent).toContain("No inbox items match this filter.");
+    click("Completed (1)");
+    expect(container.textContent).toContain("Project launch");
+  });
+
   it("creates persistent knowledge nodes", () => {
     click("Knowledge Graph");
     const node = container.querySelector<HTMLInputElement>('input[aria-label="New knowledge node"]');
