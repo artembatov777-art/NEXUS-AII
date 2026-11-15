@@ -25,6 +25,8 @@ export function ProviderProfilesPanel({
   const [label, setLabel] = useState("");
   const [status, setStatus] = useState("");
   const [persistentStorage, setPersistentStorage] = useState(false);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +43,7 @@ export function ProviderProfilesPanel({
 
     if (gatewaySessionReady && !isTauri()) {
       void (async () => {
+        setSyncing(true);
         try {
           const response = await fetch("/api/profiles", { credentials: "same-origin" });
           const payload = await response.json() as { profiles?: unknown[]; deletedProfileIds?: unknown[]; error?: string };
@@ -87,6 +90,8 @@ export function ProviderProfilesPanel({
         } catch (cause) {
           if (active) setStatus("Profiles remain saved on this device, but cloud synchronization failed: " +
             (cause instanceof Error ? cause.message : "Unknown synchronization error."));
+        } finally {
+          if (active) setSyncing(false);
         }
       })();
     }
@@ -94,7 +99,7 @@ export function ProviderProfilesPanel({
       if (active && result === true) setPersistentStorage(true);
     });
     return () => { active = false; };
-  }, [gatewaySessionReady]);
+  }, [gatewaySessionReady, syncAttempt]);
 
   const selectedProfile = useMemo(
     () => profiles.find(profile => profile.id === selectedId) ?? null,
@@ -292,6 +297,12 @@ export function ProviderProfilesPanel({
     <small>Profiles are saved on this device without an expiry date. {gatewaySessionReady && !isTauri() ? "Cloud synchronization is enabled for this remembered NEXUS device. " : "Remember the NEXUS device session to synchronize profiles across Safari, Home Screen and desktop browser. "}{persistentStorage
       ? "The browser has also granted persistent storage, protecting them from automatic eviction."
       : "They remain until you delete them or clear this app's/browser's site data. Private browsing may discard them."} API keys are never stored in profiles. Selecting a profile does not connect to it.</small>
+    {gatewaySessionReady && !isTauri() && <button
+      className="secondary-btn"
+      type="button"
+      onClick={() => setSyncAttempt(attempt => attempt + 1)}
+      disabled={syncing}
+    >{syncing ? t("Synchronizing profiles…") : t("Sync profiles now")}</button>}
     {status && <small role="status">{t(status)}</small>}
   </section>;
 }
