@@ -125,7 +125,7 @@ async function readStore() {
   try {
     raw = await readFile(file, "utf8");
   } catch (error) {
-    if (error && error.code === "ENOENT") return [];
+    if (error && error.code === "ENOENT") return { profiles: [], deletedProfileIds: [] };
     throw error;
   }
   if (Buffer.byteLength(raw, "utf8") > MAX_FILE_BYTES) {
