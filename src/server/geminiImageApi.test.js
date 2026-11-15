@@ -48,6 +48,19 @@ describe("POST /api/gemini-image", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("accepts a remembered NEXUS session cookie for image generation", async () => {
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]).toString("base64");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: png } }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const res = response();
+    await handler(request({
+      headers: { authorization: "", cookie: "nexus_gateway=test-access-token" },
+      body: { prompt: "A quiet landscape", allowRemoteProcessing: true }
+    }), res);
+    expect(res.statusCode).toBe(200);
+  });
+
   it("rejects empty, oversized, and invalid image options before contacting Google", async () => {
     for (const body of [
       { prompt: "A cat" },
