@@ -6,6 +6,7 @@ const MAX_MESSAGE_CHARS = 12_000;
 const MAX_SYSTEM_CHARS = 24_000;
 const PROVIDERS = Object.freeze({
   openai: { baseUrl: "https://api.openai.com/v1", keyName: "OPENAI_API_KEY" },
+  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", keyName: "GEMINI_API_KEY" },
   xai: { baseUrl: "https://api.x.ai/v1", keyName: "XAI_API_KEY" },
   deepseek: { baseUrl: "https://api.deepseek.com", keyName: "DEEPSEEK_API_KEY" },
   mistral: { baseUrl: "https://api.mistral.ai/v1", keyName: "MISTRAL_API_KEY" },
@@ -101,7 +102,7 @@ export default async function handler(req, res) {
   const provider = resolveProvider(req);
   if (!provider) return sendJson(res, 404, { error: "Unsupported hosted provider." });
   const apiKey = process.env[provider.keyName];
-  if (!apiKey) return sendJson(res, 503, { error: "This provider is not configured in the NEXUS Vercel environment." });
+  if (!apiKey) return sendJson(res, 503, { error: "This provider is not configured in the NEXUS server environment." });
   let baseUrl = provider.baseUrl;
   if (provider.hostedEndpoint) {
     try {
