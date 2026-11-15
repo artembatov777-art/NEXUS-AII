@@ -1,4 +1,7 @@
 use serde::Serialize;
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
+use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -116,6 +119,63 @@ fn create_workspace_permissions_temp(path: &Path) -> Result<(PathBuf, fs::File),
     Err("Could not create a unique temporary workspace permissions file.".into())
 }
 
+fn open_approved_root_handle(root: &Path) -> Result<CapabilityDir, String> {
+    let canonical = fs::canonicalize(root)
+        .map_err(|error| format!("Could not verify the approved directory: {error}"))?;
+    if canonical != root {
+        return Err("The approved directory path changed and must be approved again.".into());
+    }
+
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_DIRECTORY);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Open the directory itself, not a reparse-point target. Omitting
+        // FILE_SHARE_DELETE pins the directory while its capability is used.
+        options.custom_flags(0x0020_0000 | 0x0200_0000);
+        options.share_mode(0x0000_0001 | 0x0000_0002);
+    }
+    let file = options.open(root)
+        .map_err(|error| format!("Could not pin the approved directory: {error}"))?;
+    let metadata = file.metadata()
+        .map_err(|error| format!("Could not inspect the approved directory handle: {error}"))?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err("The approved workspace root is no longer a regular directory.".into());
+    }
+    if fs::canonicalize(root).map_err(|error| error.to_string())? != root {
+        return Err("The approved directory changed while NEXUS was opening it.".into());
+    }
+    Ok(CapabilityDir::from_std_file(file))
+}
+
+fn open_capability_file(
+    directory: &CapabilityDir,
+    name: &std::ffi::OsStr,
+    read: bool,
+    write: bool,
+    create_new: bool,
+) -> Result<fs::File, String> {
+    let mut options = CapabilityOpenOptions::new();
+    options.read(read).write(write).create_new(create_new).follow(FollowSymlinks::No);
+    directory.open_with(Path::new(name), &options)
+        .map(CapabilityFileIntoStd::into_std)
+        .map_err(|error| format!("Could not safely open the approved file: {error}"))
+}
+
+trait CapabilityFileIntoStd {
+    fn into_std(self) -> fs::File;
+}
+
+impl CapabilityFileIntoStd for cap_std::fs::File {
+    fn into_std(self) -> fs::File { cap_std::fs::File::into_std(self) }
+}
+
 pub struct WorkspaceAccess {
     roots: Mutex<Vec<PathBuf>>,
     persistence_path: PathBuf,
@@ -206,6 +266,39 @@ impl WorkspaceAccess {
             fs::rename(&temporary, &self.persistence_path)
                 .map_err(|e| format!("Could not finalize workspace permissions: {e}"))
         }
+    }
+
+    /// Opens an approved directory through a pinned root handle. All subsequent
+    /// child lookups are relative to that handle, so replacing a parent path
+    /// after validation cannot redirect the operation outside the approved tree.
+    pub(crate) fn open_approved_directory(&self, path: &Path) -> Result<(CapabilityDir, PathBuf), String> {
+        let root = self.allowed_root_for(path)?;
+        let relative = path.strip_prefix(&root)
+            .map_err(|_| "The requested path is outside an approved directory.")?;
+        if relative.components().any(|component| matches!(
+            component,
+            std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_)
+        )) {
+            return Err("The requested path contains an invalid directory traversal.".into());
+        }
+        let root_handle = open_approved_root_handle(&root)?;
+        let directory = if relative.as_os_str().is_empty() {
+            root_handle
+        } else {
+            root_handle.open_dir(relative)
+                .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?
+        };
+        Ok((directory, root))
+    }
+
+    pub(crate) fn open_approved_parent(&self, path: &Path) -> Result<(CapabilityDir, OsString, PathBuf), String> {
+        let parent = path.parent()
+            .ok_or_else(|| "The selected file must be inside an approved directory.".to_string())?;
+        let name = path.file_name()
+            .ok_or_else(|| "The selected file has no valid name.".to_string())?
+            .to_os_string();
+        let (directory, root) = self.open_approved_directory(parent)?;
+        Ok((directory, name, root))
     }
 
     pub(crate) fn allowed_root_for(&self, path: &Path) -> Result<PathBuf, String> {
@@ -382,18 +475,13 @@ fn read_workspace_file_inner(path: &str, access: &WorkspaceAccess) -> Result<Str
     let requested = Path::new(path);
     let parent = requested.parent()
         .ok_or_else(|| "The file must be inside an approved directory.".to_string())?;
-    let root = access.allowed_root_for(parent)?;
-    let canonical_parent = fs::canonicalize(parent)
-        .map_err(|error| format!("Could not resolve the selected file's directory: {error}"))?;
-    if !canonical_parent.starts_with(&root) {
-        return Err("The requested file is outside the allowed directory.".into());
+    let (parent_directory, name, _root) = access.open_approved_parent(requested)?;
+    let file = open_capability_file(&parent_directory, &name, true, false, false)?;
+    let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
+    if !metadata.is_file() {
+        return Err("NEXUS can open regular files only, not links or special entries.".into());
     }
-    let name = requested.file_name()
-        .ok_or_else(|| "The selected file has no valid name.".to_string())?;
-    // Resolve only the parent. Canonicalizing the complete path would follow
-    // a final-component symlink before O_NOFOLLOW/OPEN_REPARSE_POINT can reject it.
-    let target = canonical_parent.join(name);
-    let file = open_regular_file_readonly(&target)?;
+    ensure_no_external_hard_links(&file)?;
     let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
     if metadata.len() > MAX_TEXT_FILE_BYTES {
         return Err("This file is larger than the 2 MB preview limit.".into());
@@ -428,17 +516,8 @@ fn write_workspace_file_inner(
     let requested = PathBuf::from(path);
     let parent = requested.parent()
         .ok_or_else(|| "The file must be inside an allowed directory.".to_string())?;
-    let root = access.ensure_new_path_allowed(parent)?;
-    let canonical_parent = fs::canonicalize(parent)
-        .map_err(|error| format!("Could not resolve the target directory: {error}"))?;
-    if !canonical_parent.starts_with(&root) {
-        return Err("The target directory is outside the allowed workspace.".into());
-    }
-    let name = requested.file_name()
-        .ok_or_else(|| "The file must have a valid name.".to_string())?;
-    let target = canonical_parent.join(name);
-
-    match fs::symlink_metadata(&target) {
+    let (parent_directory, name, _root) = access.open_approved_parent(&requested)?;
+    match parent_directory.symlink_metadata(Path::new(&name)) {
         Ok(metadata) => {
             if expected_content.is_none() {
                 return Err("A file or folder already exists at this path. Choose a different name instead of overwriting it.".into());
@@ -446,15 +525,9 @@ fn write_workspace_file_inner(
             if metadata.file_type().is_symlink() || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
-            let existing = fs::canonicalize(&target)
-                .map_err(|error| format!("Could not resolve existing file: {error}"))?;
-            if !existing.starts_with(&root) {
-                return Err("The target file is outside the allowed directory.".into());
-            }
-
-            // Open once without following a final symlink. Compare and replace
-            // through the same handle so a path swap cannot redirect the write.
-            let mut file = open_regular_file_readwrite(&target)
+            // Open relative to the pinned parent handle and refuse a final
+            // symlink/reparse point. The comparison and write use this same handle.
+            let mut file = open_capability_file(&parent_directory, &name, true, true, false)
                 .map_err(|error| {
                     if error.contains("hard-linked") {
                         error
@@ -462,6 +535,12 @@ fn write_workspace_file_inner(
                         "The file changed or is no longer safely readable. Reload it before saving.".to_string()
                     }
                 })?;
+            let opened_metadata = file.metadata()
+                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+            if !opened_metadata.is_file() {
+                return Err("NEXUS can edit regular files only, not links or special entries.".into());
+            }
+            ensure_no_external_hard_links(&file)?;
             let opened_metadata = file.metadata()
                 .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
             if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
@@ -495,19 +574,7 @@ fn write_workspace_file_inner(
             }
             // create_new is atomic and refuses to replace a path that appeared
             // after the preflight check.
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::OpenOptionsExt;
-                options.custom_flags(0x0020_0000);
-            }
-            let mut file = options.open(&target)
+            let mut file = open_capability_file(&parent_directory, &name, false, true, true)
                 .map_err(|error| format!("Could not create file without replacing an existing entry: {error}"))?;
             file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
             file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
@@ -535,19 +602,12 @@ fn create_workspace_directory_inner(path: &str, access: &WorkspaceAccess) -> Res
     if path.trim().is_empty() || path.len() > 4096 { return Err("Enter a valid directory path.".into()); }
     let requested = PathBuf::from(path);
     let parent = requested.parent().ok_or_else(|| "The new directory must be inside an allowed directory.".to_string())?;
-    let root = access.ensure_new_path_allowed(parent)?;
-    let canonical_parent = fs::canonicalize(parent)
-        .map_err(|e| format!("Could not resolve the new directory's parent: {e}"))?;
-    if !canonical_parent.is_dir() || !canonical_parent.starts_with(&root) {
-        return Err("The new directory must be inside an allowed directory.".into());
-    }
-    let name = requested.file_name()
-        .ok_or_else(|| "The new directory must have a valid name.".to_string())?;
-    let target = canonical_parent.join(name);
-    if fs::symlink_metadata(&target).is_ok() {
+    let (parent_directory, name, _root) = access.open_approved_parent(&requested)?;
+    if parent_directory.symlink_metadata(Path::new(&name)).is_ok() {
         return Err("A file or directory already exists at that path.".into());
     }
-    fs::create_dir(&target).map_err(|e| format!("Could not create directory: {e}"))
+    parent_directory.create_dir(Path::new(&name))
+        .map_err(|e| format!("Could not create directory: {e}"))
 }
 
 #[tauri::command]
