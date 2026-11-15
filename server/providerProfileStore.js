@@ -169,12 +169,25 @@ export async function loadProviderProfilesFromServer() {
 }
 
 export async function saveProviderProfilesToServer(profiles, deletedIds) {
-  const existing = deletedIds === undefined ? await readStore() : null;
-  const deletedProfileIds = normalizeDeletedIds(deletedIds ?? existing.deletedProfileIds);
-  const deleted = new Set(deletedProfileIds);
-  const normalized = normalizeProviderProfiles(profiles).filter(profile => !deleted.has(profile.id));
-  const operation = writeQueue.then(() => writeStore(normalized, deletedProfileIds));
+  // Validate request data before it enters the serialized write queue.
+  const requestedProfiles = normalizeProviderProfiles(profiles);
+  const requestedDeletedIds = deletedIds === undefined ? [] : normalizeDeletedIds(deletedIds);
+
+  // Read the current store inside the queue. Reading before queuing lets two
+  // overlapping requests race and a stale request can erase a newer deletion.
+  // Tombstones are monotonic: once a profile is deleted, stale devices cannot
+  // resurrect it by uploading an older collection or an empty tombstone list.
+  const operation = writeQueue.then(async () => {
+    const existing = await readStore();
+    const deletedProfileIds = normalizeDeletedIds([
+      ...existing.deletedProfileIds,
+      ...requestedDeletedIds
+    ]);
+    const deleted = new Set(deletedProfileIds);
+    const normalized = requestedProfiles.filter(profile => !deleted.has(profile.id));
+    await writeStore(normalized, deletedProfileIds);
+    return { profiles: normalized, deletedProfileIds };
+  });
   writeQueue = operation.catch(() => undefined);
-  await operation;
-  return { profiles: normalized, deletedProfileIds };
+  return operation;
 }
