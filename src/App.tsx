@@ -236,7 +236,7 @@ export default function App() {
   const localNoAuth = provider.credentialHandle === "none";
   const browserGatewaySelected = !isTauri() && (
     provider.baseUrl === "/api/gemini" ||
-    /^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia)$/.test(provider.baseUrl)
+    /^\/api\/provider\/(openai|xai|deepseek|mistral|openrouter|groq|sambanova|nvidia|omniroute)$/.test(provider.baseUrl)
   );
 
   function closeMobileNavigation() {
