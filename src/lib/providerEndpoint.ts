@@ -1,5 +1,5 @@
 /**
- * Client-side validation for OpenAI-compatible provider endpoints.
+ * Client-side validation for configured AI provider endpoints.
  * The native Rust host repeats these checks; this helper only gives faster,
  * clearer feedback before an IPC request is made.
  */
