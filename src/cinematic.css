@@ -1028,6 +1028,12 @@
 .studio-form { display:flex; flex-direction:column; gap:9px; max-width:680px; margin:14px 0 18px; }
 .studio-form input,.studio-form textarea { width:100%; border:1px solid rgba(128,146,205,.25); border-radius:8px; padding:10px 12px; color:#e8ebff; background:rgba(4,9,22,.78); font:inherit; font-size:12px; }
 .studio-form textarea { resize:vertical; }
+.studio-inbox-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:0 0 12px; }
+.studio-inbox-tools>input { flex:1 1 220px; min-width:0; border:1px solid rgba(128,146,205,.25); border-radius:8px; padding:9px 11px; color:#e8ebff; background:rgba(4,9,22,.78); font:inherit; font-size:12px; }
+.studio-inbox-tools>div { display:flex; flex-wrap:wrap; gap:5px; }
+.studio-inbox-tools button { padding:7px 9px; border:1px solid rgba(128,146,205,.18); border-radius:7px; color:#9ba7c7; background:rgba(20,29,52,.55); font:inherit; font-size:10px; }
+.studio-inbox-tools button.active { border-color:rgba(126,169,231,.42); color:#d8e8ff; background:rgba(60,91,139,.28); }
+
 .studio-inline-form { flex-direction:row; }
 .studio-list { display:flex; flex-direction:column; gap:8px; }
 .studio-list>article { display:flex; align-items:flex-start; gap:12px; padding:12px; border:1px solid rgba(128,146,205,.14); border-radius:9px; background:rgba(22,30,54,.42); }
