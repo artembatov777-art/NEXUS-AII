@@ -1,4 +1,5 @@
 use crate::workspace_fs::{ensure_no_external_hard_links, open_capability_file, open_regular_file_readonly, WorkspaceAccess};
+use cap_fs_ext::DirExt;
 use cap_std::fs::Dir as CapabilityDir;
 use serde::Serialize;
 use std::fs;
