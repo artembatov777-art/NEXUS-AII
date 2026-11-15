@@ -5,7 +5,7 @@ import { DEFAULT_PROVIDER, type ProviderSettings } from "../types";
 import { createProfileCredentialHandle, isDedicatedCredentialHandle } from "../lib/providerCredentials";
 import { PROVIDER_PRESETS, getProviderPreset } from "../lib/providerPresets";
 import {
-  loadProviderProfiles, removeProviderProfile, saveProviderProfiles,
+  loadProviderProfiles, removeProviderProfile, requestPersistentProviderProfileStorage, saveProviderProfiles,
   upsertProviderProfile, type ProviderProfileRecord
 } from "../lib/providerProfiles";
 
@@ -22,6 +22,7 @@ export function ProviderProfilesPanel({
   const [selectedId, setSelectedId] = useState("");
   const [label, setLabel] = useState("");
   const [status, setStatus] = useState("");
+  const [persistentStorage, setPersistentStorage] = useState(false);
 
   useEffect(() => {
     const loaded = loadProviderProfiles();
@@ -195,7 +196,9 @@ export function ProviderProfilesPanel({
       {selectedProfile && <button className="secondary-btn" type="button" onClick={updateSelected} disabled={!isDirty}>{t("Update selected")}</button>}
       {selectedProfile && <button className="secondary-btn" type="button" onClick={deleteSelected}>{t("Delete profile")}</button>}
     </div>
-    <small>Profiles store endpoint, model, declared route and credential handle only. API keys are never stored here. Selecting a profile does not connect to it.</small>
+    <small>Profiles are saved on this device without an expiry date. {persistentStorage
+      ? "The browser has also granted persistent storage, protecting them from automatic eviction."
+      : "They remain until you delete them or clear this app's/browser's site data. Private browsing may discard them."} API keys are never stored in profiles. Selecting a profile does not connect to it.</small>
     {status && <small role="status">{t(status)}</small>}
   </section>;
 }
