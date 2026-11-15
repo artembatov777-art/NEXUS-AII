@@ -104,6 +104,32 @@ describe("POST /api/gemini-image", () => {
     expect(options?.body).toContain('"responseFormat":{"image":{"aspectRatio":"16:9","imageSize":"1K"}}');
   });
 
+  it("sends a verified source image to Gemini for iterative editing", async () => {
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]).toString("base64");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: png } }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const res = response();
+    await handler(request({ body: {
+      prompt: "Add a moon", allowRemoteProcessing: true,
+      sourceImage: { mimeType: "image/png", data: png, byteLength: 12 }
+    } }), res);
+    expect(res.statusCode).toBe(200);
+    const upstreamBody = JSON.parse(vi.mocked(fetch).mock.calls[0]?.[1]?.body);
+    expect(upstreamBody.contents[0].parts[0]).toEqual({ inlineData: { mimeType: "image/png", data: png } });
+    expect(upstreamBody.contents[0].parts[1]).toEqual({ text: "Add a moon" });
+  });
+
+  it("rejects malformed or mismatched source images before contacting Google", async () => {
+    const res = response();
+    await handler(request({ body: {
+      prompt: "Edit", allowRemoteProcessing: true,
+      sourceImage: { mimeType: "image/png", data: Buffer.from("not png").toString("base64"), byteLength: 7 }
+    } }), res);
+    expect(res.statusCode).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("rejects upstream responses without a valid supported image", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: Buffer.from("not an image").toString("base64") } }] } }]
