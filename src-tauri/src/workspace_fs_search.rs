@@ -167,6 +167,7 @@ fn search_contents_in_capability(
             Err(_) => { truncated = true; continue; }
         };
         for entry in iterator {
+            let entry = match entry { Ok(value) => value, Err(_) => continue };
             visited_entries += 1;
             if visited_entries > 5_000 {
                 truncated = true;
@@ -207,6 +208,7 @@ fn search_contents_in_capability(
                 _ => continue,
             };
             if opened_metadata.len() > MAX_FILE_BYTES { continue; }
+            if ensure_no_external_hard_links(&file).is_err() { continue; }
             let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
             if file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).is_err()
                 || bytes.len() as u64 > MAX_FILE_BYTES {
