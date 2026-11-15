@@ -27,7 +27,6 @@ const profile = {
     model: "openai/gpt-oss-20b",
     inferenceLocation: "remote",
     credentialHandle: "default",
-    providerProtocol: "openai-chat-completions"
   },
   updatedAt: 100
 };
