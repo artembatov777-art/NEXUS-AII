@@ -1534,7 +1534,7 @@ fn forward_sse_chunk(
                 "outputTokens":chunk.output_tokens
             })).map_err(|_| "The chat stream consumer disconnected.".to_string())?;
         }
-        if chunk.finish_reason.is_some() {
+        if finish_reason.is_none() && chunk.finish_reason.is_some() {
             *finish_reason = chunk.finish_reason;
         }
     }
