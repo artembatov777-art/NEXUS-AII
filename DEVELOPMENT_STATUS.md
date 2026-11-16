@@ -1,6 +1,45 @@
 # NEXUS AU Development Status
 
-Updated: 2026-11-15
+Updated: 2026-11-16
+
+## Current continuation audit (2026-11-16)
+
+This section supersedes older head/CI claims below; the remaining entries are historical implementation notes, not current release acceptance.
+
+- Inspected clean branch `feat/nexus-core-architecture` at `40e72de70c9a14af9cf43adf82499f747af66ad4`, README, active roadmap, implementation plan, architecture/contracts, runtime, voice controls, native filesystem implementation, tests and workflows. No `Instuchion` file exists in the checked-out Git tree; do not invent its contents.
+- The seven-phase sequence in `docs/ROADMAP.md` is authoritative. Phase I is the first formally unfinished phase: fresh owner-side iPhone Safari acceptance is outstanding. Do not mark it complete from jsdom tests. Continue independent Phase II engineering while manual acceptance is pending, as the existing roadmap already permits.
+
+| Area / phase | Implemented and covered by automation | Partial, absent, or unverified |
+| --- | --- | --- |
+| I: Interface | Desktop shell, module panels, responsive/mobile demo, navigation and dialog contracts | Latest real iPhone Safari acceptance remains open |
+| II: AI Core | Provider-neutral router, profiles, discovery, streaming/cancellation/retry/failover, OpenAI-compatible and Anthropic adapters; generated-image storage/editing; host speech controls | No live provider verification in this session; native/offline STT/TTS absent; real WebView voice permission/interruption acceptance open |
+| III: Memory / RAG | Inspect/edit/delete, project-scoped ingestion, source provenance, hybrid retrieval, index repair, browser/native repositories | Real desktop multi-session acceptance and embedding-model availability remain unverified here |
+| IV: Agents / tools | Bounded runtime, checkpoint persistence, approvals, Tool Gateway, audit replay blocking, model planning, MCP HTTP | Durable whole-plan coordinator recovery, automatic input-bound result replay, MCP authentication/OAuth and specialist teams absent |
+| V: Filesystem | Approved roots, bounded reads/search/writes, no-overwrite rename/move, recovery journal; handle-relative hardening and race tests already exist | Windows branch-head compilation failed; complete hostile parent-directory race acceptance and real Windows smoke tests remain open |
+| VI: Security / integration | Default deny, OS vault adapters, redaction, encrypted backup, transactional recovery, CSP/capability checks | Interactive vault verification, upstream Rust advisories and filesystem residual risks remain release gates |
+| Training Lab | Governed versioned datasets, JSON/JSONL import/export, evaluations/comparison, immutable experiment metadata | No model-weight training, LoRA runner, model artifact registry or hardware scheduling |
+| VII: Release | Quality/native workflows and package artifact upload definitions exist | No verified release candidate, signed release, full desktop smoke record or completed release acceptance |
+
+### Baseline evidence and blockers
+
+- Exact-head [Quality run 43821829166](https://github.com/artembatov777-art/NEXUS-AII/actions/runs/43821829166) passed. [Mobile preview run 43821823370](https://github.com/artembatov777-art/NEXUS-AII/actions/runs/43821823370) passed.
+- Exact-head [native run 43821829036](https://github.com/artembatov777-art/NEXUS-AII/actions/runs/43821829036) **failed on Windows** at `cargo check`: E0624 (`maybe_dir` private) and E0599 (`access_mode` not found), `workspace_fs.rs:333/339`. macOS and Linux jobs passed checks, Rust tests, packaging and artifact upload. Rust security audit was skipped by the failed dependency; it is not a fresh clean audit.
+- Baseline local verification: 86 Vitest files / 637 tests and 6 Node server tests passed; TypeScript/Vite production build and workflow pin checks passed; npm audit reported 0 vulnerabilities. Vite reports the existing large-chunk warning for the lazy transformer runtime.
+- This workspace initially lacked Rust. A minimal stable toolchain was installed for verification. Full Linux checking needs unavailable GTK/WebKit development packages; Windows cross-checking needs the absent MinGW C compiler. Package installation is unavailable to this unprivileged environment. A separate Windows-target compile of the actual problematic directory-open block with pinned `cap-std` / `cap-fs-ext` 4.0.3 passes after the trait imports; this is a focused API check, **not** a full application build or Windows runtime test.
+
+### Changes in this continuation
+
+- Restored the missing Windows-only `OpenOptionsMaybeDirExt` and `cap_std::fs::OpenOptionsExt` imports. Preserve no-follow and pinned-parent semantics; do not replace them with ambient path operations merely to make compilation pass. Existing file/directory move and no-overwrite tests remain the behavioral acceptance tests.
+- Reproduced three voice lifecycle races with deferred browser callbacks: final text after explicit stop, an old session ending during a new session, and an old permission error during a new session. All three tests failed before the fix. Explicit stop now invalidates the old instance before calling the host; both recognition paths ignore stale error/end callbacks, as they already did for result callbacks.
+- Added speech interruption/resume and unavailable-synthesis coverage. These are simulated host-boundary tests, not evidence of actual Safari/WebView speech support. Final local suite: 86 Vitest files / 642 tests and 6 Node server tests passed; the voice component has 14 passing tests.
+- No provider, OmniRoute, Ollama service, real credential, main-branch change or PR merge was used.
+
+### Next work
+
+1. Verify the Windows native job for the corrected imports, then inspect any remaining Rust/test/packaging failure before broadening implementation.
+2. Keep Phase I open until the latest iPhone Safari acceptance is recorded.
+3. Continue Phase II voice host integration/permission/interruption verification; resolve the roadmap's native/offline voice scope conflict before choosing a runtime (it is both an unchecked Phase II item and listed as post-release work).
+4. Keep live provider/Ollama/OmniRoute integration deferred until the owner-authorized final integration. Existing prepared adapters and tests must remain functional.
 
 ## Repository state
 

@@ -49,13 +49,13 @@ The existing `src/core/multimodal.ts` is a policy-validation layer, not a provid
 - [x] Persist generated images as validated message attachments in conversation history and round-trip them through browser/native conversation storage; automated storage/repository tests cover the attachment lifecycle.
 - [x] Support iterative image editing from an existing generated or user-selected PNG/JPEG/WebP image with MIME/signature validation, a 3.2 MB source limit, explicit remote consent, and regression tests.
 - [x] Implement a real Gemini 3.1 Flash Image adapter with bounded prompt/output handling, clear provider attribution, and explicit remote-processing consent; automated Quality passed, live provider verification remains pending.
-- [x] Add a chat-composer image-generation control, preview the returned image, and support safe download without placing provider secrets in browser storage; conversation-history persistence remains a separate open item.
+- [x] Add a chat-composer image-generation control, preview the returned image, and support safe download without placing provider secrets in browser storage; conversation-history persistence is implemented and covered by the attachment lifecycle tests above.
 - [x] Add automated tests for unsupported providers, malformed image responses, source-image MIME/signature/size validation, cancellation, remote-consent denial, and Gemini adapter capability mapping. Quality passed on `434452fd5ceda0a92771cf33f513639b8c1abac2` (86 test files, production build, and npm audit).
-- [x] Add an explicit browser/WebView conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and return to listening. Automated and real-host verification remains pending.
+- [x] Add an explicit browser/WebView conversational voice mode: capture speech, submit through the normal AI Core path, speak the completed answer, allow interruption, and return to listening. Automated lifecycle coverage exists; real-host verification remains pending.
 - [ ] Add a native/offline STT/TTS runtime and platform-specific permission/availability checks; browser/WebView APIs are not evidence of offline support.
 - [x] Keep one-shot push-to-talk available as a lower-permission alternative and disclose that browser/WebView speech services may process audio remotely.
 - [x] Add voice-mode regression tests for duplicate transcript submission, permission denial, stopping a conversation, and cleanup on unmount.
-- [ ] Add interruption and unsupported-host integration coverage on actual browser/WebView targets; automated unit coverage and real-host verification remain incomplete.
+- [ ] Add interruption and unsupported-host integration coverage on actual browser/WebView targets; automated stop/restart race, interruption/resume and unavailable-synthesis coverage exists; actual host integration verification remains incomplete.
 - [x] Explicitly document that browser/WebView speech services are host-dependent and do not claim offline/native voice.
 
 

@@ -1,6 +1,10 @@
 use serde::Serialize;
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
+#[cfg(windows)]
+use cap_fs_ext::OpenOptionsMaybeDirExt;
 use cap_std::fs::{Dir as CapabilityDir, OpenOptions as CapabilityOpenOptions};
+#[cfg(windows)]
+use cap_std::fs::OpenOptionsExt;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};

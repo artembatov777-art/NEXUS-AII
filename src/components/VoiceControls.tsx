@@ -107,6 +107,7 @@ export function VoiceControls({
         }
       };
       instance.onerror = event => {
+        if (recognition.current !== instance) return;
         setError(recognitionErrorMessage(event.error));
         setListening(false);
         setInterim("");
@@ -118,7 +119,8 @@ export function VoiceControls({
         }
       };
       instance.onend = () => {
-        if (recognition.current === instance) recognition.current = null;
+        if (recognition.current !== instance) return;
+        recognition.current = null;
         setListening(false);
         setInterim("");
         if (conversationModeRef.current && !waitingForResponseRef.current && !generatingRef.current && !speakingRef.current) {
@@ -230,7 +232,9 @@ export function VoiceControls({
   function toggleListening() {
     setError("");
     if (listening && !conversationModeRef.current) {
-      recognition.current?.stop();
+      const active = recognition.current;
+      recognition.current = null;
+      active?.stop();
       setListening(false);
       setInterim("");
       return;
@@ -265,13 +269,15 @@ export function VoiceControls({
         if (finalText.trim()) onTranscriptRef.current(finalText.trim(), false);
       };
       instance.onerror = event => {
+        if (recognition.current !== instance) return;
         setError(recognitionErrorMessage(event.error));
         setListening(false);
         setInterim("");
         if (recognition.current === instance) recognition.current = null;
       };
       instance.onend = () => {
-        if (recognition.current === instance) recognition.current = null;
+        if (recognition.current !== instance) return;
+        recognition.current = null;
         setListening(false);
         setInterim("");
       };

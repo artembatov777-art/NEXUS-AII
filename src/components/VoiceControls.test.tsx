@@ -9,6 +9,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -30,6 +31,16 @@ describe("VoiceControls", () => {
     expect(button).not.toBeNull();
     act(() => button?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(container.textContent).toContain("Speech recognition is not supported");
+  });
+
+  it("does not open the microphone for conversation when speech synthesis is unavailable", () => {
+    const start = vi.fn();
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: class { start = start; } });
+    act(() => root.render(<VoiceControls onTranscript={vi.fn()} textToSpeak="" />));
+    act(() => container.querySelector('button[aria-label="Start voice conversation"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toContain("Text-to-speech is not supported");
+    expect(container.querySelector('button[aria-label="End voice conversation"]')).toBeNull();
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("discloses that host speech recognition may use an online service", () => {
@@ -66,6 +77,48 @@ describe("VoiceControls", () => {
     const result = Object.assign([{ transcript: "late transcript" }], { isFinal: true });
     act(() => instance?.onresult?.({ resultIndex: 0, results: [result] }));
     expect(onTranscript).not.toHaveBeenCalled();
+  });
+
+  it.each(["result", "end", "error"] as const)("ignores a late %s callback after stopping and restarting voice input", callback => {
+    class DeferredRecognition {
+      static instances: DeferredRecognition[] = [];
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      constructor() { DeferredRecognition.instances.push(this); }
+      start() { this.onstart?.(); }
+      // Browser stop/abort completion arrives asynchronously.
+      stop() {}
+      abort() {}
+    }
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: DeferredRecognition });
+    const onTranscript = vi.fn();
+    act(() => root.render(<VoiceControls onTranscript={onTranscript} textToSpeak="" />));
+    const click = (label: string) => act(() => {
+      container.querySelector(`button[aria-label="${label}"]`)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    click("Start voice input");
+    const old = DeferredRecognition.instances[0];
+    click("Stop voice input");
+    const finalResult = (text: string) => ({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    if (callback === "result") {
+      act(() => old.onresult?.(finalResult("stopped session")));
+      expect(onTranscript).not.toHaveBeenCalled();
+    }
+    click("Start voice input");
+    const current = DeferredRecognition.instances[1];
+    act(() => {
+      if (callback === "end") old.onend?.();
+      if (callback === "error") old.onerror?.({ error: "not-allowed" });
+    });
+    expect(container.querySelector('button[aria-label="Stop voice input"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    act(() => current.onresult?.(finalResult("current session")));
+    expect(onTranscript).toHaveBeenCalledExactlyOnceWith("current session", false);
   });
 
   it("submits recognized speech automatically in voice conversation mode", () => {
@@ -115,7 +168,7 @@ describe("VoiceControls", () => {
     expect(onTranscript).toHaveBeenCalledWith("send this to NEXUS", true);
   });
 
-  it("reads the completed answer aloud and resumes listening", () => {
+  it.each(["completion", "interruption"])("resumes listening after speech %s and ignores late speech callbacks", outcome => {
     class FakeRecognition {
       static latest: FakeRecognition | null = null;
       lang = "";
@@ -159,8 +212,19 @@ describe("VoiceControls", () => {
     expect(speech.speak).toHaveBeenCalledTimes(1);
     const spoken = vi.mocked(speech.speak).mock.calls[0]?.[0] as FakeUtterance;
     expect(spoken.text).toBe("NEXUS is ready.");
-    act(() => spoken.onend?.());
-    expect(FakeRecognition.latest).not.toBe(firstRecognition);
+    if (outcome === "interruption") {
+      const stopReading = container.querySelector('button[aria-label="Stop reading"]');
+      expect(stopReading).not.toBeNull();
+      act(() => stopReading?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    } else {
+      act(() => spoken.onend?.());
+    }
+    const resumed = FakeRecognition.latest;
+    expect(resumed).not.toBe(firstRecognition);
+    act(() => { spoken.onerror?.(); spoken.onend?.(); });
+    expect(FakeRecognition.latest).toBe(resumed);
+    expect(container.querySelector('button[aria-label="End voice conversation"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
   it("stops recognition and speech when voice conversation is ended", () => {
