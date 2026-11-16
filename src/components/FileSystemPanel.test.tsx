@@ -102,10 +102,45 @@ describe("FileSystemPanel native workspace access", () => {
     const acknowledgeButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Confirm manual reconciliation");
     await act(async () => { acknowledgeButton!.click(); });
     expect(invokeMock).toHaveBeenCalledWith("acknowledge_workspace_operation_recovery", { operationId: "rename-123" });
-    expect(invokeMock).toHaveBeenCalledWith("record_tool_audit_event", expect.objectContaining({ event: expect.objectContaining({ toolId: "filesystem.recovery-manual-reconciliation" }) }));
+    const reconciliationAuditCalls = invokeMock.mock.calls.filter(([command]) => command === "record_tool_audit_event");
+    expect(reconciliationAuditCalls.map(([, args]) => (args as { event: { status: string; traceId: string } }).event.status)).toEqual(["started", "reconciled"]);
+    expect(reconciliationAuditCalls.every(([, args]) => (args as { event: { traceId: string } }).event.traceId === "rename-123")).toBe(true);
     expect(container.textContent).not.toContain("Filesystem recovery required");
     expect(container.textContent).toContain("Manual reconciliation recorded");
     expect(invokeMock.mock.calls.some(([command]) => command === "rename_workspace_entry" || command === "move_workspace_entry" || command === "move_workspace_entries_batch")).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a recovery journal intact when the manual-reconciliation audit cannot be written", async () => {
+    const rootPath = "/home/test/Documents";
+    const operation = {
+      operationId: "rename-audit-blocked", valid: true, error: null,
+      entries: [{
+        source: rootPath + "/draft.txt", destination: rootPath + "/final.txt",
+        sourceState: "regular file", destinationState: "missing"
+      }]
+    };
+    let acknowledged = false;
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_workspace_operation_recovery_status") return acknowledged ? null : "An interrupted operation needs review.";
+      if (command === "get_workspace_operation_recovery_details") return acknowledged ? [] : [operation];
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [];
+      if (command === "record_tool_audit_event") throw new Error("Audit database unavailable");
+      if (command === "acknowledge_workspace_operation_recovery") { acknowledged = true; return undefined; }
+      return undefined;
+    });
+    await renderPanel();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const acknowledgeButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Confirm manual reconciliation");
+    await act(async () => { acknowledgeButton!.click(); });
+    expect(invokeMock).toHaveBeenCalledWith("record_tool_audit_event", expect.objectContaining({
+      event: expect.objectContaining({ toolId: "filesystem.recovery-manual-reconciliation", status: "started", traceId: "rename-audit-blocked" })
+    }));
+    expect(invokeMock).not.toHaveBeenCalledWith("acknowledge_workspace_operation_recovery", expect.anything());
+    expect(container.textContent).toContain("Filesystem recovery required");
+    expect(container.textContent).toContain("audit record");
     vi.unstubAllGlobals();
   });
 
