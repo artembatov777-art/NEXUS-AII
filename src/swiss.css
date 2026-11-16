@@ -80,3 +80,47 @@ body { font-family: 'Satoshi', 'DM Sans', system-ui, sans-serif; }
 }
 /* Keep the collapsed sidebar truly collapsed after applying panel spacing. */
 .sidebar.sidebar-hidden { padding-inline: 0; }
+
+/* The command center lives inside the heading; keep it visible on the home view. */
+.chat-area[data-home="true"] .chat-heading { display: block; }
+.chat-area[data-home="true"] .composer-wrap {
+  background: #f2f2f2;
+  padding-top: 12px;
+}
+.voice-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.voice-controls button, .voice-controls select {
+  max-width: 100%; min-height: 36px; color: #333; background: #fff; border: 1px solid #aaa; border-radius: 6px;
+}
+.voice-controls button:hover, .voice-controls button.voice-active { color: #111; background: #e4e4e4; border-color: #666; }
+.voice-controls .voice-note { flex-basis: 100%; color: #555; font-size: 11px; line-height: 1.5; }
+.composer-note { color: #555; }
+@media (max-width: 640px) {
+  .app-shell { width: 100%; max-width: 100vw; overflow: hidden; }
+  .main-panel { width: 100%; min-width: 0; }
+  .chat-area { min-width: 0; width: 100%; }
+  .voice-controls select { min-width: 0; flex: 1 1 130px; }
+  .voice-controls button { flex: 1 1 auto; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .chat-area[data-home="true"] .composer-wrap { position: static; }
+}
+/* Message role rules in legacy CSS are more specific than generic text colors. */
+.message.assistant .message-content, .message.user .message-content { color: #222; }
+.message.assistant .message-author, .message.user .message-author { color: #333; }
+.message-author span, .chat-project-context, .typing { color: #555; }
+.chat-project-context select { color: #222; background: #fff; border-color: #aaa; }
+/* Contrast for the command deck and its individual cards. */
+.deck-tool-copy strong, .deck-briefing h4, .command-monitor-grid strong,
+.command-activity li strong { color: #222; }
+.deck-tool-copy small, .deck-heading p, .deck-overline, .deck-core-readout span,
+.deck-section-heading small, .command-monitor-grid small, .command-activity li small,
+.command-activity > p { color: #505050; }
+.deck-core-readout > div, .command-monitor-grid article, .command-activity li {
+  background: #e9e9e9; border-color: #c8c8c8;
+}
+@media (max-width: 640px) {
+  .deck-core-readout { grid-column: 1 / -1; width: 100%; max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .deck-core-readout strong { white-space: normal; overflow: visible; text-overflow: clip; }
+  .deck-tool-copy strong { font-size: 13px; }
+  .deck-tool-copy small { font-size: 11px; }
+}
