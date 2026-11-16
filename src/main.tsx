@@ -7,6 +7,7 @@ import "./styles.css";
 import "./cinematic.css";
 import "./redesign.css";
 import "./premium.css";
+import "./swiss.css";
 
 const isMobileDemo = new URLSearchParams(window.location.search).get("demo") === "1";
 

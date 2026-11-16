@@ -1,0 +1,35 @@
+/* Mobile preview uses the same editorial palette as the desktop workspace. */
+.mobile-demo { background: #e4e4e4; color: #111; }
+.mobile-demo .demo-device { background: #f2f2f2; color: #111; border-color: #bbb; box-shadow: 0 24px 65px #0002; }
+.mobile-demo .demo-topbar, .mobile-demo .demo-context-row, .mobile-demo .demo-screen,
+.mobile-demo .demo-chat-footer, .mobile-demo .demo-tabbar { background: #f2f2f2; color: #111; border-color: #ccc; }
+.mobile-demo .demo-brand strong, .mobile-demo .demo-context-row strong,
+.mobile-demo .demo-section h2, .mobile-demo .demo-chat-intro h1,
+.mobile-demo .demo-project-card h3 { color: #111; font-family: 'Clash Display','Space Grotesk',system-ui,sans-serif; letter-spacing: -.04em; }
+.mobile-demo .demo-brand span, .mobile-demo .demo-context-label, .mobile-demo .demo-section-heading span,
+.mobile-demo .demo-chat-intro > span, .mobile-demo .demo-disclaimer { color: #555; }
+.mobile-demo .demo-topbar, .mobile-demo .demo-context-row { padding-inline: 20px; }
+.mobile-demo .demo-screen { padding-inline: 20px; }
+.mobile-demo .demo-section { gap: 16px; }
+.mobile-demo .demo-brand-mark, .mobile-demo .demo-message-avatar,
+.mobile-demo .demo-send-button, .mobile-demo .demo-primary-action { background: #111; color: #fff; border-color: #111; box-shadow: none; }
+.mobile-demo .demo-round-button, .mobile-demo .demo-model-icon, .mobile-demo .demo-project-icon,
+.mobile-demo .demo-profile-avatar { background: #e2e2e2; color: #222; border-color: #c8c8c8; box-shadow: none; }
+.mobile-demo .demo-model-card, .mobile-demo .demo-project-card, .mobile-demo .demo-memory-summary,
+.mobile-demo .demo-module-card, .mobile-demo .demo-stat-grid > div, .mobile-demo .demo-settings-group,
+.mobile-demo .demo-settings-profile, .mobile-demo .demo-more-grid button, .mobile-demo .demo-tool-row,
+.mobile-demo .demo-document-row, .mobile-demo .demo-file-row, .mobile-demo .demo-safe-note,
+.mobile-demo .demo-notice { background: #fafafa; color: #222; border: 1px solid #ccc; box-shadow: none; }
+.mobile-demo :is(.demo-model-card,.demo-project-card,.demo-memory-summary,.demo-module-card,.demo-stat-grid,.demo-settings-group,.demo-more-grid,.demo-tool-row,.demo-document-row,.demo-file-row) :is(strong,h3,b) { color: #111; }
+.mobile-demo :is(.demo-model-card,.demo-project-card,.demo-memory-summary,.demo-module-card,.demo-stat-grid,.demo-settings-group,.demo-more-grid,.demo-tool-row,.demo-document-row,.demo-file-row) :is(small,p,span) { color: #555; }
+.mobile-demo .demo-search, .mobile-demo .demo-composer, .mobile-demo .demo-field-label textarea { background: #fff; color: #111; border-color: #aaa; box-shadow: none; }
+.mobile-demo input, .mobile-demo textarea { color: #111; }
+.mobile-demo input::placeholder, .mobile-demo textarea::placeholder { color: #666; }
+.mobile-demo .demo-message-bubble { background: #fff; border-color: #ccc; color: #222; line-height: 1.6; }
+.mobile-demo .demo-message.user .demo-message-bubble { background: #252525; color: #fff; border-color: #252525; }
+.mobile-demo .demo-suggestions button, .mobile-demo .demo-preview-pill { background: #e8e8e8; border-color: #c7c7c7; color: #333; }
+.mobile-demo .demo-orb { filter: grayscale(.8); }
+.mobile-demo .demo-tabbar button { color: #666; }
+.mobile-demo .demo-tabbar button.active { color: #315e60; }
+.mobile-demo .demo-home-indicator { background: #222; }
+.mobile-demo :where(button,input,textarea,select):focus-visible { outline: 2px solid #285b60; outline-offset: 3px; }

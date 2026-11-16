@@ -7,6 +7,7 @@ import {
   FlaskConical, HardDrive, LockKeyhole, Activity
 } from "lucide-react";
 import "./mobile-demo.css";
+import "./swiss-mobile.css";
 
 type DemoTab = "chat" | "projects" | "memory" | "knowledge" | "agents" | "files" | "tools" | "training" | "settings" | "more";
 
