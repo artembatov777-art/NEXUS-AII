@@ -15,6 +15,7 @@ const splitIds = (value: string) => value.split(/[\n,]+/).map(item => item.trim(
 
 export function TrainingLabPanel({ onClose, provider, availableModels }: { onClose: () => void; provider: ProviderSettings; availableModels: string[] }) {
   const repository = useMemo(() => new WorkspaceTrainingLabRepository(window.localStorage), []);
+  const [trainingView, setTrainingView] = useState<"dataset" | "evaluation" | "experiment" | "records">("dataset");
   const [datasets, setDatasets] = useState<DatasetManifest[]>([]);
   const [selectedDatasetKey, setSelectedDatasetKey] = useState("");
   const [experiments, setExperiments] = useState<TrainingExperiment[]>([]);
@@ -399,6 +400,9 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <div><div className="eyebrow">{t("MODEL DEVELOPMENT")}</div><h2 id="training-lab-title"><FlaskConical size={20}/> Training Lab</h2><p>{t("Live model testing, evaluation baselines, dataset governance, and reproducible experiment records.")}</p></div>
         <button className="icon-btn" onClick={onClose} aria-label="Close Training Lab"><X size={18}/></button>
       </header>
+      <nav className="workspace-view-tabs" aria-label={t("Training Lab sections")}>
+        {([ ["dataset", "Datasets"], ["evaluation", "Evaluation"], ["experiment", "Experiment"], ["records", "Saved records"] ] as const).map(([id, label]) => <button key={id} type="button" data-training-view={id} aria-pressed={trainingView === id} onClick={() => setTrainingView(id)}>{t(label)}</button>)}
+      </nav>
       <div className="training-notice">
         {isTauri() ? "Metadata is stored in the local SQLite database. Live inference and evaluation are available. Running a test or model comparison sends the evaluation prompt to the configured provider. Dataset evaluation sends only held-out test inputs; expected outputs stay local for scoring. Use only data you are comfortable sending. Fine-tuning jobs and model-weight updates are not implemented yet." : "Browser preview stores metadata in localStorage and disables live inference. In the desktop app, running a test, comparison, or dataset evaluation sends evaluation inputs to the configured provider; expected outputs stay local for scoring. Use only data you are comfortable sending."}
         <br/>Private conversations, memories, and raw sample text are not imported automatically.
@@ -409,7 +413,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <progress max={Math.max(1, evaluationProgress.total)} value={Math.min(evaluationProgress.completed, evaluationProgress.total)} style={{ width: "100%" }}/>
         <small>{evaluationProgress.completed}/{evaluationProgress.total} provider evaluations completed</small>
       </div>}
-      <div className="training-section">
+      <div className="training-section" hidden={trainingView !== "dataset"}>
         <div className="training-section-title"><Database size={16}/> Register dataset manifest</div>
         <div className="training-two-col">
           <label>{t("Dataset ID")}<input value={datasetId} onChange={event => setDatasetId(event.target.value)} maxLength={160}/></label>
@@ -432,7 +436,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         <div className="training-two-col"><label className="secondary-btn">{t("Import JSON / JSONL samples")}<input type="file" accept=".json,.jsonl,.ndjson,application/json" hidden disabled={working} onChange={event => { void importDatasetFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label><span className="training-record-counts">{importedSamples.length} sample record(s) staged for import</span></div>
         <button className="primary-btn" onClick={() => void saveDataset()} disabled={working}><Save size={14}/> Save dataset version</button>
       </div>
-      <div className="training-section">
+      <div className="training-section" hidden={trainingView !== "evaluation"}>
         <div className="training-section-title"><FlaskConical size={16}/> Manual evaluation bench</div>
         <label>{t("Evaluation prompt")}<input value={evaluationPrompt} onChange={event => setEvaluationPrompt(event.target.value)} maxLength={8000}/></label>
         <label>{t("Required phrases")}<textarea rows={2} value={requiredPhrases} onChange={event => setRequiredPhrases(event.target.value)} placeholder="Comma-separated phrases"/></label>
@@ -446,7 +450,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         {liveTestRunning && <button className="secondary-btn" onClick={() => liveTestAbort.current?.abort()}>{t("Cancel model test")}</button>}
         {evaluationSummary && <div className="training-evaluation-result"><strong>{Math.round(evaluationSummary.passRate * 100)}% phrase coverage</strong><span>{evaluationSummary.passedCases}/{evaluationSummary.totalCases} case(s) passed. Metrics JSON was updated for the next experiment record.</span></div>}
       </div>
-      <div className="training-section">
+      <div className="training-section" hidden={trainingView !== "experiment"}>
         <div className="training-section-title"><FlaskConical size={16}/> Record experiment</div>
         <div className="training-two-col">
           <label>{t("Model ID")}<input value={modelId} onChange={event => setModelId(event.target.value)} placeholder="provider/model-id"/></label>
@@ -463,7 +467,7 @@ export function TrainingLabPanel({ onClose, provider, availableModels }: { onClo
         </div>
         <button className="primary-btn" onClick={() => void saveExperiment()} disabled={working || datasets.length === 0}><Save size={14}/> Save experiment record</button>
       </div>
-      <div className="training-section">
+      <div className="training-section" hidden={trainingView !== "records"}>
         <div className="training-section-title"><RefreshCw size={15}/> Saved records</div>
         <div className="training-record-counts"><span>{datasets.length} dataset version(s)</span><span>{experiments.length} experiment(s)</span><button className="icon-btn" onClick={() => void refresh()} aria-label="Refresh Training Lab records"><RefreshCw size={14}/></button></div>
         {selectedDatasetRecord && <button className="secondary-btn" onClick={() => exportDatasetSamples(selectedDatasetRecord)} disabled={!selectedDatasetRecord.samples?.length}>{t("Export selected dataset samples (.jsonl)")}</button>}

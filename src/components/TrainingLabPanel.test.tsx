@@ -23,6 +23,19 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 describe("Training Lab privacy and preview mode", () => {
+  it("shows one workflow at a time and keeps the dataset draft when switching", async () => {
+    await act(async () => { root.render(<TrainingLabPanel onClose={vi.fn()} provider={{ baseUrl: "http://127.0.0.1:20128/v1", model: "auto", inferenceLocation: "remote", credentialHandle: "default" }} availableModels={[]} />); });
+    const sections = container.querySelectorAll<HTMLElement>(".training-section");
+    expect(Array.from(sections).filter(section => !section.hidden)).toHaveLength(1);
+    const name = container.querySelector<HTMLInputElement>('input[value="NEXUS baseline dataset"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "My dataset"); name.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-training-view="evaluation"]')!.click(); });
+    expect(sections[0].hidden).toBe(true);
+    expect(sections[1].hidden).toBe(false);
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-training-view="dataset"]')!.click(); });
+    expect(name.value).toBe("My dataset");
+  });
+
   it("rejects duplicate split IDs instead of silently deduplicating user input", async () => {
     await act(async () => { root.render(<TrainingLabPanel onClose={vi.fn()} provider={{ baseUrl: "http://127.0.0.1:20128/v1", model: "auto", inferenceLocation: "remote", credentialHandle: "default" }} availableModels={[]} />); });
     const trainIds = Array.from(container.querySelectorAll("textarea")).find(textarea =>

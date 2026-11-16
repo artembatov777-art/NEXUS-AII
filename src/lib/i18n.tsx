@@ -3,6 +3,17 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 export type NexusLanguage = "ru" | "en";
 const STORAGE_KEY = "nexus-au:language:v1";
 const translations: Record<string, string> = {
+  "Datasets": "Наборы данных",
+  "Evaluation": "Оценка",
+  "Experiment": "Эксперимент",
+  "Tool catalog": "Каталог инструментов",
+  "Approvals": "Подтверждения",
+  "Task": "Задача",
+  "Audit": "Журнал",
+  "Training Lab sections": "Разделы Training Lab",
+  "Tools sections": "Разделы инструментов",
+  "Agent sections": "Разделы агентов",
+
   "Loading subsystem…": "Загрузка модуля…",
   "Welcome to NEXUS AU. Your workspace is ready. Configure an AI provider in settings, then start a conversation. Local semantic memory search may download an embedding model on first use; chat generation follows the selected provider route.": "Добро пожаловать в NEXUS AU. Рабочее пространство готово. Настрой AI-провайдера в разделе настроек и начни диалог. При первом семантическом поиске памяти может загрузиться модель эмбеддингов. Ответы генерируются через выбранного провайдера.",
   "New conversation": "Новый диалог",

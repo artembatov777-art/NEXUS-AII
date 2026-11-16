@@ -124,3 +124,35 @@ body { font-family: 'Satoshi', 'DM Sans', system-ui, sans-serif; }
   .deck-tool-copy strong { font-size: 13px; }
   .deck-tool-copy small { font-size: 11px; }
 }
+
+/* Focused module views: one task at a time, with forms that fit a phone. */
+.workspace-view-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; scrollbar-width: thin; }
+.workspace-view-tabs button { flex: 0 0 auto; min-height: 42px; padding: 8px 14px; border: 1px solid #b7b7b7; border-radius: 8px; background: #fff; color: #333; font: 600 13px/1.25 system-ui, sans-serif; }
+.workspace-view-tabs button[aria-pressed="true"] { background: #202020; color: #fff; border-color: #202020; }
+.training-section[hidden], .mcp-manager[hidden], .tools-summary[hidden], .tools-toolbar[hidden], .tools-catalog[hidden], .agent-main-column[hidden], .agent-side-column[hidden], .agent-card[hidden] { display: none !important; }
+.training-modal .training-section, .tools-workspace .mcp-manager, .tools-workspace .tools-summary > div, .agent-center .agent-runtime-strip article {
+  background: #fff; color: #222; border: 1px solid #d0d0d0; box-shadow: none;
+}
+.training-modal .training-notice, .tools-workspace .mcp-security-note, .agent-center .agent-disclaimer { background: #e9efee; color: #263d3c; border-color: #c4d3d1; }
+.training-modal :is(.training-section-title, label, small, .training-record-counts),
+.tools-workspace :is(.mcp-manager-heading, .mcp-manager-heading strong, .mcp-manager-heading small, .mcp-empty, .tools-summary span, .tools-summary strong, .tool-card-copy strong, .tool-card-copy small),
+.agent-center :is(.agent-runtime-strip strong, .agent-runtime-strip small, .agent-kicker, .agent-empty, .agent-card p) { color: #333; }
+.training-modal .training-section { padding: 20px; }
+.training-modal label, .mcp-manager label { font-size: 13px; line-height: 1.4; }
+.training-modal :is(input,select,textarea), .mcp-manager :is(input,select,textarea) { font: 400 16px/1.5 system-ui, sans-serif; min-height: 44px; }
+.agent-center-grid { grid-template-columns: minmax(0, 1fr); }
+.agent-main-column, .agent-side-column { min-width: 0; width: 100%; }
+.agent-center .agent-card, .tools-workspace .tool-card { background: #fff; border-color: #d0d0d0; color: #222; }
+@media (max-width: 640px) {
+  .training-modal, .agent-center, .tools-workspace { width: 100%; max-width: 100%; height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px); max-height: none; padding: 16px; border-radius: 12px; overflow-y: auto; }
+  .modal-backdrop, .agent-backdrop { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); align-items: center; }
+  .training-two-col, .training-splits, .mcp-add-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .training-modal .training-section { padding: 16px; }
+  .agent-runtime-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .agent-center-header, .tools-workspace-header { gap: 12px; }
+}
+.workspace-view-tabs { flex-shrink: 0; }
+.agent-center-grid { flex: 0 0 auto; }
+.agent-center-footer, .tools-workspace .file-workspace-footer { flex-shrink: 0; background: transparent; color: #444; }
+.tools-workspace .file-workspace-footer > span { color: #444; }
+.agent-center-title p, .file-workspace-heading p, .memory-header p { color: #555; }

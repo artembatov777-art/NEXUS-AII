@@ -40,6 +40,19 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 describe("ToolsPanel MCP management", () => {
+  it("separates server setup and catalog while preserving the server draft", async () => {
+    await act(async () => { root.render(<ToolsPanel onClose={onClose} />); });
+    const server = container.querySelector<HTMLInputElement>('[aria-label="MCP server name"]')!;
+    inputValue(server, "My draft");
+    expect(container.querySelector<HTMLElement>(".mcp-manager")!.hidden).toBe(false);
+    expect(container.querySelector<HTMLElement>(".tools-catalog")!.hidden).toBe(true);
+    await act(async () => { Array.from(container.querySelectorAll(".workspace-view-tabs button")).find(button => button.textContent?.includes("Tool catalog"))!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(container.querySelector<HTMLElement>(".mcp-manager")!.hidden).toBe(true);
+    expect(container.querySelector<HTMLElement>(".tools-catalog")!.hidden).toBe(false);
+    await act(async () => { (container.querySelector(".workspace-view-tabs button") as HTMLButtonElement).click(); });
+    expect(server.value).toBe("My draft");
+  });
+
   it("saves a secure endpoint, initializes a session, discovers tools and shows live status", async () => {
     await act(async () => { root.render(<ToolsPanel onClose={onClose} />); });
     inputValue(container.querySelector<HTMLInputElement>('[aria-label="MCP server name"]')!, "Demo server");

@@ -129,6 +129,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     new LocalTransformerEmbeddingProvider(),
     new IndexedDbMemoryVectorIndex()
   ), [memoryRepository]);
+  const [agentView, setAgentView] = useState<"run" | "profile" | "progress" | "approvals" | "history" | "audit">("run");
   const [task, setTask] = useState(initialTask ?? "");
   useEffect(() => {
     if (initialTask?.trim()) setTask(initialTask.slice(0, 6000));
@@ -395,9 +396,12 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         <article data-state="failed"><span className="agent-runtime-mark"/><div><strong>{failedCount}</strong><small>{t("Failed / cancelled")}</small></div></article>
       </section>
 
+      <nav className="workspace-view-tabs" aria-label={t("Agent sections")}>
+        {([ ["run", "Task"], ["profile", "Profile settings"], ["progress", "Run event stream"], ["approvals", "Approvals"], ["history", "Run history"], ["audit", "Audit"] ] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={agentView === id} onClick={() => setAgentView(id)}>{t(label)}{id === "approvals" && pendingApprovalCount > 0 ? ` (${pendingApprovalCount})` : ""}</button>)}
+      </nav>
       <div className="agent-center-grid">
-        <section className="agent-main-column">
-          <article className="agent-card">
+        <section className="agent-main-column" hidden={!(["run", "profile", "progress"] as const).some(view => view === agentView)}>
+          <article className="agent-card" hidden={agentView !== "run"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">AVAILABLE AGENTS · {registeredAgents.length}</span><h3>{registeredAgents[0]?.name ?? BUILT_IN_AGENT_CATALOG[0].name}</h3></div><span className="agent-local-tag">{t("LOCAL DEMO")}</span></div>
             <p>{registeredAgents[0]?.description ?? BUILT_IN_AGENT_CATALOG[0].description}</p>
             <div className="agent-metadata">
@@ -411,7 +415,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
-          <article className="agent-card">
+          <article className="agent-card" hidden={agentView !== "profile"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("AGENT CONFIGURATION")}</span><h3>{t("Profile settings")}</h3></div><span className="agent-local-tag">V1.{profile.revision}.0</span></div>
             <label className="agent-task-label" htmlFor="agent-name">{t("Display name")}</label>
             <input id="agent-name" className="agent-profile-input" value={profile.name} maxLength={80} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))}/>
@@ -423,7 +427,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             <div className="agent-disclaimer">Changing the profile creates a new agent version. Finish or reject active runs first; older checkpoints cannot resume on a different version.</div>
           </article>
 
-          <article className="agent-card">
+          <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
             {busy && <button className="agent-danger-button" onClick={() => controller.current?.abort()}><X size={13}/> Cancel active run</button>}
@@ -431,8 +435,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           </article>
         </section>
 
-        <aside className="agent-side-column">
-          <article className="agent-card agent-approval-card">
+        <aside className="agent-side-column" hidden={agentView === "run" || agentView === "profile" || agentView === "progress"}>
+          <article className="agent-card agent-approval-card" hidden={agentView !== "approvals"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("HUMAN IN THE LOOP")}</span><h3>{t("Approval queue")}</h3></div><span className="agent-count">{checkpoints.filter(item => item.status === "waiting_for_approval").length}</span></div>
             {checkpoints.filter(item => item.status === "waiting_for_approval").length === 0 ? <div className="agent-empty">{t("No pending approvals.")}</div> :
               checkpoints.filter(item => item.status === "waiting_for_approval").map(checkpoint => <div className="agent-approval-item" key={checkpoint.runId}>
@@ -441,7 +445,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               </div>)}
           </article>
 
-          <article className="agent-card">
+          <article className="agent-card" hidden={agentView !== "history"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
             {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
               <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
@@ -452,7 +456,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               </div>)}</div>}
           </article>
 
-          <article className="agent-card">
+          <article className="agent-card" hidden={agentView !== "audit"}>
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
               <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
               <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
