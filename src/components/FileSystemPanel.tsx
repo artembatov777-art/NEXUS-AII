@@ -30,10 +30,14 @@ const parentPath = (path: string) => {
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return index > 1 ? trimmed.slice(0, index) : trimmed.slice(0, Math.max(index + 1, 1));
 };
-async function recordFilesystemAudit(action: string): Promise<boolean> {
+async function recordFilesystemAudit(
+  action: string,
+  status: "started" | "completed" | "failed" | "reconciled" = "completed",
+  traceId = crypto.randomUUID()
+): Promise<boolean> {
   try {
     await invoke("record_tool_audit_event", {
-      event: { toolId: `filesystem.${action}`, runId: "filesystem-owner-ui", traceId: crypto.randomUUID(), status: "completed", timestamp: Date.now() }
+      event: { toolId: `filesystem.${action}`, runId: "filesystem-owner-ui", traceId, status, timestamp: Date.now() }
     });
     return true;
   } catch {
@@ -190,12 +194,24 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
     setBusy(true);
     setError("");
     try {
-      await invoke("acknowledge_workspace_operation_recovery", { operationId });
-      const audited = await recordFilesystemAudit("recovery-manual-reconciliation");
+      // Persist the audit claim before removing the only durable recovery record.
+      // If the audit sink is unavailable, keep the journal intact and fail closed.
+      const auditTraceId = operationId;
+      const started = await recordFilesystemAudit("recovery-manual-reconciliation", "started", auditTraceId);
+      if (!started) {
+        throw new Error("NEXUS could not save the audit record. The recovery record was not cleared.");
+      }
+      try {
+        await invoke("acknowledge_workspace_operation_recovery", { operationId });
+      } catch (cause) {
+        await recordFilesystemAudit("recovery-manual-reconciliation", "failed", auditTraceId);
+        throw cause;
+      }
+      const audited = await recordFilesystemAudit("recovery-manual-reconciliation", "reconciled", auditTraceId);
       const status = await refreshRecoveryState();
       setNotice(status
-        ? (audited ? "Recovery record acknowledged. Other pending records still need review." : "Recovery record cleared, but the audit history could not be updated.")
-        : (audited ? "Manual reconciliation recorded. No files were changed; filesystem operations are available again." : "Recovery record cleared, but the audit history could not be updated."));
+        ? (audited ? "Recovery record acknowledged. Other pending records still need review." : "Recovery record cleared, but the final audit event could not be saved; its started audit entry remains for review.")
+        : (audited ? "Manual reconciliation recorded. No files were changed; filesystem operations are available again." : "Recovery record cleared, but the final audit event could not be saved; its started audit entry remains for review."));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       try {
