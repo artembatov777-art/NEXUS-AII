@@ -33,7 +33,7 @@ const parentPath = (path: string) => {
 async function recordFilesystemAudit(
   action: string,
   status: "started" | "completed" | "failed" | "reconciled" = "completed",
-  traceId = crypto.randomUUID()
+  traceId: string = crypto.randomUUID()
 ): Promise<boolean> {
   try {
     await invoke("record_tool_audit_event", {
