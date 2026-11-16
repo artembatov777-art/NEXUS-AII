@@ -136,8 +136,10 @@ fn open_approved_root_handle(root: &Path) -> Result<CapabilityDir, String> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
-        // Open the directory itself, not a reparse-point target. Omitting
-        // FILE_SHARE_DELETE pins the directory while its capability is used.
+        // Keep the directory pinned against rename/delete while allowing the
+        // handle-relative no-replace rename API to add files and subdirectories.
+        // These are narrowly scoped directory rights, not GENERIC_WRITE.
+        options.access_mode(0x8000_0000 | 0x0000_0002 | 0x0000_0004);
         options.custom_flags(0x0020_0000 | 0x0200_0000);
         options.share_mode(0x0000_0001 | 0x0000_0002);
     }
@@ -325,8 +327,31 @@ impl WorkspaceAccess {
         for component in relative.components() {
             match component {
                 std::path::Component::Normal(name) => {
-                    directory = directory.open_dir_nofollow(name)
-                        .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?;
+                    #[cfg(windows)]
+                    {
+                        let mut options = CapabilityOpenOptions::new();
+                        options.read(true).maybe_dir(true).follow(FollowSymlinks::No);
+                        // A destination directory handle passed to
+                        // SetFileInformationByHandle(FileRenameInfo) must carry
+                        // FILE_ADD_FILE / FILE_ADD_SUBDIRECTORY. Open each child
+                        // relative to the already pinned parent so this does not
+                        // reintroduce an ambient-path race.
+                        options.access_mode(0x8000_0000 | 0x0000_0002 | 0x0000_0004);
+                        let child = directory.open_with(Path::new(name), &options)
+                            .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?
+                            .into_std();
+                        let metadata = child.metadata()
+                            .map_err(|error| format!("Could not inspect a directory inside the approved workspace: {error}"))?;
+                        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                            return Err("The requested workspace path contains a link or non-directory entry.".into());
+                        }
+                        directory = CapabilityDir::from_std_file(child);
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        directory = directory.open_dir_nofollow(name)
+                            .map_err(|error| format!("Could not open a directory inside the approved workspace: {error}"))?;
+                    }
                 }
                 _ => return Err("The requested path contains an invalid directory traversal.".into()),
             }
