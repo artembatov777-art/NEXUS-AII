@@ -65,3 +65,71 @@ fn intermediate_symlinks_and_hard_links_are_refused() {
     drop(workspace);
     fs::remove_dir_all(base).unwrap();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn edit_checks_version_and_preserves_original_on_conflict() {
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-edit-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    let ws = Workspace::grant(&base).unwrap();
+    assert!(ws.edit(Path::new("file"), "stale", "new").is_err());
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "old");
+    ws.edit(Path::new("file"), "old", "new").unwrap();
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "new");
+    drop(ws);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn concurrent_nexus_edits_do_not_both_apply_the_same_snapshot() {
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-race-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    let handles: Vec<_> = ["first", "second"]
+        .into_iter()
+        .map(|content| {
+            let base = base.clone();
+            std::thread::spawn(move || {
+                Workspace::grant(&base)
+                    .unwrap()
+                    .edit(Path::new("file"), "old", content)
+            })
+        })
+        .collect();
+    let results: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert!(["first", "second"].contains(&fs::read_to_string(base.join("file")).unwrap().as_str()));
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn edit_rejects_links_and_parent_traversal() {
+    use std::os::unix::fs::symlink;
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-edit-links-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    symlink(base.join("file"), base.join("link")).unwrap();
+    let ws = Workspace::grant(&base).unwrap();
+    assert!(ws.edit(Path::new("link"), "old", "new").is_err());
+    assert!(ws.edit(Path::new("../file"), "old", "new").is_err());
+    fs::hard_link(base.join("file"), base.join("hardlink")).unwrap();
+    assert!(ws.edit(Path::new("file"), "old", "new").is_err());
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "old");
+    drop(ws);
+    fs::remove_dir_all(base).unwrap();
+}

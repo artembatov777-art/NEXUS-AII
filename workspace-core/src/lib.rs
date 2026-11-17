@@ -111,6 +111,80 @@ impl Workspace {
         }
         Ok(dir)
     }
+    #[cfg(target_os = "linux")]
+    pub fn edit(&self, path: &Path, expected: &str, content: &str) -> Result<(), String> {
+        use cap_std::fs::PermissionsExt;
+        use std::io::Write;
+        use std::os::fd::AsRawFd;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        if expected.len() > 48000 || content.len() > 48000 {
+            return Err("File exceeds edit limit".into());
+        }
+        let dir = self.directory(path.parent().ok_or("Missing parent")?)?;
+        let name = path.file_name().ok_or("Missing filename")?;
+        normal(name)?;
+        let mut lock_options = OpenOptions::new();
+        lock_options.read(true);
+        let lock = dir
+            .open_with(".", &lock_options)
+            .map_err(|_| "Cannot open directory lock")?
+            .into_std();
+        if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
+            return Err("Cannot lock directory".into());
+        }
+        let mut original_options = OpenOptions::new();
+        original_options.read(true).follow(FollowSymlinks::No);
+        let original = dir
+            .open_with(name, &original_options)
+            .map_err(|_| "File unavailable")?
+            .into_std();
+        let metadata = original.metadata().map_err(|_| "Cannot inspect file")?;
+        if !metadata.is_file() {
+            return Err("Not a regular file".into());
+        }
+        ensure_no_external_hard_links(&original)?;
+        if read_text(&dir, name, 48000)? != expected {
+            return Err("File changed; reload before editing".into());
+        }
+        let temp = format!(
+            ".nexus-edit-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut options = OpenOptions::new();
+        options
+            .write(true)
+            .create_new(true)
+            .follow(FollowSymlinks::No);
+        let mut staged = dir
+            .open_with(&temp, &options)
+            .map_err(|_| "Cannot create temporary file")?;
+        let result = (|| -> Result<(), String> {
+            staged
+                .set_permissions(cap_std::fs::Permissions::from_mode({
+                    use std::os::unix::fs::PermissionsExt as _;
+                    metadata.permissions().mode()
+                }))
+                .map_err(|_| "Cannot set permissions")?;
+            staged
+                .write_all(content.as_bytes())
+                .map_err(|_| "Cannot write temporary file")?;
+            staged
+                .sync_all()
+                .map_err(|_| "Cannot sync temporary file")?;
+            if read_text(&dir, name, 48000)? != expected {
+                return Err("File changed; reload before editing".into());
+            }
+            dir.rename(&temp, &dir, name)
+                .map_err(|_| "Cannot replace file")?;
+            lock.sync_all()
+                .map_err(|_| "File replaced but directory sync failed; inspect before retrying")?;
+            Ok(())
+        })();
+        let _ = dir.remove_file(&temp);
+        result
+    }
     pub fn read(&self, path: &Path) -> Result<String, String> {
         let dir = self.directory(path.parent().ok_or("Missing parent")?)?;
         read_text(&dir, path.file_name().ok_or("Missing filename")?, 48000)
