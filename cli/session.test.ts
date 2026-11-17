@@ -49,3 +49,11 @@ describe('terminal session', () => {
     expect(session.history()).toEqual([]);
   });
 });
+
+it('does not retain a turn when durable history fails', async () => {
+  const router = new ModelRouter();
+  router.register({ id: 'test', listModels: async () => ok([]), async *stream() { yield { type: 'text_delta', text: 'answer' }; yield { type: 'completed' }; } });
+  const session = new TerminalSession(router, 'test', 'model', [], async () => { throw new Error('disk full'); });
+  await expect(session.send('hello', () => {})).rejects.toThrow('disk full');
+  expect(session.history()).toEqual([]);
+});

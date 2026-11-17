@@ -34,3 +34,11 @@
 - Удаление Tauri может затронуть vault, SQLite и native-команды; сначала найти замены и проверить их на всех платформах.
 - Провайдер и модель не выбраны; локальные тесты использовать с контролируемым тестовым адаптером, не выдавая его за рабочую модель.
 - Нужны решения о терминальных аналогах мультимодальности, мобильного доступа и обучения, а также о способе установки.
+
+## Сверка реализации на 863285b (2026-11-17)
+
+- Desktop: `src/lib/nexusRuntime.ts` собирает общие `src/core` planner/workflow, model router, gateway, memory, knowledge, projects и checkpoints; browser использует localStorage, Tauri — native repositories и IPC. `src/lib/workspaceTools.ts` обращается к Tauri; `src-tauri/src/workspace_fs.rs` использует закреплённые каталоги и no-follow при проходе компонентов. Наличие кода и тестов не подтверждает ручную работу Desktop или платформенные гарантии в этой среде.
+- CLI: `cli/nexus.ts` использует `ModelRouter`, `AgentPlanner`, `PlanExecutor`, `ToolGateway` и `TerminalSession`; до текущего изменения провайдеров и инструментов нет, audit намеренно отказывает. CLI не подключает Desktop memory, checkpoint, MCP, workspace и хранилища. `TerminalSession` — отдельный управляющий состоянием диалога слой, а не доказательство полноценного агентного цикла.
+- Повторно пригодны контракты и логика `src/core/model.ts`, `agentPlanner.ts`, `agentWorkflow.ts`, `planExecutor.ts`, `tools.ts`, `toolRegistry.ts`, `memory.ts`, `knowledge.ts`, `mcpClient.ts` и репозиторные интерфейсы; для работающего CLI нужны host-адаптеры и проверка совместимости данных. Desktop conversation schema отличается от терминальной истории: миграция не реализована.
+- Отсутствующие CLI-адаптеры: защищённый workspace, долговечные audit/checkpoint, совместимые memory/knowledge/projects, MCP transport и конфигурация моделей. Node API с проверкой строки или `realpath` до `open` не защищает от подмены компонентов. Предпочтительный путь — выделить защищённый Rust workspace в переиспользуемую библиотеку и предоставить CLI ограниченный локальный интерфейс, затем проверить Linux/macOS/Windows, включая гонки. До этого файловый доступ закрыт.
+- Проверка исходной базы: `npm test` и `npm run build` прошли после установки без install-скриптов; стандартная установка ONNX не удалась из-за сетевого отказа. Rust/Cargo отсутствуют; нативная сборка и CI по ОС не подтверждены.

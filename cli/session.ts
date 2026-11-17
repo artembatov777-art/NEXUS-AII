@@ -4,7 +4,7 @@ import type { ModelMessage, ModelRouter } from '../src/core/model';
 export class TerminalSession {
   private messages: ModelMessage[] = [];
   private running = false;
-  constructor(private readonly router: ModelRouter, private readonly provider: string, private readonly model: string) {}
+  constructor(private readonly router: ModelRouter, private readonly provider: string, private readonly model: string, initial: ModelMessage[] = [], private readonly save?: (messages: ModelMessage[]) => Promise<void>) { this.messages = initial.map(message => ({ ...message })); }
 
   history(): ModelMessage[] { return this.messages.map(message => ({ ...message })); }
   clear(): void { if (this.running) throw new Error('Cannot clear an active request.'); this.messages = []; }
@@ -30,7 +30,9 @@ export class TerminalSession {
       }
       if (signal?.aborted) throw new Error('Request cancelled.');
       if (!completed) throw new Error('Model stream ended without completion.');
-      this.messages = [...messages, { role: 'assistant', content: response }];
+      const next: ModelMessage[] = [...messages, { role: 'assistant', content: response }];
+      if (this.save) await this.save(next);
+      this.messages = next;
     } finally { this.running = false; }
   }
 }

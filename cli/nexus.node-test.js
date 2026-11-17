@@ -18,3 +18,31 @@ test('noninteractive input reports unavailable model honestly', () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /model.*not configured/i);
 });
+
+test('test model streams and restores completed turns across processes', async () => {
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const history = join(mkdtempSync(join(tmpdir(), 'nexus-history-')), 'history.json');
+  const runTest = input => spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input });
+  const first = runTest('hello\n');
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /TEST MODEL.*hello/s);
+  const second = runTest('again\n');
+  assert.equal(second.status, 0, second.stderr);
+  const saved = JSON.parse(readFileSync(history, 'utf8'));
+  assert.deepEqual(saved.messages.map(message => message.role), ['user', 'assistant', 'user', 'assistant']);
+  assert.equal(saved.messages[0].content, 'hello');
+});
+
+test('corrupt history fails without overwriting it', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const history = join(mkdtempSync(join(tmpdir(), 'nexus-history-')), 'history.json');
+  writeFileSync(history, 'broken');
+  const result = spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input: 'hello\n' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /History error/);
+  assert.equal(readFileSync(history, 'utf8'), 'broken');
+});

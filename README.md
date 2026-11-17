@@ -82,3 +82,7 @@ npm run tauri dev
 - Security model: docs/SECURITY.md
 - Platform smoke tests: docs/PLATFORM_SMOKE_TESTS.md
 - Desktop installation and build artifacts: docs/INSTALLATION.md
+
+### Offline CLI test fixture
+
+`npm run cli -- --test-model` starts a deterministic echo fixture labelled `TEST MODEL`; it is not an AI model and does not execute tools. Completed turns are stored in `~/.nexus-au/test-history.json`. Use `--history PATH` after `--test-model` to select a separate history file. The file contains conversation text; it is not encrypted and is not compatible with Desktop history. An invalid history file stops startup without overwriting it. Ctrl-C cancels the active terminal session. Normal CLI mode still has no configured provider.
