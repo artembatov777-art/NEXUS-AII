@@ -21,3 +21,13 @@ describe('terminal commands', () => {
     expect(await dispatchCommand('hello', context)).toBe(false);
   });
 });
+
+it('reports workspace backend unavailable for workspace commands without sending them to chat', async () => {
+  const output: string[] = [];
+  const context = { run: async () => err('tool_failed', 'unexpected'), write: (value: string) => output.push(value), newId: () => 'run', signal: new AbortController().signal };
+  for (const command of ['/project /tmp', '/files', '/read secret', '/search query']) {
+    expect(await dispatchCommand(command, context)).toBe(true);
+  }
+  expect(output.join('')).toMatch(/workspace backend.*unavailable/i);
+  expect(output).toHaveLength(4);
+});

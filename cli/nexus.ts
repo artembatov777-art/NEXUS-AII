@@ -29,7 +29,8 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode
 
-Interactive commands: /help, /agent <task>, /exit
+Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /exit
+Workspace backend is not available in this build.
 A model is not configured yet. No files or commands are accessed.
 `;
 const args = process.argv.slice(2);
@@ -65,7 +66,9 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
   try {
     if (!stdin.isTTY && testMode) {
       for await (const line of terminal) {
-        if (line.trim() && await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal)) process.exitCode = 1;
+        if (!line.trim()) continue;
+        if (await dispatchCommand(line.trim(), { run: agent.run.bind(agent), write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
+        if (await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal)) process.exitCode = 1;
       }
     } else while (true) {
       let line;

@@ -11,6 +11,10 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
+  if (/^\/(project|files|read|search)(?:\s|$)/.test(input)) {
+    context.write('Workspace backend is unavailable; no filesystem access was attempted.\n');
+    return true;
+  }
   if (input !== '/agent' && !input.startsWith('/agent ')) return false;
   const goal = input.slice('/agent'.length).trim();
   if (!goal) { context.write('Usage: /agent <task>\n'); return true; }

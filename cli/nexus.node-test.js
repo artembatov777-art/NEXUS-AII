@@ -46,3 +46,14 @@ test('corrupt history fails without overwriting it', async () => {
   assert.match(result.stderr, /History error/);
   assert.equal(readFileSync(history, 'utf8'), 'broken');
 });
+
+test('workspace commands in test mode report unavailable rather than being sent to the fixture', async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const history = join(mkdtempSync(join(tmpdir(), 'nexus-workspace-')), 'history.json');
+  const result = spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input: '/files\n' });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /workspace backend.*unavailable/i);
+  assert.doesNotMatch(result.stdout, /TEST MODEL/);
+});
