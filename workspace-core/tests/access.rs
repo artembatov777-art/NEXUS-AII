@@ -43,3 +43,25 @@ fn replacing_the_project_path_does_not_retarget_a_session() {
     assert!(ws.read(Path::new("note")).is_err());
     fs::remove_dir_all(base).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn intermediate_symlinks_and_hard_links_are_refused() {
+    use std::os::unix::fs::symlink;
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-links-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    let root = base.join("root");
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(root.join("inside")).unwrap();
+    fs::write(root.join("inside/file"), "data").unwrap();
+    symlink(root.join("inside"), root.join("alias")).unwrap();
+    let workspace = Workspace::grant(&root).unwrap();
+    assert!(workspace.read(Path::new("alias/file")).is_err());
+    fs::hard_link(root.join("inside/file"), base.join("outside-link")).unwrap();
+    assert!(workspace.read(Path::new("inside/file")).is_err());
+    drop(workspace);
+    fs::remove_dir_all(base).unwrap();
+}
