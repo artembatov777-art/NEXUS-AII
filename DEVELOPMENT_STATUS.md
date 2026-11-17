@@ -194,3 +194,7 @@ The terminal agent has a tested, sequential adapter over `AgentPlanner`, `ToolRe
 ## NEXUS AU 2.0 owner direction (2026-11-17)
 
 The owner’s master plan supersedes the previous desktop-first and CLI-only directions: CLI and Tauri Desktop will share one local Agent Engine. Existing data and features remain subject to migration and verification. Live provider integration remains deferred. PR #2 is open, draft and unmerged. Baseline GitHub Actions for `ee4e88ed563c5f9d45bf5d24442b51b1b4094f76`: Quality passed; Native desktop quality failed on the Windows Rust library test step, while Linux and macOS passed; security audit was skipped. These results predate uncommitted CLI and lockfile changes.
+
+## Shared engine continuation (2026-11-17)
+
+The sequential plan executor previously located in the CLI is now in `src/core/planExecutor.ts`, with its tests in the core. The CLI uses a compatibility re-export. It can be composed by either host, but the existing Desktop still uses its resumable multi-agent coordinator: the two interfaces have not yet been unified and the shared-engine phase is not complete. Exact-head `b31f069ec6cf97d0f7dfe00543c6121c89872d60` GitHub Actions: Quality passed; native desktop failed on the Windows Rust library tests; Linux and macOS native jobs passed; Rust audit was skipped. The failure cannot be treated as a Windows pass.

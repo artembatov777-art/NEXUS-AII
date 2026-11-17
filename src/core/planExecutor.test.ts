@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { AgentPlanner } from '../src/core/agentPlanner';
-import { ModelRouter } from '../src/core/model';
-import { ModelRouterPlanner } from '../src/core/modelPlanner';
-import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
-import { ToolGateway, type ToolAuditEvent } from '../src/core/tools';
-import { ToolRegistry } from '../src/core/toolRegistry';
-import { ok } from '../src/core/result';
-import { TerminalAgent } from './agent';
+import { AgentPlanner } from './agentPlanner';
+import { ModelRouter } from './model';
+import { ModelRouterPlanner } from './modelPlanner';
+import { GatewayAgentToolExecutor } from './agentToolBridge';
+import { ToolGateway, type ToolAuditEvent } from './tools';
+import { ToolRegistry } from './toolRegistry';
+import { ok } from './result';
+import { PlanExecutor as TerminalAgent } from './planExecutor';
 
 describe('terminal agent', () => {
   function setup(allowed: boolean) {
@@ -66,5 +66,11 @@ describe('terminal agent', () => {
     const agent = new TerminalAgent(planner, registry, new GatewayAgentToolExecutor(gateway, 'owner'));
     expect(await agent.run('inspect', 'model-run', new AbortController().signal)).toMatchObject({ ok: true, value: [{ stepId: 'one', output: { path: 'a' } }] });
     expect(events.map(event => event.status)).toEqual(['started', 'completed']);
+  });
+  it('does not report completion for an empty plan', async () => {
+    const gateway = new ToolGateway({ authorize: async () => 'deny' }, { record: async () => ok(undefined), list: async () => ok([]) }, { now: () => 1 });
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [] }) });
+    const executor = new TerminalAgent(planner, new ToolRegistry(gateway), new GatewayAgentToolExecutor(gateway, 'owner'));
+    expect(await executor.run('fix project', 'empty-plan', new AbortController().signal)).toMatchObject({ ok: false, error: { code: 'validation' } });
   });
 });

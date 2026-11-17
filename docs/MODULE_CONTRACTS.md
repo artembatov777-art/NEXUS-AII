@@ -369,3 +369,7 @@ Owner profile, local settings, permissions, and model preferences remain private
 Normal conversation, memory retrieval, and agent execution do not automatically update model weights. Runtime memory and model training are separate systems with separate controls.
 
 The training pipeline may consume only explicitly curated datasets with documented provenance and permission status. Every experiment must be reproducible and evaluated against held-out data. Fine-tuning, retrieval, prompting, and foundation-model pretraining must be described accurately and separately.
+
+## Terminal transition: plan execution
+
+`src/core/planExecutor.ts` provides a host-independent sequential executor for plans validated by `AgentPlanner`. It receives the tool registry and `AgentToolExecutor` as dependencies, passes each step through the existing gateway bridge, stops on cancellation or the first error, and reports completed steps to the caller. Tool permissions and durable audit remain the responsibility of the host-provided gateway; the executor does not grant permissions or supply an audit store. The CLI currently has no registered native tools or durable audit, so it cannot execute filesystem or shell actions. Desktop currently uses the separate resumable multi-agent coordinator; this contract is an intermediate building block, not evidence that both hosts already share an execution runtime or that completed plans can be resumed after a crash.
