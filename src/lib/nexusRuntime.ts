@@ -18,9 +18,10 @@ import { ToolRegistry } from "../core/toolRegistry";
 import { McpClient } from "../core/mcpClient";
 import { McpHttpTransport } from "../core/mcpHttpTransport";
 import type { PermissionScope, ToolRisk } from "../core/tools";
-import { AgentPlanner, type ValidatedPlan } from "../core/agentPlanner";
+import { AgentPlanner } from "../core/agentPlanner";
+import { createAgentWorkflow } from "../core/agentWorkflow";
 import { ModelRouterPlanner } from "../core/modelPlanner";
-import { MultiAgentCoordinator, type CoordinationEvent } from "../core/multiAgentCoordinator";
+import { MultiAgentCoordinator } from "../core/multiAgentCoordinator";
 import { ResumableAgentTaskExecutor } from "../core/resumableAgentExecutor";
 import { LocalStorageTraceSink } from "./traceStorage";
 import type { ModelRouter } from "../core/model";
@@ -166,21 +167,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
       }
       const planner = new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model));
       const coordinator = createCoordinator(threadId);
-      return {
-        plan: async (goal: string, signal: AbortSignal, referenceContext?: string): Promise<Result<ValidatedPlan>> => {
-          const available = toolRegistry.search("", 100);
-          if (!available.ok) return available;
-          const allowed = allowedToolIds ? new Set(allowedToolIds) : null;
-          const tools = allowed ? available.value.filter(tool => allowed.has(tool.id) || (allowed.has("mcp.*") && tool.id.startsWith("mcp."))) : available.value;
-          if (allowed && tools.length === 0) return err("validation", "No tools allowed for this workflow are registered.");
-          return planner.plan(goal, tools, signal, referenceContext);
-        },
-        run: (plan: ValidatedPlan, runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => {
-          const assignments = Object.fromEntries(plan.steps.map(step => [step.id, TOOL_INVOCATION_AGENT_ID])) as Record<string, AgentId>;
-          return coordinator.run(runId, plan, assignments, signal);
-        },
-        resume: (runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> => coordinator.resume(runId, signal)
-      };
+      return createAgentWorkflow(planner, toolRegistry, coordinator, TOOL_INVOCATION_AGENT_ID, allowedToolIds);
     },
     checkpointService,
     checkpointRepository,

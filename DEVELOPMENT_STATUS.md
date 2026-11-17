@@ -198,3 +198,5 @@ The owner’s master plan supersedes the previous desktop-first and CLI-only dir
 ## Shared engine continuation (2026-11-17)
 
 The sequential plan executor previously located in the CLI is now in `src/core/planExecutor.ts`, with its tests in the core. The CLI uses a compatibility re-export. It can be composed by either host, but the existing Desktop still uses its resumable multi-agent coordinator: the two interfaces have not yet been unified and the shared-engine phase is not complete. Exact-head `b31f069ec6cf97d0f7dfe00543c6121c89872d60` GitHub Actions: Quality passed; native desktop failed on the Windows Rust library tests; Linux and macOS native jobs passed; Rust audit was skipped. The failure cannot be treated as a Windows pass.
+
+The Desktop workflow composition has been moved from `src/lib/nexusRuntime.ts` to the host-neutral `src/core/agentWorkflow.ts`, preserving the existing planner, allowlist, checkpointed coordinator and same-instance resume semantics. Existing Desktop workflow tests and a core allowlist test cover the extraction. CLI still uses the separate sequential executor; shared runtime and durable whole-plan recovery remain unfinished.
