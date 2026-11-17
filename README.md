@@ -86,3 +86,7 @@ npm run tauri dev
 ### Offline CLI test fixture
 
 `npm run cli -- --test-model` starts a deterministic echo fixture labelled `TEST MODEL`; it is not an AI model and does not execute tools. Completed turns are stored in `~/.nexus-au/test-history.json`. Use `--history PATH` after `--test-model` to select a separate history file. The file contains conversation text; it is not encrypted and is not compatible with Desktop history. An invalid history file stops startup without overwriting it. Ctrl-C cancels the active terminal session. Normal CLI mode still has no configured provider.
+
+### CLI workspace
+
+With stable Rust and the npm dependencies installed, run `npm run build:workspace` and `npm run cli` in a terminal. Use `/project <absolute directory>` to grant access for this session. Use `/files [relative directory]`, `/read <relative file>`, or `/search <literal text>` and confirm the displayed read permission. Search returns matching paths, scanning at most 1,000 entries down to eight subdirectory levels and returning up to 100 paths. Files must be UTF-8 and at most 48,000 bytes. Ctrl-C closes the session. The CLI stores tool audit records under `~/.nexus-au/workspace-audit/`.

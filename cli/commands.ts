@@ -3,6 +3,7 @@ import type { TerminalStepResult } from './agent';
 import type { Result } from '../src/core/result';
 
 interface CommandContext {
+  workspace?: (line: string, signal: AbortSignal) => Promise<string>;
   run(goal: string, runId: string, signal: AbortSignal, onStep: (step: TerminalStepResult) => void): Promise<Result<TerminalStepResult[]>>;
   write(text: string): void;
   newId(): string;
@@ -12,6 +13,7 @@ interface CommandContext {
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
   if (/^\/(project|files|read|search)(?:\s|$)/.test(input)) {
+    if (context.workspace) { context.write(await context.workspace(input, context.signal) + '\n'); return true; }
     context.write('Workspace backend is unavailable; no filesystem access was attempted.\n');
     return true;
   }

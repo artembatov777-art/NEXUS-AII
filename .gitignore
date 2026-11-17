@@ -13,3 +13,5 @@ build-cli/
 
 # TypeScript incremental build metadata
 *.tsbuildinfo
+
+workspace-core/target/

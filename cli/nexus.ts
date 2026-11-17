@@ -17,6 +17,7 @@ import { runPrompt } from './runner';
 import pkg from '../package.json';
 import { testModel } from './testModel';
 import { loadHistory, saveHistory } from './history';
+import { workspaceSession } from './workspaceHost';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -30,8 +31,8 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --history    History file for test mode
 
 Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /exit
-Workspace backend is not available in this build.
-A model is not configured yet. No files or commands are accessed.
+Use /project <absolute directory> to grant a project for this session.
+A model is not configured yet.
 `;
 const args = process.argv.slice(2);
 const testMode = args[0] === '--test-model' && (args.length === 1 || (args.length === 3 && args[1] === '--history' && !!args[2]));
@@ -58,6 +59,7 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
   // Fail closed until a durable audit store and native tools are available.
   const audit = { record: async () => err('storage_failed', 'Durable audit is unavailable.') };
   const gateway = new ToolGateway(permissions, audit, { now: () => Date.now() });
+  const workspace = stdin.isTTY && stdout.isTTY ? workspaceSession(permissions) : undefined;
   const registry = new ToolRegistry(gateway);
   const agent = new TerminalAgent(new AgentPlanner(new ModelRouterPlanner(router, 'unconfigured', 'unconfigured')), registry, new GatewayAgentToolExecutor(gateway, 'owner'));
   const controller = new AbortController();
@@ -67,7 +69,7 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
     if (!stdin.isTTY && testMode) {
       for await (const line of terminal) {
         if (!line.trim()) continue;
-        if (await dispatchCommand(line.trim(), { run: agent.run.bind(agent), write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
+        if (await dispatchCommand(line.trim(), { workspace: workspace?.command, run: agent.run.bind(agent), write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
         if (await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal)) process.exitCode = 1;
       }
     } else while (true) {
@@ -75,8 +77,8 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
       try { line = (await terminal.question('❯ ')).trim(); } catch { break; }
       if (line === '/exit' || line === '/quit') break;
       if (line === '/help') stdout.write(help);
-      else if (await dispatchCommand(line, { run: agent.run.bind(agent), write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
+      else if (await dispatchCommand(line, { workspace: workspace?.command, run: agent.run.bind(agent), write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
       else if (line) await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal);
     }
-  } finally { terminal.close(); }
+  } finally { workspace?.close(); terminal.close(); }
 }

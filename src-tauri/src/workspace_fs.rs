@@ -18,33 +18,7 @@ const MAX_DIRECTORY_ENTRIES: usize = 500;
 
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Refuse hard-linked files: a second directory entry may expose the same inode
-/// outside the owner-approved workspace, even when the selected path is inside it.
-pub(crate) fn ensure_no_external_hard_links(file: &fs::File) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let metadata = file.metadata()
-            .map_err(|_| "NEXUS could not verify whether the file has external hard links.")?;
-        if metadata.nlink() > 1 {
-            return Err("NEXUS will not access a hard-linked file because another path may expose the same data.".into());
-        }
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
-        let mut information: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        let queried = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) };
-        if queried == 0 {
-            return Err("NEXUS could not verify whether the file has external hard links.".into());
-        }
-        if information.nNumberOfLinks > 1 {
-            return Err("NEXUS will not access a hard-linked file because another path may expose the same data.".into());
-        }
-    }
-    Ok(())
-}
+pub(crate) use nexus_workspace::ensure_no_external_hard_links;
 
 /// Opens only a regular file and refuses to follow a final-component symlink/reparse point.
 /// The caller must still validate the canonical parent against an approved root.
@@ -637,23 +611,7 @@ fn read_workspace_file_inner(path: &str, access: &WorkspaceAccess) -> Result<Str
     }
     let requested = Path::new(path);
     let (parent_directory, name, _root) = access.open_approved_parent(requested)?;
-    let file = open_capability_file(&parent_directory, &name, true, false, false)?;
-    let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
-    if !metadata.is_file() {
-        return Err("NEXUS can open regular files only, not links or special entries.".into());
-    }
-    ensure_no_external_hard_links(&file)?;
-    let metadata = file.metadata().map_err(|e| format!("Could not inspect opened file: {e}"))?;
-    if metadata.len() > MAX_TEXT_FILE_BYTES {
-        return Err("This file is larger than the 2 MB preview limit.".into());
-    }
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.take(MAX_TEXT_FILE_BYTES + 1).read_to_end(&mut bytes)
-        .map_err(|e| format!("Could not read file: {e}"))?;
-    if bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
-        return Err("This file grew beyond the 2 MB preview limit while being read.".into());
-    }
-    String::from_utf8(bytes).map_err(|_| "This file is not UTF-8 text and cannot be previewed.".into())
+    nexus_workspace::read_text(&parent_directory, &name, MAX_TEXT_FILE_BYTES)
 }
 
 #[tauri::command]

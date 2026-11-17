@@ -39,6 +39,7 @@ jobs:
         run: npm install --global npm@10.8.2
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
       - run: npm run build
+      - run: cargo test --locked --manifest-path workspace-core/Cargo.toml
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - name: Build Windows installers
