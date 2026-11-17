@@ -27,7 +27,12 @@ export function registerCliWorkspaceTools(gateway: ToolGateway, backend: Workspa
           const response = await backend.invoke({ operation, ...input }, context.signal);
           if (context.signal.aborted) return err('cancelled', 'Workspace operation cancelled.');
           if (!response || typeof response !== 'object' || typeof response.ok !== 'boolean') return err('tool_failed', 'Invalid workspace backend response.');
-          if (!response.ok) return response;
+          if (!response.ok) {
+            const failure = response.error;
+            const allowedCodes = ['validation', 'permission_denied', 'timeout', 'cancelled', 'tool_failed', 'storage_failed'];
+            if (!failure || typeof failure !== 'object' || !allowedCodes.includes(failure.code) || typeof failure.message !== 'string' || !failure.message.trim() || failure.message.length > 1000 || typeof failure.retryable !== 'boolean') return err('tool_failed', 'Invalid workspace backend response.');
+            return err(failure.code, failure.message, failure.retryable);
+          }
           const value = response.value;
           if (!value || typeof value !== 'object' || Array.isArray(value)) return err('tool_failed', 'Invalid workspace backend response.');
           const data = value as Record<string, unknown>;

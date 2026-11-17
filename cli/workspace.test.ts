@@ -70,3 +70,9 @@ it('aborts an in-flight backend operation', async () => {
   expect(await result).toMatchObject({ ok: false, error: { code: 'cancelled' } });
   expect(observed).toBe(true);
 });
+
+it('rejects a malformed backend error rather than exposing an invalid result', async () => {
+  const { backend, call } = setup();
+  vi.mocked(backend.invoke).mockResolvedValue({ ok: false } as never);
+  expect(await call('cli.workspace.read', { root: '/project', path: 'x' })).toMatchObject({ ok: false, error: { code: 'tool_failed', message: 'Invalid workspace backend response.' } });
+});
