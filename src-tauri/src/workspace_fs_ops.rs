@@ -190,7 +190,14 @@ pub(crate) fn rename_no_replace_at(
         use std::os::windows::io::AsRawHandle;
         use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::Foundation::HANDLE;
-        use windows_sys::Win32::Storage::FileSystem::{SetFileInformationByHandle, FILE_RENAME_INFO};
+        use windows_sys::Win32::Storage::FileSystem::FILE_RENAME_INFO;
+        #[repr(C)]
+        struct IoStatusBlock { status_or_pointer: usize, information: usize }
+        #[link(name = "ntdll")]
+        extern "system" {
+            fn NtSetInformationFile(handle: HANDLE, status: *mut IoStatusBlock, info: *const core::ffi::c_void, length: u32, class: u32) -> i32;
+            fn RtlNtStatusToDosError(status: i32) -> u32;
+        }
 
         // Open the source entry relative to its pinned parent, refuse final
         // reparse points, and request DELETE on this original handle. Windows
@@ -228,16 +235,22 @@ pub(crate) fn rename_no_replace_at(
             std::ptr::copy_nonoverlapping(wide_name.as_ptr(), name_pointer, wide_name.len());
             name_pointer.add(wide_name.len()).write(0);
         }
+        // NT FileRenameInformation supports a target directory handle and a
+        // relative name, preserving the pinned-directory security boundary.
+        let mut status = IoStatusBlock { status_or_pointer: 0, information: 0 };
         let result = unsafe {
-            SetFileInformationByHandle(
+            NtSetInformationFile(
                 source_file.as_raw_handle() as HANDLE,
-                3, // FileRenameInfo
-                buffer.as_mut_ptr().cast(),
+                &mut status,
+                buffer.as_ptr().cast(),
                 u32::try_from(total_size).map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename metadata is too large."))?,
+                10, // FileRenameInformation
             )
         };
         let _ = (_source_path, _destination_path);
-        if result == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
+        if result < 0 {
+            Err(std::io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32))
+        } else { Ok(()) }
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
@@ -709,6 +722,8 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(source_directory.join("item.txt")).unwrap(), "source contents");
         assert_eq!(fs::read_to_string(destination_directory.join("item.txt")).unwrap(), "destination contents");
+        drop(source_handle);
+        drop(destination_handle);
         fs::remove_dir_all(base).expect("cleanup");
     }
 
@@ -740,6 +755,8 @@ mod tests {
         assert_eq!(fs::read_to_string(destination_directory.join("folder").join("nested.txt")).unwrap(), "nested contents");
         assert!(!source_directory.join("item.txt").exists());
         assert!(!source_directory.join("folder").exists());
+        drop(source_handle);
+        drop(destination_handle);
         fs::remove_dir_all(base).expect("cleanup");
     }
 
