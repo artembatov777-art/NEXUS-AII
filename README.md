@@ -57,6 +57,10 @@ These facts do not mean every planned feature is production-ready. See `docs/ROA
 - Agent integrations: Tool Gateway and MCP.
 - Quality: unit/integration tests, CI, security review, and real desktop smoke tests.
 
+## Terminal transition
+
+A terminal entry point is under development. Run `npm run cli` or `npm run cli -- --help`. The shell includes an `/agent` command, but does not yet connect to a model, access project files, or execute commands; the existing desktop application remains available while its capabilities are migrated. See [the transition plan](tasks/plan.md) and [task list](tasks/todo.md).
+
 ## Development
 
 For platform prerequisites, installer artifacts, and first-launch setup, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
