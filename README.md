@@ -126,9 +126,10 @@ fully synced staging file gets a name but before rename can leave a
 `.nexus-edit-*` file. The CLI leaves such files alone. Review an orphan before
 removing it, and only after confirming its writer has exited.
 
-Before dispatching an edit, the CLI persists an intent with the project, file,
-original revision, original text, and SHA-256 hashes of both versions for each file. The
-per-attempt `.edit.json.steps` journal records preflight and file dispatch
+Before dispatching an edit, the CLI persists an intent with the project, file
+paths, original revisions and SHA-256 hashes of both versions. Original text
+goes into a separate recovery store. The per-attempt `.edit.json.steps`
+journal records preflight and file dispatch
 intent and outcomes as they are known. A dispatch intent without an outcome
 can mean the file was replaced but its reply was lost. It prints the recovery
 ID, also stored as the basename of a `.edit.json` file under
@@ -154,8 +155,14 @@ inspect it, then prepare a new rollback from the original apply ID for any
 remaining eligible files. A side edit can still race the final native
 revision check and rename.
 
-The journal stores original file contents in plaintext under
-`~/.nexus-au/workspace-audit/`. Keep the directory owner-only. Removing a
-journal also removes the information needed for that rollback. Linux writes
-require a current workspace host with write-receipt support.
+For new operations the CLI stores original file contents in
+`~/.nexus-au/workspace-recovery/` (directory mode `0700`, files `0600`).
+These local backups are plaintext. SHA-256 checksums detect corruption
+and bind backups and write receipts to the operation. They do not authenticate
+data against someone who can rewrite all files as your user. The CLI refuses
+rollback if the backup or journal fails verification. `/recover` can still
+inspect files using intact audit metadata if the backup is unavailable.
+Existing journals stay in place, including the original text in version 3
+journals. Linux writes require a current workspace host with write-receipt
+support and durable audit and recovery storage.
 Windows and macOS hosts support preview and approval of regular drafts.

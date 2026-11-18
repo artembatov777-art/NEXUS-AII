@@ -266,7 +266,33 @@ with tempfile.TemporaryDirectory() as temp:
         phases = [json.loads(line)["phase"] for line in journal.read_text().splitlines()]
         intent = journal.with_suffix("")
         assert intent.stat().st_mode & 0o777 == 0o600
-        assert json.loads(intent.read_text())["files"][0]["original"] == "workspace fixture"
+        metadata = json.loads(intent.read_text())
+        assert metadata["version"] == 4
+        assert "workspace fixture" not in intent.read_text()
+        snapshots = intent.parent.with_name("workspace-recovery") / (batch_id + ".json")
+        assert snapshots.stat().st_mode & 0o777 == 0o600
+        assert snapshots.parent.stat().st_mode & 0o777 == 0o700
+        saved_snapshots = snapshots.read_text()
+        assert json.loads(saved_snapshots)["originals"][0] == "workspace fixture"
+        snapshots.write_text(saved_snapshots + " ")
+        cli.sendline("/rollback " + batch_id)
+        cli.expect("Recovery data is missing or failed integrity verification")
+        cli.expect("❯")
+        assert note.read_text() == "workspace updated"
+        cli.sendline("/recover " + batch_id)
+        for _ in range(2):
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+        cli.expect_exact('Matches the proposed replacement: "note.txt"')
+        cli.expect("❯")
+        snapshots.write_text(saved_snapshots)
+
+        original_steps = journal.read_text()
+        journal.write_text(original_steps.replace('"phase":"applied"', '"phase":"altered"'))
+        cli.sendline("/rollback " + batch_id)
+        cli.expect("No readable rollback journal")
+        cli.expect("❯")
+        journal.write_text(original_steps)
         assert phases == ["preflight-started", "preflight-passed", "dispatch-intent",
                           "applied", "dispatch-intent", "not-confirmed"]
         # Denying the reverse plan leaves both files unchanged. Reopening it

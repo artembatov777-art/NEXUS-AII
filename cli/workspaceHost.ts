@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, join } from 'node:path';
-import { lstat, mkdir, open, readFile, type FileHandle } from 'node:fs/promises';
+import { mkdir, open, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { ok, err } from '../src/core/result';
 import { ToolGateway, type PermissionService, type ToolAuditEvent } from '../src/core/tools';
 import { registerCliWorkspaceTools } from './workspace';
@@ -13,6 +13,10 @@ import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
 import { PlanExecutor } from '../src/core/planExecutor';
 import { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
+import {
+  assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
+  MAX_INTENT_BYTES, MAX_STEPS_BYTES, readPrivateJournal, syncDirectory, WorkspaceRecoveryStore, type RecoveryFile
+} from './workspaceRecovery';
 
 const executable = fileURLToPath(new URL('./bin/nexus-workspace' + (process.platform === 'win32' ? '.exe' : ''), import.meta.url));
 
@@ -55,26 +59,11 @@ class Connection {
   }
 }
 
-const digest = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
-
-const MAX_DRAFT_FILES = 8;
-const MAX_EDIT_BYTES = 48_000;
-// JSON escapes some characters as six bytes.
-const MAX_INTENT_BYTES = MAX_DRAFT_FILES * MAX_EDIT_BYTES * 7;
-
 interface DraftFile {
   readonly path: string;
   readonly before: string;
   readonly after: string;
   readonly revision?: string;
-}
-
-interface RecoveryFile {
-  path: string;
-  revision: string;
-  before: string;
-  after: string;
-  original?: string;
 }
 
 interface EditStep {
@@ -94,57 +83,42 @@ function isRevision(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 128 && /^\d+:\d+:-?\d+:\d+:\d+$/.test(value);
 }
 
-function isIntentFile(file: unknown): file is RecoveryFile {
-  if (!file || typeof file !== 'object') return false;
-  const { path, revision, before, after } = file as Record<string, unknown>;
-  return typeof path === 'string' && typeof revision === 'string' &&
-    typeof before === 'string' && /^[a-f0-9]{64}$/.test(before) &&
-    typeof after === 'string' && /^[a-f0-9]{64}$/.test(after);
-}
-
 export function workspaceSession(permissions: PermissionService, report: (text: string) => void) {
   let host: Connection | undefined;
   let root = '';
   let draft: DraftPlan | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
+  const recovery = new WorkspaceRecoveryStore(join(dirname(dir), 'workspace-recovery'));
   const auditFile = (id: string) => {
     if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id)) throw new Error('Invalid audit run identifier');
     return join(dir, id + '.jsonl');
   };
   const intentFile = (id: string) => {
-    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id)) throw new Error('Invalid recovery ID');
+    if (!isRecoveryId(id)) throw new Error('Invalid recovery ID');
     return join(dir, id + '.edit.json');
   };
   async function assertPrivateAuditDirectory() {
-    for (const path of [dirname(dir), dir]) {
-      const metadata = await lstat(path);
-      if (!metadata.isDirectory() || metadata.uid !== process.getuid?.() || (metadata.mode & 0o077)) {
-        throw new Error('Workspace audit directory is not private');
+    await assertPrivateDirectory(dirname(dir));
+    await assertPrivateDirectory(dir);
+  }
+
+  async function readIntent(id: string) {
+    const path = intentFile(id);
+    const contents = process.platform === 'linux'
+      ? await readPrivateJournal(path, MAX_INTENT_BYTES) : await readFile(path, 'utf8');
+    const intent = JSON.parse(contents);
+    if (intent?.version === 4) {
+      const { root, plan, rollbackOf, files, recoveryHash } = intent;
+      const manifest = { root, plan, rollbackOf, files };
+      if (digest(JSON.stringify({ id, manifest, recoveryHash })) !== intent.intentHash) {
+        throw new Error('Invalid edit intent checksum');
       }
     }
-  }
-
-  async function assertPrivateJournal(file: FileHandle, limit: number) {
-    const metadata = await file.stat();
-    if (!metadata.isFile() || metadata.uid !== process.getuid?.() || metadata.nlink !== 1 ||
-        (metadata.mode & 0o077) || metadata.size > limit) {
-      throw new Error('Invalid workspace journal');
-    }
-  }
-
-  async function readPrivateJournal(path: string, limit: number) {
-    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    try {
-      await assertPrivateJournal(file, limit);
-      return await file.readFile('utf8');
-    } finally { await file.close(); }
+    return intent;
   }
 
   async function syncAuditDirectory() {
-    for (const path of [dir, dirname(dir), homedir()]) {
-      const directory = await open(path, 'r');
-      try { await directory.sync(); } finally { await directory.close(); }
-    }
+    for (const path of [dir, dirname(dir), homedir()]) await syncDirectory(path);
   }
   const gateway = new ToolGateway(permissions, {
     async record(event) {
@@ -193,8 +167,10 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
     const flags = event.phase === 'preflight-started' ? append | constants.O_CREAT | constants.O_EXCL : append;
     const file = await open(intentFile(runId) + '.steps', flags, 0o600);
     try {
-      await assertPrivateJournal(file, 128_000);
-      await file.appendFile(JSON.stringify({ ...event, at: new Date().toISOString() }) + '\n');
+      await assertPrivateJournal(file, MAX_STEPS_BYTES);
+      const step = { ...event, at: new Date().toISOString() };
+      const checksum = digest(JSON.stringify({ runId, step }));
+      await file.appendFile(JSON.stringify({ ...step, checksum }) + '\n');
       await file.sync();
     } finally { await file.close(); }
     await syncAuditDirectory();
@@ -241,20 +217,21 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         performance.now() < input.draft.approvedUntil!;
       if (!current()) return err('cancelled', 'Draft is no longer current.');
 
-      const intent = {
-        version: 3,
+      const manifest = {
         root: input.root,
         plan: input.draft.hash,
         rollbackOf: input.draft.rollbackOf,
         files: input.draft.files.map(({ path, revision, before, after }) =>
-          ({ path, revision, before: digest(before), after: digest(after), original: before }))
+          ({ path, revision: revision!, before: digest(before), after: digest(after) }))
       };
       const id = context.runId;
       try {
         await assertPrivateAuditDirectory();
+        const recoveryHash = await recovery.save(id, manifest, input.draft.files.map(file => file.before));
         const journal = await open(intentFile(id), 'wx', 0o600);
         try {
-          await journal.writeFile(JSON.stringify(intent));
+          const intentHash = digest(JSON.stringify({ id, manifest, recoveryHash }));
+          await journal.writeFile(JSON.stringify({ version: 4, ...manifest, recoveryHash, intentHash }));
           await journal.sync();
         } finally { await journal.close(); }
         await syncAuditDirectory();
@@ -362,14 +339,9 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       }
       if (command === '/recover') {
         let intent: Record<string, unknown>;
-        try {
-          const path = intentFile(arg);
-          const contents = process.platform === 'linux'
-            ? await readPrivateJournal(path, MAX_INTENT_BYTES) : await readFile(path, 'utf8');
-          intent = JSON.parse(contents);
-        }
+        try { intent = await readIntent(arg); }
         catch { return 'No readable edit intent for that recovery ID.'; }
-        const files = intent?.version === 2 || intent?.version === 3 ? intent.files : [intent];
+        const files = intent && [2, 3, 4].includes(intent.version as number) ? intent.files : [intent];
         if (intent?.root !== root || !Array.isArray(files) || !files.length ||
             files.length > MAX_DRAFT_FILES || !files.every(isIntentFile)) {
           return 'Recovery requires a valid intent for the selected project.';
@@ -395,22 +367,36 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         draft = undefined;
         if (!host.editSupported) return 'This workspace host cannot apply rollbacks.';
         let files: RecoveryFile[];
+        let originals: readonly string[];
         const receipts = new Map<string, string>();
         try {
           await assertPrivateAuditDirectory();
-          const intent = JSON.parse(await readPrivateJournal(intentFile(arg), MAX_INTENT_BYTES));
-          if (intent?.version !== 3 || intent.rollbackOf || intent.root !== root ||
+          const intent = await readIntent(arg);
+          if (![3, 4].includes(intent?.version) || intent.rollbackOf || intent.root !== root ||
               !Array.isArray(intent.files) || !intent.files.length || intent.files.length > MAX_DRAFT_FILES ||
               !intent.files.every(isIntentFile)) throw new Error('Invalid rollback intent');
           files = intent.files;
-          for (const file of files) {
-            if (typeof file.original !== 'string' || Buffer.byteLength(file.original) > MAX_EDIT_BYTES ||
-                digest(file.original) !== file.before) throw new Error('Invalid rollback original');
+          if (intent.version === 4) {
+            const { root, plan, rollbackOf } = intent;
+            try {
+              originals = await recovery.load(arg, { root, plan, rollbackOf, files }, intent.recoveryHash);
+            } catch {
+              return 'Recovery data is missing or failed integrity verification. Use /recover to inspect the files.';
+            }
+          } else {
+            originals = files.map(file => {
+              if (typeof file.original !== 'string' || Buffer.byteLength(file.original) > MAX_EDIT_BYTES ||
+                  digest(file.original) !== file.before) throw new Error('Invalid rollback original');
+              return file.original;
+            });
           }
-          const steps = await readPrivateJournal(intentFile(arg) + '.steps', 128_000);
+          const steps = await readPrivateJournal(intentFile(arg) + '.steps', MAX_STEPS_BYTES);
           // A record without its final newline can be a torn append.
           for (const line of steps.split('\n').slice(0, -1)) {
-            const step: EditStep = JSON.parse(line);
+            const { checksum, ...step } = JSON.parse(line);
+            if (intent.version === 4 && digest(JSON.stringify({ runId: arg, step })) !== checksum) {
+              throw new Error('Invalid rollback step checksum');
+            }
             if (step.phase === 'applied' && typeof step.path === 'string' && isRevision(step.revision)) {
               receipts.set(step.path, step.revision);
             }
@@ -422,7 +408,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         const reverse: DraftFile[] = [];
         const preview: string[] = [];
         const skipped: string[] = [];
-        for (const file of [...files].reverse()) {
+        for (const [index, file] of [...files.entries()].reverse()) {
           if (signal.aborted) return 'Rollback preview cancelled.';
           const label = quoteTerminal(file.path);
           const receipt = receipts.get(file.path);
@@ -439,8 +425,8 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
           } else if (observed.value.revision !== receipt || digest(observed.value.content) !== file.after) {
             skipped.push(`Skipped ${label}: conflict with the confirmed write revision.`);
           } else {
-            reverse.push(Object.freeze({ path: file.path, before: observed.value.content, after: file.original!, revision: receipt }));
-            preview.push(`Rollback for ${label}\n- ${quoteTerminal(observed.value.content)}\n+ ${quoteTerminal(file.original)}`);
+            reverse.push(Object.freeze({ path: file.path, before: observed.value.content, after: originals[index], revision: receipt }));
+            preview.push(`Rollback for ${label}\n- ${quoteTerminal(observed.value.content)}\n+ ${quoteTerminal(originals[index])}`);
           }
         }
         if (signal.aborted) return 'Rollback preview cancelled.';
