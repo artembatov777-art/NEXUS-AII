@@ -369,10 +369,13 @@ pub fn acknowledge_workspace_operation_recovery(
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     fn fixture() -> (PathBuf, PathBuf, WorkspaceAccess, WorkspaceOperationJournal) {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
-        let base = std::env::temp_dir().join(format!("nexus-fs-recovery-{}-{nonce}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("nexus-fs-recovery-{}-{nonce}-{}", std::process::id(), FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)));
         let root = base.join("approved");
         fs::create_dir_all(&root).expect("create approved root");
         let permissions = base.join("permissions.json");
