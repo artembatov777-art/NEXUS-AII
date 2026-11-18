@@ -1,17 +1,14 @@
 //! Native test candidate. Neither the shipped Windows host nor Tauri calls this.
 use super::{query, revision};
 use crate::{open_child_directory, read_open_text, Workspace};
-use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
 use cap_std::fs::{Dir, OpenOptions, OpenOptionsExt};
 use std::{
     ffi::OsStr,
     fs::File,
     io::{self, Seek, SeekFrom, Write},
     mem::{offset_of, size_of, size_of_val},
-    os::windows::{
-        ffi::OsStrExt,
-        io::{AsRawHandle, FromRawHandle},
-    },
+    os::windows::{ffi::OsStrExt, io::AsRawHandle},
     path::{Component, Path},
     ptr::null_mut,
     sync::atomic::{AtomicU64, Ordering},
@@ -23,7 +20,7 @@ use windows_sys::{
         FILE_RENAME_REPLACE_IF_EXISTS,
     },
     Win32::{
-        Foundation::{RtlNtStatusToDosError, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE},
+        Foundation::{RtlNtStatusToDosError, GENERIC_READ, GENERIC_WRITE},
         Security::{
             GetKernelObjectSecurity, DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION,
             LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, SACL_SECURITY_INFORMATION,
@@ -177,23 +174,29 @@ fn require_plain_file(file: &File) -> io::Result<()> {
 }
 
 fn directory_for_publish(dir: &Dir) -> io::Result<File> {
-    let handle = unsafe {
-        ReOpenFile(
-            dir.as_raw_handle(),
-            GENERIC_READ | FILE_ADD_FILE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    let file = unsafe { File::from_raw_handle(handle) };
+    // Open the current pinned directory through its capability, requesting
+    // FILE_ADD_FILE during the relative open. ReOpenFile cannot add these
+    // rights reliably when the original directory handle was read-only.
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .maybe_dir(true)
+        .follow(FollowSymlinks::No);
+    options.access_mode(GENERIC_READ | FILE_ADD_FILE);
+    options.share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE);
+    let file = dir.open_with(".", &options)?.into_std();
     let metadata = file.metadata()?;
     if !metadata.is_dir() || crate::is_link_or_reparse(&metadata) {
         return Err(io::Error::other(
             "Publication requires a pinned regular directory",
         ));
+    }
+    let original: FILE_ID_INFO = query(&dir.try_clone()?.into_std_file(), FileIdInfo)?;
+    let reopened: FILE_ID_INFO = query(&file, FileIdInfo)?;
+    if original.VolumeSerialNumber != reopened.VolumeSerialNumber
+        || original.FileId.Identifier != reopened.FileId.Identifier
+    {
+        return Err(io::Error::other("Publication directory identity changed"));
     }
     Ok(file)
 }
@@ -491,7 +494,7 @@ mod tests {
     use super::*;
     use std::{fs, os::windows::fs::OpenOptionsExt as _, path::PathBuf, process::Command};
 
-    use std::os::windows::io::OwnedHandle;
+    use std::os::windows::io::{FromRawHandle, OwnedHandle};
     use windows_sys::Win32::{
         Foundation::{GetLastError, LocalFree, ERROR_NOT_ALL_ASSIGNED, LUID},
         Security::{
