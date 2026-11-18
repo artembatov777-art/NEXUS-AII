@@ -2,6 +2,8 @@
 import json
 import os
 import signal
+import shutil
+import sys
 import subprocess
 import tempfile
 from pathlib import Path
@@ -145,14 +147,14 @@ with tempfile.TemporaryDirectory() as temp:
         replacement = project / "replacement.txt"
         replacement.write_text("workspace fixture")
         replacement.replace(note)
-        apply_draft("yes", "File changed; prepare a new draft")
+        apply_draft("yes", "No writes were dispatched.")
         assert note.read_text() == "workspace fixture"
 
         prepare_draft()
         approve_draft("yes", "Draft approved in memory")
         note.unlink()
         note.symlink_to(outside)
-        apply_draft("yes", "File unavailable")
+        apply_draft("yes", "No writes were dispatched.")
         assert outside.read_text() == "outside fixture"
         note.unlink()
         note.write_text("workspace fixture")
@@ -174,6 +176,87 @@ with tempfile.TemporaryDirectory() as temp:
             ["denied"], ["started", "failed"], ["started", "failed"], ["started", "completed"],
         ])
 
+        second = project / "second.txt"
+        second.write_text("second fixture")
+
+        def prepare_batch():
+            cli.sendline("/draft " + json.dumps([
+                {"path": "note.txt", "from": "fixture", "to": "updated"},
+                {"path": "second.txt", "from": "fixture", "to": "updated"},
+            ]))
+            for _ in range(2):
+                cli.expect("Type yes to allow:")
+                cli.sendline("yes")
+            cli.expect(r"Plan ([a-f0-9]{64}) \(2 file\(s\)\)")
+            plan = cli.match.group(1)
+            cli.expect_exact('Draft for "note.txt"')
+            cli.expect_exact('Draft for "second.txt"')
+            cli.expect("❯")
+            return plan
+
+        def confirm_batch(plan, answer="yes"):
+            cli.sendline("/approve")
+            cli.expect("filesystem:read:selected")
+            cli.expect(plan)
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+            cli.expect("filesystem:write:selected")
+            cli.expect(plan)
+            cli.expect("Type yes to allow:")
+            cli.sendline(answer)
+            cli.expect("Draft approved in memory" if answer == "yes" else "denied")
+            cli.expect("❯")
+
+        note.write_text("workspace fixture")
+        confirm_batch(prepare_batch(), "no")
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+        confirm_batch(prepare_batch())
+        cli.sendline("/approve")
+        cli.expect("Prepare an unapproved draft first")
+        cli.expect("❯")
+        second.write_text("second changed")
+        apply_draft("yes", "No writes were dispatched.")
+        assert note.read_text() == "workspace fixture"
+        assert second.read_text() == "second changed"
+
+        # The second file can be safely read but native policy refuses to
+        # replace it. The already committed first edit remains in place.
+        second.write_text("second fixture")
+        second.chmod(0o666)
+        confirm_batch(prepare_batch())
+        cli.sendline("/apply")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect(r"Apply attempt ([0-9a-f-]{36})")
+        batch_id = cli.match.group(1)
+        cli.expect_exact("1/2 file(s) confirmed")
+        cli.expect("❯")
+        assert note.read_text() == "workspace updated"
+        assert second.read_text() == "second fixture"
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+
+        cli.sendline("/recover " + batch_id)
+        for _ in range(2):
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+        cli.expect_exact('Matches the proposed replacement: "note.txt"')
+        cli.expect_exact('Matches the original revision: "second.txt"')
+        cli.expect("❯")
+        journal = Path(temp) / ".nexus-au" / "workspace-audit" / (batch_id + ".edit.json.steps")
+        phases = [json.loads(line)["phase"] for line in journal.read_text().splitlines()]
+        assert phases == ["preflight-started", "preflight-passed", "dispatch-intent",
+                          "applied", "dispatch-intent", "not-confirmed"]
+        second.chmod(0o644)
+        note.write_text("workspace fixture")
+        confirm_batch(prepare_batch())
+        apply_draft("yes", "Draft applied")
+        assert note.read_text() == "workspace updated"
+        assert second.read_text() == "second updated"
+
         note.write_text("workspace fixture")
         prepare_draft()
         approve_draft("yes", "Draft approved in memory")
@@ -190,6 +273,8 @@ with tempfile.TemporaryDirectory() as temp:
 
         prepare_draft()
         approve_draft("yes", "Draft approved in memory")
+        second.write_text("second fixture")
+        confirm_batch(prepare_batch())
         # Pause the real host so Ctrl-C cancels an in-flight apply before rename.
         children = subprocess.check_output(["pgrep", "-P", str(cli.pid)], text=True).split()
         host, = map(int, children)
@@ -213,8 +298,9 @@ with tempfile.TemporaryDirectory() as temp:
         cli.expect("Selected")
         cli.expect("❯")
         cli.sendline("/recover " + recovery_id)
-        cli.expect("Type yes to allow:")
-        cli.sendline("no")
+        for _ in range(2):
+            cli.expect("Type yes to allow:")
+            cli.sendline("no")
         cli.expect("Recovery could not inspect the file")
         cli.expect("❯")
         for contents, expected in [
@@ -225,8 +311,9 @@ with tempfile.TemporaryDirectory() as temp:
             if contents is not None:
                 note.write_text(contents)
             cli.sendline("/recover " + recovery_id)
-            cli.expect("Type yes to allow:")
-            cli.sendline("yes")
+            for _ in range(2):
+                cli.expect("Type yes to allow:")
+                cli.sendline("yes")
             cli.expect_exact(expected)
             cli.expect("❯")
         cli.sendline("/apply")
@@ -245,7 +332,7 @@ with tempfile.TemporaryDirectory() as temp:
         cli.expect(r"Apply attempt ([0-9a-f-]{36})")
         recovery_id = cli.match.group(1)
         os.kill(host, signal.SIGKILL)
-        cli.expect_exact("The edit outcome is unknown.")
+        cli.expect_exact("Preflight interrupted; no writes were dispatched.")
         cli.expect("❯")
         cli.sendline("/project " + str(project))
         cli.expect("Selected")
@@ -256,5 +343,68 @@ with tempfile.TemporaryDirectory() as temp:
         cli.expect("Matches the original revision")
         cli.expect("❯")
         assert note.read_text() == "workspace fixture"
+    finally:
+        cli.close(force=True)
+
+    # Relay real host replies, then lose the reply after the second committed
+    # edit. The CLI may only report the first edit as confirmed until recovery.
+    isolated = Path(temp) / "cli-with-fault"
+    isolated_bin = isolated / "bin"
+    isolated_bin.mkdir(parents=True)
+    shutil.copy("build-cli/nexus.js", isolated / "nexus.mjs")
+    shutil.copy("build-cli/bin/nexus-workspace", isolated_bin / "real-host")
+    proxy = isolated_bin / "nexus-workspace"
+    proxy.write_text(f"#!{sys.executable}\n" + """
+import json
+from pathlib import Path
+import subprocess
+import sys
+with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
+                      stdin=subprocess.PIPE, stdout=subprocess.PIPE) as host:
+    def forward(reply):
+        sys.stdout.buffer.write(reply)
+        sys.stdout.buffer.flush()
+    forward(host.stdout.readline())
+    for line in sys.stdin.buffer:
+        host.stdin.write(line)
+        host.stdin.flush()
+        reply = host.stdout.readline()
+        request = json.loads(line)
+        if request["operation"] == "edit" and request["path"] == "second.txt":
+            assert json.loads(reply)["value"]["applied"] is True
+            host.stdin.close()
+            break
+        forward(reply)
+""")
+    proxy.chmod(0o700)
+    note.write_text("workspace fixture")
+    second.write_text("second fixture")
+    cli = pexpect.spawn("node", [str(isolated / "nexus.mjs"), "--test-model"],
+                        encoding="utf-8", env={**os.environ, "HOME": temp}, timeout=5)
+    try:
+        cli.expect("❯")
+        cli.sendline("/project " + str(project))
+        cli.expect("Selected")
+        cli.expect("❯")
+        confirm_batch(prepare_batch())
+        cli.sendline("/apply")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect(r"Apply attempt ([0-9a-f-]{36})")
+        lost_id = cli.match.group(1)
+        cli.expect_exact("The edit outcome is unknown. 1/2 file(s) confirmed.")
+        cli.expect("❯")
+        assert note.read_text() == "workspace updated"
+        assert second.read_text() == "second updated"
+        cli.sendline("/project " + str(project))
+        cli.expect("Selected")
+        cli.expect("❯")
+        cli.sendline("/recover " + lost_id)
+        for _ in range(2):
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+        cli.expect_exact('Matches the proposed replacement: "note.txt"')
+        cli.expect_exact('Matches the proposed replacement: "second.txt"')
+        cli.expect("❯")
     finally:
         cli.close(force=True)

@@ -94,14 +94,21 @@ With stable Rust and the npm dependencies installed, run `npm run build:workspac
 In interactive test mode, `/agent list [directory]` lists entries and
 `/agent search <text>` searches file contents through the same gateway.
 
-Use `/draft {"path":"note.txt","from":"old text","to":"new text"}` to preview
-a replacement. The old text must appear exactly once. `/approve` asks for
-permission through the gateway, rechecks the file snapshot, and records the
-approval for this session. `/discard`, selecting another project, or exiting
-clears the draft. On Linux, use `/apply` after approval and confirm the write
-permission at the prompt. Approval expires after five minutes. Each apply
-attempt consumes the approval, even if it fails. Rebuild the
-Rust host with `npm run build:workspace` before using it.
+For one file, use `/draft {"path":"note.txt","from":"old text","to":"new text"}`.
+For multiple files, pass a JSON array with up to eight replacements, one per
+file. Each old span must appear exactly once. The CLI shows all replacements
+and a plan hash. Use `/approve` to check and approve that plan as a unit.
+`/discard`, selecting a project, or exiting clears the plan. On Linux, use
+`/apply` and confirm the plan's write permission at the prompt. Approval expires
+after five minutes. Each apply attempt consumes the approval, including an
+attempt that fails. Rebuild the Rust host with `npm run build:workspace` before
+using these commands.
+
+Before sending any writes, the gateway compares the current snapshots and
+revisions of all files. The Rust host then reapplies the individual checks
+under the directory lock for each replacement. Files are replaced in plan
+order. If a later file fails or the connection goes away, earlier successful
+replacements stay in place. There is no automatic rollback or retry.
 
 Apply supports owner-owned UTF-8 files in owner-owned directories without
 group or public write access. Hard links, symlinks and unsupported file
@@ -120,11 +127,14 @@ fully synced staging file gets a name but before rename can leave a
 removing it, and only after confirming its writer has exited.
 
 Before dispatching an edit, the CLI persists an intent with the project, file,
-original revision and SHA-256 hashes of both versions. It prints the recovery
+original revision and SHA-256 hashes of both versions for each file. The
+per-attempt `.edit.json.steps` journal records preflight and file dispatch
+intent and outcomes as they are known. A dispatch intent without an outcome
+can mean the file was replaced but its reply was lost. It prints the recovery
 ID, also stored as the basename of a `.edit.json` file under
 `~/.nexus-au/workspace-audit/`. If the host loses its reply, or directory sync
 fails after rename, reselect the same project and run `/recover <ID>`. The
-gateway requests read permission and reports whether the file currently
+gateway requests read permission and reports for each file whether it currently
 matches the original revision, matches the proposed bytes, or differs.
 A match describes the observed file, so it does not prove that an edit
 survived a power failure or that this process wrote it. Recovery never

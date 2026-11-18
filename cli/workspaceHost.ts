@@ -56,18 +56,39 @@ class Connection {
 
 const digest = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
+const MAX_DRAFT_FILES = 8;
+const MAX_EDIT_BYTES = 48_000;
+
+interface DraftFile {
+  readonly path: string;
+  readonly before: string;
+  readonly after: string;
+  readonly revision?: string;
+}
+
 interface EditIntent {
   root: string;
-  path: string;
-  revision: string;
-  before: string;
-  after: string;
+  files: DraftFile[];
+}
+
+interface DraftPlan {
+  readonly files: readonly DraftFile[];
+  readonly hash: string;
+  approvedUntil?: number;
+}
+
+function isIntentFile(file: unknown): file is DraftFile {
+  if (!file || typeof file !== 'object') return false;
+  const { path, revision, before, after } = file as Record<string, unknown>;
+  return typeof path === 'string' && typeof revision === 'string' &&
+    typeof before === 'string' && /^[a-f0-9]{64}$/.test(before) &&
+    typeof after === 'string' && /^[a-f0-9]{64}$/.test(after);
 }
 
 export function workspaceSession(permissions: PermissionService, report: (text: string) => void) {
   let host: Connection | undefined;
   let root = '';
-  let draft: { path: string; before: string; after: string; revision?: string; approvedUntil?: number } | undefined;
+  let draft: DraftPlan | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
   const auditFile = (id: string) => {
     if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id)) throw new Error('Invalid audit run identifier');
@@ -111,6 +132,29 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       return err('tool_failed','Invalid workspace backend response.');
     }
   });
+  const resource = (plan: DraftPlan) => plan.files.length === 1
+    ? `${root}/${plan.files[0].path}`
+    : `${root} (${plan.files.length} files; plan ${plan.hash})`;
+
+  async function preflight(connection: Connection, plan: DraftPlan, signal: AbortSignal) {
+    for (const file of plan.files) {
+      const reply = await connection.exchange({version:1, operation:'read', path:file.path}, signal);
+      if (reply.ok !== true || reply.value?.content !== file.before || reply.value?.revision !== file.revision) {
+        return err('tool_failed', `File changed or is unavailable. Prepare a new draft: ${file.path}`);
+      }
+    }
+    return ok(undefined);
+  }
+
+  async function recordEditStep(runId: string, event: { phase: string; path?: string }) {
+    const file = await open(intentFile(runId) + '.steps', 'a', 0o600);
+    try {
+      await file.appendFile(JSON.stringify({ ...event, at: new Date().toISOString() }) + '\n');
+      await file.sync();
+    } finally { await file.close(); }
+    await syncAuditDirectory();
+  }
+
   const approve = gateway.register({
     id: 'cli.workspace.approve-draft',
     version: '1',
@@ -123,14 +167,10 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         ? ok({ host, draft })
         : err('validation', 'Prepare an unapproved draft first.');
     },
-    resourceForInput: input => `${root}/${input.draft.path}`,
+    resourceForInput: input => resource(input.draft),
     async execute(input, context) {
-      const reply = await input.host.exchange({version:1,operation:'read',path:input.draft.path}, context.signal);
-      if (context.signal.aborted) return err('cancelled', 'Draft approval cancelled.');
-      if (reply.ok !== true || reply.value?.content !== input.draft.before || reply.value?.revision !== input.draft.revision) {
-        return err('tool_failed', 'File changed or is unavailable. Prepare a new draft.');
-      }
-      return ok({ approved: true });
+      const result = await preflight(input.host, input.draft, context.signal);
+      return result.ok ? ok({ approved: true }) : result;
     }
   });
   if (!approve.ok) throw new Error(approve.error.message);
@@ -146,42 +186,74 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
     timeoutMs: 15_000,
     validateInput(input: unknown) {
       if (!host?.editSupported) return err('validation', 'This workspace host cannot apply drafts.');
-      return input === null && draft?.approvedUntil !== undefined && performance.now() < draft.approvedUntil && typeof draft.revision === 'string'
+      return input === null && draft?.approvedUntil !== undefined && performance.now() < draft.approvedUntil && draft.files.every(file => typeof file.revision === 'string')
         ? ok({ host, root, draft })
         : err('validation', 'Prepare and approve a new draft first.');
     },
-    resourceForInput: input => `${input.root}/${input.draft.path}`,
+    resourceForInput: input => resource(input.draft),
     async execute(input, context) {
-      if (draft !== input.draft || host !== input.host || context.signal.aborted || performance.now() >= input.draft.approvedUntil!) {
-        return err('cancelled', 'Draft is no longer current.');
-      }
-      const { path, before, after, revision } = input.draft;
-      if (typeof revision !== 'string') return err('validation', 'Draft revision is missing.');
-      const intent: EditIntent = { root: input.root, path, revision, before: digest(before), after: digest(after) };
+      const current = () => draft === input.draft && host === input.host && !context.signal.aborted &&
+        performance.now() < input.draft.approvedUntil!;
+      if (!current()) return err('cancelled', 'Draft is no longer current.');
+
+      const intent: EditIntent = {
+        root: input.root,
+        files: input.draft.files.map(({ path, revision, before, after }) =>
+          ({ path, revision, before: digest(before), after: digest(after) }))
+      };
+      const id = context.runId;
       try {
-        const journal = await open(intentFile(context.runId), 'wx', 0o600);
+        const journal = await open(intentFile(id), 'wx', 0o600);
         try {
-          await journal.writeFile(JSON.stringify(intent));
+          await journal.writeFile(JSON.stringify({ ...intent, version: 2, plan: input.draft.hash }));
           await journal.sync();
         } finally { await journal.close(); }
         await syncAuditDirectory();
+        await recordEditStep(id, { phase: 'preflight-started' });
       } catch {
         return err('storage_failed', 'Cannot persist edit intent. No edit was dispatched.');
       }
-      if (context.signal.aborted || performance.now() >= input.draft.approvedUntil!) {
-        return err('cancelled', 'Approval expired or operation cancelled before dispatch.');
-      }
-      report(`Apply attempt ${context.runId}. If interrupted, reselect the project and use /recover ${context.runId}.\n`);
+      report(`Apply attempt ${id}. If interrupted, reselect the project and use /recover ${id}.\n`);
+
+      // This read-only pass finishes for the whole plan before sending any
+      // writes. Each native edit repeats its checks under the directory lock.
       try {
-        const reply = await input.host.exchange({
-          version: 1, operation: 'edit', path, expected: before, revision, content: after
-        }, context.signal);
-        if (reply.ok === true && reply.value?.applied === true) return ok({ applied: true });
-        if (reply.ok === false && typeof reply.message === 'string') return err('tool_failed', reply.message);
-        return err('tool_failed', 'Workspace host did not confirm the edit.');
+        const checked = await preflight(input.host, input.draft, context.signal);
+        await recordEditStep(id, { phase: checked.ok ? 'preflight-passed' : 'preflight-failed' });
+        if (!checked.ok) return err('tool_failed', `${checked.error.message}. No writes were dispatched.`);
       } catch {
-        return err('tool_failed', 'Connection lost. The edit outcome is unknown.');
+        return err('tool_failed', 'Preflight interrupted; no writes were dispatched.');
       }
+
+      let applied = 0;
+      const progress = () => `${applied}/${input.draft.files.length} file(s) confirmed. Use /recover ${id} to inspect every file.`;
+      for (const { path, before, after, revision } of input.draft.files) {
+        if (!current()) return err('cancelled', `Operation stopped before the next write. ${progress()}`);
+        try {
+          await recordEditStep(id, { phase: 'dispatch-intent', path });
+        } catch {
+          return err('storage_failed', `Could not journal the next write. ${progress()}`);
+        }
+        if (!current()) return err('cancelled', `Operation stopped before the next write. ${progress()}`);
+        try {
+          const reply = await input.host.exchange({
+            version: 1, operation: 'edit', path, expected: before, revision, content: after
+          }, context.signal);
+          if (reply.ok !== true || reply.value?.applied !== true) {
+            await recordEditStep(id, { phase: 'not-confirmed', path });
+            const message = reply.ok === false && typeof reply.message === 'string'
+              ? reply.message : 'Workspace host did not confirm the edit.';
+            return err('tool_failed', `${message} ${progress()}`);
+          }
+          applied++;
+          await recordEditStep(id, { phase: 'applied', path });
+        } catch {
+          // The last write may have passed rename even if IPC or journaling
+          // failed. Do not replay or compensate automatically.
+          return err('tool_failed', `Write or journal interrupted. The edit outcome is unknown. ${progress()}`);
+        }
+      }
+      return ok({ applied });
     }
   });
   if (!apply.ok) throw new Error(apply.error.message);
@@ -238,21 +310,30 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         return 'Draft approved in memory. No file was written.';
       }
       if (command === '/recover') {
-        let intent: EditIntent;
+        let intent: Record<string, unknown>;
         try { intent = JSON.parse(await readFile(intentFile(arg), 'utf8')); }
         catch { return 'No readable edit intent for that recovery ID.'; }
-        if (!intent || intent.root !== root || typeof intent.path !== 'string' ||
-            typeof intent.revision !== 'string' || !/^[a-f0-9]{64}$/.test(intent.before) ||
-            !/^[a-f0-9]{64}$/.test(intent.after)) {
+        const files = intent?.version === 2 ? intent.files : [intent];
+        if (intent?.root !== root || !Array.isArray(files) || !files.length ||
+            files.length > MAX_DRAFT_FILES || !files.every(isIntentFile)) {
           return 'Recovery requires a valid intent for the selected project.';
         }
-        const observed = await invoke<{ content: string; revision?: string }>('read', {root, path:intent.path}, signal);
-        if (!observed.ok) return `Recovery could not inspect the file: ${quoteTerminal(observed.error.message)}`;
-        const contents = digest(observed.value.content);
-        const state = contents === intent.after ? 'Matches the proposed replacement'
-          : contents === intent.before && observed.value.revision === intent.revision ? 'Matches the original revision'
-          : 'Does not match the original revision or proposed replacement';
-        return `${state}: ${quoteTerminal(intent.path)}. This is the current observation; no edit was replayed.`;
+        const observations: string[] = [];
+        for (const file of files) {
+          if (signal.aborted) break;
+          const { path, revision, before, after } = file;
+          const observed = await invoke<{ content: string; revision?: string }>('read', {root, path}, signal);
+          if (!observed.ok) {
+            observations.push(`Recovery could not inspect the file ${quoteTerminal(path)}: ${quoteTerminal(observed.error.message)}`);
+            continue;
+          }
+          const contents = digest(observed.value.content);
+          const state = contents === after ? 'Matches the proposed replacement'
+            : contents === before && observed.value.revision === revision ? 'Matches the original revision'
+            : 'Does not match the original revision or proposed replacement';
+          observations.push(`${state}: ${quoteTerminal(path)}`);
+        }
+        return [...observations, 'Current observations only. No edit was replayed.'].join('\n');
       }
       if (command === '/apply') {
         if (arg) return 'Usage: /apply';
@@ -267,24 +348,40 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       }
       if (command === '/draft') {
         draft = undefined;
-        if (Buffer.byteLength(arg) > 48_000) return 'Draft input exceeds 48 KB.';
+        if (Buffer.byteLength(arg) > MAX_EDIT_BYTES) return 'Draft input exceeds 48 KB.';
         let input: unknown;
-        try { input = JSON.parse(arg); } catch { return 'Usage: /draft {"path":"file","from":"old","to":"new"}'; }
-        if (!input || typeof input !== 'object') return 'Invalid draft input.';
-        const { path, from, to } = input as Record<string, unknown>;
-        if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to) {
-          return 'Specify a file and a nonempty, unique span to replace.';
+        try { input = JSON.parse(arg); }
+        catch { return 'Usage: /draft {"path":"file","from":"old","to":"new"} or a JSON array of replacements'; }
+        const changes = Array.isArray(input) ? input : [input];
+        if (!changes.length || changes.length > MAX_DRAFT_FILES) return 'Drafts require between one and eight files.';
+        const files: DraftFile[] = [];
+        const preview: string[] = [];
+        const paths = new Set<string>();
+        const revisions = new Set<string>();
+        for (const change of changes) {
+          if (!change || typeof change !== 'object') return 'Invalid draft input.';
+          const { path, from, to } = change as Record<string, unknown>;
+          if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to) {
+            return 'Specify a file and a nonempty, unique span to replace.';
+          }
+          if (paths.has(path)) return 'A draft cannot edit the same path twice.';
+          paths.add(path);
+          const result = await invoke<{ content: string; revision?: string }>('read', {root, path}, signal);
+          if (!result.ok) return quoteTerminal(result.error.message);
+          const { content: before, revision } = result.value;
+          if (revision && revisions.has(revision)) return 'A draft cannot edit the same file through two paths.';
+          if (revision) revisions.add(revision);
+          const index = before.indexOf(from);
+          if (index < 0 || index !== before.lastIndexOf(from)) return 'Draft span must occur exactly once.';
+          const after = before.slice(0, index) + to + before.slice(index + from.length);
+          if (Buffer.byteLength(after) > MAX_EDIT_BYTES) return 'Draft result exceeds 48 KB.';
+          if (signal.aborted) return 'Draft cancelled.';
+          files.push(Object.freeze({path, before, after, revision}));
+          preview.push(`Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}`);
         }
-        const result = await invoke<{ content: string; revision?: string }>('read', {root, path}, signal);
-        if (!result.ok) return quoteTerminal(result.error.message);
-        const before = result.value.content;
-        const index = before.indexOf(from);
-        if (index < 0 || index !== before.lastIndexOf(from)) return 'Draft span must occur exactly once.';
-        const after = before.slice(0, index) + to + before.slice(index + from.length);
-        if (Buffer.byteLength(after) > 48_000) return 'Draft result exceeds 48 KB.';
-        if (signal.aborted) return 'Draft cancelled.';
-        draft = {path, before, after, revision: result.value.revision};
-        return `Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}\nUse /approve or /discard. No file was written.`;
+        draft = {files:Object.freeze(files), hash:digest(JSON.stringify({root,files}))};
+        return [`Plan ${draft.hash} (${files.length} file(s)).`, ...preview,
+          'Use /approve or /discard. No file was written.'].join('\n');
       }
       const operation = command === '/files' ? 'list' : command === '/read' ? 'read' : 'search';
       const input = operation === 'search' ? {root,path:'',query:arg} : {root,path:arg};
