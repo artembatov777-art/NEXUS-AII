@@ -50,15 +50,17 @@ npm run prepare:windows-host
 npm run test:cli
 cargo test --locked --manifest-path workspace-core/Cargo.toml
 ./scripts/test-windows-host.ps1 -HostPath build-cli/bin/nexus-workspace.exe
+node scripts/test-windows-workspace-cli.mjs
 npm run tauri build -- --bundles nsis,msi
 ./scripts/test-windows-installer.ps1
 ```
 
 The Windows Tauri configuration bundles `nexus-workspace.exe` as a sidecar.
 The host build also stages the executable for the source checkout's CLI.
-The MSI smoke script extracts the package in a temporary directory and
-runs the bundled host. The NSIS installer and interactive Desktop first
-launch require a separate Windows smoke test.
+The smoke script extracts the MSI in a temporary directory and runs its
+bundled host. On the disposable native CI runner, `-InstallNsis` also
+installs NSIS into a temporary directory, runs its installed host, and
+uninstalls the app. Interactive Desktop launch remains a separate check.
 
 For the terminal, run `npm run cli -- --test-model` and select a disposable
 folder with `/project C:\path\to\project`. Browse, search, inspect a plan,
@@ -72,17 +74,25 @@ The Windows Rust test target contains a replacement candidate for local NTFS.
 It holds the original and parent directory handles, writes and flushes a
 same-directory staging file, and attempts a handle-relative replacement.
 It rejects extra streams, extended attributes and differences in the owner,
-group, DACL or mandatory label. Publication can fail if Windows rejects
-replacement of an open target. Native tests must establish the sharing and
-cleanup behavior before linking this path into the CLI or Desktop. Full SACL
-handling and durable private Windows recovery storage are still required.
+group, DACL, SACL or mandatory label. The test thread requires
+`SeSecurityPrivilege` to check SACLs, including a fixture with a custom audit
+rule. Publication can fail if Windows rejects replacement of an open target.
 A crash between disarming delete-on-close and rename can leave a staging
-file. Leave it untouched until its owner and operation state are established.
+file. Test cleanup requires a trusted receipt matching the original revision,
+staging identity and approved bytes. Durable Windows receipt storage and a
+privilege-safe SACL strategy are required before connecting this mechanism
+to the CLI or Desktop. Release builds keep this path disabled.
 
 In Desktop, open **File System**, choose a folder in the standard Windows
 picker, and grant it explicitly. Use **Review changes** to preview the
 existing editor's changes and **Confirm and save** to submit them through
-checked native commands. The Agent Control Center's **Test planner
+checked native commands. **Multi-file change preview** accepts the same
+replacement records as CLI `/draft`. It uses revisioned Workspace Core
+snapshots, shows per-file diffs, and lists the plan's Tool Gateway audit.
+**Check current revisions** uses fresh reads and reports conflicts. Desktop
+multi-file apply and rollback are gated; the existing recovery panel
+continues to report interrupted native move and rename operations.
+The Agent Control Center's **Test planner
 (offline)** supports `list <absolute path>`, `read <absolute path>`, and
 `search {"path":"C:/path/to/project","query":"text"}`. Each read requires
 Tool Gateway approval. This provider runs locally with synthetic planning and

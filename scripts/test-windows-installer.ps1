@@ -1,5 +1,6 @@
+param([switch]$InstallNsis)
 $ErrorActionPreference = 'Stop'
-$root = Join-Path ([System.IO.Path]::GetTempPath()) ("nexus-msi-" + [guid]::NewGuid())
+$root = Join-Path ([System.IO.Path]::GetTempPath()) ("nexus-installer-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $root | Out-Null
 try {
     $bundle = Join-Path $PSScriptRoot '../src-tauri/target/release/bundle'
@@ -21,6 +22,34 @@ try {
         throw 'The MSI must include the workspace host exactly once.'
     }
     & (Join-Path $PSScriptRoot 'test-windows-host.ps1') -HostPath $hosts[0].FullName
+    if ($InstallNsis) {
+        # Only the disposable runner opts into installing, then uninstalling, the application.
+        $install = Join-Path $root 'nsis-installed'
+        $uninstaller = Join-Path $install 'uninstall.exe'
+        try {
+            # NSIS requires /D as the final argument, with no enclosing quotes.
+            $process = Start-Process -FilePath $nsis[0].FullName -ArgumentList "/S /D=$install" -PassThru -Wait
+            if ($process.ExitCode -ne 0) {
+                throw "NSIS install failed with exit code $($process.ExitCode)."
+            }
+            $installedHost = Join-Path $install 'nexus-workspace.exe'
+            $installedApp = Join-Path $install 'nexus-au.exe'
+            foreach ($item in @($installedHost, $installedApp, $uninstaller)) {
+                if (!(Test-Path -LiteralPath $item -PathType Leaf)) {
+                    throw "NSIS did not install $item in the temporary destination."
+                }
+            }
+            & (Join-Path $PSScriptRoot 'test-windows-host.ps1') -HostPath $installedHost
+        } finally {
+            if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
+                # _?= keeps the uninstaller local and makes the exit status observable.
+                $process = Start-Process -FilePath $uninstaller -ArgumentList "/S _?=$install" -PassThru -Wait
+                if ($process.ExitCode -ne 0) {
+                    throw "NSIS uninstall failed with exit code $($process.ExitCode)."
+                }
+            }
+        }
+    }
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force
 }

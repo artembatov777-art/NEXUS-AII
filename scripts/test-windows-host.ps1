@@ -1,6 +1,11 @@
 param([Parameter(Mandatory)][string]$HostPath)
 $ErrorActionPreference = 'Stop'
 $exe = (Resolve-Path -LiteralPath $HostPath).Path
+$binary = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe))
+if ($binary.Contains('NEXUS_WINDOWS_REPLACEMENT_TEST_ROOT') -or $binary.Contains('STAGE_RECEIPT=')) {
+    throw 'Workspace host package contains test-only replacement code.'
+}
+Remove-Variable binary
 $root = Join-Path ([System.IO.Path]::GetTempPath()) ("NEXUS preview " + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $root | Out-Null
 try {

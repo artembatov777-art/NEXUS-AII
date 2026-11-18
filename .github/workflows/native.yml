@@ -48,17 +48,25 @@ jobs:
           npm run prepare:windows-host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./scripts/test-windows-host.ps1 -HostPath build-cli/bin/nexus-workspace.exe
+      - name: Exercise Windows CLI recovery and the write gate
+        if: runner.os == 'Windows'
+        run: node scripts/test-windows-workspace-cli.mjs
       - run: npm run build
-      - run: cargo test --locked --manifest-path workspace-core/Cargo.toml
+      - name: Test Windows Workspace Core (native x64)
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path workspace-core/Cargo.toml --target x86_64-pc-windows-msvc
+      - name: Test Workspace Core on Unix
+        if: runner.os != 'Windows'
+        run: cargo test --locked --manifest-path workspace-core/Cargo.toml
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - name: Build Windows installers
         if: runner.os == 'Windows'
         run: npm run tauri build -- --bundles "nsis,msi"
-      - name: Extract Windows MSI and test packaged workspace host
+      - name: Test Windows workspace host from MSI and installed NSIS package
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/test-windows-installer.ps1
+        run: ./scripts/test-windows-installer.ps1 -InstallNsis
       - name: Build macOS disk image
         if: runner.os == 'macOS'
         run: npm run tauri build -- --bundles "dmg"
