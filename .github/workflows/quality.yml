@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  frontend:
+  web-api:
+    name: Web/API tests and build
     runs-on: ubuntu-latest
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
@@ -29,7 +30,31 @@ jobs:
       - name: Pin npm to stable Arborist release
         run: npm install --global npm@10.8.2
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
-      - name: Audit npm dependency advisories
-        run: npm audit --audit-level=high
-      - run: npm run test
+      - run: npm run test:web-api
       - run: npm run build
+
+  npm-security:
+    name: Web/API and Desktop npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0 (Node 24)
+        with:
+          node-version: 22
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit full dependency tree including build and test tools
+        if: success() || failure()
+        run: npm audit --audit-level=high
+
+  # Preserve the original frontend check as a gate for both jobs.
+  frontend:
+    if: always()
+    needs: [web-api, npm-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require application and security checks
+        env:
+          WEB_RESULT: ${{ needs.web-api.result }}
+          SECURITY_RESULT: ${{ needs.npm-security.result }}
+        run: test "$WEB_RESULT" = success && test "$SECURITY_RESULT" = success

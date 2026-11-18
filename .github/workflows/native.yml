@@ -38,6 +38,9 @@ jobs:
       - name: Pin npm to stable Arborist release
         run: npm install --global npm@10.8.2
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Test CLI shell and smoke tests
+        if: runner.os == 'Linux'
+        run: npm run test:cli
       - run: npm run build
       - run: cargo test --locked --manifest-path workspace-core/Cargo.toml
       - run: cargo check --manifest-path src-tauri/Cargo.toml
@@ -60,12 +63,14 @@ jobs:
           retention-days: 14
 
   rust-security-audit:
-    needs: native
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
-      - name: Audit Rust dependency advisories
+      - name: Audit Desktop Rust dependencies
         run: cargo audit --file src-tauri/Cargo.lock
+      - name: Audit Workspace Core Rust dependencies
+        if: success() || failure()
+        run: cargo audit --file workspace-core/Cargo.lock

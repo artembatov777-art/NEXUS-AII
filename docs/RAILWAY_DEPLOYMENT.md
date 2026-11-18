@@ -52,3 +52,16 @@ Railway variables do not inherit from Vercel. Configure the gateway token and pr
 keys in Railway itself. Changing variables requires a new Railway deployment/restart,
 not a Vercel redeploy. Keep the Vercel project untouched until the Railway service has
 passed its health and chat tests.
+
+## Preview CI gate
+
+The Quality workflow reports Web/API tests and build separately from the shared
+npm security audit. The existing `frontend` check requires both to pass. The
+Native desktop quality workflow covers CLI smoke tests, native tests and bundles,
+and audits both Rust lockfiles. The full npm audit covers the build and test tools
+shared by Web/API and Desktop, including packages excluded from the runtime audit.
+
+Railway's [Wait for CI](https://docs.railway.com/deployments/github-autodeploys#wait-for-ci)
+waits on the commit's GitHub Actions workflows. A passing Web/API job alone does
+not clear that gate. Keep Preview isolated from Production credentials, volumes
+and external services before starting a manual Preview deployment.
