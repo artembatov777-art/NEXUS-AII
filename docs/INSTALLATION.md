@@ -38,6 +38,45 @@ npm run tauri build -- --bundles appimage,deb
 
 Run only the command for the current operating system. For Linux, install the Tauri 2 WebKitGTK development packages before building. See the Tauri 2 prerequisites for the current distribution-specific package names.
 
+## Windows 10 and 11 x64
+
+Install Node.js 22, the Rust stable `x86_64-pc-windows-msvc` toolchain,
+Microsoft C++ Build Tools with a Windows SDK, and WebView2. Build from
+PowerShell in the repository root.
+
+```powershell
+npm ci --legacy-peer-deps
+npm run prepare:windows-host
+npm run test:cli
+cargo test --locked --manifest-path workspace-core/Cargo.toml
+./scripts/test-windows-host.ps1 -HostPath build-cli/bin/nexus-workspace.exe
+npm run tauri build -- --bundles nsis,msi
+./scripts/test-windows-installer.ps1
+```
+
+The Windows Tauri configuration bundles `nexus-workspace.exe` as a sidecar.
+The host build also stages the executable for the source checkout's CLI.
+The MSI smoke script extracts the package in a temporary directory and
+runs the bundled host. The NSIS installer and interactive Desktop first
+launch require a separate Windows smoke test.
+
+For the terminal, run `npm run cli -- --test-model` and select a disposable
+folder with `/project C:\path\to\project`. Browse, search, inspect a plan,
+and review its diff. The Windows CLI allowlist permits read-only workspace
+operations. Before enabling writes, verify handle-relative replacement on
+NTFS, preservation or refusal of security descriptors and additional streams,
+locked-file behavior, interrupted staging, cross-process revision races,
+and Windows-private audit and recovery storage.
+
+In Desktop, open **File System**, choose a folder in the standard Windows
+picker, and grant it explicitly. Use **Review changes** to preview the
+existing editor's changes and **Confirm and save** to submit them through
+checked native commands. The Agent Control Center's **Test planner
+(offline)** supports `list <absolute path>`, `read <absolute path>`, and
+`search {"path":"C:/path/to/project","query":"text"}`. Each read requires
+Tool Gateway approval. This provider runs locally with synthetic planning and
+keeps provider credentials and file contents on the computer.
+
 ## First launch
 
 1. Launch NEXUS AU and let the local workspace initialize.

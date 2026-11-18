@@ -39,8 +39,15 @@ jobs:
         run: npm install --global npm@10.8.2
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
       - name: Test CLI shell and smoke tests
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' || runner.os == 'Windows'
         run: npm run test:cli
+      - name: Prepare and test Windows workspace host
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run prepare:windows-host
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/test-windows-host.ps1 -HostPath build-cli/bin/nexus-workspace.exe
       - run: npm run build
       - run: cargo test --locked --manifest-path workspace-core/Cargo.toml
       - run: cargo check --manifest-path src-tauri/Cargo.toml
@@ -48,6 +55,10 @@ jobs:
       - name: Build Windows installers
         if: runner.os == 'Windows'
         run: npm run tauri build -- --bundles "nsis,msi"
+      - name: Extract Windows MSI and test packaged workspace host
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1
       - name: Build macOS disk image
         if: runner.os == 'macOS'
         run: npm run tauri build -- --bundles "dmg"

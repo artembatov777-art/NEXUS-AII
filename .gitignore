@@ -15,3 +15,6 @@ build-cli/
 *.tsbuildinfo
 
 workspace-core/target/
+
+# Windows Tauri sidecar build output
+src-tauri/binaries/

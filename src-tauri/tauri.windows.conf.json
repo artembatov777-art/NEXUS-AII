@@ -1,0 +1,9 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run prepare:windows-host && npm run dev",
+    "beforeBuildCommand": "npm run prepare:windows-host && npm run build"
+  },
+  "bundle": {
+    "externalBin": ["binaries/nexus-workspace"]
+  }
+}

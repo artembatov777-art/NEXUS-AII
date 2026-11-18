@@ -94,6 +94,12 @@ With stable Rust and the npm dependencies installed, run `npm run build:workspac
 In interactive test mode, `/agent list [directory]` lists entries and
 `/agent search <text>` searches file contents through the same gateway.
 
+On Windows 10/11 x64, run `npm run prepare:windows-host` with the Rust MSVC
+toolchain before first running `npm run cli`. The host supplies revisioned
+snapshots for browsing, search and draft review. Windows CLI apply and
+rollback remain gated on native write validation. See the
+[Windows build and verification instructions](docs/INSTALLATION.md#windows-10-and-11-x64).
+
 #### Plan workspace changes
 
 The interactive CLI has a deterministic workspace planner that runs locally

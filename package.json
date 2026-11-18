@@ -20,7 +20,8 @@
     "build:cli": "esbuild cli/nexus.ts --bundle --platform=node --format=esm --target=node20 --outfile=build-cli/nexus.js",
     "prepack": "npm run build:cli",
     "check:cli": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --resolveJsonModule --esModuleInterop cli/nexus.ts cli/agent.ts cli/permissions.ts cli/workspace.ts",
-    "build:workspace": "cargo install --locked --path workspace-core --root build-cli"
+    "build:workspace": "cargo install --locked --path workspace-core --root build-cli",
+    "prepare:windows-host": "node scripts/prepare-windows-host.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
