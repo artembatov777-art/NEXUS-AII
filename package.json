@@ -31,12 +31,12 @@
     "mammoth": "^1.9.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
     "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "esbuild": "^0.28.2",
     "jsdom": "^26.1.0",
