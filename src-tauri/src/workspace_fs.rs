@@ -688,6 +688,14 @@ fn write_workspace_file_inner(
                     return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
                 }
             }
+            // Windows replacement is not yet transactionally safe. Never
+            // truncate the user's original file in the shipped desktop host:
+            // a crash or failed write would destroy the approved snapshot.
+            // Creation of new files remains available through create_new.
+            #[cfg(windows)]
+            return Err("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.".into());
+
+            #[cfg(not(windows))]
             file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
             file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
             file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
@@ -887,6 +895,7 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn checked_write_rejects_external_changes_without_overwriting_them() {
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
@@ -911,6 +920,35 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "external edit");
 
         fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_checked_write_fails_closed_without_truncating_existing_file() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "nexus-windows-checked-write-gate-{}-{nonce}", std::process::id()
+        ));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("important.txt");
+        fs::write(&target, "original").unwrap();
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).unwrap()],
+            base.join("permissions.json"),
+        );
+
+        let error = write_workspace_file_inner(
+            target.to_str().unwrap(), "replacement", Some("original"), &access
+        ).unwrap_err();
+        assert!(error.contains("not available yet"), "{error}");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        assert!(write_workspace_file_inner(
+            target.to_str().unwrap(), "replacement", Some("stale"), &access
+        ).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]
