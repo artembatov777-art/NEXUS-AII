@@ -162,3 +162,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "windows_replace.rs"]
+mod replacement;

@@ -68,6 +68,17 @@ NTFS, preservation or refusal of security descriptors and additional streams,
 locked-file behavior, interrupted staging, cross-process revision races,
 and Windows-private audit and recovery storage.
 
+The Windows Rust test target contains a replacement candidate for local NTFS.
+It holds the original and parent directory handles, writes and flushes a
+same-directory staging file, and attempts a handle-relative replacement.
+It rejects extra streams, extended attributes and differences in the owner,
+group, DACL or mandatory label. Publication can fail if Windows rejects
+replacement of an open target. Native tests must establish the sharing and
+cleanup behavior before linking this path into the CLI or Desktop. Full SACL
+handling and durable private Windows recovery storage are still required.
+A crash between disarming delete-on-close and rename can leave a staging
+file. Leave it untouched until its owner and operation state are established.
+
 In Desktop, open **File System**, choose a folder in the standard Windows
 picker, and grant it explicitly. Use **Review changes** to preview the
 existing editor's changes and **Confirm and save** to submit them through

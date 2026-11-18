@@ -28,6 +28,25 @@ try {
     if ($result[4].ok -or $result[5].ok) {
         throw 'Workspace accepted an out-of-scope read or disabled write.'
     }
+    # Supply valid original bytes and the actual revision to test the write
+    # gate, independently of the malformed-request check in the first stream.
+    $editRequest = ConvertTo-Json -Compress -InputObject @{
+        version = 1
+        operation = 'edit'
+        path = 'note.txt'
+        expected = 'workspace smoke'
+        revision = $result[3].value.revision
+        content = 'must not be published'
+    }
+    $editFrames = @($editRequest | & $exe $root)
+    if ($LASTEXITCODE -ne 0 -or $editFrames.Count -ne 2) {
+        throw 'Packaged host returned an invalid write-gate response.'
+    }
+    $editReady = ConvertFrom-Json -InputObject $editFrames[0]
+    $editResult = ConvertFrom-Json -InputObject $editFrames[1]
+    if (!$editReady.ready -or $editReady.edit -or $editResult.ok -ne $false) {
+        throw 'Packaged host did not refuse a valid Windows write attempt.'
+    }
     if ((Get-Content -LiteralPath (Join-Path $root 'note.txt') -Raw) -ne 'workspace smoke') {
         throw 'Read-only smoke changed the fixture.'
     }
