@@ -457,8 +457,20 @@ fn edit(
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
-    rename_over(&stage.file, &directory, name)
-        .map_err(|e| prep(format!("rename staged file: {e}")))?;
+    if let Err(rename_error) = rename_over(&stage.file, &directory, name) {
+        // Disarmed stages are otherwise cleaned up only by Drop, where a
+        // failed delete disposition cannot be reported to the caller.
+        // Restore delete-on-close while the staging identity is still pinned.
+        // Never retry publication through a pathname or release the original
+        // lock to make a sharing violation disappear.
+        let cleanup = disposition(&stage.file, true);
+        return Err(match cleanup {
+            Ok(()) => prep(format!("rename staged file: {rename_error}")),
+            Err(cleanup_error) => prep(format!(
+                "rename staged file: {rename_error}; staging cleanup could not be confirmed: {cleanup_error}"
+            )),
+        });
+    }
     stage.published = true;
     stage
         .file
