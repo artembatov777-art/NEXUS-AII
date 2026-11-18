@@ -15,8 +15,7 @@ use std::{
 };
 use windows_sys::{
     Wdk::Storage::FileSystem::{
-        FileDispositionInformationEx, FileEaInformation, FileRenameInformationEx,
-        NtQueryInformationFile, NtSetInformationFile, FILE_DISPOSITION_INFORMATION_EX,
+        FileEaInformation, FileRenameInformationEx, NtQueryInformationFile, NtSetInformationFile,
         FILE_EA_INFORMATION, FILE_RENAME_INFORMATION, FILE_RENAME_POSIX_SEMANTICS,
         FILE_RENAME_REPLACE_IF_EXISTS,
     },
@@ -202,19 +201,21 @@ fn directory_for_publish(dir: &Dir) -> io::Result<File> {
     Ok(file)
 }
 
-fn disposition(file: &File, flags: u32) -> io::Result<()> {
-    let info = FILE_DISPOSITION_INFORMATION_EX { Flags: flags };
-    // Use the NT file information class on the already-open handle. The
-    // Win32 wrapper does not support FileDispositionInfoEx on this runner.
-    nt_result(unsafe {
-        NtSetInformationFile(
+fn disposition(file: &File, delete: bool) -> io::Result<()> {
+    let info = FILE_DISPOSITION_INFO { DeleteFile: delete };
+    if unsafe {
+        SetFileInformationByHandle(
             file.as_raw_handle(),
-            &mut IO_STATUS_BLOCK::default(),
-            (&info as *const FILE_DISPOSITION_INFORMATION_EX).cast(),
-            size_of::<FILE_DISPOSITION_INFORMATION_EX>() as u32,
-            FileDispositionInformationEx,
+            FileDispositionInfo,
+            (&info as *const FILE_DISPOSITION_INFO).cast(),
+            size_of::<FILE_DISPOSITION_INFO>() as u32,
         )
-    })
+    } == 0
+    {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 struct Stage {
@@ -226,10 +227,7 @@ impl Drop for Stage {
     fn drop(&mut self) {
         if !self.published {
             // Delete via the opened staging identity, never by a stale pathname.
-            let _ = disposition(
-                &self.file,
-                FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
-            );
+            let _ = disposition(&self.file, true);
         }
     }
 }
@@ -333,11 +331,7 @@ fn discard_stage(
     if read_open_text(&staged, 48_000)? != expected_content {
         return Err("Staged content changed; staging file needs manual review".into());
     }
-    disposition(
-        &staged,
-        FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
-    )
-    .map_err(|e| e.to_string())
+    disposition(&staged, true).map_err(|e| e.to_string())
 }
 
 fn edit(
@@ -403,11 +397,8 @@ fn edit(
             .into_std(),
         published: false,
     };
-    disposition(
-        &stage.file,
-        FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
-    )
-    .map_err(|error| prep(format!("mark staging file for cleanup: {error}")))?;
+    disposition(&stage.file, true)
+        .map_err(|error| prep(format!("mark staging file for cleanup: {error}")))?;
     if security_descriptor(&stage.file)
         .map_err(|e| prep(format!("read staging security descriptor: {e}")))?
         != security
@@ -460,7 +451,7 @@ fn edit(
 
     // The old handle remains open across the handle-relative rename. If the
     // filesystem refuses to replace that pinned file, there is no fallback.
-    disposition(&stage.file, FILE_DISPOSITION_FLAG_ON_CLOSE)
+    disposition(&stage.file, false)
         .map_err(|error| prep(format!("disarm staging cleanup: {error}")))?;
     checkpoint(PublishPoint::Disarmed).map_err(|error| prep(error.to_string()))?;
     if revision(&original)? != expected_revision {
