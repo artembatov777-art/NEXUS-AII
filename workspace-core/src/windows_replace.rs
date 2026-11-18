@@ -457,6 +457,34 @@ fn edit(
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
+    // Keep the original exclusively pinned during staging and all external
+    // checkpoints. NTFS cannot rename over a target whose existing handle
+    // denies FILE_SHARE_DELETE, so release it only at the publication boundary.
+    // Reopen with delete sharing and verify the same file identity and revision
+    // before issuing the handle-relative rename. Fail closed on interference.
+    let original_identity: FILE_ID_INFO =
+        query(&original, FileIdInfo).map_err(|e| prep(format!("read original identity: {e}")))?;
+    drop(original);
+    let mut publish_options = OpenOptions::new();
+    publish_options.read(true).follow(FollowSymlinks::No);
+    publish_options
+        .access_mode(GENERIC_READ | ACCESS_SYSTEM_SECURITY)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE);
+    let publication_guard = dir
+        .open_with(name, &publish_options)
+        .map_err(|e| prep(format!("reopen original for publication: {e}")))?
+        .into_std();
+    let reopened_identity: FILE_ID_INFO = query(&publication_guard, FileIdInfo)
+        .map_err(|e| prep(format!("verify publication identity: {e}")))?;
+    if reopened_identity.VolumeSerialNumber != original_identity.VolumeSerialNumber
+        || reopened_identity.FileId.Identifier != original_identity.FileId.Identifier
+        || revision(&publication_guard)? != expected_revision
+        || security_descriptor(&publication_guard)
+            .map_err(|e| prep(format!("verify publication security: {e}")))?
+            != security
+    {
+        return Err("Original changed before publication".into());
+    }
     if let Err(rename_error) = rename_over(&stage.file, &directory, name) {
         // Disarmed stages are otherwise cleaned up only by Drop, where a
         // failed delete disposition cannot be reported to the caller.
@@ -484,9 +512,8 @@ fn edit(
     }
     let published = revision(&stage.file)?;
     drop(stage);
-    // The original requests FILE_WRITE_DATA. A new snapshot permits only
-    // shared reads, so release the old handle after rename before reopening.
-    drop(original);
+    // The publication guard no longer refers to the new file after rename.
+    drop(publication_guard);
     let (observed, found) = workspace.snapshot(path)?;
     if found != published || observed != content {
         return Err("Replacement was published but could not be confirmed".into());
