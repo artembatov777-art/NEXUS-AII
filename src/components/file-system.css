@@ -64,3 +64,22 @@
 .file-recovery-entry small{color:#a9b7c2;font-size:8px}
 .file-recovery-entry code{color:#d4e3eb;font:8px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
 @media(max-width:760px){.file-recovery-entry{grid-template-columns:minmax(0,1fr)}}
+
+.file-edit-diff {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.file-edit-diff > span { grid-column: 1 / -1; }
+
+.file-edit-diff pre {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.file-edit-diff ins { text-decoration: none; }

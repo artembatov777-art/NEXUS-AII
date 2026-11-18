@@ -1,4 +1,6 @@
 import { t } from "../lib/i18n";
+import { ModelRouter } from "../core/model";
+import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, Sparkles, X } from "lucide-react";
@@ -69,14 +71,16 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       const activeProfile = records.find(profile => sameSettings(profile.settings, providerSettings));
       const profiles = records.map(profile => ({ id: profile.id, settings: profile.settings }));
       if (!activeProfile) profiles.unshift({ id: "nexus.current", settings: providerSettings });
-      const models = canUseAgentProvider(providerSettings, hasProviderKey)
+      const models = (canUseAgentProvider(providerSettings, hasProviderKey)
         ? createTauriAutoModelRouterForProfiles(
             profiles,
             activeProfile?.id ?? "nexus.current",
             providerSettings.routeMode === "manual" ? "manual" : "auto",
             providerSettings.inferenceLocation
           )
-        : null;
+        : null) ?? new ModelRouter();
+      const registeredTestProvider = models.register(workspaceTestProvider);
+      if (!registeredTestProvider.ok) throw new Error(registeredTestProvider.error.message);
       const runtime = createWorkspaceNexusRuntime("local-user", {
         authorizeAgent: async ({ agentId }) => agentId === BUILT_IN_AGENT_IDS.localWorkflow ? "ask_user" : agentId === TOOL_INVOCATION_AGENT_ID ? "allow" : "deny",
         authorizeTool: async ({ scope, resource, reason }) => {
@@ -111,7 +115,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           }
           return "deny";
         }
-      }, models ?? undefined);
+      }, models);
       const registered = registerBuiltInAgentSuite(runtime, loadedProfile.value);
       if (!registered.ok) throw new Error(registered.error.message);
       const workspaceTools = registerWorkspaceTools(runtime.toolRegistry);
@@ -147,6 +151,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const routedModelId = providerSettings.model.trim() || (providerSettings.routeMode === "manual" ? "" : "auto");
   const agentProviderReady = canUseAgentProvider(providerSettings, hasProviderKey) && !!routedModelId;
   const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, routedModelId, THREAD_ID + "-planned", ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, routedModelId]);
+  const testWorkflow = useMemo(() => runtime?.createAgentWorkflow(
+    WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, THREAD_ID + "-workspace-test", WORKSPACE_TEST_TOOLS
+  ) ?? null, [runtime]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
@@ -265,36 +272,42 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     addFeed("Agent profile saved as version 1." + next.revision + ".0.", "success");
   }
 
-  async function startPlannedWorkflow() {
-    if (!runtime || !plannedWorkflow || !task.trim() || busy) return;
+  async function startPlannedWorkflow(useTestProvider = false) {
+    const workflow = useTestProvider ? testWorkflow : plannedWorkflow;
+    if (!runtime || !workflow || !task.trim() || busy) return;
     const goal = task.trim();
     const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
-    if (!window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
+    if (!useTestProvider && !window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
     setTask("");
     setFeed([]);
     const nextController = new AbortController();
     controller.current = nextController;
     setBusy(true);
     try {
-      addFeed("Retrieving relevant saved profile and project context…");
-      const contextWarnings: string[] = [];
-      const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
-      const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`) : [];
-      if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
-      if (projectId) {
-        const [knowledge, projectMemories] = await Promise.all([
-          runtime.knowledgeService.retrieve(goal, projectId, 4, nextController.signal),
-          memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
-        ]);
-        if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
-        else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
-        if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
-        else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`));
+      let referenceContext: string | undefined;
+      if (useTestProvider) {
+        addFeed("Test planner · offline read-only inspection");
+      } else {
+        addFeed("Retrieving relevant saved profile and project context…");
+        const contextWarnings: string[] = [];
+        const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
+        const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`) : [];
+        if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
+        if (projectId) {
+          const [knowledge, projectMemories] = await Promise.all([
+            runtime.knowledgeService.retrieve(goal, projectId, 4, nextController.signal),
+            memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
+          ]);
+          if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
+          else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
+          if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
+          else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`));
+        }
+        if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
+        referenceContext = contextParts.join("\n\n").slice(0, 12_000);
+        addFeed("Sending the task and approved reference context to the configured model planner…");
       }
-      if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
-      const referenceContext = contextParts.join("\n\n").slice(0, 12_000);
-      addFeed("Sending the task and approved reference context to the configured model planner…");
-      const planned = await plannedWorkflow.plan(goal, nextController.signal, referenceContext);
+      const planned = await workflow.plan(goal, nextController.signal, referenceContext);
       if (!planned.ok) {
         addFeed("Planning failed: " + planned.error.message, "error");
         return;
@@ -302,7 +315,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       addFeed("Validated plan: " + planned.value.steps.length + " bounded tool step(s).", "success");
       const coordinationId = crypto.randomUUID() as AgentRunId;
       setActiveRunId(coordinationId);
-      for await (const event of plannedWorkflow.run(planned.value, coordinationId, nextController.signal)) {
+      for await (const event of workflow.run(planned.value, coordinationId, nextController.signal)) {
         if (event.type === "started") addFeed("Planned workflow started: " + event.runId);
         else if (event.type === "agent_started") addFeed("Executing step " + event.step + " with " + event.agentId + "…");
         else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
@@ -411,7 +424,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             </div>
             <label className="agent-task-label" htmlFor="agent-task">{t("Task input")}</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
-            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!testWorkflow || !isTauri() || busy || !task.trim()} onClick={() => void startPlannedWorkflow(true)} title='Use list <absolute path>, read <absolute path>, or search {"path":"...","query":"..."}'>Test planner (offline)</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 

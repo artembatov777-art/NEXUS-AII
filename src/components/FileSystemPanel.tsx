@@ -45,6 +45,21 @@ async function recordFilesystemAudit(
   }
 }
 
+function changedLines(before: string, after: string) {
+  const original = before.split("\n");
+  const proposed = after.split("\n");
+  let start = 0;
+  while (start < original.length && start < proposed.length && original[start] === proposed[start]) start++;
+  let end = 0;
+  while (end < original.length - start && end < proposed.length - start &&
+      original[original.length - end - 1] === proposed[proposed.length - end - 1]) end++;
+  return {
+    firstLine: start + 1,
+    removed: original.slice(start, original.length - end),
+    added: proposed.slice(start, proposed.length - end)
+  };
+}
+
 const fileIcon = (name: string) => {
   const extension = name.split(".").pop()?.toLowerCase();
   return ["ts", "tsx", "js", "jsx", "rs", "py", "json", "css", "html", "yml", "yaml"].includes(extension ?? "") ? FileCode2 : FileText;
@@ -62,6 +77,9 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   const [imagePreview, setImagePreview] = useState<WorkspaceImagePreview | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
+  const [review, setReview] = useState<{ path: string; before: string; after: string } | null>(null);
+  const currentReview = editing && review?.path === selectedPath && review.before === preview && review.after === draft;
+  const diff = currentReview ? changedLines(review.before, review.after) : null;
   const [grantPath, setGrantPath] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
@@ -338,18 +356,26 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
   }
 
   async function saveFile() {
-    if (!selectedPath) return;
+    if (!currentReview || busy) return;
+    const { path, before, after } = review;
+    setReview(null);
     setBusy(true);
     setError("");
+    const traceId = crypto.randomUUID();
     try {
-      await invoke("write_workspace_file_checked", { path: selectedPath, content: draft, expectedContent: preview });
-      const audited = await recordFilesystemAudit("write");
-      setPreview(draft);
+      if (!await recordFilesystemAudit("write", "started", traceId)) {
+        setError("File was not saved because the write audit could not be recorded.");
+        return;
+      }
+      await invoke("write_workspace_file_checked", { path, content: after, expectedContent: before });
+      const audited = await recordFilesystemAudit("write", "completed", traceId);
+      setPreview(after);
       setEditing(false);
       setConflictDetected(false);
-      setNotice(audited ? "File saved." : "File saved, but the audit entry could not be saved.");
+      setNotice(audited ? "File saved." : "File saved, but the completion audit could not be recorded.");
       await refresh(currentPath, true);
     } catch (cause) {
+      await recordFilesystemAudit("write", "failed", traceId);
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
       setConflictDetected(/changed|removed or moved/i.test(message));
@@ -664,7 +690,18 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
               <button className="secondary-btn" onClick={() => void renameSelected()} disabled={busy || Boolean(recoveryStatus) || !renameName.trim()}>{t("Rename")}</button>
               <label>{t("Move to approved folder")}<div className="file-move-input"><input aria-label={t("Move destination folder")} value={moveDestination} onChange={event => setMoveDestination(event.target.value)} placeholder={t("Destination folder path")}/><button className="secondary-btn" onClick={() => void chooseMoveDestination()} disabled={busy}>{t("Browse")}</button></div></label>
               <button className="secondary-btn" onClick={() => void moveSelected()} disabled={busy || Boolean(recoveryStatus) || !moveDestination.trim()}>{t("Move file")}</button>
-            </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">{t("IMAGE PREVIEW · READ ONLY · MAX 4 MB")}</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">{t("TEXT CONTENT · MAX 2 MB")}</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> Save changes</button><button className="secondary-btn" onClick={() => { setDraft(preview); setEditing(false); }}>{t("Cancel")}</button></> : !imagePreview ? <><button className="secondary-btn" onClick={() => setEditing(true)}>{t("Edit file")}</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>{t("Analyze with AI")}</button>}</> : <span className="file-image-readonly">{t("Image previews are read-only. Original file is unchanged.")}</span>}</div></> : <div className="file-empty">{t("Select a text file to inspect or edit it.")}</div>}
+            </div>{imagePreview ? <div className="file-preview-content"><div className="file-pane-label">{t("IMAGE PREVIEW · READ ONLY · MAX 4 MB")}</div><div className="file-image-preview"><img src={imagePreview.dataUrl} alt={selectedPath.split(/[\\\\/]/).pop() ?? "Selected image"} /><small>{imagePreview.mediaType} · {formatSize(imagePreview.sizeBytes)}</small></div></div> : <div className="file-preview-content"><div className="file-pane-label">{t("TEXT CONTENT · MAX 2 MB")}</div>{editing ? <textarea className="file-editor" value={draft} onChange={event => { setReview(null); setDraft(event.target.value); }} spellCheck={false}/> : <pre>{preview}</pre>}</div>}<div className="file-editor-actions">{editing ? <>
+              {diff && <div className="file-edit-diff" aria-label={t("Review file changes")}>
+                <span>{t("Changes starting at line")} {diff.firstLine}</span>
+                <div><strong>{t("Before")} ({diff.removed.length})</strong><pre><del>{diff.removed.join("\n").replace(/\r/g, "␍")}</del></pre></div>
+                <div><strong>{t("After")} ({diff.added.length})</strong><pre><ins>{diff.added.join("\n").replace(/\r/g, "␍")}</ins></pre></div>
+              </div>}
+              {currentReview
+                ? <><button className="primary-btn" onClick={() => void saveFile()} disabled={busy}><Save size={14}/> {t("Confirm and save")}</button>
+                    <button className="secondary-btn" onClick={() => setReview(null)} disabled={busy}>{t("Back to editing")}</button></>
+                : <button className="primary-btn" onClick={() => setReview({ path: selectedPath, before: preview, after: draft })} disabled={busy || draft === preview}>{t("Review changes")}</button>}
+              <button className="secondary-btn" onClick={() => { setReview(null); setDraft(preview); setEditing(false); }} disabled={busy}>{t("Cancel")}</button>
+            </> : !imagePreview ? <><button className="secondary-btn" onClick={() => { setReview(null); setEditing(true); }}>{t("Edit file")}</button>{onAnalyze && <button className="primary-btn" onClick={() => onAnalyze({ name: selectedPath.split(/[\\\\/]/).pop() ?? selectedPath, path: selectedPath, content: preview })} disabled={busy}>{t("Analyze with AI")}</button>}</> : <span className="file-image-readonly">{t("Image previews are read-only. Original file is unchanged.")}</span>}</div></> : <div className="file-empty">{t("Select a text file to inspect or edit it.")}</div>}
           </aside>
         </div>
         <footer className="file-workspace-footer"><span><ShieldCheck size={15}/> Permission-scoped access · External folders are not accessed without approval</span><button className="secondary-btn" onClick={closeWorkspace}>{t("Close workspace")}</button></footer>

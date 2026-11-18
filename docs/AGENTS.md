@@ -47,6 +47,15 @@ own preview and approval. `/recover` observes the current state even if the
 backups are unavailable, provided the audit intent is intact. Existing
 journals are retained. Linux is the only supported write platform.
 
+### Desktop offline planner
+
+The Agent Control Center can run a deterministic test provider through
+`ModelRouterPlanner` and the existing checkpointed workflow. The fixture
+emits at most one list, read, or content-search step. Its allowlist and the
+Tool Gateway apply before Tauri resolves the approved path. The fixture
+operates on the task entered by the user. Saved memory and project knowledge
+are used only by the separately confirmed configured-provider flow.
+
 ## Safety and recovery boundaries
 
 - Agent and tool permissions default to deny.

@@ -539,7 +539,11 @@ describe("FileSystemPanel native workspace access", () => {
     const rootPath = "/home/test/Documents";
     const filePath = rootPath + "/notes.txt";
     isTauriMock.mockReturnValue(true);
-    invokeMock.mockImplementation(async (command: string) => {
+    let auditAvailable = false;
+    invokeMock.mockImplementation(async (command: string, args?: { event?: { status: string } }) => {
+      if (command === "record_tool_audit_event" && args?.event?.status === "started" && !auditAvailable) {
+        throw new Error("Audit store unavailable");
+      }
       if (command === "list_workspace_directories") return [rootPath];
       if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }];
       if (command === "read_workspace_file") return "original";
@@ -557,8 +561,22 @@ describe("FileSystemPanel native workspace access", () => {
       setter?.call(editor, "my draft");
       editor.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    const saveButton = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes("Save changes"));
-    await act(async () => { saveButton!.click(); });
+    const findButton = (label: string) => Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes(label));
+    const reviewButton = findButton("Review changes");
+    expect(findButton("Confirm and save")).toBeUndefined();
+    await act(async () => { reviewButton!.click(); });
+    expect(container.querySelector(".file-edit-diff del")?.textContent).toBe("original");
+    expect(container.querySelector(".file-edit-diff ins")?.textContent).toBe("my draft");
+    expect(invokeMock.mock.calls.some(([command]) => command === "write_workspace_file_checked")).toBe(false);
+    await act(async () => { findButton("Back to editing")!.click(); });
+    expect(findButton("Confirm and save")).toBeUndefined();
+    await act(async () => { findButton("Review changes")!.click(); });
+    await act(async () => { findButton("Confirm and save")!.click(); });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("write audit could not be recorded");
+    expect(invokeMock.mock.calls.some(([command]) => command === "write_workspace_file_checked")).toBe(false);
+    auditAvailable = true;
+    await act(async () => { findButton("Review changes")!.click(); });
+    await act(async () => { findButton("Confirm and save")!.click(); });
     expect(invokeMock).toHaveBeenCalledWith("write_workspace_file_checked", {
       path: filePath, content: "my draft", expectedContent: "original"
     });
