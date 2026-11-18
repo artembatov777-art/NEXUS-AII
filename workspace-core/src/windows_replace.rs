@@ -407,7 +407,7 @@ fn edit(
         &stage.file,
         FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
     )
-    .map_err(|error| prep(error.to_string()))?;
+    .map_err(|error| prep(format!("mark staging file for cleanup: {error}")))?;
     if security_descriptor(&stage.file)
         .map_err(|e| prep(format!("read staging security descriptor: {e}")))?
         != security
@@ -420,10 +420,11 @@ fn edit(
         .file
         .write_all(content.as_bytes())
         .and_then(|_| stage.file.sync_all())
-        .map_err(|error| prep(error.to_string()))?;
-    require_plain_file(&stage.file).map_err(|error| prep(error.to_string()))?;
-    let identity: FILE_ID_INFO =
-        query(&stage.file, FileIdInfo).map_err(|error| prep(error.to_string()))?;
+        .map_err(|error| prep(format!("write and sync staging file: {error}")))?;
+    require_plain_file(&stage.file)
+        .map_err(|error| prep(format!("inspect staging streams and attributes: {error}")))?;
+    let identity: FILE_ID_INFO = query(&stage.file, FileIdInfo)
+        .map_err(|error| prep(format!("read staging identity: {error}")))?;
     checkpoint(PublishPoint::Staged(&StageReceipt {
         target: path.to_owned(),
         original_revision: expected_revision.to_owned(),
@@ -454,12 +455,13 @@ fn edit(
     if read_open_text(&stage.file, 48_000)? != content {
         return Err("Staging file contents changed".into());
     }
-    require_plain_file(&stage.file).map_err(|error| prep(error.to_string()))?;
+    require_plain_file(&stage.file)
+        .map_err(|error| prep(format!("inspect staging streams and attributes: {error}")))?;
 
     // The old handle remains open across the handle-relative rename. If the
     // filesystem refuses to replace that pinned file, there is no fallback.
     disposition(&stage.file, FILE_DISPOSITION_FLAG_ON_CLOSE)
-        .map_err(|error| prep(error.to_string()))?;
+        .map_err(|error| prep(format!("disarm staging cleanup: {error}")))?;
     checkpoint(PublishPoint::Disarmed).map_err(|error| prep(error.to_string()))?;
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
