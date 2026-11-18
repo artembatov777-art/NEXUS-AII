@@ -34,6 +34,57 @@ describe("FileSystemPanel native workspace access", () => {
     container.remove();
   });
 
+  it("previews both files via the gateway and detects a replaced revision without writing", async () => {
+    const directory = "C:\\workspace";
+    let revision = "first-r1";
+    const audit: unknown[] = [];
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string; event?: unknown }) => {
+      if (command === "list_workspace_directories") return [directory];
+      if (command === "list_workspace_entries") return [];
+      if (command === "get_workspace_operation_recovery_details") return [];
+      if (command === "list_tool_audit_events") return audit;
+      if (command === "record_tool_audit_event") { audit.push(args?.event); return; }
+      if (command === "snapshot_workspace_file") {
+        return args?.path?.endsWith("first.txt")
+          ? { content: "old first", revision } : { content: "old second", revision: "second-r1" };
+      }
+      return null;
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      await renderPanel();
+      const editor = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Replacement plan (JSON)"]')!;
+      const input = (value: string) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        setter?.call(editor, value);
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      const button = (label: string) => Array.from(container.querySelectorAll("button")).find(item => item.textContent === label)!;
+      await act(async () => { input(JSON.stringify({ path: "../outside.txt", from: "old", to: "new" })); });
+      await act(async () => { button("Preview plan").click(); });
+      expect(container.textContent).toContain("Use file paths relative to the selected folder");
+      expect(invokeMock.mock.calls.some(([command]) => command === "snapshot_workspace_file")).toBe(false);
+      await act(async () => {
+        input(JSON.stringify([
+          { path: "first.txt", from: "old", to: "updated first" },
+          { path: "second.txt", from: "old", to: "updated second" }
+        ]));
+      });
+      await act(async () => { button("Preview plan").click(); });
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain("updated first");
+      expect(container.textContent).toContain("updated second");
+      expect(container.textContent).toContain("workspace.snapshot · completed");
+      expect(JSON.stringify(audit)).not.toContain("updated first");
+      revision = "first-r2";
+      await act(async () => { button("Check current revisions").click(); });
+      expect(container.textContent).toContain("first.txt — changed since the plan");
+      expect(container.textContent).toContain("second.txt — revision matches");
+      expect(invokeMock.mock.calls.some(([command]) => command.startsWith("write_workspace"))).toBe(false);
+    } finally { confirm.mockRestore(); }
+  });
+
   it("surfaces unresolved interrupted filesystem recovery before file operations", async () => {
     const rootPath = "/home/test/Documents";
     isTauriMock.mockReturnValue(true);

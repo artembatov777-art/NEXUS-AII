@@ -449,6 +449,18 @@ impl Workspace {
         read_text(&dir, path.file_name().ok_or("Missing filename")?, 48000)
     }
 }
+/// The same bounded revisioned snapshot used by the CLI's draft tools.
+pub fn snapshot_text(dir: &Dir, name: &OsStr) -> Result<(String, Option<String>), String> {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        Workspace::snapshot_at(dir, name).map(|(text, revision)| (text, Some(revision)))
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        read_text(dir, name, 48_000).map(|text| (text, None))
+    }
+}
+
 fn child(dir: &Dir, part: Component<'_>) -> Result<Dir, String> {
     let Component::Normal(name) = part else {
         return Err("Invalid relative path".into());

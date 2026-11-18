@@ -83,3 +83,12 @@
 }
 
 .file-edit-diff ins { text-decoration: none; }
+
+
+.file-plan-preview textarea {
+  display: block;
+  width: 100%;
+  min-height: 5rem;
+  margin-bottom: 8px;
+  resize: vertical;
+}

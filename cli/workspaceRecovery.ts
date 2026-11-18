@@ -3,9 +3,9 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, type FileHandle } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { MAX_DRAFT_FILES, MAX_EDIT_BYTES } from '../src/core/workspaceChangePreview';
+export { MAX_DRAFT_FILES, MAX_EDIT_BYTES };
 export const digest = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
-export const MAX_DRAFT_FILES = 8;
-export const MAX_EDIT_BYTES = 48_000;
 // JSON encodes some characters with six bytes.
 export const MAX_INTENT_BYTES = MAX_DRAFT_FILES * MAX_EDIT_BYTES * 7;
 export const MAX_STEPS_BYTES = 128_000;

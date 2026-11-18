@@ -5,31 +5,15 @@ import { PlanExecutor, type PlanStepResult } from '../src/core/planExecutor';
 import { err, ok, type Result } from '../src/core/result';
 import type { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
-import { digest, MAX_DRAFT_FILES, MAX_EDIT_BYTES } from './workspaceRecovery';
-
-interface Replacement {
-  path: string;
-  from: string;
-  to: string;
-}
+import { digest } from './workspaceRecovery';
+import { MAX_EDIT_BYTES, parseReplacements, prepareChanges as preparePreview, type Replacement, type WorkspaceSnapshot } from '../src/core/workspaceChangePreview';
+export { parseReplacements, type DraftFile, type WorkspaceSnapshot } from '../src/core/workspaceChangePreview';
 
 interface Task {
   goal: string;
   directory: string;
   query?: string;
   changes: readonly Replacement[];
-}
-
-export interface WorkspaceSnapshot {
-  content: string;
-  revision?: string;
-}
-
-export interface DraftFile {
-  readonly path: string;
-  readonly before: string;
-  readonly after: string;
-  readonly revision?: string;
 }
 
 export interface WorkspaceTaskPlan {
@@ -51,49 +35,13 @@ export interface WorkspaceTaskPlan {
   readonly expectedResult: string;
 }
 
-type ReadFile = (path: string) => Promise<Result<WorkspaceSnapshot>>;
-
-export function parseReplacements(input: unknown): Result<Replacement[]> {
-  const changes: unknown[] = Array.isArray(input) ? input : [input];
-  if (!changes.length || changes.length > MAX_DRAFT_FILES) return err('validation', 'Drafts require between one and eight files.');
-
-  const replacements: Replacement[] = [];
-  const paths = new Set<string>();
-  for (const change of changes) {
-    if (!change || typeof change !== 'object') return err('validation', 'Invalid draft input.');
-    const { path, from, to } = change as Record<string, unknown>;
-    if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to ||
-        Buffer.from(to).toString('utf8') !== to) {
-      return err('validation', 'Specify a file and a nonempty, unique span to replace.');
-    }
-    if (paths.has(path)) return err('validation', 'A draft cannot edit the same path twice.');
-    paths.add(path);
-    replacements.push({ path, from, to });
-  }
-  return ok(replacements);
-}
-
-/** Shared by manual drafts and agent plans. All snapshots come from the caller's Gateway. */
-export async function prepareChanges(changes: readonly Replacement[], read: ReadFile, signal: AbortSignal) {
-  const files: DraftFile[] = [];
-  const diff: string[] = [];
-  const revisions = new Set<string>();
-  for (const { path, from, to } of changes) {
-    if (signal.aborted) return err('cancelled', 'Draft cancelled.');
-    const result = await read(path);
-    if (!result.ok) return result;
-    const { content: before, revision } = result.value;
-    if (revision && revisions.has(revision)) return err('validation', 'A draft cannot edit the same file through two paths.');
-    if (revision) revisions.add(revision);
-    const index = before.indexOf(from);
-    if (index < 0 || index !== before.lastIndexOf(from)) return err('validation', 'Draft span must occur exactly once.');
-    const after = before.slice(0, index) + to + before.slice(index + from.length);
-    if (Buffer.byteLength(after) > MAX_EDIT_BYTES) return err('validation', 'Draft result exceeds 48 KB.');
-    files.push(Object.freeze({ path, before, after, revision }));
-    diff.push(`Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}`);
-  }
-  if (signal.aborted) return err('cancelled', 'Draft cancelled.');
-  return ok({ files: Object.freeze(files), diff: Object.freeze(diff) });
+export async function prepareChanges(changes: readonly Replacement[], read: (path: string) => Promise<Result<WorkspaceSnapshot>>, signal: AbortSignal) {
+  const result = await preparePreview(changes, read, signal);
+  if (!result.ok) return result;
+  const { files, spans } = result.value;
+  const diff = spans.map(({ path, from, to, offset }) =>
+    `Draft for ${quoteTerminal(path)} (character offset ${offset})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}`);
+  return ok({ files, diff: Object.freeze(diff) });
 }
 
 function parseTask(input: string): Result<Task> {

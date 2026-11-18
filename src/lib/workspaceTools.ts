@@ -269,3 +269,34 @@ export function registerWorkspaceTools(registry: ToolRegistry): Result<void> {
   }
   return ok(undefined);
 }
+
+/** Revisioned reads for desktop change previews. No write tool is registered here. */
+export function registerWorkspaceSnapshotTool(gateway: import("../core/tools").ToolGateway) {
+  return gateway.register<PathInput, import("../core/workspaceChangePreview").WorkspaceSnapshot>({
+    id: "workspace.snapshot",
+    version: "1",
+    description: "Read a bounded revisioned snapshot inside an approved workspace",
+    requiredPermissions: ["filesystem:read:selected"],
+    risk: "medium",
+    timeoutMs: 15_000,
+    validateInput: validPathInput,
+    resourceForInput: input => input.path,
+    async execute({ path }, { signal }) {
+      const native = ensureNative();
+      if (!native.ok) return native;
+      if (signal.aborted) return err("cancelled", "Workspace snapshot cancelled.");
+      try {
+        const snapshot = await invoke<{ content: string; revision: string | null }>("snapshot_workspace_file", { path });
+        if (signal.aborted) return err("cancelled", "Workspace snapshot cancelled.");
+        if (!snapshot || typeof snapshot.content !== "string" ||
+            new TextEncoder().encode(snapshot.content).byteLength > MAX_TOOL_TEXT_BYTES ||
+            (snapshot.revision !== null && (typeof snapshot.revision !== "string" || snapshot.revision.length > 128))) {
+          return err("tool_failed", "Invalid or oversized workspace snapshot.");
+        }
+        return ok({ content: snapshot.content, revision: snapshot.revision ?? undefined });
+      } catch (cause) {
+        return failure(cause, typeof cause === "string" ? cause : "Could not snapshot the approved file.");
+      }
+    }
+  });
+}

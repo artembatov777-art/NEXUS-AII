@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./file-system.css";
+import { WorkspaceChangePreview } from "./WorkspaceChangePreview";
 import { ArrowLeft, File, FileCode2, FileText, Folder, FolderOpen, FolderPlus, HardDrive, LockKeyhole, RefreshCw, Save, Search, ShieldCheck, X } from "lucide-react";
 
 type WorkspaceEntry = {
@@ -667,6 +668,7 @@ export function FileSystemPanel({ onClose, onAnalyze }: { onClose: () => void; o
         </div>}
         {error && <div className="error-banner" role="alert">{error}{conflictDetected && <button className="secondary-btn" onClick={() => void reloadLatestFile()} disabled={busy}>{t("Reload latest version")}</button>}</div>}
         {notice && <div className="knowledge-status" role="status">{t(notice)}</div>}
+        {currentPath && <WorkspaceChangePreview key={currentPath} root={currentPath} />}
         <div className="file-workspace-body">
           <div className="file-list-pane">
             <div className="file-pane-heading"><div><span className="file-pane-label">{searchActive ? "SEARCH RESULTS" : "CURRENT LOCATION"}</span><strong>{currentPath || "Choose an approved folder"}</strong>{contentSearchMode && searchActive && contentSearchSummary && <small className="file-search-summary">{contentSearchSummary}</small>}</div><span>{contentSearchMode && searchActive ? contentMatches.length : entries.length} items</span></div>

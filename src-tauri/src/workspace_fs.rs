@@ -617,6 +617,16 @@ pub fn read_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> 
     read_workspace_file_inner(&path, &access)
 }
 
+#[tauri::command]
+pub fn snapshot_workspace_file(path: String, access: State<'_, WorkspaceAccess>) -> Result<serde_json::Value, String> {
+    if path.trim().is_empty() || path.len() > 4096 {
+        return Err("The selected file path is invalid.".into());
+    }
+    let (parent, name, _) = access.open_approved_parent(Path::new(&path))?;
+    let (content, revision) = nexus_workspace::snapshot_text(&parent, &name)?;
+    Ok(serde_json::json!({ "content": content, "revision": revision }))
+}
+
 fn write_workspace_file_inner(
     path: &str,
     content: &str,
@@ -736,10 +746,13 @@ pub fn create_workspace_directory(path: String, access: State<'_, WorkspaceAcces
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn workspace_file_reads_reject_final_component_symlinks_even_when_target_is_approved() {
+        #[cfg(unix)]
         use std::os::unix::fs::symlink;
+        #[cfg(windows)]
+        use std::os::windows::fs::symlink_file as symlink;
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
             .expect("clock").as_nanos();
         let base = std::env::temp_dir().join(format!("nexus-fs-read-no-follow-{}-{nonce}", std::process::id()));
@@ -758,6 +771,27 @@ mod tests {
         assert!(result.is_err(), "a final-component symlink must not be followed even when its target is inside the approved root");
         assert_eq!(fs::read_to_string(&target).unwrap(), "approved target");
         fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_workspace_read_rejects_junction_within_approved_root() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("nexus-tauri-junction-{}-{nonce}", std::process::id()));
+        let target = root.join("target");
+        let junction = root.join("junction");
+        fs::create_dir_all(&target).unwrap();
+        let file = target.join("note.txt");
+        fs::write(&file, "approved text").unwrap();
+        assert!(std::process::Command::new("cmd").args(["/d", "/c", "mklink", "/J"])
+            .arg(&junction).arg(&target).status().unwrap().success());
+        let access = WorkspaceAccess::for_test(vec![fs::canonicalize(&root).unwrap()], root.join("permissions.json"));
+        assert_eq!(read_workspace_file_inner(file.to_str().unwrap(), &access).unwrap(), "approved text");
+        let redirected = junction.join("note.txt");
+        assert!(read_workspace_file_inner(redirected.to_str().unwrap(), &access).is_err());
+        fs::remove_dir(junction).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
