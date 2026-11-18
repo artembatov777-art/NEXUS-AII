@@ -26,19 +26,40 @@ export async function assertPrivateJournal(file: FileHandle, limit: number) {
   }
 }
 
-export async function readPrivateJournal(path: string, limit: number) {
+async function readBoundedJournal(file: FileHandle, limit: number, completeLines: boolean) {
+  const bytes = Buffer.alloc(limit + 1);
+  let offset = 0;
+  while (offset < bytes.length) {
+    const { bytesRead } = await file.read(bytes, offset, bytes.length - offset);
+    if (!bytesRead) break;
+    offset += bytesRead;
+  }
+  if (offset > limit) throw new Error('Oversized workspace journal');
+  const frame = bytes.subarray(0, offset);
+  const end = completeLines ? frame.lastIndexOf(10) + 1 : offset;
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(frame.subarray(0, end));
+}
+
+export async function readPrivateJournal(path: string, limit: number, completeLines = false) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     await assertPrivateJournal(file, limit);
-    const bytes = Buffer.alloc(limit + 1);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const { bytesRead } = await file.read(bytes, offset, bytes.length - offset);
-      if (!bytesRead) break;
-      offset += bytesRead;
+    return await readBoundedJournal(file, limit, completeLines);
+  } finally { await file.close(); }
+}
+
+/** Inspection on hosts without the private write store. Never authorizes a write. */
+export async function readInspectionJournal(path: string, limit: number, completeLines = false) {
+  if (process.platform === 'linux') return readPrivateJournal(path, limit, completeLines);
+  const entry = await lstat(path, { bigint: true });
+  if (!entry.isFile() || entry.nlink !== 1n || entry.size > BigInt(limit)) throw new Error('Invalid workspace journal');
+  const file = await open(path, 'r');
+  try {
+    const opened = await file.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || opened.dev !== entry.dev || opened.ino !== entry.ino) {
+      throw new Error('Workspace journal changed while opening');
     }
-    if (offset > limit) throw new Error('Oversized workspace journal');
-    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, offset));
+    return await readBoundedJournal(file, limit, completeLines);
   } finally { await file.close(); }
 }
 
@@ -112,4 +133,46 @@ export class WorkspaceRecoveryStore {
     }
     return record.originals;
   }
+}
+
+export type EditEvidence =
+  | { phase: 'dispatch-intent' | 'not-confirmed' }
+  | { phase: 'applied'; revision: string };
+
+function isEditRevision(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 128 &&
+    /^(?:\d+:\d+:-?\d+:\d+:\d+|win:\d+:[a-f0-9]{32}:-?\d+:-?\d+:\d+)$/.test(value);
+}
+
+/** Read only the durable prefix. A partial final append is not a receipt. */
+export function parseEditEvidence(text: string, id: string, version: number, files: readonly RecoveryFile[]) {
+  const evidence = new Map<string, EditEvidence>();
+  let phase: string | undefined;
+  let next = 0;
+  for (const line of text.split('\n').slice(0, -1)) {
+    const { checksum, ...step } = JSON.parse(line);
+    if (version === 4 && digest(JSON.stringify({ runId: id, step })) !== checksum) {
+      throw new Error('Invalid edit step checksum');
+    }
+    if (phase === undefined && step.phase === 'preflight-started') {
+      phase = step.phase;
+    } else if (phase === 'preflight-started' && ['preflight-passed', 'preflight-failed'].includes(step.phase)) {
+      phase = step.phase;
+    } else if (files[next]?.path === step.path && typeof step.path === 'string') {
+      if ((phase === 'preflight-passed' || phase === 'applied') && step.phase === 'dispatch-intent') {
+        evidence.set(step.path, { phase: 'dispatch-intent' });
+      } else if (phase === 'dispatch-intent' && step.phase === 'not-confirmed') {
+        evidence.set(step.path, { phase: 'not-confirmed' });
+      } else if (phase === 'dispatch-intent' && step.phase === 'applied' && isEditRevision(step.revision)) {
+        evidence.set(step.path, { phase: 'applied', revision: step.revision });
+        next++;
+      } else {
+        throw new Error('Invalid edit phase transition');
+      }
+      phase = step.phase;
+    } else {
+      throw new Error('Edit step does not match its intent');
+    }
+  }
+  return evidence;
 }

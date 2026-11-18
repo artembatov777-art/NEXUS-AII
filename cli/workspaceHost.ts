@@ -14,7 +14,8 @@ import { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
 import {
   assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
-  MAX_INTENT_BYTES, MAX_STEPS_BYTES, readPrivateJournal, syncDirectory, WorkspaceRecoveryStore, type RecoveryFile
+  MAX_INTENT_BYTES, MAX_STEPS_BYTES, parseEditEvidence, readInspectionJournal, readPrivateJournal,
+  syncDirectory, WorkspaceRecoveryStore, type EditEvidence, type RecoveryFile
 } from './workspaceRecovery';
 import {
   parseReplacements, prepareChanges, WorkspacePlanner, type DraftFile, type WorkspaceSnapshot, type WorkspaceTaskPlan
@@ -105,9 +106,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
   }
 
   async function readIntent(id: string) {
-    const path = intentFile(id);
-    const contents = process.platform === 'linux'
-      ? await readPrivateJournal(path, MAX_INTENT_BYTES) : await readFile(path, 'utf8');
+    const contents = await readInspectionJournal(intentFile(id), MAX_INTENT_BYTES);
     const intent = JSON.parse(contents);
     if (intent?.version === 4) {
       const { root, plan, planId, rollbackOf, files, recoveryHash } = intent;
@@ -400,6 +399,13 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
             files.length > MAX_DRAFT_FILES || !files.every(isIntentFile)) {
           return 'Recovery requires a valid intent for the selected project.';
         }
+        let evidence: Map<string, EditEvidence> | undefined;
+        if (intent.version === 3 || intent.version === 4) {
+          try {
+            const steps = await readInspectionJournal(intentFile(arg) + '.steps', MAX_STEPS_BYTES, true);
+            evidence = parseEditEvidence(steps, arg, intent.version, files);
+          } catch { /* Current bytes can still be inspected without a journal. */ }
+        }
         const observations: string[] = [];
         for (const file of files) {
           if (signal.aborted) break;
@@ -413,7 +419,12 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
           const state = contents === after ? 'Matches the proposed replacement'
             : contents === before && observed.value.revision === revision ? 'Matches the original revision'
             : 'Does not match the original revision or proposed replacement';
-          observations.push(`${state}: ${quoteTerminal(path)}`);
+          const step = evidence?.get(path);
+          const receipt = step?.phase === 'applied'
+            ? (observed.value.revision === step.revision && contents === after ? 'confirmed revision' : 'confirmed revision has since changed')
+            : step ? 'dispatch recorded; outcome unconfirmed'
+              : evidence ? 'no dispatch recorded' : 'write evidence unavailable';
+          observations.push(`${state}: ${quoteTerminal(path)} (journal: ${receipt})`);
         }
         return [...observations, 'Current observations only. No edit was replayed.'].join('\n');
       }
@@ -423,7 +434,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         if (!host.editSupported) return 'This workspace host cannot apply rollbacks.';
         let files: RecoveryFile[];
         let originals: readonly string[];
-        const receipts = new Map<string, string>();
+        let receipts: Map<string, EditEvidence>;
         try {
           await assertPrivateAuditDirectory();
           const intent = await readIntent(arg);
@@ -445,17 +456,8 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
               return file.original;
             });
           }
-          const steps = await readPrivateJournal(intentFile(arg) + '.steps', MAX_STEPS_BYTES);
-          // A record without its final newline can be a torn append.
-          for (const line of steps.split('\n').slice(0, -1)) {
-            const { checksum, ...step } = JSON.parse(line);
-            if (intent.version === 4 && digest(JSON.stringify({ runId: arg, step })) !== checksum) {
-              throw new Error('Invalid rollback step checksum');
-            }
-            if (step.phase === 'applied' && typeof step.path === 'string' && isRevision(step.revision)) {
-              receipts.set(step.path, step.revision);
-            }
-          }
+          const steps = await readPrivateJournal(intentFile(arg) + '.steps', MAX_STEPS_BYTES, true);
+          receipts = parseEditEvidence(steps, arg, intent.version, files);
         } catch {
           return 'No readable rollback journal for that apply ID and selected project.';
         }
@@ -466,11 +468,12 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         for (const [index, file] of [...files.entries()].reverse()) {
           if (signal.aborted) return 'Rollback preview cancelled.';
           const label = quoteTerminal(file.path);
-          const receipt = receipts.get(file.path);
-          if (!receipt) {
+          const step = receipts.get(file.path);
+          if (step?.phase !== 'applied') {
             skipped.push(`Skipped ${label}: no confirmed write revision. Use /recover ${arg} to inspect it.`);
             continue;
           }
+          const receipt = step.revision;
           const observed = await invoke<{ content: string; revision?: string }>('read', {root, path: file.path},
             signal, randomUUID(), `rollback:${arg}:${randomUUID()}`);
           if (!observed.ok) {

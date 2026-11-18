@@ -297,8 +297,8 @@ with tempfile.TemporaryDirectory() as temp:
         for _ in range(2):
             cli.expect("Type yes to allow:")
             cli.sendline("yes")
-        cli.expect_exact('Matches the proposed replacement: "note.txt"')
-        cli.expect_exact('Matches the original revision: "second.txt"')
+        cli.expect_exact('Matches the proposed replacement: "note.txt" (journal: confirmed revision)')
+        cli.expect_exact('Matches the original revision: "second.txt" (journal: dispatch recorded; outcome unconfirmed)')
         cli.expect("❯")
         journal = Path(temp) / ".nexus-au" / "workspace-audit" / (batch_id + ".edit.json.steps")
         phases = [json.loads(line)["phase"] for line in journal.read_text().splitlines()]
@@ -339,6 +339,11 @@ with tempfile.TemporaryDirectory() as temp:
         journal.write_text(original_steps.replace('"phase":"applied"', '"phase":"altered"'))
         cli.sendline("/rollback " + batch_id)
         cli.expect("No readable rollback journal")
+        cli.expect("❯")
+        journal.write_bytes(original_steps.encode() + b'{"path":"\xe2\x82')
+        prepare_rollback(batch_id, 1, 1)
+        cli.sendline("/discard")
+        cli.expect("Draft discarded")
         cli.expect("❯")
         journal.write_text(original_steps)
         legacy_steps = legacy_file.with_name(legacy_file.name + ".steps")
@@ -518,8 +523,8 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         for _ in range(2):
             cli.expect("Type yes to allow:")
             cli.sendline("yes")
-        cli.expect_exact('Matches the proposed replacement: "note.txt"')
-        cli.expect_exact('Matches the proposed replacement: "second.txt"')
+        cli.expect_exact('Matches the proposed replacement: "note.txt" (journal: confirmed revision)')
+        cli.expect_exact('Matches the proposed replacement: "second.txt" (journal: dispatch recorded; outcome unconfirmed)')
         cli.expect("❯")
         prepare_rollback(lost_id, 1, 1, 'Skipped "second.txt": no confirmed write revision')
         cli.sendline("/discard")
@@ -574,8 +579,8 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         for _ in range(2):
             cli.expect("Type yes to allow:")
             cli.sendline("yes")
-        cli.expect_exact('Matches the proposed replacement: "second.txt"')
-        cli.expect_exact('Matches the original revision: "note.txt"')
+        cli.expect_exact('Matches the proposed replacement: "second.txt" (journal: dispatch recorded; outcome unconfirmed)')
+        cli.expect_exact('Matches the original revision: "note.txt" (journal: no dispatch recorded)')
         cli.expect("❯")
 
         # The prior approval cannot survive re-preparing the reverse plan.
@@ -605,6 +610,13 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         replacement.write_text("workspace updated")
         replacement.replace(note)
         apply_draft("yes", "No writes were dispatched.")
+        cli.sendline("/recover " + source_id)
+        for _ in range(2):
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+        cli.expect_exact('Matches the proposed replacement: "note.txt" (journal: confirmed revision has since changed)')
+        cli.expect_exact('Matches the proposed replacement: "second.txt" (journal: confirmed revision)')
+        cli.expect("❯")
         confirm_batch(prepare_rollback(source_id, 2, 1, 'Skipped "note.txt": conflict with the confirmed write revision'))
         apply_draft("yes", "Rollback applied")
         assert note.read_text() == "workspace updated"

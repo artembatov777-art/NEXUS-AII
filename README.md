@@ -171,9 +171,11 @@ ID, also stored as the basename of a `.edit.json` file under
 fails after rename, reselect the same project and run `/recover <ID>`. The
 gateway requests read permission and reports for each file whether it currently
 matches the original revision, matches the proposed bytes, or differs.
-A match describes the observed file, so it does not prove that an edit
-survived a power failure or that this process wrote it. Recovery never
-replays an edit. A retry requires a fresh draft and approval.
+The result also shows whether the journal confirms that revision, records a
+dispatch without confirmation, or has no usable evidence. A byte match alone
+leaves the write outcome unconfirmed. Power-loss durability depends on the
+filesystem and platform. Recovery only inspects the workspace.
+A retry requires a fresh draft and approval.
 To undo a completed or partially applied plan, run `/rollback <apply ID>`
 with the same project selected. The command previews the reverse changes in
 reverse application order. It includes only files whose current bytes and
