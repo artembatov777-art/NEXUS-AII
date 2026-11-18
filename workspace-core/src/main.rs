@@ -1,5 +1,5 @@
 //! One granted directory per process. Closing stdin revokes the session.
-use nexus_workspace::{read_text, Workspace};
+use nexus_workspace::{is_capability_link_or_reparse, open_child_directory, read_text, Workspace};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
@@ -47,11 +47,16 @@ fn walk(
         let name = entry.file_name();
         let Some(label) = name.to_str() else { continue };
         let path = format!("{prefix}{label}");
-        let kind = entry.file_type().map_err(|_| "Cannot inspect entry")?;
+        let Ok(metadata) = dir.symlink_metadata(&name) else {
+            continue;
+        };
+        if is_capability_link_or_reparse(&metadata) {
+            continue;
+        }
+        let kind = metadata.file_type();
         if let Some(q) = query {
             if kind.is_dir() && depth < 8 {
-                use cap_fs_ext::DirExt;
-                if let Ok(child) = dir.open_dir_nofollow(&name) {
+                if let Ok(child) = open_child_directory(dir, &name) {
                     walk(
                         &child,
                         &format!("{path}/"),
@@ -78,12 +83,12 @@ fn execute(ws: &Workspace, line: &[u8]) -> Result<Value, String> {
     let path = Path::new(&r.path);
     match r.operation {
         Operation::Read => {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             {
                 let (content, revision) = ws.snapshot(path)?;
                 Ok(json!({"content":content,"revision":revision}))
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", windows)))]
             Ok(json!({"content":ws.read(path)?}))
         }
         Operation::Edit => {

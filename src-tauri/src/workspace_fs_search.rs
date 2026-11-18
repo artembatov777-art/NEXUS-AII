@@ -1,7 +1,7 @@
 use crate::workspace_fs::{ensure_no_external_hard_links, open_capability_file, WorkspaceAccess};
+use nexus_workspace::{is_capability_link_or_reparse, is_link_or_reparse, open_child_directory};
 #[cfg(test)]
 use crate::workspace_fs::open_regular_file_readonly;
-use cap_fs_ext::DirExt;
 use cap_std::fs::Dir as CapabilityDir;
 use serde::Serialize;
 #[cfg(test)]
@@ -69,7 +69,7 @@ fn search_contents_in(root: &Path, start: &Path, query: &str) -> Result<Workspac
                 Ok(value) => value,
                 Err(_) => continue,
             };
-            if link_metadata.file_type().is_symlink() { continue; }
+            if is_link_or_reparse(&link_metadata) { continue; }
 
             let name = entry.file_name().to_string_lossy().into_owned();
             let canonical = match fs::canonicalize(&entry_path) {
@@ -187,11 +187,11 @@ fn search_contents_in_capability(
                 Ok(value) => value,
                 Err(_) => { truncated = true; continue; }
             };
-            if metadata.file_type().is_symlink() { continue; }
+            if is_capability_link_or_reparse(&metadata) { continue; }
             if metadata.is_dir() {
                 if !excluded_directory(&name.to_string_lossy()) {
                     if depth < MAX_SEARCH_DEPTH {
-                        match directory.open_dir_nofollow(&name) {
+                        match open_child_directory(&directory, &name) {
                             Ok(child) => pending.push((child, relative_directory.join(&name), depth + 1)),
                             Err(_) => truncated = true,
                         }

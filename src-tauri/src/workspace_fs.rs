@@ -19,6 +19,7 @@ const MAX_DIRECTORY_ENTRIES: usize = 500;
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
 pub(crate) use nexus_workspace::ensure_no_external_hard_links;
+use nexus_workspace::{is_capability_link_or_reparse, is_link_or_reparse, open_child_directory};
 
 /// Opens only a regular file and refuses to follow a final-component symlink/reparse point.
 /// The caller must still validate the canonical parent against an approved root.
@@ -39,7 +40,7 @@ pub(crate) fn open_regular_file_readonly(path: &Path) -> Result<fs::File, String
     let file = options.open(path)
         .map_err(|error| format!("Could not open a regular file without following links: {error}"))?;
     let metadata = file.metadata().map_err(|error| format!("Could not inspect the opened file: {error}"))?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
+    if !metadata.is_file() || is_link_or_reparse(&metadata) {
         return Err("NEXUS can open regular files only, not links or special entries.".into());
     }
     ensure_no_external_hard_links(&file)?;
@@ -65,7 +66,7 @@ fn open_regular_file_readwrite(path: &Path) -> Result<fs::File, String> {
         .map_err(|error| format!("Could not open the approved file without following links: {error}"))?;
     let metadata = file.metadata()
         .map_err(|error| format!("Could not inspect the opened file safely: {error}"))?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
+    if !metadata.is_file() || is_link_or_reparse(&metadata) {
         return Err("NEXUS can edit regular files only, not links or special entries.".into());
     }
     ensure_no_external_hard_links(&file)?;
@@ -125,7 +126,7 @@ fn open_approved_root_handle(root: &Path) -> Result<CapabilityDir, String> {
         .map_err(|error| format!("Could not pin the approved directory: {error}"))?;
     let metadata = file.metadata()
         .map_err(|error| format!("Could not inspect the approved directory handle: {error}"))?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+    if !metadata.is_dir() || is_link_or_reparse(&metadata) {
         return Err("The approved workspace root is no longer a regular directory.".into());
     }
     if fs::canonicalize(root).map_err(|error| error.to_string())? != root {
@@ -143,17 +144,14 @@ pub(crate) fn open_capability_file(
 ) -> Result<fs::File, String> {
     let mut options = CapabilityOpenOptions::new();
     options.read(read).write(write).create_new(create_new).follow(FollowSymlinks::No);
-    directory.open_with(Path::new(name), &options)
-        .map(CapabilityFileIntoStd::into_std)
-        .map_err(|error| format!("Could not safely open the approved file: {error}"))
-}
-
-trait CapabilityFileIntoStd {
-    fn into_std(self) -> fs::File;
-}
-
-impl CapabilityFileIntoStd for cap_std::fs::File {
-    fn into_std(self) -> fs::File { cap_std::fs::File::into_std(self) }
+    let file = directory.open_with(Path::new(name), &options)
+        .map(cap_std::fs::File::into_std)
+        .map_err(|error| format!("Could not safely open the approved file: {error}"))?;
+    let metadata = file.metadata().map_err(|error| format!("Could not inspect the approved file: {error}"))?;
+    if !metadata.is_file() || is_link_or_reparse(&metadata) {
+        return Err("Only regular, non-reparse files can be opened.".into());
+    }
+    Ok(file)
 }
 
 pub struct WorkspaceAccess {
@@ -194,7 +192,7 @@ impl WorkspaceAccess {
                     return None;
                 }
                 let metadata = fs::symlink_metadata(&path).ok()?;
-                if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                if !metadata.is_dir() || is_link_or_reparse(&metadata) {
                     return None;
                 }
                 Some(path)
@@ -292,7 +290,7 @@ impl WorkspaceAccess {
         }
         let alias_metadata = fs::symlink_metadata(&alias_root)
             .map_err(|error| format!("Could not inspect the approved root alias: {error}"))?;
-        if !alias_metadata.is_dir() || alias_metadata.file_type().is_symlink() {
+        if !alias_metadata.is_dir() || is_link_or_reparse(&alias_metadata) {
             return Err("The requested path uses a symbolic link for its approved root.".into());
         }
         let mut relative = PathBuf::new();
@@ -320,7 +318,7 @@ impl WorkspaceAccess {
                             .into_std();
                         let metadata = child.metadata()
                             .map_err(|error| format!("Could not inspect a directory inside the approved workspace: {error}"))?;
-                        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                        if !metadata.is_dir() || is_link_or_reparse(&metadata) {
                             return Err("The requested workspace path contains a link or non-directory entry.".into());
                         }
                         directory = CapabilityDir::from_std_file(child);
@@ -421,9 +419,9 @@ fn list_workspace_entries_capability(
             Ok(value) => value,
             Err(_) => continue,
         };
-        if metadata.file_type().is_symlink() { continue; }
+        if is_capability_link_or_reparse(&metadata) { continue; }
         let (kind, size_bytes, modified_at_ms) = if metadata.is_dir() {
-            let child = match directory.open_dir_nofollow(&name) { Ok(value) => value, Err(_) => continue };
+            let child = match open_child_directory(&directory, &name) { Ok(value) => value, Err(_) => continue };
             let opened = child.dir_metadata().map_err(|e| format!("Could not inspect directory entry: {e}"))?;
             let modified = opened.modified().ok()
                 .and_then(|time| time.duration_since(cap_std::time::SystemClock::UNIX_EPOCH).ok())
@@ -490,7 +488,7 @@ fn search_workspace_entries_in(root: &Path, start: &Path, query: &str) -> Result
                 Ok(value) => value,
                 Err(_) => continue,
             };
-            if link_metadata.file_type().is_symlink() { continue; }
+            if is_link_or_reparse(&link_metadata) { continue; }
             let canonical = match fs::canonicalize(&entry_path) {
                 Ok(value) if value.starts_with(&canonical_root) => value,
                 _ => continue,
@@ -557,10 +555,10 @@ fn search_workspace_entries_capability(
                 Ok(value) => value,
                 Err(_) => continue,
             };
-            if metadata.file_type().is_symlink() { continue; }
+            if is_capability_link_or_reparse(&metadata) { continue; }
             let (kind, size_bytes, modified_at_ms) = if metadata.is_dir() {
                 if depth < MAX_SEARCH_DEPTH {
-                    if let Ok(child) = directory.open_dir_nofollow(&name) {
+                    if let Ok(child) = open_child_directory(&directory, &name) {
                         pending.push((child, relative_directory.join(&name), depth + 1));
                     }
                 }
@@ -639,7 +637,7 @@ fn write_workspace_file_inner(
             if expected_content.is_none() {
                 return Err("A file or folder already exists at this path. Choose a different name instead of overwriting it.".into());
             }
-            if metadata.file_type().is_symlink() || !metadata.is_file() {
+            if is_capability_link_or_reparse(&metadata) || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
             // Open relative to the pinned parent handle and refuse a final

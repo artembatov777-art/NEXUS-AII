@@ -37,15 +37,70 @@ pub fn ensure_no_external_hard_links(file: &fs::File) -> Result<(), String> {
     Ok(())
 }
 
-fn normal(name: &OsStr) -> Result<(), String> {
-    if Path::new(name).components().count() != 1
-        || Path::new(name).file_name() != Some(name)
-        || cfg!(windows) && name.to_string_lossy().contains([':', '\\'])
+/// Reject all Windows reparse tags, including junctions and tags not exposed
+/// as symbolic links by Rust's FileType.
+pub fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
     {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    metadata.file_type().is_symlink()
+}
+
+/// Same reparse check for metadata obtained relative to a directory capability.
+pub fn is_capability_link_or_reparse(metadata: &cap_std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use cap_std::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    metadata.file_type().is_symlink()
+}
+
+#[cfg(windows)]
+mod windows;
+fn normal(name: &OsStr) -> Result<(), String> {
+    if Path::new(name).components().count() != 1 || Path::new(name).file_name() != Some(name) {
         return Err("Invalid workspace component".into());
+    }
+    #[cfg(windows)]
+    {
+        let name = name.to_string_lossy();
+        let stem = name
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .trim_end()
+            .to_ascii_uppercase();
+        let numbered_device = stem
+            .strip_prefix("COM")
+            .or_else(|| stem.strip_prefix("LPT"))
+            .is_some_and(|suffix| {
+                matches!(
+                    suffix,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            });
+        if name.contains([':', '\\', '*', '?', '"', '<', '>', '|'])
+            || name.chars().any(char::is_control)
+            || name.ends_with(['.', ' '])
+            || numbered_device
+            || matches!(
+                stem.as_str(),
+                "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+            )
+        {
+            return Err("Invalid Windows workspace component".into());
+        }
     }
     Ok(())
 }
+
 fn open_text(dir: &Dir, name: &OsStr) -> Result<fs::File, String> {
     normal(name)?;
     let mut options = OpenOptions::new();
@@ -62,7 +117,7 @@ fn open_text(dir: &Dir, name: &OsStr) -> Result<fs::File, String> {
 
 fn read_open_text(file: &fs::File, limit: u64) -> Result<String, String> {
     let metadata = file.metadata().map_err(|_| "Cannot inspect file")?;
-    if !metadata.is_file() || metadata.len() > limit {
+    if !metadata.is_file() || is_link_or_reparse(&metadata) || metadata.len() > limit {
         return Err("File type or size exceeds preview limit".into());
     }
     ensure_no_external_hard_links(file)?;
@@ -144,7 +199,7 @@ impl Workspace {
         }
         Ok(dir)
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     pub fn snapshot(&self, path: &Path) -> Result<(String, String), String> {
         let dir = self.directory(path.parent().ok_or("Missing parent")?)?;
         Self::snapshot_at(&dir, path.file_name().ok_or("Missing filename")?)
@@ -160,6 +215,17 @@ impl Workspace {
             return Err("File changed while being read".into());
         }
         Ok((text, after))
+    }
+
+    #[cfg(windows)]
+    fn snapshot_at(dir: &Dir, name: &OsStr) -> Result<(String, String), String> {
+        let file = windows::open_snapshot(dir, name)?;
+        let before = windows::revision(&file)?;
+        let text = read_open_text(&file, 48_000)?;
+        if before != windows::revision(&file)? {
+            return Err("File changed while being read".into());
+        }
+        Ok((text, before))
     }
 
     #[cfg(target_os = "linux")]
@@ -387,9 +453,25 @@ fn child(dir: &Dir, part: Component<'_>) -> Result<Dir, String> {
     let Component::Normal(name) = part else {
         return Err("Invalid relative path".into());
     };
+    open_child_directory(dir, name)
+}
+
+/// Opens exactly one child component without following links.
+pub fn open_child_directory(dir: &Dir, name: &OsStr) -> Result<Dir, String> {
     normal(name)?;
-    dir.open_dir_nofollow(name)
-        .map_err(|_| "Directory unavailable".into())
+    let child = dir
+        .open_dir_nofollow(name)
+        .map_err(|_| "Directory unavailable")?;
+    #[cfg(windows)]
+    {
+        let metadata = child
+            .dir_metadata()
+            .map_err(|_| "Cannot inspect directory")?;
+        if is_capability_link_or_reparse(&metadata) {
+            return Err("Reparse-point directories are not allowed".into());
+        }
+    }
+    Ok(child)
 }
 
 #[cfg(all(test, target_os = "linux"))]

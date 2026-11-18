@@ -209,7 +209,7 @@ pub(crate) fn rename_no_replace_at(
         options.access_mode(0x8000_0000 | 0x0001_0000); // GENERIC_READ | DELETE
         let source_file = source_directory.open_with(Path::new(source_name), &options)?.into_std();
         let metadata = source_file.metadata()?;
-        if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
+        if nexus_workspace::is_link_or_reparse(&metadata) || (!metadata.is_file() && !metadata.is_dir()) {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Only regular files and directories can be moved."));
         }
 
@@ -277,7 +277,7 @@ fn relocate_entry(
     let source = canonical_source_parent.join(source_name);
     let source_metadata = source_directory.symlink_metadata(source_name)
         .map_err(|error| format!("Could not inspect the selected entry: {error}"))?;
-    if source_metadata.file_type().is_symlink() || (!source_metadata.is_file() && !source_metadata.is_dir()) {
+    if nexus_workspace::is_capability_link_or_reparse(&source_metadata) || (!source_metadata.is_file() && !source_metadata.is_dir()) {
         return Err("NEXUS can move only regular files and directories, not symbolic links or special entries.".into());
     }
     if source == source_root || !source.starts_with(&source_root) {
@@ -395,7 +395,7 @@ fn move_workspace_entries_batch_inner(
         let source = canonical_source_parent.join(source_name);
         let metadata = fs::symlink_metadata(&source)
             .map_err(|error| format!("Could not inspect a selected file: {error}"))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
+        if nexus_workspace::is_link_or_reparse(&metadata) || !metadata.is_file() {
             return Err("Batch move supports regular files only; folders, symbolic links, and special entries are excluded.".into());
         }
         if !seen_sources.insert(source.clone()) {
@@ -527,7 +527,7 @@ fn rename_workspace_entries_batch_inner(
         let source = canonical_parent.join(source_name);
         let metadata = fs::symlink_metadata(&source)
             .map_err(|error| format!("Could not inspect a selected file: {error}"))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
+        if nexus_workspace::is_link_or_reparse(&metadata) || !metadata.is_file() {
             return Err("Batch rename supports regular files only; folders, symbolic links, and special entries are excluded.".into());
         }
         if !seen_sources.insert(source.clone()) {
