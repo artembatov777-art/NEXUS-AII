@@ -650,8 +650,15 @@ fn write_workspace_file_inner(
             if is_capability_link_or_reparse(&metadata) || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
+            // Until a transactional Windows replacement protocol is verified,
+            // fail before requesting write access to an existing file. The
+            // caller keeps its draft; the on-disk original remains untouched.
+            #[cfg(windows)]
+            return Err("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.".into());
+
             // Open relative to the pinned parent handle and refuse a final
             // symlink/reparse point. The comparison and write use this same handle.
+            #[cfg(not(windows))]
             let mut file = open_capability_file(&parent_directory, &name, true, true, false)
                 .map_err(|error| {
                     if error.contains("hard-linked") {
@@ -660,6 +667,8 @@ fn write_workspace_file_inner(
                         "The file changed or is no longer safely readable. Reload it before saving.".to_string()
                     }
                 })?;
+            #[cfg(not(windows))]
+            {
             let opened_metadata = file.metadata()
                 .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
             if !opened_metadata.is_file() {
@@ -688,19 +697,10 @@ fn write_workspace_file_inner(
                     return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
                 }
             }
-            // Windows replacement is not yet transactionally safe. Never
-            // truncate the user's original file in the shipped desktop host:
-            // a crash or failed write would destroy the approved snapshot.
-            // Creation of new files remains available through create_new.
-            #[cfg(windows)]
-            return Err("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.".into());
-
-            #[cfg(not(windows))]
-            {
-                file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
-                file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
-                file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
-                file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
+            file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
+            file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
+            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
