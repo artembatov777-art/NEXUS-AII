@@ -7,6 +7,7 @@ test('help describes terminal usage', () => {
   const result = run('--help');
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Usage: nexus/);
+  assert.match(result.stdout, /\/agent plan <task>.*\/agent inspect.*\/agent diff.*\/agent status/);
 });
 test('unknown arguments fail without starting a session', () => {
   const result = run('--unknown');
@@ -52,8 +53,8 @@ test('workspace commands in test mode report unavailable rather than being sent 
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const history = join(mkdtempSync(join(tmpdir(), 'nexus-workspace-')), 'history.json');
-  const result = spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input: '/files\n' });
+  const result = spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input: '/files\n/agent plan fixture\n/agent inspect\n/agent diff\n/agent status\n' });
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /workspace backend.*unavailable/i);
+  assert.equal(result.stdout.match(/workspace backend.*unavailable/gi)?.length, 5);
   assert.doesNotMatch(result.stdout, /TEST MODEL/);
 });

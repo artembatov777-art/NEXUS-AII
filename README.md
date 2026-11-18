@@ -94,6 +94,34 @@ With stable Rust and the npm dependencies installed, run `npm run build:workspac
 In interactive test mode, `/agent list [directory]` lists entries and
 `/agent search <text>` searches file contents through the same gateway.
 
+#### Plan workspace changes
+
+The interactive CLI has a deterministic workspace planner that runs locally
+without a model, including in normal CLI mode. A plain-text goal lists the
+project root and, for a goal of up to 256 UTF-8 bytes, searches for it as a
+literal string. For scoped discovery or exact replacements, supply JSON.
+`directory` scopes the listing and search. The replacement paths are always
+relative to the selected project.
+
+```text
+/project /absolute/path/to/project
+/agent plan {"goal":"Update the label in the guide and source","query":"old label","changes":[{"path":"README.md","from":"old label","to":"new label"},{"path":"src/labels.ts","from":"old label","to":"new label"}]}
+/agent inspect
+/agent diff
+/approve
+/apply
+/agent status
+```
+
+The planner shows candidates, proposed actions, captured revisions, expected
+content hashes and risks. Listing, search and file snapshots each require
+permission. The plan ID and hash identify the reviewed content. Showing the
+complete diff is required before approval. Plain-text goals produce
+read-only plans, and write plans require explicit replacements. Workspace
+contents stay local. Plans and approvals are session-local.
+Completed or interrupted apply attempts can be inspected using their durable
+operation ID after restarting the CLI.
+
 For one file, use `/draft {"path":"note.txt","from":"old text","to":"new text"}`.
 For multiple files, pass a JSON array with up to eight replacements, one per
 file. Each old span must appear exactly once. The CLI shows all replacements
@@ -158,11 +186,16 @@ revision check and rename.
 For new operations the CLI stores original file contents in
 `~/.nexus-au/workspace-recovery/` (directory mode `0700`, files `0600`).
 These local backups are plaintext. SHA-256 checksums detect corruption
-and bind backups and write receipts to the operation. They do not authenticate
-data against someone who can rewrite all files as your user. The CLI refuses
+and bind backups and write receipts to the operation. Anyone who can rewrite
+these files as your user can also recompute the checksums. The CLI refuses
 rollback if the backup or journal fails verification. `/recover` can still
 inspect files using intact audit metadata if the backup is unavailable.
 Existing journals stay in place, including the original text in version 3
 journals. Linux writes require a current workspace host with write-receipt
 support and durable audit and recovery storage.
-Windows and macOS hosts support preview and approval of regular drafts.
+Windows and macOS hosts support discovery, preview and approval. CLI writes
+remain disabled on both platforms.
+
+To run the Linux terminal integration suite, build the CLI and Rust host with
+`npm run build:cli` and `npm run build:workspace`, then run
+`python3 scripts/test-workspace-pty.py` with Python `pexpect` installed.

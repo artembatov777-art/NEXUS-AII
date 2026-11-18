@@ -38,7 +38,7 @@ export async function readPrivateJournal(path: string, limit: number) {
       offset += bytesRead;
     }
     if (offset > limit) throw new Error('Oversized workspace journal');
-    return bytes.subarray(0, offset).toString('utf8');
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, offset));
   } finally { await file.close(); }
 }
 
@@ -58,6 +58,7 @@ export interface RecoveryFile {
 export interface RecoveryManifest {
   root: string;
   plan: string;
+  planId?: string;
   rollbackOf?: string;
   files: readonly Omit<RecoveryFile, 'original'>[];
 }

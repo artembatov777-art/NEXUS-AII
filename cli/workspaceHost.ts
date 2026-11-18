@@ -8,15 +8,17 @@ import { randomUUID } from 'node:crypto';
 import { ok, err } from '../src/core/result';
 import { ToolGateway, type PermissionService, type ToolAuditEvent } from '../src/core/tools';
 import { registerCliWorkspaceTools } from './workspace';
-import { AgentPlanner } from '../src/core/agentPlanner';
 import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
-import { PlanExecutor } from '../src/core/planExecutor';
+import type { PlanStepResult } from '../src/core/planExecutor';
 import { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
 import {
   assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
   MAX_INTENT_BYTES, MAX_STEPS_BYTES, readPrivateJournal, syncDirectory, WorkspaceRecoveryStore, type RecoveryFile
 } from './workspaceRecovery';
+import {
+  parseReplacements, prepareChanges, WorkspacePlanner, type DraftFile, type WorkspaceSnapshot, type WorkspaceTaskPlan
+} from './workspacePlanner';
 
 const executable = fileURLToPath(new URL('./bin/nexus-workspace' + (process.platform === 'win32' ? '.exe' : ''), import.meta.url));
 
@@ -59,13 +61,6 @@ class Connection {
   }
 }
 
-interface DraftFile {
-  readonly path: string;
-  readonly before: string;
-  readonly after: string;
-  readonly revision?: string;
-}
-
 interface EditStep {
   phase: string;
   path?: string;
@@ -76,6 +71,9 @@ interface DraftPlan {
   readonly files: readonly DraftFile[];
   readonly hash: string;
   readonly rollbackOf?: string;
+  readonly agentPlanId?: string;
+  readonly agentDiff?: readonly string[];
+  previewed?: boolean;
   approvedUntil?: number;
 }
 
@@ -87,6 +85,10 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
   let host: Connection | undefined;
   let root = '';
   let draft: DraftPlan | undefined;
+  let planned: WorkspaceTaskPlan | undefined;
+  let lastAttempt: {
+    id: string; kind: string; hash: string; confirmed: number; total: number; result: 'incomplete' | 'completed';
+  } | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
   const recovery = new WorkspaceRecoveryStore(join(dirname(dir), 'workspace-recovery'));
   const auditFile = (id: string) => {
@@ -108,8 +110,8 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       ? await readPrivateJournal(path, MAX_INTENT_BYTES) : await readFile(path, 'utf8');
     const intent = JSON.parse(contents);
     if (intent?.version === 4) {
-      const { root, plan, rollbackOf, files, recoveryHash } = intent;
-      const manifest = { root, plan, rollbackOf, files };
+      const { root, plan, planId, rollbackOf, files, recoveryHash } = intent;
+      const manifest = { root, plan, planId, rollbackOf, files };
       if (digest(JSON.stringify({ id, manifest, recoveryHash })) !== intent.intentHash) {
         throw new Error('Invalid edit intent checksum');
       }
@@ -148,7 +150,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       return err('tool_failed','Invalid workspace backend response.');
     }
   });
-  const resource = (plan: DraftPlan) => plan.files.length === 1 && !plan.rollbackOf
+  const resource = (plan: DraftPlan) => plan.files.length === 1 && !plan.rollbackOf && !plan.agentDiff
     ? `${root}/${plan.files[0].path}`
     : `${root} (${plan.files.length} files; plan ${plan.hash}${plan.rollbackOf ? `; rollback of ${plan.rollbackOf}` : ''})`;
 
@@ -184,6 +186,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
     risk: 'high',
     timeoutMs: 15_000,
     validateInput(input: unknown) {
+      if (draft?.agentDiff && !draft.previewed) return err('validation', 'View the complete plan diff with /agent diff before approval.');
       return input === null && host && draft && draft.approvedUntil === undefined
         ? ok({ host, draft })
         : err('validation', 'Prepare an unapproved draft first.');
@@ -220,6 +223,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       const manifest = {
         root: input.root,
         plan: input.draft.hash,
+        planId: input.draft.agentPlanId,
         rollbackOf: input.draft.rollbackOf,
         files: input.draft.files.map(({ path, revision, before, after }) =>
           ({ path, revision: revision!, before: digest(before), after: digest(after) }))
@@ -239,7 +243,10 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       } catch {
         return err('storage_failed', 'Cannot persist edit intent. No edit was dispatched.');
       }
+      if (!current()) return err('cancelled', 'Operation stopped before preflight. No edits were dispatched.');
       const label = input.draft.rollbackOf ? 'Rollback' : 'Apply';
+      const attempt = { id, kind: label, hash: input.draft.hash, confirmed: 0, total: input.draft.files.length, result: 'incomplete' as const };
+      lastAttempt = attempt;
       report(`${label} attempt ${id}. If interrupted, reselect the project and use /recover ${id}.\n`);
 
       // This read-only pass finishes for the whole plan before sending any
@@ -252,8 +259,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         return err('tool_failed', 'Preflight interrupted; no writes were dispatched.');
       }
 
-      let applied = 0;
-      const progress = () => `${applied}/${input.draft.files.length} file(s) confirmed. Use /recover ${id} to inspect every file.`;
+      const progress = () => `${attempt.confirmed}/${attempt.total} file(s) confirmed. Use /recover ${id} to inspect every file.`;
       for (const { path, before, after, revision } of input.draft.files) {
         if (!current()) return err('cancelled', `Operation stopped before the next write. ${progress()}`);
         try {
@@ -273,14 +279,14 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
             return err('tool_failed', `${message} ${progress()}`);
           }
           await recordEditStep(id, { phase: 'applied', path, revision: reply.value.revision });
-          applied++;
+          attempt.confirmed++;
         } catch {
           // The last write may have passed rename even if IPC or journaling
           // failed. Do not replay or compensate automatically.
           return err('tool_failed', `Write or journal interrupted. The edit outcome is unknown. ${progress()}`);
         }
       }
-      return ok({ applied });
+      return ok({ applied: attempt.confirmed });
     }
   });
   if (!apply.ok) throw new Error(apply.error.message);
@@ -289,26 +295,28 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
     runId = randomUUID(), traceId: string = randomUUID()) =>
     gateway.execute<T>(`cli.workspace.${operation}`, input, {runId, traceId, signal}, 'owner');
 
-  // The offline planner accepts one explicit task. The selected root comes
-  // from this terminal session and the gateway still requires confirmation.
-  const planner = new AgentPlanner({
-    async createPlan({ goal }) {
-      if (!host) return err('permission_denied', 'Select a project first.');
-      const match = /^(read|list|search)(?:[ \t]+(.+))?$/.exec(goal);
-      if (!match || (!match[2] && match[1] !== 'list')) {
-        return err('validation', 'Offline tasks: read <file>, list [directory], search <text>.');
-      }
-      const [, operation, arg = ''] = match;
-      return ok({ goal, steps: [{
-        id: operation, toolId: `cli.workspace.${operation}`, purpose: `Workspace ${operation}`,
-        input: operation === 'search' ? { root, path: '', query: arg } : { root, path: arg },
-        dependsOn: []
-      }] });
-    }
-  }, 1);
-  const agent = new PlanExecutor(planner, registry, new GatewayAgentToolExecutor(gateway, 'owner'));
+  const planner = new WorkspacePlanner(registry, new GatewayAgentToolExecutor(gateway, 'owner'));
+  const readSnapshot = (path: string, signal: AbortSignal, planId?: string) =>
+    invoke<WorkspaceSnapshot>('read', { root, path }, signal, randomUUID(), planId ? `plan:${planId}:${randomUUID()}` : undefined);
+
+  function inspect(plan: WorkspaceTaskPlan) {
+    return [
+      `Agent plan ${plan.id} (hash ${plan.hash})`,
+      `Goal: ${quoteTerminal(plan.goal)}`,
+      `Analyzed directory: ${quoteTerminal(plan.directory || '.')}`,
+      `Entries: ${quoteTerminal(plan.entries)}`,
+      ...(plan.query ? [`Candidates for ${quoteTerminal(plan.query)}: ${quoteTerminal(plan.candidates)}`] : []),
+      `Proposed actions: ${plan.actions.length}`,
+      ...plan.actions.map(action => `- ${quoteTerminal(action)}`),
+      `Expected result: ${plan.expectedResult}`,
+      ...plan.risks.map(risk => `Risk: ${risk}`)
+    ].join('\n');
+  }
+
   return {
-    run: agent.run.bind(agent),
+    run: (goal: string, runId: string, signal: AbortSignal, onStep?: (step: PlanStepResult) => void) =>
+      host ? planner.runInspection(root, goal, runId, signal, onStep)
+        : Promise.resolve(err('permission_denied', 'Select a project first.')),
     close: () => host?.close(),
     async command(line:string, signal:AbortSignal) {
       const [command] = line.split(/\s/,1);
@@ -322,12 +330,58 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
           if (ready.ready !== true) throw new Error();
           next.editSupported = process.platform === 'linux' && ready.edit === true && ready.editRevision === true;
         } catch { next.close(); return 'Workspace backend unavailable or directory denied.'; }
-        host?.close(); host=next; root=arg; draft=undefined;
+        if (root !== arg) lastAttempt = undefined;
+        host?.close(); host=next; root=arg; draft=undefined; planned=undefined;
         return 'Selected '+quoteTerminal(root);
       }
       if (!host) return 'No project selected. Use /project <absolute directory>.';
+      if (command === '/agent') {
+        const [action] = arg.split(/\s/, 1);
+        const parameters = arg.slice(action.length).trim();
+        if (action === 'plan') {
+          draft = undefined;
+          planned = undefined;
+          const result = await planner.plan(root, parameters, (path, id) => readSnapshot(path, signal, id), signal);
+          if (!result.ok) return `Planning stopped: ${quoteTerminal(result.error.message)}`;
+          const { plan, files, diff } = result.value;
+          planned = plan;
+          if (files.length) draft = { files, hash: plan.hash, agentPlanId: plan.id, agentDiff: diff };
+          return [
+            'Deterministic workspace planner (no AI provider).',
+            inspect(plan),
+            files.length ? 'Use /agent diff to review the plan before approval.' : 'Read-only plan. Supply explicit replacements to prepare a diff.'
+          ].join('\n');
+        }
+        if (parameters) return `Usage: /agent ${action}`;
+        if (action === 'inspect') return planned ? inspect(planned) : 'No current agent plan.';
+        if (action === 'diff') {
+          if (!draft?.agentDiff) return 'No pending agent changes.';
+          draft.previewed = true;
+          return [`Diff for agent plan ${draft.hash}`, ...draft.agentDiff,
+            'Use /approve or /discard. No file was written.'].join('\n');
+        }
+        if (action === 'status') {
+          let state = planned ? 'Read-only analysis complete.' : 'No pending plan.';
+          if (planned?.actions.length) state = 'Plan is no longer pending.';
+          if (draft) {
+            state = draft.approvedUntil !== undefined
+              ? (performance.now() < draft.approvedUntil ? 'Approved for one apply attempt.' : 'Approval expired. Prepare a new plan.')
+              : (draft.agentDiff && !draft.previewed ? 'Review /agent diff before approval.' : 'Awaiting approval.');
+          }
+          return [
+            `Status: ${state}`,
+            ...(planned ? [`Agent plan ${planned.id} (hash ${planned.hash})`] : []),
+            ...(lastAttempt ? [
+              `${lastAttempt.kind} attempt ${lastAttempt.id} for plan ${lastAttempt.hash}: ${lastAttempt.result}. ${lastAttempt.confirmed}/${lastAttempt.total} file(s) confirmed.`,
+              `Use /recover ${lastAttempt.id} to inspect each file.`
+            ] : [])
+          ].join('\n');
+        }
+        return 'Usage: /agent plan <task>, /agent inspect, /agent diff, or /agent status';
+      }
       if (command === '/discard') {
         draft = undefined;
+        planned = undefined;
         return 'Draft discarded.';
       }
       if (command === '/approve') {
@@ -365,6 +419,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       }
       if (command === '/rollback') {
         draft = undefined;
+        planned = undefined;
         if (!host.editSupported) return 'This workspace host cannot apply rollbacks.';
         let files: RecoveryFile[];
         let originals: readonly string[];
@@ -377,9 +432,9 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
               !intent.files.every(isIntentFile)) throw new Error('Invalid rollback intent');
           files = intent.files;
           if (intent.version === 4) {
-            const { root, plan, rollbackOf } = intent;
+            const { root, plan, planId, rollbackOf } = intent;
             try {
-              originals = await recovery.load(arg, { root, plan, rollbackOf, files }, intent.recoveryHash);
+              originals = await recovery.load(arg, { root, plan, planId, rollbackOf, files }, intent.recoveryHash);
             } catch {
               return 'Recovery data is missing or failed integrity verification. Use /recover to inspect the files.';
             }
@@ -445,6 +500,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         const runId = randomUUID();
         try {
           const result = await invoke('apply-draft', null, signal, runId);
+          if (result.ok && lastAttempt?.id === runId) lastAttempt.result = 'completed';
           return result.ok ? (current?.rollbackOf ? 'Rollback applied.' : 'Draft applied.') : `${quoteTerminal(result.error.message)} Inspect the file before preparing another draft.`;
         } finally {
           if (draft === current && current?.approvedUntil !== undefined) draft = undefined;
@@ -452,39 +508,18 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       }
       if (command === '/draft') {
         draft = undefined;
+        planned = undefined;
         if (Buffer.byteLength(arg) > MAX_EDIT_BYTES) return 'Draft input exceeds 48 KB.';
         let input: unknown;
         try { input = JSON.parse(arg); }
         catch { return 'Usage: /draft {"path":"file","from":"old","to":"new"} or a JSON array of replacements'; }
-        const changes = Array.isArray(input) ? input : [input];
-        if (!changes.length || changes.length > MAX_DRAFT_FILES) return 'Drafts require between one and eight files.';
-        const files: DraftFile[] = [];
-        const preview: string[] = [];
-        const paths = new Set<string>();
-        const revisions = new Set<string>();
-        for (const change of changes) {
-          if (!change || typeof change !== 'object') return 'Invalid draft input.';
-          const { path, from, to } = change as Record<string, unknown>;
-          if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to) {
-            return 'Specify a file and a nonempty, unique span to replace.';
-          }
-          if (paths.has(path)) return 'A draft cannot edit the same path twice.';
-          paths.add(path);
-          const result = await invoke<{ content: string; revision?: string }>('read', {root, path}, signal);
-          if (!result.ok) return quoteTerminal(result.error.message);
-          const { content: before, revision } = result.value;
-          if (revision && revisions.has(revision)) return 'A draft cannot edit the same file through two paths.';
-          if (revision) revisions.add(revision);
-          const index = before.indexOf(from);
-          if (index < 0 || index !== before.lastIndexOf(from)) return 'Draft span must occur exactly once.';
-          const after = before.slice(0, index) + to + before.slice(index + from.length);
-          if (Buffer.byteLength(after) > MAX_EDIT_BYTES) return 'Draft result exceeds 48 KB.';
-          if (signal.aborted) return 'Draft cancelled.';
-          files.push(Object.freeze({path, before, after, revision}));
-          preview.push(`Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}`);
-        }
-        draft = {files:Object.freeze(files), hash:digest(JSON.stringify({root,files}))};
-        return [`Plan ${draft.hash} (${files.length} file(s)).`, ...preview,
+        const changes = parseReplacements(input);
+        if (!changes.ok) return quoteTerminal(changes.error.message);
+        const prepared = await prepareChanges(changes.value, path => readSnapshot(path, signal), signal);
+        if (!prepared.ok) return quoteTerminal(prepared.error.message);
+        const { files, diff } = prepared.value;
+        draft = {files, hash:digest(JSON.stringify({root,files}))};
+        return [`Plan ${draft.hash} (${files.length} file(s)).`, ...diff,
           'Use /approve or /discard. No file was written.'].join('\n');
       }
       const operation = command === '/files' ? 'list' : command === '/read' ? 'read' : 'search';

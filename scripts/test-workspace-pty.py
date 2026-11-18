@@ -6,6 +6,7 @@ import shutil
 import sys
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 import pexpect
 
@@ -194,6 +195,43 @@ with tempfile.TemporaryDirectory() as temp:
             cli.expect("❯")
             return plan
 
+        def prepare_agent_plan(review=True):
+            cli.sendline("/agent plan " + json.dumps({
+                "goal": "Update both fixture labels", "query": "fixture", "changes": [
+                    {"path": "note.txt", "from": "fixture", "to": "updated"},
+                    {"path": "second.txt", "from": "fixture", "to": "updated"},
+                ],
+            }))
+            for path in [None, None, "note.txt", "second.txt"]:
+                cli.expect("filesystem:read:selected")
+                if path:
+                    cli.expect_exact(path)
+                cli.expect("Type yes to allow:")
+                cli.sendline("yes")
+            cli.expect(r"Agent plan ([0-9a-f-]{36}) \(hash ([a-f0-9]{64})\)")
+            plan_id, plan = cli.match.groups()
+            cli.expect_exact('Entries:')
+            cli.expect_exact('Candidates for "fixture":')
+            cli.expect_exact('Proposed actions: 2')
+            cli.expect_exact('"revision":')
+            cli.expect_exact('"expectedContentHash":')
+            cli.expect('Use /agent diff to review')
+            cli.expect("❯")
+            if review:
+                review_agent_diff(plan)
+            return plan_id, plan
+
+        def review_agent_diff(plan):
+            cli.sendline("/agent diff")
+            cli.expect("Diff for agent plan " + plan)
+            cli.expect_exact('Draft for "note.txt"')
+            cli.expect_exact('- "fixture"')
+            cli.expect_exact('+ "updated"')
+            cli.expect_exact('Draft for "second.txt"')
+            cli.expect_exact('- "fixture"')
+            cli.expect_exact('+ "updated"')
+            cli.expect("❯")
+
         def confirm_batch(plan, answer="yes"):
             cli.sendline("/approve")
             cli.expect("filesystem:read:selected")
@@ -286,6 +324,16 @@ with tempfile.TemporaryDirectory() as temp:
         cli.expect_exact('Matches the proposed replacement: "note.txt"')
         cli.expect("❯")
         snapshots.write_text(saved_snapshots)
+        # A v3 operation still rolls back from the original audit layout.
+        legacy_id = str(uuid.uuid4())
+        legacy_intent = {key: metadata[key] for key in ("root", "plan", "files")}
+        legacy_intent["version"] = 3
+        for file, original in zip(legacy_intent["files"], json.loads(saved_snapshots)["originals"]):
+            file["original"] = original
+        legacy_file = intent.with_name(legacy_id + ".edit.json")
+        with legacy_file.open("x") as handle:
+            handle.write(json.dumps(legacy_intent))
+        legacy_file.chmod(0o600)
 
         original_steps = journal.read_text()
         journal.write_text(original_steps.replace('"phase":"applied"', '"phase":"altered"'))
@@ -293,6 +341,13 @@ with tempfile.TemporaryDirectory() as temp:
         cli.expect("No readable rollback journal")
         cli.expect("❯")
         journal.write_text(original_steps)
+        legacy_steps = legacy_file.with_name(legacy_file.name + ".steps")
+        legacy_steps.write_text(original_steps)
+        legacy_steps.chmod(0o600)
+        prepare_rollback(legacy_id, 1, 1)
+        cli.sendline("/discard")
+        cli.expect("Draft discarded")
+        cli.expect("❯")
         assert phases == ["preflight-started", "preflight-passed", "dispatch-intent",
                           "applied", "dispatch-intent", "not-confirmed"]
         # Denying the reverse plan leaves both files unchanged. Reopening it
@@ -485,7 +540,7 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         cli.sendline("/project " + str(project))
         cli.expect("Selected")
         cli.expect("❯")
-        confirm_batch(prepare_batch())
+        confirm_batch(prepare_agent_plan()[1])
         cli.sendline("/apply")
         cli.expect("Type yes to allow:")
         cli.sendline("yes")
@@ -500,6 +555,10 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         cli.expect(r"Rollback attempt ([0-9a-f-]{36})")
         rollback_id = cli.match.group(1)
         cli.expect_exact("The edit outcome is unknown. 0/2 file(s) confirmed.")
+        cli.expect("❯")
+        cli.sendline("/agent status")
+        cli.expect(rollback_id)
+        cli.expect("incomplete")
         cli.expect("❯")
         assert note.read_text() == "workspace updated"
         assert second.read_text() == "second fixture"
@@ -550,5 +609,145 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         apply_draft("yes", "Rollback applied")
         assert note.read_text() == "workspace updated"
         assert second.read_text() == "second fixture"
+    finally:
+        cli.close(force=True)
+
+    # Exercise the complete planner in the normal interactive CLI with no model.
+    # The preload advances only the CLI clock for the approval-expiration case.
+    clock_flag = Path(temp) / "clock-expired"
+    preload = Path(temp) / "clock.mjs"
+    preload.write_text(
+        "import { existsSync } from 'node:fs';\n"
+        "const original = performance.now.bind(performance);\n"
+        "Object.defineProperty(performance, 'now', {value: () => original() + "
+        "(existsSync(process.env.NEXUS_PTY_CLOCK_FLAG) ? 360_000 : 0)});\n"
+    )
+    cli = pexpect.spawn("node", ["--import", str(preload), "build-cli/nexus.js"], encoding="utf-8",
+                        env={**os.environ, "HOME": temp, "NEXUS_PTY_CLOCK_FLAG": str(clock_flag)}, timeout=5)
+    try:
+        note.write_text("workspace fixture")
+        second.write_text("second fixture")
+        cli.expect("❯")
+        cli.sendline("/project " + str(project))
+        cli.expect("Selected")
+        cli.expect("❯")
+        cli.sendline("/agent plan fixture")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect("Deterministic workspace planner")
+        cli.expect_exact('Candidates for "fixture":')
+        cli.expect("Proposed actions: 0")
+        cli.expect("Read-only plan")
+        cli.expect("❯")
+        cli.sendline("/agent diff")
+        cli.expect("No pending agent changes")
+        cli.expect("❯")
+
+        source_dir = project / "src"
+        source_dir.mkdir()
+        (source_dir / "entry.txt").write_text("scoped needle")
+        cli.sendline('/agent plan {"goal":"Find scoped matches","directory":"src","query":"needle"}')
+        for _ in range(2):
+            cli.expect_exact(str(source_dir))
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+        cli.expect_exact('Analyzed directory: "src"')
+        cli.expect_exact('Candidates for "needle": ["entry.txt"]')
+        cli.expect("Read-only plan")
+        cli.expect("❯")
+        cli.sendline('/agent plan {"goal":"Invalid action","tool":"shell"}')
+        cli.expect("Planning stopped")
+        cli.expect("❯")
+
+        plan_id, plan = prepare_agent_plan(review=False)
+        cli.sendline("/agent inspect")
+        cli.expect(plan_id)
+        cli.expect(plan)
+        cli.expect("❯")
+        cli.sendline("/approve")
+        cli.expect("View the complete plan diff")
+        cli.expect("❯")
+        review_agent_diff(plan)
+        confirm_batch(plan, "no")
+        cli.sendline("/agent status")
+        cli.expect("Awaiting approval")
+        cli.expect("❯")
+        assert note.read_text() == "workspace fixture"
+        confirm_batch(plan)
+        clock_flag.touch()
+        cli.sendline("/agent status")
+        cli.expect("Approval expired")
+        cli.expect("❯")
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+        clock_flag.unlink()
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+
+        # The current path checks apply equally to changes proposed by the planner.
+        hardlink = project / "hard.txt"
+        hardlink.hardlink_to(outside)
+        for path, permission, expected in [
+            ("../outside.txt", False, "relative path is invalid"),
+            ("link.txt", True, "File unavailable"),
+            ("hard.txt", True, "hard-linked file"),
+        ]:
+            cli.sendline("/agent plan " + json.dumps({
+                "goal": "Try a prohibited path",
+                "changes": [{"path": path, "from": "fixture", "to": "updated"}],
+            }))
+            for _ in range(1 + int(permission)):
+                cli.expect("Type yes to allow:")
+                cli.sendline("yes")
+            cli.expect("Planning stopped")
+            cli.expect(expected)
+            cli.expect("❯")
+        assert outside.read_text() == "outside fixture"
+
+        confirm_batch(prepare_agent_plan()[1])
+        replacement.write_text("second fixture")
+        replacement.replace(second)
+        apply_draft("yes", "No writes were dispatched.")
+        assert note.read_text() == "workspace fixture"
+
+        confirm_batch(prepare_agent_plan()[1])
+        recovery_dir = Path(temp) / ".nexus-au" / "workspace-recovery"
+        moved_recovery_dir = recovery_dir.with_name("workspace-recovery.saved")
+        recovery_dir.rename(moved_recovery_dir)
+        recovery_dir.write_text("not a directory")
+        apply_draft("yes", "Cannot persist edit intent. No edit was dispatched.")
+        assert note.read_text() == "workspace fixture"
+        assert second.read_text() == "second fixture"
+        recovery_dir.unlink()
+        moved_recovery_dir.rename(recovery_dir)
+
+        plan_id, plan = prepare_agent_plan()
+        confirm_batch(plan)
+        cli.sendline("/apply")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect(r"Apply attempt ([0-9a-f-]{36})")
+        operation = cli.match.group(1)
+        cli.expect("Draft applied")
+        cli.expect("❯")
+        accepted = json.loads((audit_dir / (operation + ".edit.json")).read_text())
+        assert accepted["plan"] == plan
+        assert accepted["planId"] == plan_id
+        assert note.read_text() == "workspace updated"
+        assert second.read_text() == "second updated"
+        cli.sendline("/agent status")
+        cli.expect(plan_id)
+        cli.expect(operation)
+        cli.expect("completed")
+        cli.expect("❯")
+        confirm_batch(prepare_rollback(operation, 2, 2))
+        apply_draft("yes", "Rollback applied")
+        assert note.read_text() == "workspace fixture"
+        assert second.read_text() == "second fixture"
+        prepare_rollback(operation, 2, 0)
     finally:
         cli.close(force=True)

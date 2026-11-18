@@ -20,6 +20,33 @@ Agents are bounded task workers. They do not bypass the Tool Gateway, owner-appr
 1. **Local workflow demo:** creates a local, non-destructive task preview. It does not call a model or access external systems.
 2. **Model-planned workflow:** uses the selected provider to produce a bounded plan, validates tool IDs and schemas against the live registry, and executes approved operations through the Tool Gateway. Local no-key profiles are supported when explicitly configured as credential-free.
 
+## CLI workspace planner
+
+`cli/workspacePlanner.ts` turns a structured user task into bounded local
+discovery through the shared `AgentPlanner`, `PlanExecutor` and
+`GatewayAgentToolExecutor`. It prepares exact replacements from protected
+snapshots using the same function as `/draft`. It hashes the plan with the
+selected root, goal, plan ID, candidates, and proposed actions with their
+source revisions and content hashes. The planner uses a local, read-only tool
+catalog. All project reads and writes go through the Rust workspace process
+over stdio.
+
+`cli/workspaceHost.ts` presents the plan, gates approval on previewing the
+agent diff and passes only the reviewed plan to the existing apply tool.
+Approval is session-local, expires after five minutes and is consumed by one
+attempt. Apply checks every source revision before dispatching writes.
+The native process checks each source again under its directory lock.
+One file can succeed before another fails or the host loses its reply.
+
+`cli/workspaceRecovery.ts` stores original text separately from audit metadata.
+The version 4 intent and step journal record paths, revisions, hashes and
+outcomes. Checksums bind the private plaintext recovery payload,
+intent and write receipts to the operation and detect corruption. Only
+confirmed, unchanged results are eligible for rollback, which requires its
+own preview and approval. `/recover` observes the current state even if the
+backups are unavailable, provided the audit intent is intact. Existing
+journals are retained. Linux is the only supported write platform.
+
 ## Safety and recovery boundaries
 
 - Agent and tool permissions default to deny.

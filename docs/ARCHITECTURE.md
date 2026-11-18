@@ -72,6 +72,11 @@ Context is assembled from recent conversation, explicitly selected project data,
 ### Agents and tools
 Agents are task runners with explicit identity, budgets, allowed tools, cancellation, and checkpoints. All tool calls pass through the Tool Gateway. MCP descriptions and results are untrusted data, not system instructions.
 
+The CLI composes the shared planner, sequential executor and Tool Gateway with
+a deterministic workspace planner and a separate native workspace process.
+See [the CLI planner contract](AGENTS.md#cli-workspace-planner) for the
+approval, audit and recovery boundaries.
+
 ### Storage and privacy
 SQLite is authoritative for structured desktop state. Large files and model artifacts use managed paths and opaque identifiers. Secrets belong in the OS credential vault. Backups exclude secrets by default.
 
