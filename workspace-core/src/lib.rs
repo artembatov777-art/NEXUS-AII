@@ -166,6 +166,7 @@ impl Workspace {
     pub fn edit(&self, path: &Path, expected: &str, content: &str) -> Result<(), String> {
         let (_, revision) = self.snapshot(path)?;
         self.edit_checked(path, expected, &revision, content)
+            .map(|_| ())
     }
 
     /// The directory lock serializes NEXUS writers. External writers need not
@@ -177,7 +178,7 @@ impl Workspace {
         expected: &str,
         expected_revision: &str,
         content: &str,
-    ) -> Result<(), String> {
+    ) -> Result<String, String> {
         self.edit_with_sync(
             path,
             expected,
@@ -195,7 +196,7 @@ impl Workspace {
         expected_revision: &str,
         content: &str,
         sync: impl Fn(&fs::File) -> std::io::Result<()>,
-    ) -> Result<(), String> {
+    ) -> Result<String, String> {
         use cap_std::fs::{MetadataExt, OpenOptionsExt};
         use std::io::Write;
         use std::os::fd::{AsRawFd, FromRawFd};
@@ -271,7 +272,7 @@ impl Workspace {
         let mut staged = unsafe { fs::File::from_raw_fd(fd) };
         let mut linked = false;
         let mut replaced = false;
-        let result = (|| -> Result<(), String> {
+        let result = (|| -> Result<String, String> {
             if staged
                 .metadata()
                 .map_err(|_| "Cannot inspect temporary file")?
@@ -350,7 +351,22 @@ impl Workspace {
             replaced = true;
             sync(&lock)
                 .map_err(|_| "File replaced but directory sync failed; inspect before retrying")?;
-            Ok(())
+            let published = staged
+                .metadata()
+                .map_err(|_| "File replaced but its revision could not be verified")?;
+            let (observed, observed_revision) = Self::snapshot_at(&dir, name)
+                .map_err(|_| "File replaced but its current state could not be verified")?;
+            if published.mode() != staged_metadata.mode()
+                || published.uid() != staged_metadata.uid()
+                || published.gid() != staged_metadata.gid()
+                || published.mtime() != staged_metadata.mtime()
+                || published.mtime_nsec() != staged_metadata.mtime_nsec()
+                || revision(&published) != observed_revision
+                || observed != content
+            {
+                return Err("File replaced but changed before confirmation".into());
+            }
+            Ok(observed_revision)
         })();
         if linked && !replaced {
             // Never unlink a replacement placed at the temporary name.
@@ -414,6 +430,35 @@ mod edit_tests {
             assert_eq!(ws.read(note).unwrap(), expected);
             assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
         }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn does_not_confirm_a_revision_replaced_before_the_reply() {
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("nexus-external-replacement-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let path = Path::new("note");
+        fs::write(root.join(path), "original").unwrap();
+        let ws = Workspace::grant(&root).unwrap();
+        let (_, revision) = ws.snapshot(path).unwrap();
+        let calls = Cell::new(0);
+        let err = ws
+            .edit_with_sync(path, "original", &revision, "replacement", |file| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 3 {
+                    // Substitute a distinct inode with identical contents after
+                    // rename but before the host can return its revision.
+                    fs::write(root.join("external"), "replacement")?;
+                    fs::rename(root.join("external"), root.join(path))?;
+                }
+                file.sync_all()
+            })
+            .unwrap_err();
+        assert!(err.contains("changed before confirmation"), "{err}");
+        assert_eq!(ws.read(path).unwrap(), "replacement");
         fs::remove_dir_all(root).unwrap();
     }
 

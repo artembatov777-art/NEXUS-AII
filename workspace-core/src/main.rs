@@ -94,13 +94,13 @@ fn execute(ws: &Workspace, line: &[u8]) -> Result<Value, String> {
                     .as_deref()
                     .filter(|value| value.len() <= 128)
                     .ok_or("Missing or invalid revision")?;
-                ws.edit_checked(
+                let published_revision = ws.edit_checked(
                     path,
                     r.expected.as_deref().ok_or("Missing original content")?,
                     revision,
                     r.content.as_deref().ok_or("Missing replacement content")?,
                 )?;
-                Ok(json!({"applied":true}))
+                Ok(json!({"applied":true,"revision":published_revision}))
             }
             #[cfg(not(target_os = "linux"))]
             Err("Applying drafts is supported only on Linux".into())
@@ -132,7 +132,7 @@ fn main() -> io::Result<()> {
     writeln!(
         output,
         "{}",
-        json!({"version":1,"ready":true,"edit":cfg!(target_os = "linux")})
+        json!({"version":1,"ready":true,"edit":cfg!(target_os = "linux"),"editRevision":cfg!(target_os = "linux")})
     )?;
     output.flush()?;
     loop {

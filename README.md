@@ -127,7 +127,7 @@ fully synced staging file gets a name but before rename can leave a
 removing it, and only after confirming its writer has exited.
 
 Before dispatching an edit, the CLI persists an intent with the project, file,
-original revision and SHA-256 hashes of both versions for each file. The
+original revision, original text, and SHA-256 hashes of both versions for each file. The
 per-attempt `.edit.json.steps` journal records preflight and file dispatch
 intent and outcomes as they are known. A dispatch intent without an outcome
 can mean the file was replaced but its reply was lost. It prints the recovery
@@ -139,4 +139,23 @@ matches the original revision, matches the proposed bytes, or differs.
 A match describes the observed file, so it does not prove that an edit
 survived a power failure or that this process wrote it. Recovery never
 replays an edit. A retry requires a fresh draft and approval.
-Windows and macOS hosts support preview and approval only.
+To undo a completed or partially applied plan, run `/rollback <apply ID>`
+with the same project selected. The command previews the reverse changes in
+reverse application order. It includes only files whose current bytes and
+revision match a durably recorded Rust write receipt. It skips conflicts,
+files that already contain the original bytes, and writes without a receipt.
+Older intents without saved content and receipts still support `/recover`.
+
+Use a fresh `/approve` for this preview, then `/apply`. The approval expires
+after five minutes and allows one apply attempt. The same gateway and Rust
+checks apply to the reverse plan. Each file replacement is separate. If the
+rollback stops part-way through, use `/recover <rollback attempt ID>` to
+inspect it, then prepare a new rollback from the original apply ID for any
+remaining eligible files. A side edit can still race the final native
+revision check and rename.
+
+The journal stores original file contents in plaintext under
+`~/.nexus-au/workspace-audit/`. Keep the directory owner-only. Removing a
+journal also removes the information needed for that rollback. Linux writes
+require a current workspace host with write-receipt support.
+Windows and macOS hosts support preview and approval of regular drafts.

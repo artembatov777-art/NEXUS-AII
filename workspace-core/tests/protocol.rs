@@ -109,3 +109,50 @@ fn failed_and_interrupted_staging_leave_original_and_allow_retry() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn edit_reply_identifies_the_published_revision() {
+    use serde_json::json;
+    use std::fs;
+
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-edit-receipt-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("note"), "old").unwrap();
+    let ws = nexus_workspace::Workspace::grant(&root).unwrap();
+    let (_, original) = ws.snapshot("note".as_ref()).unwrap();
+    let mut host = Command::new(env!("CARGO_BIN_EXE_nexus-workspace"))
+        .arg(&root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = host.stdin.take().unwrap();
+    writeln!(
+        input,
+        "{}",
+        json!({
+            "version": 1, "operation": "edit", "path": "note",
+            "expected": "old", "revision": original, "content": "new"
+        })
+    )
+    .unwrap();
+    drop(input);
+    let result = host.wait_with_output().unwrap();
+    assert!(result.status.success());
+    let frames = String::from_utf8(result.stdout).unwrap();
+    let mut lines = frames
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap());
+    assert_eq!(lines.next().unwrap()["editRevision"], true);
+    let reply = lines.next().unwrap();
+    let (contents, published) = ws.snapshot("note".as_ref()).unwrap();
+    assert_eq!(contents, "new");
+    assert_ne!(original, published);
+    assert_eq!(reply["value"]["applied"], true);
+    assert_eq!(reply["value"]["revision"], published);
+    fs::remove_dir_all(root).unwrap();
+}
