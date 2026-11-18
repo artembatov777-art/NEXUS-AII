@@ -15,7 +15,8 @@ use std::{
 };
 use windows_sys::{
     Wdk::Storage::FileSystem::{
-        FileEaInformation, FileRenameInformationEx, NtQueryInformationFile, NtSetInformationFile,
+        FileDispositionInformationEx, FileEaInformation, FileRenameInformationEx,
+        NtQueryInformationFile, NtSetInformationFile, FILE_DISPOSITION_INFORMATION_EX,
         FILE_EA_INFORMATION, FILE_RENAME_INFORMATION, FILE_RENAME_POSIX_SEMANTICS,
         FILE_RENAME_REPLACE_IF_EXISTS,
     },
@@ -202,19 +203,18 @@ fn directory_for_publish(dir: &Dir) -> io::Result<File> {
 }
 
 fn disposition(file: &File, flags: u32) -> io::Result<()> {
-    let info = FILE_DISPOSITION_INFO_EX { Flags: flags };
-    if unsafe {
-        SetFileInformationByHandle(
+    let info = FILE_DISPOSITION_INFORMATION_EX { Flags: flags };
+    // Use the NT file information class on the already-open handle. The
+    // Win32 wrapper does not support FileDispositionInfoEx on this runner.
+    nt_result(unsafe {
+        NtSetInformationFile(
             file.as_raw_handle(),
-            FileDispositionInfoEx,
-            (&info as *const FILE_DISPOSITION_INFO_EX).cast(),
-            size_of::<FILE_DISPOSITION_INFO_EX>() as u32,
+            &mut IO_STATUS_BLOCK::default(),
+            (&info as *const FILE_DISPOSITION_INFORMATION_EX).cast(),
+            size_of::<FILE_DISPOSITION_INFORMATION_EX>() as u32,
+            FileDispositionInformationEx,
         )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
+    })
 }
 
 struct Stage {
