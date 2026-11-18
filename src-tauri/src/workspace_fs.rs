@@ -926,6 +926,33 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn windows_new_file_creation_remains_available_when_replacement_is_gated() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "nexus-windows-create-gate-{}-{nonce}", std::process::id()
+        ));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("new.txt");
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).unwrap()],
+            base.join("permissions.json"),
+        );
+
+        write_workspace_file_inner(target.to_str().unwrap(), "created", None, &access)
+            .expect("new file creation must remain available");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "created");
+        let error = write_workspace_file_inner(
+            target.to_str().unwrap(), "changed", Some("created"), &access
+        ).unwrap_err();
+        assert!(error.contains("not available yet"), "{error}");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "created");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn windows_checked_write_fails_closed_without_truncating_existing_file() {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
