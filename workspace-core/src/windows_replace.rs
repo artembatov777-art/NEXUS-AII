@@ -458,6 +458,9 @@ fn edit(
     }
     let published = revision(&stage.file)?;
     drop(stage);
+    // The original requests FILE_WRITE_DATA. A new snapshot permits only
+    // shared reads, so release the old handle after rename before reopening.
+    drop(original);
     let (observed, found) = workspace.snapshot(path)?;
     if found != published || observed != content {
         return Err("Replacement was published but could not be confirmed".into());
