@@ -696,10 +696,12 @@ fn write_workspace_file_inner(
             return Err("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.".into());
 
             #[cfg(not(windows))]
-            file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
-            file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
-            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
-            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
+            {
+                file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
+                file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
+                file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+                file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
+            }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             if expected_content.is_some() {
