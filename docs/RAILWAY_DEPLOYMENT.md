@@ -65,3 +65,36 @@ Railway's [Wait for CI](https://docs.railway.com/deployments/github-autodeploys#
 waits on the commit's GitHub Actions workflows. A passing Web/API job alone does
 not clear that gate. Keep Preview isolated from Production credentials, volumes
 and external services before starting a manual Preview deployment.
+
+### Draft exception for GHSA-fc5q-39xc-vjpf
+
+**Pending explicit owner approval.** This draft does not configure an exception.
+The full npm audit and the independent production dependency audit remain
+required by the `frontend` CI check.
+
+- Scope: only GHSA-fc5q-39xc-vjpf in the locked dev-only `picomatch@4.0.7`,
+  only for pushes to `feat/nexus-core-architecture` intended for Railway
+  Preview. PR and main audits, the production dependency audit, and Desktop
+  tests and Rust audits would remain strict.
+- Expiration: 2026-11-25 at 00:00 UTC, or immediately when a verified fix
+  is available or the dependency becomes reachable from untrusted runtime input.
+- Risk: Vite and Vitest use glob matching during build and test. Tracked
+  files, configuration and test inputs are under repository control, but
+  code and inputs from unreviewed contributors or dependencies can still
+  affect CI. A patched dependency is preferable. Restrict any exception
+  to reviewed branch commits on hosted runners with read-only permissions
+  and no Production secrets. A stalled build is still possible.
+- Enforcement if approved: run and retain the full npm audit report. Fail
+  closed on tool or registry errors, a changed package version or path,
+  expiration, or any other high or critical advisory. Determine transitive
+  findings from their underlying advisory records. An affected dependent
+  with any additional high or critical cause must still fail. Keep this
+  exception visible in the job summary.
+- Removal: check the registry and advisory daily until expiry. Once a fixed
+  release is verified, update the lockfile, rerun both audits, the Web/API
+  and Desktop checks, then remove the exception in the same change.
+
+Railway evaluates workflow conclusions for the commit, including PR runs.
+A push-only exception cannot unblock Preview while a strict PR audit on the
+same commit fails. Keep that failure visible and use a verified dependency
+fix to clear both checks.

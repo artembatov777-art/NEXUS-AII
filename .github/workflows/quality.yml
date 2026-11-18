@@ -33,6 +33,16 @@ jobs:
       - run: npm run test:web-api
       - run: npm run build
 
+  npm-production-security:
+    name: Production npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0 (Node 24)
+        with:
+          node-version: 22
+      - run: npm audit --omit=dev --audit-level=high
+
   npm-security:
     name: Web/API and Desktop npm audit
     runs-on: ubuntu-latest
@@ -41,20 +51,21 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0 (Node 24)
         with:
           node-version: 22
-      - name: Audit runtime dependencies
-        run: npm audit --omit=dev --audit-level=high
       - name: Audit full dependency tree including build and test tools
-        if: success() || failure()
         run: npm audit --audit-level=high
 
   # Preserve the original frontend check as a gate for both jobs.
   frontend:
     if: always()
-    needs: [web-api, npm-security]
+    needs: [web-api, npm-production-security, npm-security]
     runs-on: ubuntu-latest
     steps:
       - name: Require application and security checks
         env:
           WEB_RESULT: ${{ needs.web-api.result }}
+          PRODUCTION_SECURITY_RESULT: ${{ needs.npm-production-security.result }}
           SECURITY_RESULT: ${{ needs.npm-security.result }}
-        run: test "$WEB_RESULT" = success && test "$SECURITY_RESULT" = success
+        run: |
+          test "$WEB_RESULT" = success &&
+          test "$PRODUCTION_SECURITY_RESULT" = success &&
+          test "$SECURITY_RESULT" = success
