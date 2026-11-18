@@ -457,11 +457,13 @@ fn edit(
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
-    // Keep the original exclusively pinned during staging and all external
-    // checkpoints. NTFS cannot rename over a target whose existing handle
-    // denies FILE_SHARE_DELETE, so release it only at the publication boundary.
-    // Reopen with delete sharing and verify the same file identity and revision
-    // before issuing the handle-relative rename. Fail closed on interference.
+    // Hold the original exclusively during staging and the explicit checkpoint.
+    // Windows requires releasing that handle before replacing its directory
+    // entry. Reopening and revalidating identity, revision and security narrows
+    // the publication window, but cannot exclude a noncooperating process
+    // changing the name between verification and rename. This test-only
+    // primitive is not a transactional compare-and-swap operation and MUST
+    // NOT be enabled in the shipped Windows host without a stronger protocol.
     let original_identity: FILE_ID_INFO =
         query(&original, FileIdInfo).map_err(|e| prep(format!("read original identity: {e}")))?;
     drop(original);
