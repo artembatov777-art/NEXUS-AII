@@ -14,8 +14,11 @@ with tempfile.TemporaryDirectory() as temp:
     outside = Path(temp) / "outside.txt"
     outside.write_text("outside fixture")
     (project / "link.txt").symlink_to(outside)
-    cli = pexpect.spawn("node", ["build-cli/nexus.js", "--test-model"], encoding="utf-8",
-                        env={**os.environ, "HOME": temp}, timeout=5)
+    def start_cli():
+        return pexpect.spawn("node", ["build-cli/nexus.js", "--test-model"], encoding="utf-8",
+                             env={**os.environ, "HOME": temp}, timeout=5)
+
+    cli = start_cli()
     try:
         cli.expect("❯")
         cli.sendline("/project " + str(project))
@@ -194,9 +197,64 @@ with tempfile.TemporaryDirectory() as temp:
         cli.sendline("/apply")
         cli.expect("Type yes to allow:")
         cli.sendline("yes")
+        cli.expect(r"Apply attempt ([0-9a-f-]{36})")
+        recovery_id = cli.match.group(1)
         cli.sendcontrol("c")
         cli.expect(pexpect.EOF)
         assert not Path(f"/proc/{host}").exists()
+        assert note.read_text() == "workspace fixture"
+
+        # A fresh process recovers from the persisted intent, not memory or a
+        # retry. It needs a new project grant and a read approval.
+        cli.close()
+        cli = start_cli()
+        cli.expect("❯")
+        cli.sendline("/project " + str(project))
+        cli.expect("Selected")
+        cli.expect("❯")
+        cli.sendline("/recover " + recovery_id)
+        cli.expect("Type yes to allow:")
+        cli.sendline("no")
+        cli.expect("Recovery could not inspect the file")
+        cli.expect("❯")
+        for contents, expected in [
+            (None, "Matches the original revision"),
+            ("workspace updated", "Matches the proposed replacement"),
+            ("external edit", "Does not match the original revision or proposed replacement"),
+        ]:
+            if contents is not None:
+                note.write_text(contents)
+            cli.sendline("/recover " + recovery_id)
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+            cli.expect_exact(expected)
+            cli.expect("❯")
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+        assert note.read_text() == "external edit"
+
+        note.write_text("workspace fixture")
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        host, = map(int, subprocess.check_output(["pgrep", "-P", str(cli.pid)], text=True).split())
+        os.kill(host, signal.SIGSTOP)
+        cli.sendline("/apply")
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect(r"Apply attempt ([0-9a-f-]{36})")
+        recovery_id = cli.match.group(1)
+        os.kill(host, signal.SIGKILL)
+        cli.expect_exact("The edit outcome is unknown.")
+        cli.expect("❯")
+        cli.sendline("/project " + str(project))
+        cli.expect("Selected")
+        cli.expect("❯")
+        cli.sendline("/recover " + recovery_id)
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect("Matches the original revision")
+        cli.expect("❯")
         assert note.read_text() == "workspace fixture"
     finally:
         cli.close(force=True)

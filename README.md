@@ -99,22 +99,34 @@ a replacement. The old text must appear exactly once. `/approve` asks for
 permission through the gateway, rechecks the file snapshot, and records the
 approval for this session. `/discard`, selecting another project, or exiting
 clears the draft. On Linux, use `/apply` after approval and confirm the write
-permission at the prompt. Each apply attempt consumes the approval. Rebuild the
+permission at the prompt. Approval expires after five minutes. Each apply
+attempt consumes the approval, even if it fails. Rebuild the
 Rust host with `npm run build:workspace` before using it.
 
 Apply supports owner-owned UTF-8 files in owner-owned directories without
 group or public write access. Hard links, symlinks and unsupported file
 metadata are refused. The Rust host locks the directory for cooperating NEXUS
 writers and verifies the snapshot again immediately before replacing the
-original with a synced file in the same directory. Replacement uses the atomic
+original with a synced file staged anonymously in the same directory. Replacement uses the atomic
 rename semantics of the underlying filesystem. The revision check and rename
 are separate operations, so avoid editing the same file with external programs
 during apply. Use a local filesystem that supports directory locking, atomic
-rename and sync.
+rename, anonymous staging, procfs and sync.
 
-A failure before the rename leaves the original intact. An abrupt shutdown
-during staging may leave a `.nexus-edit-*` temporary file. After confirming
-the writing process has ended, inspect the original and remove the leftover
-staging file if no longer needed. If the host loses its reply or directory sync
-fails after rename, inspect the destination before preparing a new draft.
+A failure before rename leaves the original intact. If the host is interrupted
+during staging, Linux releases the anonymous file. An interruption after the
+fully synced staging file gets a name but before rename can leave a
+`.nexus-edit-*` file. The CLI leaves such files alone. Review an orphan before
+removing it, and only after confirming its writer has exited.
+
+Before dispatching an edit, the CLI persists an intent with the project, file,
+original revision and SHA-256 hashes of both versions. It prints the recovery
+ID, also stored as the basename of a `.edit.json` file under
+`~/.nexus-au/workspace-audit/`. If the host loses its reply, or directory sync
+fails after rename, reselect the same project and run `/recover <ID>`. The
+gateway requests read permission and reports whether the file currently
+matches the original revision, matches the proposed bytes, or differs.
+A match describes the observed file, so it does not prove that an edit
+survived a power failure or that this process wrote it. Recovery never
+replays an edit. A retry requires a fresh draft and approval.
 Windows and macOS hosts support preview and approval only.

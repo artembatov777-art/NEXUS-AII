@@ -178,9 +178,27 @@ impl Workspace {
         expected_revision: &str,
         content: &str,
     ) -> Result<(), String> {
-        use cap_std::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+        self.edit_with_sync(
+            path,
+            expected,
+            expected_revision,
+            content,
+            fs::File::sync_all,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn edit_with_sync(
+        &self,
+        path: &Path,
+        expected: &str,
+        expected_revision: &str,
+        content: &str,
+        sync: impl Fn(&fs::File) -> std::io::Result<()>,
+    ) -> Result<(), String> {
+        use cap_std::fs::{MetadataExt, OpenOptionsExt};
         use std::io::Write;
-        use std::os::fd::AsRawFd;
+        use std::os::fd::{AsRawFd, FromRawFd};
         use std::os::unix::fs::{
             MetadataExt as StdMetadataExt, PermissionsExt as StdPermissionsExt,
         };
@@ -229,8 +247,7 @@ impl Workspace {
         }
 
         require_no_extended_attributes(&original)?;
-        lock.sync_all()
-            .map_err(|_| "Directory sync unavailable; file was not replaced")?;
+        sync(&lock).map_err(|_| "Directory sync unavailable; file was not replaced")?;
         let mut nonce = [0u8; 16];
         if unsafe { libc::getrandom(nonce.as_mut_ptr().cast(), nonce.len(), 0) }
             != nonce.len() as isize
@@ -238,15 +255,21 @@ impl Workspace {
             return Err("Cannot generate staging filename".into());
         }
         let temp = format!(".nexus-edit-{:032x}", u128::from_ne_bytes(nonce));
-        let mut options = OpenOptions::new();
-        options
-            .write(true)
-            .create_new(true)
-            .follow(FollowSymlinks::No)
-            .mode(0o600);
-        let mut staged = dir
-            .open_with(&temp, &options)
-            .map_err(|_| "Cannot create temporary file")?;
+        // Until the last pre-commit checks, the staging inode has no pathname.
+        // A killed host cannot leave a partial named file behind.
+        let fd = unsafe {
+            libc::openat(
+                lock.as_raw_fd(),
+                c".".as_ptr(),
+                libc::O_TMPFILE | libc::O_WRONLY | libc::O_CLOEXEC,
+                0o600,
+            )
+        };
+        if fd < 0 {
+            return Err("Filesystem does not support safe anonymous staging".into());
+        }
+        let mut staged = unsafe { fs::File::from_raw_fd(fd) };
+        let mut linked = false;
         let mut replaced = false;
         let result = (|| -> Result<(), String> {
             if staged
@@ -257,23 +280,45 @@ impl Workspace {
             {
                 return Err("Replacement would change file group ownership".into());
             }
-            require_no_extended_attributes(
-                &staged
-                    .try_clone()
-                    .map_err(|_| "Cannot verify temporary file")?
-                    .into_std(),
-            )?;
+            require_no_extended_attributes(&staged)?;
             staged
                 .write_all(content.as_bytes())
                 .map_err(|_| "Cannot write temporary file")?;
             staged
-                .set_permissions(cap_std::fs::Permissions::from_mode(
+                .set_permissions(fs::Permissions::from_mode(
                     metadata.permissions().mode() & 0o777,
                 ))
                 .map_err(|_| "Cannot set temporary file permissions")?;
-            staged
-                .sync_all()
-                .map_err(|_| "Cannot sync temporary file")?;
+            sync(&staged).map_err(|_| "Cannot sync temporary file")?;
+            let current_parent = self
+                .directory(parent)?
+                .dir_metadata()
+                .map_err(|_| "Cannot verify parent")?;
+            let pinned = dir.dir_metadata().map_err(|_| "Cannot inspect parent")?;
+            if current_parent.dev() != pinned.dev() || current_parent.ino() != pinned.ino() {
+                return Err("Parent directory changed; select a project again".into());
+            }
+            check()?;
+            // Linux requires CAP_DAC_READ_SEARCH for linkat(AT_EMPTY_PATH).
+            // Follow the process's own pinned fd through procfs instead.
+            let fd_path =
+                std::ffi::CString::new(format!("/proc/self/fd/{}", staged.as_raw_fd())).unwrap();
+            let temp_name = std::ffi::CString::new(temp.as_str()).unwrap();
+            if unsafe {
+                libc::linkat(
+                    libc::AT_FDCWD,
+                    fd_path.as_ptr(),
+                    lock.as_raw_fd(),
+                    temp_name.as_ptr(),
+                    libc::AT_SYMLINK_FOLLOW,
+                )
+            } != 0
+            {
+                return Err(
+                    "Cannot publish the complete staging file; original was not replaced".into(),
+                );
+            }
+            linked = true;
             let staged_metadata = staged
                 .metadata()
                 .map_err(|_| "Cannot inspect temporary file")?;
@@ -287,23 +332,27 @@ impl Workspace {
             {
                 return Err("Temporary file changed".into());
             }
-            let current_parent = self
-                .directory(parent)?
-                .dir_metadata()
-                .map_err(|_| "Cannot verify parent")?;
-            let pinned = dir.dir_metadata().map_err(|_| "Cannot inspect parent")?;
-            if current_parent.dev() != pinned.dev() || current_parent.ino() != pinned.ino() {
-                return Err("Parent directory changed; select a project again".into());
+            // Avoid another file read between this last check and rename. The
+            // earlier full comparison was bound to this inode and revision.
+            let latest = dir.symlink_metadata(name).map_err(|_| "File unavailable")?;
+            if !latest.is_file()
+                || latest.nlink() != 1
+                || latest.dev() != metadata.dev()
+                || latest.ino() != metadata.ino()
+                || latest.ctime() != metadata.ctime()
+                || latest.ctime_nsec() != metadata.ctime_nsec()
+                || latest.len() != metadata.len()
+            {
+                return Err("File changed; prepare a new draft".into());
             }
-            check()?;
             dir.rename(&temp, &dir, name)
                 .map_err(|_| "Cannot replace file")?;
             replaced = true;
-            lock.sync_all()
+            sync(&lock)
                 .map_err(|_| "File replaced but directory sync failed; inspect before retrying")?;
             Ok(())
         })();
-        if !replaced {
+        if linked && !replaced {
             // Never unlink a replacement placed at the temporary name.
             if let (Ok(named), Ok(open)) = (dir.symlink_metadata(&temp), staged.metadata()) {
                 if named.dev() == open.dev() && named.ino() == open.ino() {
@@ -325,4 +374,75 @@ fn child(dir: &Dir, part: Component<'_>) -> Result<Dir, String> {
     normal(name)?;
     dir.open_dir_nofollow(name)
         .map_err(|_| "Directory unavailable".into())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod edit_tests {
+    use super::*;
+    use std::{cell::Cell, io};
+
+    #[test]
+    fn distinguishes_staging_sync_error_from_post_rename_sync_error() {
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("nexus-sync-fault-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let ws = Workspace::grant(&root).unwrap();
+        let note = Path::new("note");
+        for (fail_at, expected) in [(2, "original"), (3, "replacement")] {
+            fs::write(root.join(note), "original").unwrap();
+            let (_, revision) = ws.snapshot(note).unwrap();
+            let calls = Cell::new(0);
+            let err = ws
+                .edit_with_sync(note, "original", &revision, "replacement", |file| {
+                    calls.set(calls.get() + 1);
+                    if calls.get() == fail_at {
+                        return Err(io::Error::other("injected sync failure"));
+                    }
+                    file.sync_all()
+                })
+                .unwrap_err();
+            assert!(
+                err.contains(if fail_at == 2 {
+                    "sync temporary file"
+                } else {
+                    "File replaced"
+                }),
+                "{err}"
+            );
+            assert_eq!(ws.read(note).unwrap(), expected);
+            assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn observes_an_external_write_after_staging_starts() {
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("nexus-external-write-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let path = Path::new("note");
+        fs::write(root.join(path), "original").unwrap();
+        let ws = Workspace::grant(&root).unwrap();
+        let (_, revision) = ws.snapshot(path).unwrap();
+        let err = ws
+            .edit_with_sync(path, "original", &revision, "replacement", |file| {
+                if file.metadata()?.is_file() {
+                    let status = std::process::Command::new("sh")
+                        .args(["-c", "printf external > \"$1\"", "sh"])
+                        .arg(root.join(path))
+                        .status()?;
+                    assert!(status.success());
+                }
+                file.sync_all()
+            })
+            .unwrap_err();
+        assert!(err.contains("File changed"), "{err}");
+        assert_eq!(ws.read(path).unwrap(), "external");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
 }

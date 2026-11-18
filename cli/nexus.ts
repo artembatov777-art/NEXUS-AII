@@ -24,7 +24,7 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode
 
-Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /discard, /exit
+Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 In interactive test mode: /agent read <file>, /agent list [directory], /agent search <text>.
 A model is not configured yet.
@@ -51,7 +51,7 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
   const session = new TerminalSession(router, testMode ? 'test' : 'unconfigured', testMode ? 'echo' : 'unconfigured', history, testMode ? messages => saveHistory(historyPath, messages) : undefined);
   const terminal = createInterface({ input: stdin, output: stdout });
   const permissions = new TerminalPermissions(prompt => terminal.question(prompt));
-  const workspace = stdin.isTTY && stdout.isTTY ? workspaceSession(permissions) : undefined;
+  const workspace = stdin.isTTY && stdout.isTTY ? workspaceSession(permissions, text => stdout.write(text)) : undefined;
   const run = testMode && workspace ? workspace.run : async () => err('provider_unavailable', 'Offline planner requires an interactive --test-model session.');
   const controller = new AbortController();
   terminal.on('SIGINT', () => { controller.abort(); terminal.close(); });

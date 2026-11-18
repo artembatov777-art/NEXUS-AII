@@ -96,9 +96,16 @@ fn failed_and_interrupted_staging_leave_original_and_allow_retry() {
             assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
         }
         assert_eq!(fs::read_to_string(root.join("note")).unwrap(), "old");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
     }
+    let unrelated = root.join(".nexus-edit-00000000000000000000000000000000");
+    fs::write(&unrelated, "unrelated existing file").unwrap();
     ws.edit_checked("note".as_ref(), "old", &revision, "recovered")
         .unwrap();
     assert_eq!(fs::read_to_string(root.join("note")).unwrap(), "recovered");
+    assert_eq!(
+        fs::read_to_string(unrelated).unwrap(),
+        "unrelated existing file"
+    );
     fs::remove_dir_all(root).unwrap();
 }
