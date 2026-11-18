@@ -371,10 +371,13 @@ fn edit(
         return Err("File changed; prepare a new draft".into());
     }
     let prep = |error| format!("Windows replacement unavailable before publication: {error}");
-    local_ntfs(&original).map_err(prep)?;
-    require_plain_file(&original).map_err(prep)?;
-    let security = security_descriptor(&original).map_err(prep)?;
-    let directory = directory_for_publish(dir).map_err(prep)?;
+    local_ntfs(&original).map_err(|e| prep(format!("inspect NTFS volume: {e}")))?;
+    require_plain_file(&original)
+        .map_err(|e| prep(format!("inspect original streams and attributes: {e}")))?;
+    let security = security_descriptor(&original)
+        .map_err(|e| prep(format!("read original security descriptor: {e}")))?;
+    let directory = directory_for_publish(dir)
+        .map_err(|e| prep(format!("open pinned publication directory: {e}")))?;
 
     let stage_name = format!(
         ".nexus-win-edit-{}-{}",
@@ -393,7 +396,7 @@ fn edit(
     let mut stage = Stage {
         file: dir
             .open_with(&stage_name, &options)
-            .map_err(prep)?
+            .map_err(|e| prep(format!("create staging file: {e}")))?
             .into_std(),
         published: false,
     };
@@ -401,8 +404,11 @@ fn edit(
         &stage.file,
         FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
     )
-    .map_err(prep)?;
-    if security_descriptor(&stage.file).map_err(prep)? != security {
+    .map_err(|error| prep(error.to_string()))?;
+    if security_descriptor(&stage.file)
+        .map_err(|e| prep(format!("read staging security descriptor: {e}")))?
+        != security
+    {
         return Err(
             "Replacement would change the NTFS owner, group, DACL, SACL or mandatory label".into(),
         );
@@ -411,9 +417,10 @@ fn edit(
         .file
         .write_all(content.as_bytes())
         .and_then(|_| stage.file.sync_all())
-        .map_err(prep)?;
-    require_plain_file(&stage.file).map_err(prep)?;
-    let identity: FILE_ID_INFO = query(&stage.file, FileIdInfo).map_err(prep)?;
+        .map_err(|error| prep(error.to_string()))?;
+    require_plain_file(&stage.file).map_err(|error| prep(error.to_string()))?;
+    let identity: FILE_ID_INFO =
+        query(&stage.file, FileIdInfo).map_err(|error| prep(error.to_string()))?;
     checkpoint(PublishPoint::Staged(&StageReceipt {
         target: path.to_owned(),
         original_revision: expected_revision.to_owned(),
@@ -421,30 +428,41 @@ fn edit(
         volume: identity.VolumeSerialNumber,
         file_id: identity.FileId.Identifier,
     }))
-    .map_err(prep)?;
-    require_plain_file(&original).map_err(prep)?;
+    .map_err(|error| prep(error.to_string()))?;
+    require_plain_file(&original)
+        .map_err(|e| prep(format!("inspect original streams and attributes: {e}")))?;
     if revision(&original)? != expected_revision
-        || security_descriptor(&original).map_err(prep)? != security
+        || security_descriptor(&original)
+            .map_err(|e| prep(format!("read original security descriptor: {e}")))?
+            != security
     {
         return Err("File changed during staging".into());
     }
-    if security_descriptor(&stage.file).map_err(prep)? != security {
+    if security_descriptor(&stage.file)
+        .map_err(|e| prep(format!("read staging security descriptor: {e}")))?
+        != security
+    {
         return Err("Staging file security descriptor changed".into());
     }
-    stage.file.seek(SeekFrom::Start(0)).map_err(prep)?;
+    stage
+        .file
+        .seek(SeekFrom::Start(0))
+        .map_err(|error| prep(error.to_string()))?;
     if read_open_text(&stage.file, 48_000)? != content {
         return Err("Staging file contents changed".into());
     }
-    require_plain_file(&stage.file).map_err(prep)?;
+    require_plain_file(&stage.file).map_err(|error| prep(error.to_string()))?;
 
     // The old handle remains open across the handle-relative rename. If the
     // filesystem refuses to replace that pinned file, there is no fallback.
-    disposition(&stage.file, FILE_DISPOSITION_FLAG_ON_CLOSE).map_err(prep)?;
-    checkpoint(PublishPoint::Disarmed).map_err(prep)?;
+    disposition(&stage.file, FILE_DISPOSITION_FLAG_ON_CLOSE)
+        .map_err(|error| prep(error.to_string()))?;
+    checkpoint(PublishPoint::Disarmed).map_err(|error| prep(error.to_string()))?;
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
-    rename_over(&stage.file, &directory, name).map_err(prep)?;
+    rename_over(&stage.file, &directory, name)
+        .map_err(|e| prep(format!("rename staged file: {e}")))?;
     stage.published = true;
     stage
         .file
