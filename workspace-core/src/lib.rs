@@ -489,10 +489,15 @@ pub fn open_child_directory(dir: &Dir, name: &OsStr) -> Result<Dir, String> {
 #[cfg(all(test, target_os = "linux"))]
 mod edit_tests {
     use super::*;
-    use std::{cell::Cell, io};
+    use std::{cell::Cell, io, sync::Mutex};
+
+    // One test spawns a child process. Serialize these tests so the child
+    // cannot transiently inherit another test's locked directory descriptor.
+    static EDIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn distinguishes_staging_sync_error_from_post_rename_sync_error() {
+        let _guard = EDIT_TEST_LOCK.lock().unwrap();
         let root = std::env::temp_dir()
             .canonicalize()
             .unwrap()
@@ -529,6 +534,7 @@ mod edit_tests {
 
     #[test]
     fn does_not_confirm_a_revision_replaced_before_the_reply() {
+        let _guard = EDIT_TEST_LOCK.lock().unwrap();
         let root = std::env::temp_dir()
             .canonicalize()
             .unwrap()
@@ -558,6 +564,7 @@ mod edit_tests {
 
     #[test]
     fn observes_an_external_write_after_staging_starts() {
+        let _guard = EDIT_TEST_LOCK.lock().unwrap();
         let root = std::env::temp_dir()
             .canonicalize()
             .unwrap()
