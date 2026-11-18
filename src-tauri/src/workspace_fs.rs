@@ -669,38 +669,38 @@ fn write_workspace_file_inner(
                 })?;
             #[cfg(not(windows))]
             {
-            let opened_metadata = file.metadata()
-                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
-            if !opened_metadata.is_file() {
-                return Err("NEXUS can edit regular files only, not links or special entries.".into());
-            }
-            ensure_no_external_hard_links(&file)?;
-            let opened_metadata = file.metadata()
-                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
-            if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
-                return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
-            }
-
-            if let Some(expected) = expected_content {
-                let mut current_bytes = Vec::with_capacity(opened_metadata.len() as usize);
-                {
-                    let mut limited = (&mut file).take(MAX_TEXT_FILE_BYTES + 1);
-                    limited.read_to_end(&mut current_bytes)
-                        .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                let opened_metadata = file.metadata()
+                    .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+                if !opened_metadata.is_file() {
+                    return Err("NEXUS can edit regular files only, not links or special entries.".into());
                 }
-                if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+                ensure_no_external_hard_links(&file)?;
+                let opened_metadata = file.metadata()
+                    .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+                if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
                     return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
                 }
-                let current = String::from_utf8(current_bytes)
-                    .map_err(|_| "The file changed or is no longer readable as UTF-8. Reload it before saving.".to_string())?;
-                if current != expected {
-                    return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
+
+                if let Some(expected) = expected_content {
+                    let mut current_bytes = Vec::with_capacity(opened_metadata.len() as usize);
+                    {
+                        let mut limited = (&mut file).take(MAX_TEXT_FILE_BYTES + 1);
+                        limited.read_to_end(&mut current_bytes)
+                            .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                    }
+                    if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+                        return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+                    }
+                    let current = String::from_utf8(current_bytes)
+                        .map_err(|_| "The file changed or is no longer readable as UTF-8. Reload it before saving.".to_string())?;
+                    if current != expected {
+                        return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
+                    }
                 }
-            }
-            file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
-            file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
-            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
-            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
+                file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
+                file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
+                file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+                file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
