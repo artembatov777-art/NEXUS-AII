@@ -46,7 +46,7 @@ fn normal(name: &OsStr) -> Result<(), String> {
     }
     Ok(())
 }
-pub fn read_text(dir: &Dir, name: &OsStr, limit: u64) -> Result<String, String> {
+fn open_text(dir: &Dir, name: &OsStr) -> Result<fs::File, String> {
     normal(name)?;
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
@@ -55,15 +55,17 @@ pub fn read_text(dir: &Dir, name: &OsStr, limit: u64) -> Result<String, String> 
         use cap_std::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NONBLOCK);
     }
-    let file = dir
-        .open_with(name, &options)
-        .map_err(|_| "File unavailable")?
-        .into_std();
+    dir.open_with(name, &options)
+        .map(|f| f.into_std())
+        .map_err(|_| "File unavailable".into())
+}
+
+fn read_open_text(file: &fs::File, limit: u64) -> Result<String, String> {
     let metadata = file.metadata().map_err(|_| "Cannot inspect file")?;
     if !metadata.is_file() || metadata.len() > limit {
         return Err("File type or size exceeds preview limit".into());
     }
-    ensure_no_external_hard_links(&file)?;
+    ensure_no_external_hard_links(file)?;
     let mut bytes = Vec::new();
     file.take(limit + 1)
         .read_to_end(&mut bytes)
@@ -73,6 +75,37 @@ pub fn read_text(dir: &Dir, name: &OsStr, limit: u64) -> Result<String, String> 
     }
     String::from_utf8(bytes).map_err(|_| "File is not UTF-8 text".into())
 }
+
+pub fn read_text(dir: &Dir, name: &OsStr, limit: u64) -> Result<String, String> {
+    read_open_text(&open_text(dir, name)?, limit)
+}
+
+#[cfg(target_os = "linux")]
+fn require_no_extended_attributes(file: &fs::File) -> Result<(), String> {
+    use std::os::fd::AsRawFd;
+    let count = unsafe { libc::flistxattr(file.as_raw_fd(), std::ptr::null_mut(), 0) };
+    if count == 0
+        || (count < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOTSUP))
+    {
+        Ok(())
+    } else {
+        Err("Unsupported or unverifiable extended attributes on edit file".into())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn revision(metadata: &fs::Metadata) -> String {
+    use std::os::unix::fs::MetadataExt;
+    format!(
+        "{}:{}:{}:{}:{}",
+        metadata.dev(),
+        metadata.ino(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+        metadata.len()
+    )
+}
+
 pub struct Workspace(Dir);
 impl Workspace {
     pub fn grant(path: &Path) -> Result<Self, String> {
@@ -112,77 +145,172 @@ impl Workspace {
         Ok(dir)
     }
     #[cfg(target_os = "linux")]
+    pub fn snapshot(&self, path: &Path) -> Result<(String, String), String> {
+        let dir = self.directory(path.parent().ok_or("Missing parent")?)?;
+        Self::snapshot_at(&dir, path.file_name().ok_or("Missing filename")?)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn snapshot_at(dir: &Dir, name: &OsStr) -> Result<(String, String), String> {
+        let file = open_text(dir, name)?;
+        let before = revision(&file.metadata().map_err(|_| "Cannot inspect file")?);
+        let text = read_open_text(&file, 48000)?;
+        let after = revision(&file.metadata().map_err(|_| "Cannot inspect file")?);
+        if before != after {
+            return Err("File changed while being read".into());
+        }
+        Ok((text, after))
+    }
+
+    #[cfg(target_os = "linux")]
     pub fn edit(&self, path: &Path, expected: &str, content: &str) -> Result<(), String> {
-        use cap_std::fs::PermissionsExt;
+        let (_, revision) = self.snapshot(path)?;
+        self.edit_checked(path, expected, &revision, content)
+    }
+
+    /// The directory lock serializes NEXUS writers. External writers need not
+    /// honor it. rename is atomic, but the final check and rename are not CAS.
+    #[cfg(target_os = "linux")]
+    pub fn edit_checked(
+        &self,
+        path: &Path,
+        expected: &str,
+        expected_revision: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        use cap_std::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
         use std::io::Write;
         use std::os::fd::AsRawFd;
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static NEXT: AtomicU64 = AtomicU64::new(0);
+        use std::os::unix::fs::{
+            MetadataExt as StdMetadataExt, PermissionsExt as StdPermissionsExt,
+        };
+
         if expected.len() > 48000 || content.len() > 48000 {
             return Err("File exceeds edit limit".into());
         }
-        let dir = self.directory(path.parent().ok_or("Missing parent")?)?;
+        let parent = path.parent().ok_or("Missing parent")?;
+        let dir = self.directory(parent)?;
         let name = path.file_name().ok_or("Missing filename")?;
-        normal(name)?;
         let mut lock_options = OpenOptions::new();
-        lock_options.read(true);
+        lock_options.read(true).custom_flags(libc::O_DIRECTORY);
         let lock = dir
             .open_with(".", &lock_options)
             .map_err(|_| "Cannot open directory lock")?
             .into_std();
-        if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
-            return Err("Cannot lock directory".into());
+        if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            return Err("Workspace edit is busy or directory locking is unavailable".into());
         }
-        let mut original_options = OpenOptions::new();
-        original_options.read(true).follow(FollowSymlinks::No);
-        let original = dir
-            .open_with(name, &original_options)
-            .map_err(|_| "File unavailable")?
-            .into_std();
+        let parent_meta = lock
+            .metadata()
+            .map_err(|_| "Cannot inspect edit directory")?;
+        if parent_meta.uid() != unsafe { libc::geteuid() } || parent_meta.mode() & 0o022 != 0 {
+            return Err(
+                "Editing requires an owner-owned directory without group or public write access"
+                    .into(),
+            );
+        }
+        let check = || -> Result<(), String> {
+            let (text, current_revision) = Self::snapshot_at(&dir, name)?;
+            if text != expected || current_revision != expected_revision {
+                return Err("File changed; prepare a new draft".into());
+            }
+            Ok(())
+        };
+        check()?;
+        let original = open_text(&dir, name)?;
         let metadata = original.metadata().map_err(|_| "Cannot inspect file")?;
-        if !metadata.is_file() {
-            return Err("Not a regular file".into());
+        // A replacement has a fresh inode. Restrict edits to owner-owned,
+        // ordinary files with no special mode bits.
+        if metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.permissions().mode() & 0o7022 != 0
+            || revision(&metadata) != expected_revision
+        {
+            return Err("File ownership, mode or revision does not permit replacement".into());
         }
-        ensure_no_external_hard_links(&original)?;
-        if read_text(&dir, name, 48000)? != expected {
-            return Err("File changed; reload before editing".into());
+
+        require_no_extended_attributes(&original)?;
+        lock.sync_all()
+            .map_err(|_| "Directory sync unavailable; file was not replaced")?;
+        let mut nonce = [0u8; 16];
+        if unsafe { libc::getrandom(nonce.as_mut_ptr().cast(), nonce.len(), 0) }
+            != nonce.len() as isize
+        {
+            return Err("Cannot generate staging filename".into());
         }
-        let temp = format!(
-            ".nexus-edit-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
+        let temp = format!(".nexus-edit-{:032x}", u128::from_ne_bytes(nonce));
         let mut options = OpenOptions::new();
         options
             .write(true)
             .create_new(true)
-            .follow(FollowSymlinks::No);
+            .follow(FollowSymlinks::No)
+            .mode(0o600);
         let mut staged = dir
             .open_with(&temp, &options)
             .map_err(|_| "Cannot create temporary file")?;
+        let mut replaced = false;
         let result = (|| -> Result<(), String> {
-            staged
-                .set_permissions(cap_std::fs::Permissions::from_mode({
-                    use std::os::unix::fs::PermissionsExt as _;
-                    metadata.permissions().mode()
-                }))
-                .map_err(|_| "Cannot set permissions")?;
+            if staged
+                .metadata()
+                .map_err(|_| "Cannot inspect temporary file")?
+                .gid()
+                != metadata.gid()
+            {
+                return Err("Replacement would change file group ownership".into());
+            }
+            require_no_extended_attributes(
+                &staged
+                    .try_clone()
+                    .map_err(|_| "Cannot verify temporary file")?
+                    .into_std(),
+            )?;
             staged
                 .write_all(content.as_bytes())
                 .map_err(|_| "Cannot write temporary file")?;
             staged
+                .set_permissions(cap_std::fs::Permissions::from_mode(
+                    metadata.permissions().mode() & 0o777,
+                ))
+                .map_err(|_| "Cannot set temporary file permissions")?;
+            staged
                 .sync_all()
                 .map_err(|_| "Cannot sync temporary file")?;
-            if read_text(&dir, name, 48000)? != expected {
-                return Err("File changed; reload before editing".into());
+            let staged_metadata = staged
+                .metadata()
+                .map_err(|_| "Cannot inspect temporary file")?;
+            let named = dir
+                .symlink_metadata(&temp)
+                .map_err(|_| "Temporary file changed")?;
+            if !named.is_file()
+                || named.dev() != staged_metadata.dev()
+                || named.ino() != staged_metadata.ino()
+                || named.nlink() != 1
+            {
+                return Err("Temporary file changed".into());
             }
+            let current_parent = self
+                .directory(parent)?
+                .dir_metadata()
+                .map_err(|_| "Cannot verify parent")?;
+            let pinned = dir.dir_metadata().map_err(|_| "Cannot inspect parent")?;
+            if current_parent.dev() != pinned.dev() || current_parent.ino() != pinned.ino() {
+                return Err("Parent directory changed; select a project again".into());
+            }
+            check()?;
             dir.rename(&temp, &dir, name)
                 .map_err(|_| "Cannot replace file")?;
+            replaced = true;
             lock.sync_all()
                 .map_err(|_| "File replaced but directory sync failed; inspect before retrying")?;
             Ok(())
         })();
-        let _ = dir.remove_file(&temp);
+        if !replaced {
+            // Never unlink a replacement placed at the temporary name.
+            if let (Ok(named), Ok(open)) = (dir.symlink_metadata(&temp), staged.metadata()) {
+                if named.dev() == open.dev() && named.ino() == open.ino() {
+                    let _ = dir.remove_file(&temp);
+                }
+            }
+        }
         result
     }
     pub fn read(&self, path: &Path) -> Result<String, String> {

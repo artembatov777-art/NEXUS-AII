@@ -12,7 +12,7 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
-  if (/^\/(project|files|read|search|draft|approve|discard)(?:\s|$)/.test(input)) {
+  if (/^\/(project|files|read|search|draft|approve|apply|discard)(?:\s|$)/.test(input)) {
     if (context.workspace) { context.write(await context.workspace(input, context.signal) + '\n'); return true; }
     context.write('Workspace backend is unavailable; no filesystem access was attempted.\n');
     return true;

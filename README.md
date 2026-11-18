@@ -98,5 +98,23 @@ Use `/draft {"path":"note.txt","from":"old text","to":"new text"}` to preview
 a replacement. The old text must appear exactly once. `/approve` asks for
 permission through the gateway, rechecks the file snapshot, and records the
 approval for this session. `/discard`, selecting another project, or exiting
-clears the draft. Approval does not write the file. Applying a draft remains
-blocked on verification of the Rust edit primitive.
+clears the draft. On Linux, use `/apply` after approval and confirm the write
+permission at the prompt. Each apply attempt consumes the approval. Rebuild the
+Rust host with `npm run build:workspace` before using it.
+
+Apply supports owner-owned UTF-8 files in owner-owned directories without
+group or public write access. Hard links, symlinks and unsupported file
+metadata are refused. The Rust host locks the directory for cooperating NEXUS
+writers and verifies the snapshot again immediately before replacing the
+original with a synced file in the same directory. Replacement uses the atomic
+rename semantics of the underlying filesystem. The revision check and rename
+are separate operations, so avoid editing the same file with external programs
+during apply. Use a local filesystem that supports directory locking, atomic
+rename and sync.
+
+A failure before the rename leaves the original intact. An abrupt shutdown
+during staging may leave a `.nexus-edit-*` temporary file. After confirming
+the writing process has ended, inspect the original and remove the leftover
+staging file if no longer needed. If the host loses its reply or directory sync
+fails after rename, inspect the destination before preparing a new draft.
+Windows and macOS hosts support preview and approval only.

@@ -6,6 +6,8 @@ use std::{
     io::{self, BufRead, Read, Write},
     path::Path,
 };
+const MAX_REQUEST_BYTES: usize = 600_000;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
@@ -13,11 +15,18 @@ struct Request {
     operation: Operation,
     path: String,
     query: Option<String>,
+    #[cfg(target_os = "linux")]
+    expected: Option<String>,
+    #[cfg(target_os = "linux")]
+    revision: Option<String>,
+    #[cfg(target_os = "linux")]
+    content: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Operation {
     Read,
+    Edit,
     List,
     Search,
 }
@@ -68,7 +77,34 @@ fn execute(ws: &Workspace, line: &[u8]) -> Result<Value, String> {
     }
     let path = Path::new(&r.path);
     match r.operation {
-        Operation::Read => Ok(json!({"content":ws.read(path)?})),
+        Operation::Read => {
+            #[cfg(target_os = "linux")]
+            {
+                let (content, revision) = ws.snapshot(path)?;
+                Ok(json!({"content":content,"revision":revision}))
+            }
+            #[cfg(not(target_os = "linux"))]
+            Ok(json!({"content":ws.read(path)?}))
+        }
+        Operation::Edit => {
+            #[cfg(target_os = "linux")]
+            {
+                let revision = r
+                    .revision
+                    .as_deref()
+                    .filter(|value| value.len() <= 128)
+                    .ok_or("Missing or invalid revision")?;
+                ws.edit_checked(
+                    path,
+                    r.expected.as_deref().ok_or("Missing original content")?,
+                    revision,
+                    r.content.as_deref().ok_or("Missing replacement content")?,
+                )?;
+                Ok(json!({"applied":true}))
+            }
+            #[cfg(not(target_os = "linux"))]
+            Err("Applying drafts is supported only on Linux".into())
+        }
         Operation::List | Operation::Search => {
             let query = if matches!(r.operation, Operation::Search) {
                 Some(
@@ -93,14 +129,22 @@ fn main() -> io::Result<()> {
     let ws = Workspace::grant(Path::new(&root)).map_err(io::Error::other)?;
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
-    writeln!(output, "{}", json!({"version":1,"ready":true}))?;
+    writeln!(
+        output,
+        "{}",
+        json!({"version":1,"ready":true,"edit":cfg!(target_os = "linux")})
+    )?;
     output.flush()?;
     loop {
         let mut line = Vec::new();
-        if (&mut input).take(8193).read_until(b'\n', &mut line)? == 0 {
+        if (&mut input)
+            .take((MAX_REQUEST_BYTES + 1) as u64)
+            .read_until(b'\n', &mut line)?
+            == 0
+        {
             break;
         }
-        if line.len() > 8192 || line.last() != Some(&b'\n') {
+        if line.len() > MAX_REQUEST_BYTES || line.last() != Some(&b'\n') {
             break;
         }
         let mut reply = match execute(&ws, &line) {

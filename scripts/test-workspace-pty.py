@@ -114,15 +114,89 @@ with tempfile.TemporaryDirectory() as temp:
             ["denied"], ["started", "completed"], ["started", "failed"],
         ])
 
-        # Stop the real host so this operation stays in flight until cancellation.
+        def apply_draft(answer, expected):
+            cli.sendline("/apply")
+            cli.expect("filesystem:write:selected")
+            cli.expect("Type yes to allow:")
+            cli.sendline(answer)
+            cli.expect_exact(expected)
+            cli.expect("❯")
+
+        note = project / "note.txt"
+        note.write_text("workspace fixture")
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        apply_draft("no", "denied")
+        assert note.read_text() == "workspace fixture"
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        prepare_draft()
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+        approve_draft("yes", "Draft approved in memory")
+        replacement = project / "replacement.txt"
+        replacement.write_text("workspace fixture")
+        replacement.replace(note)
+        apply_draft("yes", "File changed; prepare a new draft")
+        assert note.read_text() == "workspace fixture"
+
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        note.unlink()
+        note.symlink_to(outside)
+        apply_draft("yes", "File unavailable")
+        assert outside.read_text() == "outside fixture"
+        note.unlink()
+        note.write_text("workspace fixture")
+
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        apply_draft("yes", "Draft applied")
+        assert note.read_text() == "workspace updated"
+        cli.sendline("/apply")
+        cli.expect("Prepare and approve a new draft first")
+        cli.expect("❯")
+
+        apply_runs = []
+        for audit in (Path(temp) / ".nexus-au" / "workspace-audit").glob("*.jsonl"):
+            events = [json.loads(line) for line in audit.read_text().splitlines()]
+            if events[0]["toolId"] == "cli.workspace.apply-draft":
+                apply_runs.append([event["status"] for event in events])
+        assert sorted(apply_runs) == sorted([
+            ["denied"], ["started", "failed"], ["started", "failed"], ["started", "completed"],
+        ])
+
+        note.write_text("workspace fixture")
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        audit_dir = Path(temp) / ".nexus-au" / "workspace-audit"
+        saved_audit = audit_dir.with_name("workspace-audit.saved")
+        audit_dir.rename(saved_audit)
+        audit_dir.write_text("not a directory")
+        cli.sendline("/apply")
+        cli.expect("audit history could not be verified")
+        cli.expect("❯")
+        assert note.read_text() == "workspace fixture"
+        audit_dir.unlink()
+        saved_audit.rename(audit_dir)
+
+        prepare_draft()
+        approve_draft("yes", "Draft approved in memory")
+        # Pause the real host so Ctrl-C cancels an in-flight apply before rename.
         children = subprocess.check_output(["pgrep", "-P", str(cli.pid)], text=True).split()
         host, = map(int, children)
         os.kill(host, signal.SIGSTOP)
-        cli.sendline("/read note.txt")
+        cli.sendline("/apply")
         cli.expect("Type yes to allow:")
         cli.sendline("yes")
         cli.sendcontrol("c")
         cli.expect(pexpect.EOF)
         assert not Path(f"/proc/{host}").exists()
+        assert note.read_text() == "workspace fixture"
     finally:
         cli.close(force=True)

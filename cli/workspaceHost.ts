@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { isAbsolute, join } from 'node:path';
-import { mkdir, appendFile, readFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join } from 'node:path';
+import { mkdir, open, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { ok, err } from '../src/core/result';
@@ -16,6 +16,7 @@ import { quoteTerminal } from './quote';
 const executable = fileURLToPath(new URL('./bin/nexus-workspace' + (process.platform === 'win32' ? '.exe' : ''), import.meta.url));
 
 class Connection {
+  editSupported = false;
   private child;
   private chunks;
   constructor(root: string) {
@@ -56,13 +57,26 @@ class Connection {
 export function workspaceSession(permissions: PermissionService) {
   let host: Connection | undefined;
   let root = '';
-  let draft: { path: string; before: string; after: string; approved: boolean } | undefined;
+  let draft: { path: string; before: string; after: string; revision?: string; approved: boolean } | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
-  const auditFile = (id: string) => join(dir,id + '.jsonl');
+  const auditFile = (id: string) => {
+    if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id)) throw new Error('Invalid audit run identifier');
+    return join(dir, id + '.jsonl');
+  };
   const gateway = new ToolGateway(permissions, {
     async record(event) {
       await mkdir(dir,{recursive:true,mode:0o700});
-      await appendFile(auditFile(event.runId), JSON.stringify(event)+'\n',{mode:0o600});
+      const file = await open(auditFile(event.runId), 'a', 0o600);
+      try {
+        await file.appendFile(JSON.stringify(event)+'\n');
+        await file.sync();
+      } finally { await file.close(); }
+      if (event.toolId === 'cli.workspace.apply-draft' && process.platform === 'linux') {
+        for (const path of [dir, dirname(dir), homedir()]) {
+          const directory = await open(path, 'r');
+          try { await directory.sync(); } finally { await directory.close(); }
+        }
+      }
       return ok(undefined);
     },
     async list(options) {
@@ -96,13 +110,43 @@ export function workspaceSession(permissions: PermissionService) {
     async execute(input, context) {
       const reply = await input.host.exchange({version:1,operation:'read',path:input.draft.path}, context.signal);
       if (context.signal.aborted) return err('cancelled', 'Draft approval cancelled.');
-      if (reply.ok !== true || reply.value?.content !== input.draft.before) {
+      if (reply.ok !== true || reply.value?.content !== input.draft.before || reply.value?.revision !== input.draft.revision) {
         return err('tool_failed', 'File changed or is unavailable. Prepare a new draft.');
       }
       return ok({ approved: true });
     }
   });
   if (!approve.ok) throw new Error(approve.error.message);
+
+  // Keep apply out of the agent tool catalog. Only an explicit terminal
+  // command can submit the session's approved, single-use draft.
+  const apply = gateway.register({
+    id: 'cli.workspace.apply-draft',
+    version: '1',
+    description: 'Apply the approved workspace draft',
+    requiredPermissions: ['filesystem:write:selected'],
+    risk: 'high',
+    timeoutMs: 15_000,
+    validateInput(input: unknown) {
+      if (!host?.editSupported) return err('validation', 'This workspace host cannot apply drafts.');
+      return input === null && draft?.approved && typeof draft.revision === 'string'
+        ? ok({ host, root, draft })
+        : err('validation', 'Prepare and approve a new draft first.');
+    },
+    resourceForInput: input => `${input.root}/${input.draft.path}`,
+    async execute(input, context) {
+      if (draft !== input.draft || host !== input.host || context.signal.aborted) {
+        return err('cancelled', 'Draft is no longer current.');
+      }
+      const { path, before, after, revision } = input.draft;
+      const reply = await input.host.exchange({
+        version: 1, operation: 'edit', path, expected: before, revision, content: after
+      }, context.signal);
+      if (reply.ok === true && reply.value?.applied === true) return ok({ applied: true });
+      return err('tool_failed', typeof reply.message === 'string' ? reply.message : 'Workspace host did not confirm the edit.');
+    }
+  });
+  if (!apply.ok) throw new Error(apply.error.message);
 
   const invoke = <T = unknown>(operation: string, input: unknown, signal: AbortSignal) =>
     gateway.execute<T>(`cli.workspace.${operation}`, input, {runId:randomUUID(), traceId:randomUUID(), signal}, 'owner');
@@ -136,7 +180,9 @@ export function workspaceSession(permissions: PermissionService) {
         if (!isAbsolute(arg) || Buffer.byteLength(arg) > 4096 || /[\x00-\x1f\x7f]/.test(arg)) return 'Select a valid absolute project directory.';
         const next = new Connection(arg);
         try {
-          if ((await next.exchange(null,signal)).ready !== true) throw new Error();
+          const ready = await next.exchange(null,signal);
+          if (ready.ready !== true) throw new Error();
+          next.editSupported = ready.edit === true;
         } catch { next.close(); return 'Workspace backend unavailable or directory denied.'; }
         host?.close(); host=next; root=arg; draft=undefined;
         return 'Selected '+quoteTerminal(root);
@@ -153,6 +199,16 @@ export function workspaceSession(permissions: PermissionService) {
         if (draft) draft.approved = true;
         return 'Draft approved in memory. No file was written.';
       }
+      if (command === '/apply') {
+        if (arg) return 'Usage: /apply';
+        const current = draft;
+        try {
+          const result = await invoke('apply-draft', null, signal);
+          return result.ok ? 'Draft applied.' : `${quoteTerminal(result.error.message)} Inspect the file before preparing another draft.`;
+        } finally {
+          if (draft === current && current?.approved) draft = undefined;
+        }
+      }
       if (command === '/draft') {
         draft = undefined;
         if (Buffer.byteLength(arg) > 48_000) return 'Draft input exceeds 48 KB.';
@@ -163,7 +219,7 @@ export function workspaceSession(permissions: PermissionService) {
         if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to) {
           return 'Specify a file and a nonempty, unique span to replace.';
         }
-        const result = await invoke<{ content: string }>('read', {root, path}, signal);
+        const result = await invoke<{ content: string; revision?: string }>('read', {root, path}, signal);
         if (!result.ok) return quoteTerminal(result.error.message);
         const before = result.value.content;
         const index = before.indexOf(from);
@@ -171,7 +227,7 @@ export function workspaceSession(permissions: PermissionService) {
         const after = before.slice(0, index) + to + before.slice(index + from.length);
         if (Buffer.byteLength(after) > 48_000) return 'Draft result exceeds 48 KB.';
         if (signal.aborted) return 'Draft cancelled.';
-        draft = {path, before, after, approved:false};
+        draft = {path, before, after, revision: result.value.revision, approved:false};
         return `Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}\nUse /approve or /discard. No file was written.`;
       }
       const operation = command === '/files' ? 'list' : command === '/read' ? 'read' : 'search';
