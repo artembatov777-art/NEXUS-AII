@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '../src/core/result';
+import type { ToolRegistry } from '../src/core/toolRegistry';
 import type { ToolGateway } from '../src/core/tools';
 
 /** Implementations must enforce root grants and no-follow lookups in the native host. */
@@ -17,9 +18,9 @@ function validate(input: unknown, operation: 'list' | 'read' | 'search'): Result
 }
 
 /** Gateway validation is defense in depth, never a substitute for native path safety. */
-export function registerCliWorkspaceTools(gateway: ToolGateway, backend: WorkspaceBackend): void {
+export function registerCliWorkspaceTools(registry: ToolGateway | ToolRegistry, backend: WorkspaceBackend): void {
   for (const operation of ['list', 'read', 'search'] as const) {
-    const result = gateway.register<Input, unknown>({
+    const result = registry.register<Input, unknown>({
       id: `cli.workspace.${operation}`, version: '1', description: `Workspace ${operation}`, requiredPermissions: ['filesystem:read:selected'], risk: 'medium', timeoutMs: 15_000,
       validateInput: input => validate(input, operation), resourceForInput: input => `${input.root}/${input.path}`,
       execute: async (input, context) => {

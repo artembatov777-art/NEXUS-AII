@@ -7,6 +7,10 @@ import { randomUUID } from 'node:crypto';
 import { ok, err } from '../src/core/result';
 import { ToolGateway, type PermissionService, type ToolAuditEvent } from '../src/core/tools';
 import { registerCliWorkspaceTools } from './workspace';
+import { AgentPlanner } from '../src/core/agentPlanner';
+import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
+import { PlanExecutor } from '../src/core/planExecutor';
+import { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
 
 const executable = fileURLToPath(new URL('./bin/nexus-workspace' + (process.platform === 'win32' ? '.exe' : ''), import.meta.url));
@@ -65,7 +69,8 @@ export function workspaceSession(permissions: PermissionService) {
       catch(error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok([]); throw error; }
     }
   }, { now: Date.now });
-  registerCliWorkspaceTools(gateway,{
+  const registry = new ToolRegistry(gateway);
+  registerCliWorkspaceTools(registry,{
     async invoke({operation,path,query,root:requested},signal) {
       if (!host || requested !== root) return err('permission_denied','Select a project first.');
       const reply = await host.exchange({version:1,operation,path,query},signal);
@@ -74,7 +79,22 @@ export function workspaceSession(permissions: PermissionService) {
       return err('tool_failed','Invalid workspace backend response.');
     }
   });
+  // The offline planner accepts one explicit task. The selected root comes
+  // from this terminal session and the gateway still requires confirmation.
+  const planner = new AgentPlanner({
+    async createPlan({ goal }) {
+      if (!host) return err('permission_denied', 'Select a project first.');
+      const match = /^read[ \t]+(.+)$/.exec(goal);
+      if (!match) return err('validation', 'Offline planner usage: /agent read <relative file>');
+      return ok({ goal, steps: [{
+        id: 'read', toolId: 'cli.workspace.read', purpose: 'Read the requested project file',
+        input: { root, path: match[1] }, dependsOn: []
+      }] });
+    }
+  }, 1);
+  const agent = new PlanExecutor(planner, registry, new GatewayAgentToolExecutor(gateway, 'owner'));
   return {
+    run: agent.run.bind(agent),
     close: () => host?.close(),
     async command(line:string, signal:AbortSignal) {
       const [command] = line.split(/\s/,1);

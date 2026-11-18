@@ -85,7 +85,7 @@ npm run tauri dev
 
 ### Offline CLI test fixture
 
-`npm run cli -- --test-model` starts a deterministic echo fixture labelled `TEST MODEL`; it is not an AI model and does not execute tools. Completed turns are stored in `~/.nexus-au/test-history.json`. Use `--history PATH` after `--test-model` to select a separate history file. The file contains conversation text; it is not encrypted and is not compatible with Desktop history. An invalid history file stops startup without overwriting it. Ctrl-C cancels the active terminal session. Normal CLI mode still has no configured provider.
+`npm run cli -- --test-model` starts a deterministic echo fixture labelled `TEST MODEL`; it echoes chat input. In an interactive test session, select a project with `/project` and run `/agent read <relative file>` to exercise the offline planner. The shared Tool Gateway asks for approval and records the read before the Rust host runs it. Completed turns are stored in `~/.nexus-au/test-history.json`. Use `--history PATH` after `--test-model` to select a separate history file. The file contains conversation text; it is not encrypted and is not compatible with Desktop history. An invalid history file stops startup without overwriting it. Ctrl-C cancels the active terminal session. Normal CLI mode still has no configured provider.
 
 ### CLI workspace
 
