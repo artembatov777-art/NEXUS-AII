@@ -25,16 +25,26 @@ const executable = fileURLToPath(new URL('./bin/nexus-workspace' + (process.plat
 
 class Connection {
   editSupported = false;
+  private stopped = false;
   private child;
   private chunks;
   constructor(root: string) {
     this.child = spawn(executable, [root], { shell: false, stdio: ['pipe','pipe','ignore'], windowsHide: true });
     this.chunks = this.child.stdout[Symbol.asyncIterator]();
     this.child.on('error', () => this.close());
+    this.child.on('exit', () => { this.stopped = true; });
     this.child.stdin.on('error', () => this.close());
   }
-  close() { this.child.kill('SIGKILL'); this.child.stdout.destroy(); }
+  get connected() { return !this.stopped; }
+  close() {
+    if (!this.stopped) {
+      this.stopped = true;
+      this.child.kill('SIGKILL');
+    }
+    this.child.stdout.destroy();
+  }
   async exchange(request: unknown, signal: AbortSignal) {
+    if (!this.connected) throw new Error('Workspace host disconnected. Select the project again.');
     const close = () => this.close();
     const timeout = setTimeout(close, 15000);
     signal.addEventListener('abort', close, {once:true});
@@ -143,6 +153,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
   registerCliWorkspaceTools(registry,{
     async invoke({operation,path,query,root:requested},signal) {
       if (!host || requested !== root) return err('permission_denied','Select a project first.');
+      if (!host.connected) return err('tool_failed', 'Workspace host disconnected. Select the project again.');
       const reply = await host.exchange({version:1,operation,path,query},signal);
       if (reply.ok === true) return ok(reply.value);
       if (reply.ok === false && typeof reply.message === 'string') return err('tool_failed',reply.message);
@@ -369,6 +380,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
           }
           return [
             `Status: ${state}`,
+            `Workspace host: ${!host.connected ? 'disconnected; reselect the project' : host.editSupported ? 'connected' : 'connected (read-only)'}.`,
             ...(planned ? [`Agent plan ${planned.id} (hash ${planned.hash})`] : []),
             ...(lastAttempt ? [
               `${lastAttempt.kind} attempt ${lastAttempt.id} for plan ${lastAttempt.hash}: ${lastAttempt.result}. ${lastAttempt.confirmed}/${lastAttempt.total} file(s) confirmed.`,

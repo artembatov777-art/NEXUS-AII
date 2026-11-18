@@ -83,7 +83,10 @@ fn revisions_detect_same_byte_replacements_and_locked_files_fail_closed() {
         .share_mode(0)
         .open(&path)
         .unwrap();
-    assert!(workspace.snapshot(Path::new("note")).is_err());
+    assert!(workspace
+        .snapshot(Path::new("note"))
+        .unwrap_err()
+        .contains("locked by another process"));
     drop(locked);
     assert_eq!(workspace.snapshot(Path::new("note")).unwrap().1, replaced);
     drop(workspace);

@@ -6,7 +6,7 @@ use cap_std::fs::{Dir, OpenOptions, OpenOptionsExt};
 use std::{
     ffi::OsStr,
     fs::File,
-    io::{self, Write},
+    io::{self, Seek, SeekFrom, Write},
     mem::{offset_of, size_of, size_of_val},
     os::windows::{
         ffi::OsStrExt,
@@ -26,10 +26,10 @@ use windows_sys::{
         Foundation::{RtlNtStatusToDosError, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE},
         Security::{
             GetKernelObjectSecurity, DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION,
-            LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+            LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, SACL_SECURITY_INFORMATION,
         },
         Storage::FileSystem::*,
-        System::IO::IO_STATUS_BLOCK,
+        System::{SystemServices::ACCESS_SYSTEM_SECURITY, IO::IO_STATUS_BLOCK},
     },
 };
 
@@ -87,7 +87,8 @@ fn security_descriptor(file: &File) -> io::Result<Vec<u8>> {
     let flags = OWNER_SECURITY_INFORMATION
         | GROUP_SECURITY_INFORMATION
         | DACL_SECURITY_INFORMATION
-        | LABEL_SECURITY_INFORMATION;
+        | LABEL_SECURITY_INFORMATION
+        | SACL_SECURITY_INFORMATION;
     if unsafe {
         GetKernelObjectSecurity(
             file.as_raw_handle(),
@@ -255,19 +256,21 @@ fn rename_over(file: &File, directory: &File, name: &OsStr) -> io::Result<()> {
     }
 }
 
-fn edit(
-    workspace: &Workspace,
-    path: &Path,
-    expected: &str,
-    expected_revision: &str,
-    content: &str,
-    before_publish: impl FnOnce() -> io::Result<()>,
-) -> Result<String, String> {
-    if content.len() > 48_000 {
-        return Err("Replacement exceeds the workspace text limit".into());
-    }
-    let parent = path.parent().ok_or("Missing parent")?;
-    let name = path.file_name().ok_or("Missing filename")?;
+#[derive(serde::Deserialize, serde::Serialize)]
+struct StageReceipt {
+    target: std::path::PathBuf,
+    original_revision: String,
+    name: String,
+    volume: u64,
+    file_id: [u8; 16],
+}
+
+enum PublishPoint<'a> {
+    Staged(&'a StageReceipt),
+    Disarmed,
+}
+
+fn pinned_ancestors(workspace: &Workspace, parent: &Path) -> Result<Vec<Dir>, String> {
     let mut ancestors = vec![workspace.0.try_clone().map_err(|_| "Project closed")?];
     for part in parent.components() {
         let Component::Normal(name) = part else {
@@ -275,6 +278,79 @@ fn edit(
         };
         ancestors.push(open_child_directory(ancestors.last().unwrap(), name)?);
     }
+    Ok(ancestors)
+}
+
+/// Exercise explicit recovery of the disarmed staging file. The caller must
+/// supply a receipt from its trusted operation store, never a directory scan.
+fn discard_stage(
+    workspace: &Workspace,
+    receipt: &StageReceipt,
+    expected_content: &str,
+) -> Result<(), String> {
+    let invalid = "Invalid or stale staging receipt";
+    let mut parts = receipt
+        .name
+        .strip_prefix(".nexus-win-edit-")
+        .ok_or(invalid)?
+        .split('-');
+    if parts
+        .next()
+        .and_then(|part| part.parse::<u32>().ok())
+        .is_none()
+        || parts
+            .next()
+            .and_then(|part| part.parse::<u64>().ok())
+            .is_none()
+        || parts.next().is_some()
+    {
+        return Err(invalid.into());
+    }
+    let ancestors = pinned_ancestors(workspace, receipt.target.parent().ok_or(invalid)?)?;
+    let dir = ancestors.last().unwrap();
+    let original = super::open_snapshot(dir, receipt.target.file_name().ok_or(invalid)?)?;
+    if revision(&original)? != receipt.original_revision {
+        return Err("Original changed; staging file needs manual review".into());
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    options.access_mode(GENERIC_READ | DELETE).share_mode(0);
+    let staged = dir
+        .open_with(&receipt.name, &options)
+        .map_err(|e| e.to_string())?
+        .into_std();
+    revision(&staged)?;
+    let identity: FILE_ID_INFO = query(&staged, FileIdInfo).map_err(|e| e.to_string())?;
+    if identity.VolumeSerialNumber != receipt.volume
+        || identity.FileId.Identifier != receipt.file_id
+    {
+        return Err(invalid.into());
+    }
+    require_plain_file(&staged).map_err(|e| e.to_string())?;
+    if read_open_text(&staged, 48_000)? != expected_content {
+        return Err("Staged content changed; staging file needs manual review".into());
+    }
+    disposition(
+        &staged,
+        FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE,
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn edit(
+    workspace: &Workspace,
+    path: &Path,
+    expected: &str,
+    expected_revision: &str,
+    content: &str,
+    mut checkpoint: impl FnMut(PublishPoint<'_>) -> io::Result<()>,
+) -> Result<String, String> {
+    if content.len() > 48_000 {
+        return Err("Replacement exceeds the workspace text limit".into());
+    }
+    let parent = path.parent().ok_or("Missing parent")?;
+    let name = path.file_name().ok_or("Missing filename")?;
+    let ancestors = pinned_ancestors(workspace, parent)?;
     let dir = ancestors.last().unwrap();
     crate::normal(name)?;
     let mut original_options = OpenOptions::new();
@@ -285,7 +361,7 @@ fn edit(
     // Require permission to write the original data even where the parent's
     // delete-child permission would otherwise allow a rename over the file.
     original_options
-        .access_mode(GENERIC_READ | FILE_WRITE_DATA)
+        .access_mode(GENERIC_READ | FILE_WRITE_DATA | ACCESS_SYSTEM_SECURITY)
         .share_mode(FILE_SHARE_READ);
     let original = dir
         .open_with(name, &original_options)
@@ -312,7 +388,7 @@ fn edit(
         .create_new(true)
         .follow(FollowSymlinks::No);
     options
-        .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE)
+        .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE | ACCESS_SYSTEM_SECURITY)
         .share_mode(0);
     let mut stage = Stage {
         file: dir
@@ -328,7 +404,7 @@ fn edit(
     .map_err(prep)?;
     if security_descriptor(&stage.file).map_err(prep)? != security {
         return Err(
-            "Replacement would change the NTFS owner, group, DACL or mandatory label".into(),
+            "Replacement would change the NTFS owner, group, DACL, SACL or mandatory label".into(),
         );
     }
     stage
@@ -337,17 +413,34 @@ fn edit(
         .and_then(|_| stage.file.sync_all())
         .map_err(prep)?;
     require_plain_file(&stage.file).map_err(prep)?;
-    before_publish().map_err(prep)?;
+    let identity: FILE_ID_INFO = query(&stage.file, FileIdInfo).map_err(prep)?;
+    checkpoint(PublishPoint::Staged(&StageReceipt {
+        target: path.to_owned(),
+        original_revision: expected_revision.to_owned(),
+        name: stage_name,
+        volume: identity.VolumeSerialNumber,
+        file_id: identity.FileId.Identifier,
+    }))
+    .map_err(prep)?;
     require_plain_file(&original).map_err(prep)?;
     if revision(&original)? != expected_revision
         || security_descriptor(&original).map_err(prep)? != security
     {
         return Err("File changed during staging".into());
     }
+    if security_descriptor(&stage.file).map_err(prep)? != security {
+        return Err("Staging file security descriptor changed".into());
+    }
+    stage.file.seek(SeekFrom::Start(0)).map_err(prep)?;
+    if read_open_text(&stage.file, 48_000)? != content {
+        return Err("Staging file contents changed".into());
+    }
+    require_plain_file(&stage.file).map_err(prep)?;
 
     // The old handle remains open across the handle-relative rename. If the
     // filesystem refuses to replace that pinned file, there is no fallback.
     disposition(&stage.file, FILE_DISPOSITION_FLAG_ON_CLOSE).map_err(prep)?;
+    checkpoint(PublishPoint::Disarmed).map_err(prep)?;
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
@@ -357,6 +450,12 @@ fn edit(
         .file
         .sync_all()
         .map_err(|error| format!("Replacement applied but flush failed: {error}"))?;
+    let published_error =
+        |error| format!("Replacement published; metadata could not be confirmed: {error}");
+    require_plain_file(&stage.file).map_err(published_error)?;
+    if security_descriptor(&stage.file).map_err(published_error)? != security {
+        return Err("Replacement published; security descriptor changed".into());
+    }
     let published = revision(&stage.file)?;
     drop(stage);
     let (observed, found) = workspace.snapshot(path)?;
@@ -370,6 +469,110 @@ fn edit(
 mod tests {
     use super::*;
     use std::{fs, os::windows::fs::OpenOptionsExt as _, path::PathBuf, process::Command};
+
+    use std::os::windows::io::OwnedHandle;
+    use windows_sys::Win32::{
+        Foundation::{GetLastError, LocalFree, ERROR_NOT_ALL_ASSIGNED, LUID},
+        Security::{
+            AdjustTokenPrivileges,
+            Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW, ImpersonateSelf,
+            LookupPrivilegeValueW, RevertToSelf, SecurityImpersonation, SetKernelObjectSecurity,
+            LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, SE_SECURITY_NAME, TOKEN_ADJUST_PRIVILEGES,
+            TOKEN_PRIVILEGES, TOKEN_QUERY,
+        },
+        System::Threading::{GetCurrentThread, OpenThreadToken},
+    };
+
+    // Enable the fixture privilege on the current test thread only. Production
+    // code must never self-elevate to make a workspace edit succeed.
+    struct AuditPrivilege;
+
+    impl AuditPrivilege {
+        fn enable() -> io::Result<Self> {
+            if unsafe { ImpersonateSelf(SecurityImpersonation) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let guard = Self;
+            let mut token = null_mut();
+            if unsafe {
+                OpenThreadToken(
+                    GetCurrentThread(),
+                    TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                    1,
+                    &mut token,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let token = unsafe { OwnedHandle::from_raw_handle(token) };
+            let mut luid = LUID::default();
+            if unsafe { LookupPrivilegeValueW(null_mut(), SE_SECURITY_NAME, &mut luid) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let privilege = TOKEN_PRIVILEGES {
+                PrivilegeCount: 1,
+                Privileges: [LUID_AND_ATTRIBUTES {
+                    Luid: luid,
+                    Attributes: SE_PRIVILEGE_ENABLED,
+                }],
+            };
+            let result = unsafe {
+                AdjustTokenPrivileges(
+                    token.as_raw_handle(),
+                    0,
+                    &privilege,
+                    0,
+                    null_mut(),
+                    null_mut(),
+                )
+            };
+            let code = unsafe { GetLastError() };
+            if result == 0 || code == ERROR_NOT_ALL_ASSIGNED {
+                return Err(io::Error::from_raw_os_error(code as i32));
+            }
+            Ok(guard)
+        }
+    }
+
+    impl Drop for AuditPrivilege {
+        fn drop(&mut self) {
+            assert_ne!(
+                unsafe { RevertToSelf() },
+                0,
+                "Cannot revert test impersonation"
+            );
+        }
+    }
+
+    fn set_audit_rule(path: &Path) -> io::Result<()> {
+        let file = fs::OpenOptions::new()
+            .access_mode(ACCESS_SYSTEM_SECURITY)
+            .open(path)?;
+        let mut descriptor = null_mut();
+        let sddl: Vec<u16> = "S:P(AU;SAFA;FW;;;WD)".encode_utf16().chain([0]).collect();
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                1,
+                &mut descriptor,
+                null_mut(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let result = unsafe {
+            SetKernelObjectSecurity(file.as_raw_handle(), SACL_SECURITY_INFORMATION, descriptor)
+        };
+        let error = io::Error::last_os_error();
+        unsafe { LocalFree(descriptor) };
+        if result == 0 {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
 
     struct Fixture(PathBuf);
 
@@ -396,13 +599,15 @@ mod tests {
         expected: (&str, &str),
         content: &str,
     ) -> Result<String, String> {
-        edit(ws, Path::new(name), expected.0, expected.1, content, || {
+        edit(ws, Path::new(name), expected.0, expected.1, content, |_| {
             Ok(())
         })
     }
 
     #[test]
     fn publish_partial_sequence_and_rollback_only_the_confirmed_revision() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
         let fixture = Fixture::new("sequence");
         for file in ["first", "second"] {
             fs::write(fixture.0.join(file), "original").unwrap();
@@ -416,7 +621,7 @@ mod tests {
             "original",
             &first,
             "unused",
-            || Err(io::Error::other("injected failure before rename")),
+            |_| Err(io::Error::other("injected failure before rename")),
         )
         .unwrap_err();
         assert!(fault.contains("injected failure before rename"), "{fault}");
@@ -448,6 +653,8 @@ mod tests {
 
     #[test]
     fn rejects_locks_links_streams_and_differing_acl_before_publication() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
         let fixture = Fixture::new("metadata");
         let file = fixture.0.join("note.txt");
         fs::write(&file, "original").unwrap();
@@ -523,11 +730,39 @@ mod tests {
     }
 
     #[test]
+    fn refuses_replacement_when_the_original_has_a_distinct_audit_rule() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("sacl");
+        let file = fixture.0.join("note");
+        fs::write(&file, "original").unwrap();
+        set_audit_rule(&file).unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, current) = ws.snapshot(Path::new("note")).unwrap();
+        let refused = perform(&ws, "note", ("original", &current), "replacement").unwrap_err();
+        assert!(refused.contains("SACL"), "{refused}");
+        assert_eq!(
+            ws.snapshot(Path::new("note")).unwrap(),
+            ("original".into(), current)
+        );
+        assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 1);
+    }
+
+    #[test]
     fn interruption_worker() {
         let Some(root) = std::env::var_os("NEXUS_WINDOWS_REPLACEMENT_TEST_ROOT") else {
             return;
         };
         let mode = std::env::var("NEXUS_WINDOWS_REPLACEMENT_TEST_MODE").unwrap();
+        if mode == "external-probe" {
+            let note = Path::new(&root).join("note");
+            let rename = Path::new(&root).join("moved-note");
+            assert!(fs::write(&note, "external write").is_err());
+            assert!(fs::rename(&note, &rename).is_err());
+            return;
+        }
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
         let ws = Workspace::grant(Path::new(&root)).unwrap();
         let (_, revision) = ws.snapshot(Path::new("note")).unwrap();
         edit(
@@ -536,9 +771,15 @@ mod tests {
             "original",
             &revision,
             "replacement",
-            || {
-                if mode == "staging" {
-                    std::process::exit(31);
+            |point| {
+                match point {
+                    PublishPoint::Staged(_) if mode == "staging" => std::process::exit(31),
+                    PublishPoint::Staged(receipt) if mode == "disarmed" => {
+                        println!("STAGE_RECEIPT={}", serde_json::to_string(receipt).unwrap());
+                        io::stdout().flush()?;
+                    }
+                    PublishPoint::Disarmed if mode == "disarmed" => std::process::exit(33),
+                    _ => {}
                 }
                 Ok(())
             },
@@ -546,6 +787,97 @@ mod tests {
         .unwrap();
         // Kill the worker after publication and before its caller sees a receipt.
         std::process::exit(32);
+    }
+
+    #[test]
+    fn holds_the_original_against_an_external_writer_at_the_final_checkpoint() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("external");
+        fs::write(fixture.0.join("note"), "original").unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, original) = ws.snapshot(Path::new("note")).unwrap();
+        let written = edit(
+            &ws,
+            Path::new("note"),
+            "original",
+            &original,
+            "replacement",
+            |point| {
+                if matches!(point, PublishPoint::Disarmed) {
+                    let child = Command::new(std::env::current_exe()?)
+                        .args([
+                            "--exact",
+                            "windows::replacement::tests::interruption_worker",
+                        ])
+                        .env("NEXUS_WINDOWS_REPLACEMENT_TEST_ROOT", &fixture.0)
+                        .env("NEXUS_WINDOWS_REPLACEMENT_TEST_MODE", "external-probe")
+                        .status()?;
+                    if !child.success() {
+                        return Err(io::Error::other("External write or rename was not blocked"));
+                    }
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ws.snapshot(Path::new("note")).unwrap(),
+            ("replacement".into(), written)
+        );
+        assert!(!fixture.0.join("moved-note").exists());
+    }
+
+    #[test]
+    fn cleans_only_the_receipted_stage_left_between_disarm_and_rename() {
+        let fixture = Fixture::new("disarmed");
+        fs::write(fixture.0.join("note"), "original").unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "windows::replacement::tests::interruption_worker",
+                "--nocapture",
+            ])
+            .env("NEXUS_WINDOWS_REPLACEMENT_TEST_ROOT", &fixture.0)
+            .env("NEXUS_WINDOWS_REPLACEMENT_TEST_MODE", "disarmed")
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(33),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let encoded = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("STAGE_RECEIPT="))
+            .unwrap();
+        let receipt: StageReceipt = serde_json::from_str(encoded).unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let staged = fixture.0.join(&receipt.name);
+        assert_eq!(fs::read_to_string(&staged).unwrap(), "replacement");
+
+        let swapped = fixture.0.join("unrelated");
+        fs::rename(&staged, &swapped).unwrap();
+        fs::write(&staged, "unrelated").unwrap();
+        assert!(discard_stage(&ws, &receipt, "replacement").is_err());
+        assert_eq!(fs::read_to_string(&staged).unwrap(), "unrelated");
+        fs::remove_file(&staged).unwrap();
+        fs::rename(swapped, &staged).unwrap();
+        fs::write(&staged, "external edit of the staging file").unwrap();
+        assert!(discard_stage(&ws, &receipt, "replacement").is_err());
+        assert_eq!(
+            fs::read_to_string(&staged).unwrap(),
+            "external edit of the staging file"
+        );
+        fs::write(&staged, "replacement").unwrap();
+        discard_stage(&ws, &receipt, "replacement").unwrap();
+        assert!(!staged.exists());
+        assert_eq!(
+            fs::read_to_string(fixture.0.join("note")).unwrap(),
+            "original"
+        );
     }
 
     #[test]

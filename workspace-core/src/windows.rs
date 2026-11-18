@@ -1,6 +1,7 @@
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions, OpenOptionsExt};
 use std::{ffi::OsStr, fmt::Write, fs, io, mem::size_of, os::windows::io::AsRawHandle};
+use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION};
 use windows_sys::Win32::Storage::FileSystem::{
     FileBasicInfo, FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO, FILE_ID_INFO, FILE_INFO_BY_HANDLE_CLASS,
@@ -33,7 +34,12 @@ pub(super) fn open_snapshot(dir: &Dir, name: &OsStr) -> Result<fs::File, String>
     options.share_mode(FILE_SHARE_READ);
     dir.open_with(name, &options)
         .map(cap_std::fs::File::into_std)
-        .map_err(|error| format!("Cannot open workspace file for a stable snapshot: {error}"))
+        .map_err(|error| match error.raw_os_error().map(|code| code as u32) {
+            Some(ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION) => {
+                "Workspace file is locked by another process. Close the editor or wait for it to release the file.".into()
+            }
+            _ => format!("Cannot open workspace file for a stable snapshot: {error}"),
+        })
 }
 
 /// Bind a revision to a handle, including identity across same-byte replacements

@@ -562,6 +562,7 @@ with subprocess.Popen([Path(__file__).with_name("real-host"), *sys.argv[1:]],
         cli.expect_exact("The edit outcome is unknown. 0/2 file(s) confirmed.")
         cli.expect("❯")
         cli.sendline("/agent status")
+        cli.expect("Workspace host: disconnected")
         cli.expect(rollback_id)
         cli.expect("incomplete")
         cli.expect("❯")
