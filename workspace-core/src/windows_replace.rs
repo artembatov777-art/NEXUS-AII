@@ -807,6 +807,48 @@ mod tests {
     }
 
     #[test]
+    fn failed_publication_preserves_original_and_removes_disarmed_stage() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("blocked-publication");
+        let path = fixture.0.join("note");
+        fs::write(&path, "original").unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, original_revision) = ws.snapshot(Path::new("note")).unwrap();
+
+        // A handle without FILE_SHARE_DELETE must prevent replacement. The
+        // editor must fail closed, leave the original intact and clean up
+        // the staging file even after its delete disposition was disarmed.
+        let blocker = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&path)
+            .unwrap();
+        let result = edit(
+            &ws,
+            Path::new("note"),
+            "original",
+            &original_revision,
+            "replacement",
+            |_| Ok(()),
+        );
+        assert!(result.is_err(), "a non-delete-sharing handle must block publication");
+        drop(blocker);
+        assert_eq!(
+            ws.snapshot(Path::new("note")).unwrap(),
+            ("original".into(), original_revision)
+        );
+        assert!(
+            fs::read_dir(&fixture.0).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".nexus-win-edit-")),
+            "failed publication must not leave an unreceipted staging file"
+        );
+    }
+
+    #[test]
     fn holds_the_original_against_an_external_writer_at_the_final_checkpoint() {
         let _privilege =
             AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
