@@ -56,6 +56,7 @@ class Connection {
 export function workspaceSession(permissions: PermissionService) {
   let host: Connection | undefined;
   let root = '';
+  let draft: { path: string; before: string; after: string; approved: boolean } | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
   const auditFile = (id: string) => join(dir,id + '.jsonl');
   const gateway = new ToolGateway(permissions, {
@@ -79,16 +80,47 @@ export function workspaceSession(permissions: PermissionService) {
       return err('tool_failed','Invalid workspace backend response.');
     }
   });
+  const approve = gateway.register({
+    id: 'cli.workspace.approve-draft',
+    version: '1',
+    description: 'Approve the displayed draft in memory without writing to disk',
+    requiredPermissions: ['filesystem:read:selected', 'filesystem:write:selected'],
+    risk: 'high',
+    timeoutMs: 15_000,
+    validateInput(input: unknown) {
+      return input === null && host && draft && !draft.approved
+        ? ok({ host, draft })
+        : err('validation', 'Prepare an unapproved draft first.');
+    },
+    resourceForInput: input => `${root}/${input.draft.path}`,
+    async execute(input, context) {
+      const reply = await input.host.exchange({version:1,operation:'read',path:input.draft.path}, context.signal);
+      if (context.signal.aborted) return err('cancelled', 'Draft approval cancelled.');
+      if (reply.ok !== true || reply.value?.content !== input.draft.before) {
+        return err('tool_failed', 'File changed or is unavailable. Prepare a new draft.');
+      }
+      return ok({ approved: true });
+    }
+  });
+  if (!approve.ok) throw new Error(approve.error.message);
+
+  const invoke = <T = unknown>(operation: string, input: unknown, signal: AbortSignal) =>
+    gateway.execute<T>(`cli.workspace.${operation}`, input, {runId:randomUUID(), traceId:randomUUID(), signal}, 'owner');
+
   // The offline planner accepts one explicit task. The selected root comes
   // from this terminal session and the gateway still requires confirmation.
   const planner = new AgentPlanner({
     async createPlan({ goal }) {
       if (!host) return err('permission_denied', 'Select a project first.');
-      const match = /^read[ \t]+(.+)$/.exec(goal);
-      if (!match) return err('validation', 'Offline planner usage: /agent read <relative file>');
+      const match = /^(read|list|search)(?:[ \t]+(.+))?$/.exec(goal);
+      if (!match || (!match[2] && match[1] !== 'list')) {
+        return err('validation', 'Offline tasks: read <file>, list [directory], search <text>.');
+      }
+      const [, operation, arg = ''] = match;
       return ok({ goal, steps: [{
-        id: 'read', toolId: 'cli.workspace.read', purpose: 'Read the requested project file',
-        input: { root, path: match[1] }, dependsOn: []
+        id: operation, toolId: `cli.workspace.${operation}`, purpose: `Workspace ${operation}`,
+        input: operation === 'search' ? { root, path: '', query: arg } : { root, path: arg },
+        dependsOn: []
       }] });
     }
   }, 1);
@@ -106,13 +138,45 @@ export function workspaceSession(permissions: PermissionService) {
         try {
           if ((await next.exchange(null,signal)).ready !== true) throw new Error();
         } catch { next.close(); return 'Workspace backend unavailable or directory denied.'; }
-        host?.close(); host=next; root=arg;
+        host?.close(); host=next; root=arg; draft=undefined;
         return 'Selected '+quoteTerminal(root);
       }
       if (!host) return 'No project selected. Use /project <absolute directory>.';
+      if (command === '/discard') {
+        draft = undefined;
+        return 'Draft discarded.';
+      }
+      if (command === '/approve') {
+        if (arg) return 'Usage: /approve';
+        const result = await invoke('approve-draft', null, signal);
+        if (!result.ok) return quoteTerminal(result.error.message);
+        if (draft) draft.approved = true;
+        return 'Draft approved in memory. No file was written.';
+      }
+      if (command === '/draft') {
+        draft = undefined;
+        if (Buffer.byteLength(arg) > 48_000) return 'Draft input exceeds 48 KB.';
+        let input: unknown;
+        try { input = JSON.parse(arg); } catch { return 'Usage: /draft {"path":"file","from":"old","to":"new"}'; }
+        if (!input || typeof input !== 'object') return 'Invalid draft input.';
+        const { path, from, to } = input as Record<string, unknown>;
+        if (typeof path !== 'string' || typeof from !== 'string' || !from || typeof to !== 'string' || from === to) {
+          return 'Specify a file and a nonempty, unique span to replace.';
+        }
+        const result = await invoke<{ content: string }>('read', {root, path}, signal);
+        if (!result.ok) return quoteTerminal(result.error.message);
+        const before = result.value.content;
+        const index = before.indexOf(from);
+        if (index < 0 || index !== before.lastIndexOf(from)) return 'Draft span must occur exactly once.';
+        const after = before.slice(0, index) + to + before.slice(index + from.length);
+        if (Buffer.byteLength(after) > 48_000) return 'Draft result exceeds 48 KB.';
+        if (signal.aborted) return 'Draft cancelled.';
+        draft = {path, before, after, approved:false};
+        return `Draft for ${quoteTerminal(path)} (character offset ${index})\n- ${quoteTerminal(from)}\n+ ${quoteTerminal(to)}\nUse /approve or /discard. No file was written.`;
+      }
       const operation = command === '/files' ? 'list' : command === '/read' ? 'read' : 'search';
       const input = operation === 'search' ? {root,path:'',query:arg} : {root,path:arg};
-      const result = await gateway.execute('cli.workspace.'+operation,input,{runId:randomUUID(),traceId:randomUUID(),signal},'owner');
+      const result = await invoke(operation, input, signal);
       return quoteTerminal(result.ok ? result.value : result.error.message);
     }
   };

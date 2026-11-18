@@ -90,3 +90,13 @@ npm run tauri dev
 ### CLI workspace
 
 With stable Rust and the npm dependencies installed, run `npm run build:workspace` and `npm run cli` in a terminal. Use `/project <absolute directory>` to grant access for this session. Use `/files [relative directory]`, `/read <relative file>`, or `/search <literal text>` and confirm the displayed read permission. Search returns matching paths, scanning at most 1,000 entries down to eight subdirectory levels and returning up to 100 paths. Files must be UTF-8 and at most 48,000 bytes. Ctrl-C closes the session. The CLI stores tool audit records under `~/.nexus-au/workspace-audit/`.
+
+In interactive test mode, `/agent list [directory]` lists entries and
+`/agent search <text>` searches file contents through the same gateway.
+
+Use `/draft {"path":"note.txt","from":"old text","to":"new text"}` to preview
+a replacement. The old text must appear exactly once. `/approve` asks for
+permission through the gateway, rechecks the file snapshot, and records the
+approval for this session. `/discard`, selecting another project, or exiting
+clears the draft. Approval does not write the file. Applying a draft remains
+blocked on verification of the Rust edit primitive.

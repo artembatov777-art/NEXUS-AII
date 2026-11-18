@@ -24,9 +24,9 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode
 
-Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /exit
+Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /draft, /approve, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
-In interactive test mode: /agent read <relative file> (offline planner).
+In interactive test mode: /agent read <file>, /agent list [directory], /agent search <text>.
 A model is not configured yet.
 `;
 const args = process.argv.slice(2);

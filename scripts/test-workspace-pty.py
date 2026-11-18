@@ -52,6 +52,68 @@ with tempfile.TemporaryDirectory() as temp:
         assert sorted(read_runs) == sorted([
             ["started", "completed"], ["denied"], ["started", "failed"],
         ])
+        for command, expected in [("/agent list", "note.txt"), ("/agent search fixture", "note.txt")]:
+            cli.sendline(command)
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+            cli.expect_exact(expected)
+            cli.expect("❯")
+
+        def prepare_draft():
+            cli.sendline('/draft {"path":"note.txt","from":"fixture","to":"updated"}')
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+            cli.expect_exact('- "fixture"')
+            cli.expect_exact('+ "updated"')
+            cli.expect("❯")
+            assert (project / "note.txt").read_text() == "workspace fixture"
+
+        def approve_draft(write_answer, expected):
+            cli.sendline("/approve")
+            cli.expect("filesystem:read:selected")
+            cli.expect("Type yes to allow:")
+            cli.sendline("yes")
+            cli.expect("filesystem:write:selected")
+            cli.expect("Type yes to allow:")
+            cli.sendline(write_answer)
+            cli.expect_exact(expected)
+            cli.expect("❯")
+
+        prepare_draft()
+        approve_draft("no", "denied")
+        approve_draft("yes", "Draft approved in memory")
+        assert (project / "note.txt").read_text() == "workspace fixture"
+        cli.sendline("/discard")
+        cli.expect("Draft discarded")
+        cli.expect("❯")
+        cli.sendline("/approve")
+        cli.expect("Prepare an unapproved draft first")
+        cli.expect("❯")
+
+        prepare_draft()
+        (project / "note.txt").write_text("changed externally")
+        approve_draft("yes", "File changed or is unavailable")
+        assert (project / "note.txt").read_text() == "changed externally"
+
+        cli.sendline('/draft {"path":"../outside.txt","from":"fixture","to":"updated"}')
+        cli.expect("relative path is invalid")
+        cli.expect("❯")
+        cli.sendline('/draft {"path":"link.txt","from":"fixture","to":"updated"}')
+        cli.expect("Type yes to allow:")
+        cli.sendline("yes")
+        cli.expect("File unavailable")
+        cli.expect("❯")
+        assert outside.read_text() == "outside fixture"
+
+        approvals = []
+        for audit in (Path(temp) / ".nexus-au" / "workspace-audit").glob("*.jsonl"):
+            events = [json.loads(line) for line in audit.read_text().splitlines()]
+            if events[0]["toolId"] == "cli.workspace.approve-draft":
+                approvals.append([event["status"] for event in events])
+        assert sorted(approvals) == sorted([
+            ["denied"], ["started", "completed"], ["started", "failed"],
+        ])
+
         # Stop the real host so this operation stays in flight until cancellation.
         children = subprocess.check_output(["pgrep", "-P", str(cli.pid)], text=True).split()
         host, = map(int, children)
