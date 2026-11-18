@@ -11,7 +11,7 @@ All contributors are expected to inspect current repository state before editing
 ## Workflow
 
 1. Read the relevant documentation and inspect existing implementation.
-2. Create a focused feature branch from the latest `main`.
+2. For the current continuation, work only in `feat/nexus-core-architecture`. Do not modify `main`, create a replacement development branch, or merge a PR without the owner's permission.
 3. Make a small, coherent change.
 4. Add or update tests and documentation.
 5. Run the checks relevant to the change.
@@ -57,3 +57,14 @@ Prefer concise conventional prefixes:
 - [ ] Documentation is updated.
 - [ ] No secrets or private user data are included.
 - [ ] Security and permission implications are described.
+
+## Continuation rules
+
+- Read README, `docs/ROADMAP.md`, `DEVELOPMENT_STATUS.md`, relevant contracts and any available owner instruction file before editing. `docs/AGENTS.md` documents the product runtime; it is not a substitute for owner instructions.
+- Use the seven-phase roadmap rather than historical milestone checkboxes. Keep implemented code, automated evidence and manual acceptance separate; identify the exact source SHA for CI claims.
+- Inspect and preserve working implementations and serialized contracts. Never replace them with demos or stubs to satisfy a check.
+- Do not connect OmniRoute, Ollama or real provider keys during core development; live integration is deferred to the owner's final integration stage.
+- Native filesystem lookups must retain pinned-directory, no-follow and no-overwrite behavior. Windows capability options require the extension traits from `cap-fs-ext` and `cap-std`, rather than the standard-library options trait.
+- Browser speech stop/abort events may arrive late. Invalidate a stopped session before calling the host and reject callbacks from inactive sessions.
+- Run the full frontend test/build checks and inspect current GitHub Actions; run native checks when platform prerequisites are available. Record an unavailable check or failed job explicitly, never as passed.
+- Update existing status/contracts with important decisions and remaining acceptance gates. Avoid redundant session report files.

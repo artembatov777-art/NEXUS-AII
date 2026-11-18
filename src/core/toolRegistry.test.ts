@@ -1,0 +1,5 @@
+import {describe,it,expect,vi} from "vitest";
+import {ToolRegistry} from "./toolRegistry";
+import {ToolGateway} from "./tools";
+import {ok} from "./result";
+describe("ToolRegistry",()=>{it("registers metadata without exposing implementation and searches tags",()=>{const gateway=new ToolGateway({authorize:async()=>"deny"},{record:async()=>ok(undefined)},{now:()=>1});const registry=new ToolRegistry(gateway);const execute=vi.fn();const added=registry.register({id:"notes.search",version:"1",description:"Search saved notes",requiredPermissions:["memory:read"],risk:"low",timeoutMs:1000,validateInput:(v)=>ok(v),execute},"builtin",["memory","search"]);expect(added.ok).toBe(true);const found=registry.search("memory");expect(found.ok&&found.value).toHaveLength(1);expect(registry.get("notes.search")).not.toHaveProperty("execute");expect(registry.register({id:"notes.search",version:"1",description:"duplicate",requiredPermissions:[],risk:"low",timeoutMs:1000,validateInput:(v)=>ok(v),execute}).ok).toBe(false);});});

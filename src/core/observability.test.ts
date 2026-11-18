@@ -1,0 +1,3 @@
+import {describe,it,expect} from "vitest";
+import {InMemoryTraceSink,TracedOperation} from "./observability";
+describe("observability",()=>{it("records lifecycle and redacts secret-bearing attributes",async()=>{let now=10;const sink=new InMemoryTraceSink();const op=new TracedOperation(sink,{now:()=>now},{traceId:"t",runId:"r",name:"agent.run"});expect((await op.start()).ok).toBe(true);now=25;await op.finish("completed",{step:2,apiToken:"do-not-store",label:"done"});const events=await sink.list({runId:"r"});expect(events.ok&&events.value).toHaveLength(2);if(events.ok){expect(events.value[1].durationMs).toBe(15);expect(events.value[1].attributes).toEqual({step:2,label:"done"});}});});

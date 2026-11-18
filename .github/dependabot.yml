@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: feat/nexus-core-architecture
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    allow:
+      - dependency-type: all

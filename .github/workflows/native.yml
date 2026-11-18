@@ -1,0 +1,122 @@
+name: Native desktop quality
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  # Keep the active cross-platform build alive while newer commits queue.
+  # GitHub retains only the latest pending run for this concurrency group.
+  cancel-in-progress: false
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0 (Node 24)
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libdbus-1-dev
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Test CLI shell and smoke tests
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        run: npm run test:cli
+      - name: Prepare and test Windows workspace host
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run prepare:windows-host
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/test-windows-host.ps1 -HostPath build-cli/bin/nexus-workspace.exe
+      - name: Exercise Windows CLI recovery and the write gate
+        if: runner.os == 'Windows'
+        run: node scripts/test-windows-workspace-cli.mjs
+      - run: npm run build
+      - name: Test Windows Workspace Core (native x64)
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path workspace-core/Cargo.toml --target x86_64-pc-windows-msvc
+      - name: Test Workspace Core on Unix
+        if: runner.os != 'Windows'
+        run: cargo test --locked --manifest-path workspace-core/Cargo.toml
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      - name: Build Windows installers
+        if: runner.os == 'Windows'
+        run: npm run tauri build -- --bundles "nsis,msi"
+      - name: Test Windows workspace host from MSI and installed NSIS package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -InstallNsis
+      - name: Build macOS disk image
+        if: runner.os == 'macOS'
+        run: npm run tauri build -- --bundles "dmg"
+      - name: Build Linux packages
+        if: runner.os == 'Linux'
+        run: npm run tauri build -- --bundles "appimage,deb"
+      - name: Upload native installer packages for manual smoke tests
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2 (Node 24)
+        with:
+          name: nexus-au-installers-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-installer:
+    name: Windows installer validation
+    runs-on: windows-latest
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+      - name: Pin npm to stable Arborist release
+        run: npm install --global npm@10.8.2
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Build Windows installers
+        run: npm run tauri build -- --bundles "nsis,msi"
+      - name: Test host in extracted MSI and installed NSIS
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -InstallNsis
+      - name: Upload installer packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nexus-au-installers-Windows-independent-${{ github.sha }}
+          path: src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+  rust-security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable toolchain action snapshot
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Desktop Rust dependencies
+        run: cargo audit --file src-tauri/Cargo.lock
+      - name: Audit Workspace Core Rust dependencies
+        if: success() || failure()
+        run: cargo audit --file workspace-core/Cargo.lock

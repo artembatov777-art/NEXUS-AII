@@ -1,0 +1,602 @@
+use crate::workspace_fs::WorkspaceAccess;
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const JOURNAL_VERSION: u32 = 1;
+const MAX_JOURNALED_OPERATIONS: usize = 8;
+const MAX_JOURNALED_ENTRIES: usize = 100;
+const MAX_JOURNAL_PAYLOAD_BYTES: usize = 1_048_576;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RenameEntry {
+    pub(crate) source: PathBuf,
+    pub(crate) destination: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryEntryDetails {
+    pub source: String,
+    pub destination: String,
+    pub source_state: String,
+    pub destination_state: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryOperationDetails {
+    pub operation_id: String,
+    pub valid: bool,
+    pub error: Option<String>,
+    pub entries: Vec<RecoveryEntryDetails>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RenameJournal {
+    version: u32,
+    entries: Vec<RenameEntry>,
+}
+
+pub struct WorkspaceOperationJournal {
+    connection: Mutex<Connection>,
+    operation_lock: Mutex<()>,
+    recovery_error: Mutex<Option<String>>,
+}
+
+impl WorkspaceOperationJournal {
+    pub fn open(database_path: &Path) -> Result<Self, String> {
+        let connection = Connection::open(database_path)
+            .map_err(|error| format!("Could not open the workspace operation journal: {error}"))?;
+        connection.execute_batch(
+            "CREATE TABLE IF NOT EXISTS workspace_operation_journal (
+                operation_id TEXT PRIMARY KEY NOT NULL,
+                payload TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );"
+        ).map_err(|error| format!("Could not initialize the workspace operation journal: {error}"))?;
+        Ok(Self {
+            connection: Mutex::new(connection),
+            operation_lock: Mutex::new(()),
+            recovery_error: Mutex::new(None),
+        })
+    }
+
+    pub(crate) fn lock_operation(&self) -> Result<MutexGuard<'_, ()>, String> {
+        self.operation_lock.lock()
+            .map_err(|_| "The filesystem operation lock is unavailable.".into())
+    }
+
+    pub(crate) fn begin(&self, entries: &[RenameEntry]) -> Result<String, String> {
+        if entries.is_empty() || entries.len() > MAX_JOURNALED_ENTRIES {
+            return Err("The file operation journal received an invalid batch.".into());
+        }
+        self.ensure_ready()?;
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default().as_nanos();
+        let operation_id = format!("rename-{}-{timestamp}", std::process::id());
+        let payload = serde_json::to_string(&RenameJournal {
+            version: JOURNAL_VERSION,
+            entries: entries.to_vec(),
+        }).map_err(|error| format!("Could not serialize the file operation journal: {error}"))?;
+        if payload.len() > MAX_JOURNAL_PAYLOAD_BYTES {
+            return Err("The file operation journal exceeds the recovery size limit.".into());
+        }
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        connection.execute(
+            "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
+            params![operation_id, payload, timestamp.min(i64::MAX as u128) as i64],
+        ).map_err(|error| format!("Could not persist the file operation before starting: {error}"))?;
+        Ok(operation_id)
+    }
+
+    pub(crate) fn complete(&self, operation_id: &str) -> Result<(), String> {
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        connection.execute(
+            "DELETE FROM workspace_operation_journal WHERE operation_id=?1",
+            params![operation_id],
+        ).map_err(|error| format!("The file operation completed, but its recovery record could not be cleared: {error}"))?;
+        Ok(())
+    }
+
+    pub(crate) fn ensure_ready(&self) -> Result<(), String> {
+        let error = self.recovery_error.lock()
+            .map_err(|_| "The file recovery status is unavailable.")?;
+        if let Some(message) = error.as_ref() {
+            return Err(format!("A previous file operation needs recovery before another batch rename can run: {message}"));
+        }
+        drop(error);
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let pending: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not verify pending file operation recovery.")?;
+        if pending > 0 {
+            return Err("A previous file operation is still journaled and must be recovered before another batch rename can run.".into());
+        }
+        Ok(())
+    }
+
+    pub fn recovery_status(&self) -> Result<Option<String>, String> {
+        if let Some(message) = self.recovery_error.lock()
+            .map_err(|_| "The file recovery status is unavailable.")?.clone() {
+            return Ok(Some(message));
+        }
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let pending: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not inspect pending file operation recovery.")?;
+        Ok(if pending > 0 {
+            Some("An interrupted file operation is waiting for recovery. Review the recorded paths and retry or manually reconcile it in the File System panel.".into())
+        } else {
+            None
+        })
+    }
+
+    pub fn recovery_details(&self, access: &WorkspaceAccess) -> Result<Vec<RecoveryOperationDetails>, String> {
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let mut statement = connection.prepare(
+            "SELECT operation_id,CASE WHEN length(CAST(payload AS BLOB)) <= ?1 THEN payload ELSE '' END,length(CAST(payload AS BLOB)) FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?2"
+        ).map_err(|error| format!("Could not inspect pending file operations: {error}"))?;
+        let rows = statement.query_map(params![MAX_JOURNAL_PAYLOAD_BYTES as i64, MAX_JOURNALED_OPERATIONS as i64], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+        }).map_err(|error| format!("Could not read pending file operations: {error}"))?;
+        let pending = rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not decode pending file operations: {error}"))?;
+
+        Ok(pending.into_iter().map(|(operation_id, payload, payload_size)| {
+            let parsed = if payload_size <= MAX_JOURNAL_PAYLOAD_BYTES as i64 {
+                serde_json::from_str::<RenameJournal>(&payload).ok()
+            } else {
+                None
+            };
+            match parsed {
+                Some(journal) if journal.version == JOURNAL_VERSION
+                    && !journal.entries.is_empty()
+                    && journal.entries.len() <= MAX_JOURNALED_ENTRIES => {
+                    let entries = journal.entries.into_iter().map(|entry| RecoveryEntryDetails {
+                        source_state: describe_journaled_path(access, &entry.source),
+                        destination_state: describe_journaled_path(access, &entry.destination),
+                        source: entry.source.to_string_lossy().into_owned(),
+                        destination: entry.destination.to_string_lossy().into_owned(),
+                    }).collect();
+                    RecoveryOperationDetails {
+                        operation_id,
+                        valid: true,
+                        error: None,
+                        entries,
+                    }
+                }
+                _ => RecoveryOperationDetails {
+                    operation_id,
+                    valid: false,
+                    error: Some("This recovery record is invalid or exceeds the recovery size limit. Review it before clearing the record.".into()),
+                    entries: Vec::new(),
+                }
+            }
+        }).collect())
+    }
+
+    pub fn acknowledge_manual_resolution(&self, operation_id: &str) -> Result<(), String> {
+        if operation_id.trim().is_empty() || operation_id.len() > 128 {
+            return Err("The recovery operation identifier is invalid.".into());
+        }
+        let connection = self.connection.lock()
+            .map_err(|_| "The file operation journal is unavailable.")?;
+        let deleted = connection.execute(
+            "DELETE FROM workspace_operation_journal WHERE operation_id=?1",
+            params![operation_id],
+        ).map_err(|error| format!("Could not clear the manually reconciled recovery record: {error}"))?;
+        if deleted == 0 {
+            return Err("The recovery record no longer exists. Refresh the File System panel.".into());
+        }
+        let remaining: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal",
+            [], |row| row.get(0)
+        ).map_err(|_| "Could not verify remaining file recovery records.")?;
+        drop(connection);
+        if remaining == 0 {
+            self.set_recovery_error(None)?;
+        }
+        Ok(())
+    }
+
+    pub fn recover(&self, access: &WorkspaceAccess) -> Result<(), String> {
+        let pending = {
+            let connection = self.connection.lock()
+                .map_err(|_| "The file operation journal is unavailable.")?;
+            let mut statement = connection.prepare(
+                "SELECT operation_id,CASE WHEN length(CAST(payload AS BLOB)) <= ?1 THEN payload ELSE '' END,length(CAST(payload AS BLOB)) FROM workspace_operation_journal ORDER BY created_at DESC LIMIT ?2"
+            ).map_err(|error| format!("Could not inspect pending file operations: {error}"))?;
+            let rows = statement.query_map(params![MAX_JOURNAL_PAYLOAD_BYTES as i64, MAX_JOURNALED_OPERATIONS as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+            }).map_err(|error| format!("Could not read pending file operations: {error}"))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Could not decode pending file operations: {error}"))?
+        };
+
+        if pending.len() >= MAX_JOURNALED_OPERATIONS {
+            let message = "Too many unfinished file operations are recorded; manual review is required.".to_string();
+            self.set_recovery_error(Some(message.clone()))?;
+            return Err(message);
+        }
+
+        for (operation_id, payload, payload_size) in pending {
+            if payload_size > MAX_JOURNAL_PAYLOAD_BYTES as i64 {
+                let message = "A pending file operation journal exceeds the recovery size limit and was preserved for manual review.".to_string();
+                self.set_recovery_error(Some(message.clone()))?;
+                return Err(message);
+            }
+            let journal: RenameJournal = match serde_json::from_str::<RenameJournal>(&payload) {
+                Ok(value) if value.version == JOURNAL_VERSION
+                    && !value.entries.is_empty()
+                    && value.entries.len() <= MAX_JOURNALED_ENTRIES => value,
+                _ => {
+                    let message = "A pending file operation journal is invalid and was preserved for manual review.".to_string();
+                    self.set_recovery_error(Some(message.clone()))?;
+                    return Err(message);
+                }
+            };
+
+            for entry in journal.entries.iter().rev() {
+                if let Err(error) = rollback_entry(access, entry) {
+                    let message = format!("Automatic recovery stopped without deleting its journal. {error}");
+                    self.set_recovery_error(Some(message.clone()))?;
+                    return Err(message);
+                }
+            }
+            self.complete(&operation_id)?;
+        }
+
+        self.set_recovery_error(None)?;
+        Ok(())
+    }
+
+    fn set_recovery_error(&self, message: Option<String>) -> Result<(), String> {
+        *self.recovery_error.lock()
+            .map_err(|_| "The file recovery status is unavailable.")? = message;
+        Ok(())
+    }
+}
+
+fn describe_journaled_path(access: &WorkspaceAccess, path: &Path) -> String {
+    let Some(parent) = path.parent() else {
+        return "invalid path".into();
+    };
+    let Some(name) = path.file_name() else {
+        return "invalid path".into();
+    };
+    let Ok((directory, _root)) = access.open_approved_directory(parent) else {
+        return "outside approved directory or unavailable".into();
+    };
+    match directory.symlink_metadata(name) {
+        Ok(metadata) if metadata.file_type().is_symlink() => "link (not followed)".into(),
+        Ok(metadata) if metadata.is_file() => "regular file".into(),
+        Ok(metadata) if metadata.is_dir() => "directory".into(),
+        Ok(_) => "special entry".into(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing".into(),
+        Err(_) => "unavailable".into(),
+    }
+}
+
+fn rollback_entry(access: &WorkspaceAccess, entry: &RenameEntry) -> Result<(), String> {
+    let source_parent = entry.source.parent()
+        .ok_or_else(|| "A journaled source has no parent directory.".to_string())?;
+    let destination_parent = entry.destination.parent()
+        .ok_or_else(|| "A journaled destination has no parent directory.".to_string())?;
+    let (source_directory, source_root) = access.open_approved_directory(source_parent)?;
+    let (destination_directory, destination_root) = access.open_approved_directory(destination_parent)?;
+    if source_root != destination_root {
+        return Err("A journaled operation no longer resolves inside its original approved directory.".into());
+    }
+
+    let source_name = entry.source.file_name()
+        .ok_or_else(|| "A journaled source has no valid name.".to_string())?;
+    let destination_name = entry.destination.file_name()
+        .ok_or_else(|| "A journaled destination has no valid name.".to_string())?;
+
+    let source_metadata = source_directory.symlink_metadata(source_name);
+    let destination_metadata = destination_directory.symlink_metadata(destination_name);
+    match (source_metadata, destination_metadata) {
+        (Ok(source_meta), Err(destination_error))
+            if destination_error.kind() == std::io::ErrorKind::NotFound
+                && source_meta.is_file() && !source_meta.file_type().is_symlink() => Ok(()),
+        (Err(source_error), Ok(destination_meta))
+            if source_error.kind() == std::io::ErrorKind::NotFound
+                && destination_meta.is_file() && !destination_meta.file_type().is_symlink() => {
+                    crate::workspace_fs_ops::rename_no_replace_at(
+                        &destination_directory, destination_name,
+                        &source_directory, source_name,
+                        &entry.destination, &entry.source,
+                    ).map_err(|error| format!("Could not restore a renamed file to its original name: {error}"))
+                }
+        (Ok(_), Ok(_)) => Err("Both original and renamed paths exist; recovery will not overwrite either file.".into()),
+        (Err(source_error), Err(destination_error))
+            if source_error.kind() == std::io::ErrorKind::NotFound
+                && destination_error.kind() == std::io::ErrorKind::NotFound =>
+                Err("Neither the original nor renamed path exists; recovery cannot infer the correct action.".into()),
+        _ => Err("A journaled path is a link, special entry, or cannot be inspected safely.".into()),
+    }
+}
+
+#[tauri::command]
+pub fn get_workspace_operation_recovery_status(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+) -> Result<Option<String>, String> {
+    journal.recovery_status()
+}
+
+#[tauri::command]
+pub fn get_workspace_operation_recovery_details(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    access: tauri::State<'_, WorkspaceAccess>,
+) -> Result<Vec<RecoveryOperationDetails>, String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.recovery_details(&access)
+}
+
+#[tauri::command]
+pub fn retry_workspace_operation_recovery(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    access: tauri::State<'_, WorkspaceAccess>,
+) -> Result<(), String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.recover(&access)
+}
+
+#[tauri::command]
+pub fn acknowledge_workspace_operation_recovery(
+    journal: tauri::State<'_, WorkspaceOperationJournal>,
+    operation_id: String,
+) -> Result<(), String> {
+    let _operation_guard = journal.lock_operation()?;
+    journal.acknowledge_manual_resolution(&operation_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    fn fixture() -> (PathBuf, PathBuf, WorkspaceAccess, WorkspaceOperationJournal) {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        let base = std::env::temp_dir().join(format!("nexus-fs-recovery-{}-{nonce}-{}", std::process::id(), FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).expect("create approved root");
+        let permissions = base.join("permissions.json");
+        let canonical_root = fs::canonicalize(&root).expect("canonicalize approved root");
+        fs::write(&permissions, serde_json::to_vec(&vec![canonical_root.to_string_lossy().into_owned()]).expect("serialize roots"))
+            .expect("write permissions");
+        let access = WorkspaceAccess::load(permissions);
+        let journal = WorkspaceOperationJournal::open(&base.join("journal.sqlite")).expect("open journal");
+        (base, root, access, journal)
+    }
+
+    #[test]
+    fn recovery_rolls_back_a_rename_interrupted_after_the_move() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&destination, "original contents").expect("write moved file");
+        let id = journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        drop(journal);
+        let journal = WorkspaceOperationJournal::open(&base.join("journal.sqlite"))
+            .expect("reopen journal after simulated process restart");
+        journal.recover(&access).expect("recover interrupted operation");
+        assert!(source.exists());
+        assert!(!destination.exists());
+        assert!(journal.recovery_status().expect("status").is_none());
+        let connection = journal.connection.lock().expect("journal connection");
+        let remaining: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal WHERE operation_id=?1",
+            [&id], |row| row.get(0)
+        ).expect("count pending journal rows");
+        assert_eq!(remaining, 0);
+        drop(connection);
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn recovery_restores_an_interrupted_cross_folder_batch_move() {
+        let (base, root, access, journal) = fixture();
+        let destination_directory = root.join("Archive");
+        fs::create_dir(&destination_directory).expect("create destination directory");
+        let source = root.join("draft.txt");
+        let destination = destination_directory.join("draft.txt");
+        fs::write(&destination, "moved contents").expect("write moved file");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending move");
+        journal.recover(&access).expect("recover interrupted move");
+        assert_eq!(fs::read_to_string(&source).unwrap(), "moved contents");
+        assert!(!destination.exists());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn recovery_restores_only_the_completed_prefix_of_a_partial_batch() {
+        let (base, root, access, journal) = fixture();
+        let first = root.join("one.txt");
+        let first_target = root.join("one-new.txt");
+        let second = root.join("two.txt");
+        let second_target = root.join("two-new.txt");
+        fs::write(&first_target, "first contents").expect("write first moved file");
+        fs::write(&second, "second contents").expect("write second not-yet-moved file");
+        journal.begin(&[
+            RenameEntry { source: first.clone(), destination: first_target.clone() },
+            RenameEntry { source: second.clone(), destination: second_target.clone() },
+        ]).expect("persist batch plan");
+        journal.recover(&access).expect("recover partial batch");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first contents");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second contents");
+        assert!(!first_target.exists());
+        assert!(!second_target.exists());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn recovery_leaves_conflicting_paths_untouched_and_blocks_new_batches() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&source, "source").expect("write source");
+        fs::write(&destination, "destination").expect("write destination");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        assert!(journal.recover(&access).is_err());
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "destination");
+        assert!(journal.ensure_ready().is_err());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn recovery_details_report_both_paths_and_their_current_states() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&source, "source").expect("write source");
+        fs::write(&destination, "destination").expect("write destination");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        let details = journal.recovery_details(&access).expect("read recovery details");
+        assert_eq!(details.len(), 1);
+        assert!(details[0].valid);
+        assert_eq!(details[0].entries.len(), 1);
+        assert_eq!(details[0].entries[0].source, source.to_string_lossy().into_owned());
+        assert_eq!(details[0].entries[0].destination, destination.to_string_lossy().into_owned());
+        assert_eq!(details[0].entries[0].source_state, "regular file");
+        assert_eq!(details[0].entries[0].destination_state, "regular file");
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn manual_reconciliation_clears_only_the_journal_and_preserves_conflicting_files() {
+        let (base, root, access, journal) = fixture();
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&source, "source contents").expect("write source");
+        fs::write(&destination, "destination contents").expect("write destination");
+        let operation_id = journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        assert!(journal.recover(&access).is_err());
+        assert!(journal.ensure_ready().is_err());
+        journal.acknowledge_manual_resolution(&operation_id).expect("acknowledge manual resolution");
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source contents");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "destination contents");
+        assert!(journal.recovery_status().expect("status").is_none());
+        assert!(journal.ensure_ready().is_ok());
+        assert!(journal.acknowledge_manual_resolution(&operation_id).is_err());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn manual_reconciliation_keeps_other_pending_records_blocked() {
+        let (base, root, _access, journal) = fixture();
+        let first = journal.begin(&[RenameEntry { source: root.join("one"), destination: root.join("one-new") }])
+            .expect("persist first operation");
+        let second_payload = serde_json::to_string(&RenameJournal {
+            version: JOURNAL_VERSION,
+            entries: vec![RenameEntry { source: root.join("two"), destination: root.join("two-new") }],
+        }).expect("serialize second operation");
+        journal.connection.lock().expect("journal connection").execute(
+            "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
+            params!["rename-manual-second", second_payload, 2i64],
+        ).expect("insert second pending operation");
+        let second = "rename-manual-second";
+        journal.acknowledge_manual_resolution(&first).expect("acknowledge first operation");
+        assert!(journal.recovery_status().expect("status").is_some());
+        assert!(journal.ensure_ready().is_err());
+        journal.acknowledge_manual_resolution(second).expect("acknowledge second operation");
+        assert!(journal.recovery_status().expect("status").is_none());
+        assert!(journal.ensure_ready().is_ok());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn begin_rejects_a_serialized_journal_that_exceeds_the_size_limit() {
+        let (base, _root, _access, journal) = fixture();
+        let long_component = "\\\\".repeat(4096);
+        let entries = (0..100).map(|index| RenameEntry {
+            source: PathBuf::from(format!("{index}-{long_component}")),
+            destination: PathBuf::from(format!("{index}-target-{long_component}")),
+        }).collect::<Vec<_>>();
+        let error = journal.begin(&entries).expect_err("oversized journal must be rejected");
+        assert!(error.contains("size limit"));
+        assert!(journal.recovery_status().expect("status").is_none());
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[test]
+    fn oversized_recovery_payload_is_preserved_and_never_deserialized() {
+        let (base, _root, access, journal) = fixture();
+        let connection = journal.connection.lock().expect("journal connection");
+        connection.execute(
+            "INSERT INTO workspace_operation_journal(operation_id,payload,created_at) VALUES(?1,?2,?3)",
+            params!["oversized-record", "é".repeat(MAX_JOURNAL_PAYLOAD_BYTES / 2 + 1), 1_i64],
+        ).expect("insert oversized recovery payload");
+        drop(connection);
+
+        let details = journal.recovery_details(&access).expect("inspect oversized record");
+        assert_eq!(details.len(), 1);
+        assert!(!details[0].valid);
+        assert!(details[0].error.as_deref().unwrap_or_default().contains("size limit"));
+        let error = journal.recover(&access).expect_err("oversized record must fail closed");
+        assert!(error.contains("size limit"));
+        assert!(journal.recovery_status().expect("recovery status").is_some());
+
+        let connection = journal.connection.lock().expect("journal connection");
+        let remaining: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM workspace_operation_journal WHERE operation_id=?1",
+            ["oversized-record"], |row| row.get(0)
+        ).expect("verify record retained");
+        assert_eq!(remaining, 1);
+        drop(connection);
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_never_follows_a_symlink_at_a_journaled_destination() {
+        use std::os::unix::fs::symlink;
+        let (base, root, access, journal) = fixture();
+        let outside = base.join("outside.txt");
+        let source = root.join("draft.txt");
+        let destination = root.join("final.txt");
+        fs::write(&outside, "outside").expect("write outside");
+        symlink(&outside, &destination).expect("create destination symlink");
+        journal.begin(&[RenameEntry { source: source.clone(), destination: destination.clone() }])
+            .expect("persist pending operation");
+        assert!(journal.recover(&access).is_err());
+        let details = journal.recovery_details(&access).expect("read symlink recovery details");
+        assert_eq!(details[0].entries[0].destination_state, "link (not followed)");
+        assert!(destination.is_symlink());
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "outside");
+        drop(journal);
+        fs::remove_dir_all(base).expect("cleanup");
+    }
+}

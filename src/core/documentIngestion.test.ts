@@ -1,0 +1,98 @@
+import { describe, expect, it, vi } from "vitest";
+import { DocumentIngestionService, chunkDocumentText } from "./documentIngestion";
+import type { KnowledgeChunk, KnowledgeRepository } from "./knowledge";
+import { ok } from "./result";
+
+function repository() {
+  const chunks: KnowledgeChunk[] = [];
+  const repo: KnowledgeRepository = {
+    add: async values => { chunks.push(...values); return ok(undefined); },
+    search: async () => ok(chunks),
+    removeDocument: async id => { for (let i = chunks.length - 1; i >= 0; i--) if (chunks[i].documentId === id) chunks.splice(i, 1); return ok(undefined); }
+  };
+  return { repo, chunks };
+}
+
+describe("document ingestion", () => {
+  it("chunks text with stable document provenance", async () => {
+    const { repo, chunks } = repository();
+    const service = new DocumentIngestionService(repo, { chunkCharacters: 300, overlapCharacters: 30 });
+    const content = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}: ${"architecture ".repeat(8)}`).join("\n\n");
+    const result = await service.ingest({ id: "doc-1", projectId: "project-1", fileName: "notes.md", mediaType: "text/markdown", content });
+    expect(result.ok).toBe(true);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(chunk => chunk.projectId === "project-1" && chunk.sourceLabel === "notes.md")).toBe(true);
+    expect(chunks[0].id).toBe("doc-1:chunk:1");
+  });
+
+  it("rejects unsupported formats and oversized inputs before persistence", async () => {
+    const { repo, chunks } = repository();
+    const add = vi.spyOn(repo, "add");
+    const service = new DocumentIngestionService(repo, { maxCharacters: 10 });
+    const unsupported = await service.ingest({ id: "d", projectId: "p", fileName: "x.pdf", mediaType: "application/pdf" as "text/plain", content: "text" });
+    const oversized = await service.ingest({ id: "d2", projectId: "p", fileName: "x.txt", mediaType: "text/plain", content: "12345678901" });
+    expect(unsupported.ok).toBe(false);
+    expect(oversized.ok).toBe(false);
+    expect(add).not.toHaveBeenCalled();
+    expect(chunks).toHaveLength(0);
+  });
+
+  it("reports semantic indexing only when all vectors are stored", async () => {
+    const { repo } = repository();
+    const embeddings = { embed: async (texts: string[]) => ok(texts.map(() => [1, 0])) };
+    const indexed: string[] = [];
+    const vectors = {
+      upsert: async (chunk: KnowledgeChunk) => { indexed.push(chunk.id); },
+      removeDocument: async () => undefined,
+      search: async () => []
+    };
+    const service = new DocumentIngestionService(repo, {}, embeddings, vectors);
+    const result = await service.ingest({ id: "semantic-doc", projectId: "p", fileName: "x.txt", mediaType: "text/plain", content: "A short document." });
+    expect(result.ok && result.value.semanticIndexed).toBe(true);
+    expect(indexed).toHaveLength(1);
+  });
+
+
+  it("repairs only missing vectors for the selected project", async () => {
+    const chunks: KnowledgeChunk[] = [
+      { id: "p1:ready", documentId: "d1", projectId: "p1", text: "Already indexed", sourceLabel: "one.md" },
+      { id: "p1:missing", documentId: "d2", projectId: "p1", text: "Needs embedding", sourceLabel: "two.md" },
+      { id: "p2:private", documentId: "d3", projectId: "p2", text: "Other project", sourceLabel: "private.md" }
+    ];
+    const repo: KnowledgeRepository = {
+      add: async () => ok(undefined),
+      exportAll: async () => ok(chunks),
+      search: async () => ok([]),
+      removeDocument: async () => ok(undefined)
+    };
+    const reconciledProjects: string[] = [];
+    const indexed: string[] = [];
+    const vectors = {
+      upsert: async (chunk: KnowledgeChunk) => { indexed.push(chunk.id); },
+      removeDocument: async () => undefined,
+      search: async () => [],
+      reconcile: async (projectChunks: KnowledgeChunk[]) => {
+        reconciledProjects.push(...projectChunks.map(chunk => chunk.projectId));
+        return projectChunks.filter(chunk => chunk.id === "p1:missing");
+      }
+    };
+    const embeddings = { embed: async (texts: string[]) => ok(texts.map(() => [1, 0])) };
+    const service = new DocumentIngestionService(repo, {}, embeddings, vectors);
+    const result = await service.rebuildSemanticIndex("p1");
+
+    expect(result).toEqual({ ok: true, value: { indexed: 1, totalChunks: 2 } });
+    expect(reconciledProjects).toEqual(["p1", "p1"]);
+    expect(indexed).toEqual(["p1:missing"]);
+  });
+
+  it("supports zero overlap without looping", () => {
+    const chunks = chunkDocumentText("a".repeat(700), 300, 0);
+    expect(chunks.length).toBe(3);
+    expect(chunks.every(chunk => chunk.length <= 300)).toBe(true);
+  });
+
+  it("returns no chunks for empty input and validates chunk limits", () => {
+    expect(chunkDocumentText(" \n\n ")).toEqual([]);
+    expect(() => chunkDocumentText("text", 100, 10)).toThrow();
+  });
+});

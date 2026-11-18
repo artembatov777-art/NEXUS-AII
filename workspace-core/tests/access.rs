@@ -1,0 +1,135 @@
+use nexus_workspace::Workspace;
+use std::{fs, path::Path};
+#[test]
+fn bounded_read_from_granted_directory() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-access-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("note"), "hello").unwrap();
+    let workspace = Workspace::grant(&root).unwrap();
+    assert_eq!(workspace.read(Path::new("note")).unwrap(), "hello");
+    assert!(workspace.read(Path::new("../note")).is_err());
+    assert!(workspace.read(&root.join("note")).is_err());
+    fs::write(root.join("large"), vec![0; 48001]).unwrap();
+    assert!(workspace.read(Path::new("large")).is_err());
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(root.join("note"), root.join("alias")).unwrap();
+        assert!(workspace.read(Path::new("alias")).is_err());
+    }
+    drop(workspace);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn replacing_the_project_path_does_not_retarget_a_session() {
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-pinned-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    let root = base.join("root");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("note"), "approved").unwrap();
+    let ws = Workspace::grant(&root).unwrap();
+    fs::rename(&root, base.join("original")).unwrap();
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("note"), "replacement").unwrap();
+    assert_eq!(ws.read(Path::new("note")).unwrap(), "approved");
+    fs::hard_link(base.join("original/note"), base.join("linked")).unwrap();
+    assert!(ws.read(Path::new("note")).is_err());
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn intermediate_symlinks_and_hard_links_are_refused() {
+    use std::os::unix::fs::symlink;
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-links-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    let root = base.join("root");
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(root.join("inside")).unwrap();
+    fs::write(root.join("inside/file"), "data").unwrap();
+    symlink(root.join("inside"), root.join("alias")).unwrap();
+    let workspace = Workspace::grant(&root).unwrap();
+    assert!(workspace.read(Path::new("alias/file")).is_err());
+    fs::hard_link(root.join("inside/file"), base.join("outside-link")).unwrap();
+    assert!(workspace.read(Path::new("inside/file")).is_err());
+    drop(workspace);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn edit_checks_version_and_preserves_original_on_conflict() {
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-edit-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    let ws = Workspace::grant(&base).unwrap();
+    assert!(ws.edit(Path::new("file"), "stale", "new").is_err());
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "old");
+    ws.edit(Path::new("file"), "old", "new").unwrap();
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "new");
+    drop(ws);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn concurrent_nexus_edits_do_not_both_apply_the_same_snapshot() {
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-race-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    let handles: Vec<_> = ["first", "second"]
+        .into_iter()
+        .map(|content| {
+            let base = base.clone();
+            std::thread::spawn(move || {
+                Workspace::grant(&base)
+                    .unwrap()
+                    .edit(Path::new("file"), "old", content)
+            })
+        })
+        .collect();
+    let results: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert!(["first", "second"].contains(&fs::read_to_string(base.join("file")).unwrap().as_str()));
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn edit_rejects_links_and_parent_traversal() {
+    use std::os::unix::fs::symlink;
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("nexus-edit-links-{}", std::process::id()));
+    fs::create_dir(&base).unwrap();
+    fs::write(base.join("file"), "old").unwrap();
+    symlink(base.join("file"), base.join("link")).unwrap();
+    let ws = Workspace::grant(&base).unwrap();
+    assert!(ws.edit(Path::new("link"), "old", "new").is_err());
+    assert!(ws.edit(Path::new("../file"), "old", "new").is_err());
+    fs::hard_link(base.join("file"), base.join("hardlink")).unwrap();
+    assert!(ws.edit(Path::new("file"), "old", "new").is_err());
+    assert_eq!(fs::read_to_string(base.join("file")).unwrap(), "old");
+    drop(ws);
+    fs::remove_dir_all(base).unwrap();
+}

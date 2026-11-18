@@ -1,53 +1,72 @@
-# NEXUS AU — Agent System
+# NEXUS AU — Agent Runtime
 
-## Goal
+## Product contract
 
-Agents are specialized task workers coordinated by a bounded orchestrator. They are not independent authorities and do not bypass user permissions.
+Agents are bounded task workers. They do not bypass the Tool Gateway, owner-approved workspace roots, provider credential vault, or explicit permission policy. Retrieved documents and MCP output are untrusted data, never instructions that can grant permissions.
 
-## Initial agent roles
+## Implemented runtime
 
-- **Main / Coordinator:** interprets the user request, delegates bounded subtasks, and combines results.
-- **Research:** gathers and summarizes source-grounded information.
-- **Coding:** inspects, edits, and tests code within an explicitly authorized workspace.
-- **Analyst:** evaluates data and documents.
-- **Writer:** drafts structured text and documentation.
-- **Planner:** converts goals into ordered tasks and acceptance criteria.
-- **Memory:** proposes memory updates and retrieves approved records.
-- **Browser:** interacts with explicitly permitted web resources.
-- **Security Reviewer:** checks proposed changes, permissions, and risky tool use.
+- `src/core/resumableAgents.ts` implements a serializable step runtime with bounded steps, execution time, progress/output size, cancellation, and version-pinned agent definitions.
+- Each state transition is persisted before its progress/output event is emitted. The desktop composition root uses the native SQLite checkpoint repository; browser preview uses localStorage and is not a security boundary.
+- Approval pauses store the requested permission. The host issues an opaque, one-time grant bound to the run, agent, and permission. Outstanding in-memory grants are intentionally invalidated by restart, so a pending action must be reviewed again.
+- `src/core/toolInvocationAgent.ts` adapts model-planned tool calls to the Tool Gateway. `src/lib/workspaceTools.ts` registers bounded list, search, content-search, read, write, mkdir, rename, and move operations. Native Rust filesystem commands remain the final access-control boundary.
+- `src/components/AgentControlCenter.tsx` exposes the local preview workflow, model-backed planning, task execution, checkpoint controls, ambiguous-outcome reconciliation, and recent audit events.
+- `src/core/multiAgentCoordinator.ts` executes validated, dependency-ordered plans with a bounded number of delegated steps. The current model-planned workflow assigns those steps to the Tool Invocation Agent; a full specialist-agent team is not yet a release claim.
+- The coordinator deep-copies the validated JSON plan before yielding or pausing for approval, so caller mutation cannot change a previously reviewed nested tool input.
+- MCP servers can be configured over HTTPS or loopback HTTP, discovered, and imported into the Tool Registry. Every imported call requires a separate owner confirmation. The current UI supports unauthenticated MCP endpoints only; OAuth and bearer-token credential flows are not implemented.
 
-These are proposed roles, not claims that agents have already been implemented.
+## Built-in workflows
 
-## Agent contract
+1. **Local workflow demo:** creates a local, non-destructive task preview. It does not call a model or access external systems.
+2. **Model-planned workflow:** uses the selected provider to produce a bounded plan, validates tool IDs and schemas against the live registry, and executes approved operations through the Tool Gateway. Local no-key profiles are supported when explicitly configured as credential-free.
 
-Each agent definition should include:
+## CLI workspace planner
 
-- Stable identifier and display name.
-- Purpose and system instructions.
-- Model/provider configuration.
-- Allowed tools and capabilities.
-- Input and output schemas.
-- Timeout and step budget.
-- Maximum delegation depth.
-- Cancellation behavior.
-- Logging and audit metadata.
+`cli/workspacePlanner.ts` turns a structured user task into bounded local
+discovery through the shared `AgentPlanner`, `PlanExecutor` and
+`GatewayAgentToolExecutor`. It prepares exact replacements from protected
+snapshots using the same function as `/draft`. It hashes the plan with the
+selected root, goal, plan ID, candidates, and proposed actions with their
+source revisions and content hashes. The planner uses a local, read-only tool
+catalog. All project reads and writes go through the Rust workspace process
+over stdio.
 
-## Orchestration lifecycle
+`cli/workspaceHost.ts` presents the plan, gates approval on previewing the
+agent diff and passes only the reviewed plan to the existing apply tool.
+Approval is session-local, expires after five minutes and is consumed by one
+attempt. Apply checks every source revision before dispatching writes.
+The native process checks each source again under its directory lock.
+One file can succeed before another fails or the host loses its reply.
 
-1. Validate the user's request.
-2. Create a task with explicit scope and acceptance criteria.
-3. Select the minimum necessary agents.
-4. Provide only relevant context and approved tools.
-5. Execute within time, step, and budget limits.
-6. Validate outputs and collect evidence.
-7. Request user approval before sensitive actions.
-8. Return a concise result and execution summary.
+`cli/workspaceRecovery.ts` stores original text separately from audit metadata.
+The version 4 intent and step journal record paths, revisions, hashes and
+outcomes. Checksums bind the private plaintext recovery payload,
+intent and write receipts to the operation and detect corruption. Only
+confirmed, unchanged results are eligible for rollback, which requires its
+own preview and approval. `/recover` observes the current state even if the
+backups are unavailable, provided the audit intent is intact. Existing
+journals are retained. Linux is the only supported write platform.
 
-## Safety constraints
+### Desktop offline planner
 
-- No unbounded agent loops or recursive delegation.
-- No permission escalation without user approval.
-- No secrets in prompts or logs unless strictly required by a secure provider flow.
-- Treat retrieved documents and tool output as untrusted input.
-- Make cancellation available.
-- Keep a trace of agent decisions and tool calls.
+The Agent Control Center can run a deterministic test provider through
+`ModelRouterPlanner` and the existing checkpointed workflow. The fixture
+emits at most one list, read, or content-search step. Its allowlist and the
+Tool Gateway apply before Tauri resolves the approved path. The fixture
+operates on the task entered by the user. Saved memory and project knowledge
+are used only by the separately confirmed configured-provider flow.
+
+## Safety and recovery boundaries
+
+- Agent and tool permissions default to deny.
+- Workspace access is limited to owner-approved directories and native command validation.
+- Tool inputs/outputs and plans have explicit size limits.
+- MCP server descriptions and tool results are untrusted.
+- Ambiguous external outcomes are shown for manual reconciliation. Reconciliation blocks blind retries; it does not assert whether an external side effect actually completed.
+- Automatic replay of persisted external side effects is intentionally not implemented.
+- The multi-agent coordinator's pending plan/output state is currently held in memory. Durable agent checkpoints exist, but a process restart does not yet guarantee end-to-end recovery of an entire multi-step coordination plan.
+- Tool OAuth, broad browser/terminal execution, unrestricted shell access, specialist delegation, and autonomous background agents are not implemented.
+
+## Release acceptance
+
+Automated tests cover agent checkpoint transitions, approval grants, cancellation races, planner validation, Tool Gateway permissions, workspace tool integration, MCP transport bounds, and audit reconciliation. Native smoke tests still require an owner-operated desktop session and harmless test workspace. Never mark the phase complete solely because a build passes.
