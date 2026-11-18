@@ -98,3 +98,17 @@ Railway evaluates workflow conclusions for the commit, including PR runs.
 A push-only exception cannot unblock Preview while a strict PR audit on the
 same commit fails. Keep that failure visible and use a verified dependency
 fix to clear both checks.
+
+### Dependency update tracking
+
+The Dependabot version-update configuration targets
+`feat/nexus-core-architecture`, checks npm daily, and includes indirect
+dependencies such as `picomatch`. Updates arrive as reviewable pull requests.
+GitHub loads this configuration from the default branch, so the copy on
+the feature branch is prepared for review. It does not schedule updates yet.
+GitHub's Dependabot security updates target the default branch independently
+of this version-update configuration.
+
+Review dependency PRs before merging them. A merge into the connected feature
+branch changes the commit seen by Railway. Keep Preview behind Wait for CI and
+verify that Production autodeploy is disabled before merging dependency updates.
