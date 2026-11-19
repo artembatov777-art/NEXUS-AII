@@ -452,4 +452,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state RegExp", () => {
     expect(validateAgentCheckpoint({ ...valid, state: /bad/ as unknown as AgentCheckpoint["state"] })).not.toBeNull();
   });
+  it("rejects invalid state prototype pollution key", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: JSON.parse('{"__proto__":{"flag":true}}') as AgentCheckpoint["state"] })).not.toBeNull();
+  });
 });
