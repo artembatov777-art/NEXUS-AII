@@ -425,4 +425,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state Infinity", () => {
     expect(validateAgentCheckpoint({ ...valid, state: Infinity })).not.toBeNull();
   });
+  it("rejects invalid state negative Infinity", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: -Infinity })).not.toBeNull();
+  });
 });
