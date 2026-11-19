@@ -228,7 +228,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   useEffect(() => () => { controller.current?.abort(); }, []);
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
-    let outcome: void | "waiting_for_approval" | "failed";
+    let outcome: void | "waiting_for_approval" | "failed" = undefined;
     for await (const event of events) {
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
@@ -365,7 +365,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       reportManagedEvent(managerId, "progress", "Validated plan: " + result.value.steps.length + " bounded tool step(s).", "success");
       const coordinationId = crypto.randomUUID() as AgentRunId;
       setActiveRunId(coordinationId);
-      let outcome: void | "waiting_for_approval" | "failed";
+      let outcome: void | "waiting_for_approval" | "failed" = undefined;
       for await (const event of workflow.run(result.value, coordinationId, signal)) {
         if (event.type === "started") reportManagedEvent(managerId, "progress", "Planned workflow started: " + event.runId);
         else if (event.type === "agent_started") reportManagedEvent(managerId, "progress", "Executing step " + event.step + " with " + event.agentId + "…");
