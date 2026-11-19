@@ -48,8 +48,17 @@ export class AgentRunManager {
     if (this.activeByConversation.has(conversationId)) return;
     const threads = Object.values(agentThreads(conversationId === "standalone" ? undefined : conversationId));
     let changed = false;
+    // Multiple versions of a run may be returned by a repository or import.
+    // Recover from the newest valid snapshot, never from whichever arrives first.
+    const latest = new Map<string, AgentCheckpoint>();
     for (const checkpoint of checkpoints) {
       if (validateAgentCheckpoint(checkpoint) || !threads.includes(checkpoint.threadId) || !validAgentRunIdentity(checkpoint.runId, conversationId)) continue;
+      const previous = latest.get(checkpoint.runId);
+      if (!previous || checkpoint.sequence > previous.sequence || (checkpoint.sequence === previous.sequence && checkpoint.updatedAt > previous.updatedAt)) {
+        latest.set(checkpoint.runId, checkpoint);
+      }
+    }
+    for (const checkpoint of latest.values()) {
       if (this.list().some(run => run.runtimeRunId === checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
       const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
       this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(status !== "interrupted" && status !== "waiting_for_approval" ? { finishedAt: checkpoint.updatedAt } : {}) });
