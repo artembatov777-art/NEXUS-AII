@@ -58,10 +58,16 @@ export class AgentRunManager {
         latest.set(checkpoint.runId, checkpoint);
       }
     }
+    // Index existing owners once: bulk recovery must not scan every run for
+    // each restored checkpoint (quadratic time on large histories).
+    const ownedRuntimeIds = new Set(
+      [...this.runs.values()].map(run => run.runtimeRunId).filter((id): id is string => id !== undefined)
+    );
     for (const checkpoint of latest.values()) {
-      if (this.list().some(run => run.runtimeRunId === checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
+      if (ownedRuntimeIds.has(checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
       const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
       this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(status !== "interrupted" && status !== "waiting_for_approval" ? { finishedAt: checkpoint.updatedAt } : {}) });
+      ownedRuntimeIds.add(checkpoint.runId);
       changed = true;
     }
     if (changed) this.publish();
