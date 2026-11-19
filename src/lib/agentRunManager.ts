@@ -25,11 +25,13 @@ export interface ManagedRunEvent {
   message: string;
 }
 export type ManagedRunListener = (runs: readonly ManagedRun[]) => void;
+export type ManagedRunEventListener = (event: ManagedRunEvent) => void;
 
 export class AgentRunManager {
   private readonly runs = new Map<string, ManagedRun>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly listeners = new Set<ManagedRunListener>();
+  private readonly eventListeners = new Set<ManagedRunEventListener>();
   private readonly activeByConversation = new Map<string, string>();
   private readonly events = new Map<string, ManagedRunEvent[]>();
 
@@ -94,10 +96,19 @@ export class AgentRunManager {
     const run = this.runs.get(runId);
     if (!run) throw new Error("Unknown run ID.");
     const events = this.events.get(runId) ?? [];
-    events.push({ runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message });
+    const event: ManagedRunEvent = { runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message };
+    events.push(event);
     this.events.set(runId, events.slice(-200));
+    for (const listener of [...this.eventListeners]) {
+      try { listener({ ...event }); } catch { /* Observers never interrupt agent execution. */ }
+    }
     // Run-state subscribers need no rerender for high-frequency progress messages.
     // Consumers of event history can request the latest bounded snapshot explicitly.
+  }
+
+  subscribeEvents(listener: ManagedRunEventListener): () => void {
+    this.eventListeners.add(listener);
+    return () => { this.eventListeners.delete(listener); };
   }
 
   subscribe(listener: ManagedRunListener): () => void {

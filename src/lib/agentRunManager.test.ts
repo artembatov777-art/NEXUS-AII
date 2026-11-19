@@ -194,6 +194,22 @@ describe("AgentRunManager", () => {
     unsubscribe();
   });
 
+  it("broadcasts isolated progress events without broadcasting an unchanged run status", async () => {
+    const manager = new AgentRunManager();
+    const listener = vi.fn(), broken = vi.fn(() => { throw new Error("broken terminal"); });
+    await manager.start("run", "chat", async () => {});
+    const unsubscribe = manager.subscribeEvents(listener);
+    const unsubscribeBroken = manager.subscribeEvents(broken);
+    manager.appendEvent("run", "progress", "step");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0]).toMatchObject({ runId: "run", conversationId: "chat", kind: "progress", message: "step" });
+    expect(manager.history("run")).toHaveLength(1);
+    unsubscribe();
+    unsubscribeBroken();
+    manager.appendEvent("run", "output", "done");
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
