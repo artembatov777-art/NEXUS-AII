@@ -362,4 +362,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects timestamp createdAt = 101", () => {
     expect(validateAgentCheckpoint({ ...valid, createdAt: 101 })).not.toBeNull();
   });
+  it("rejects unsupported status queued", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "queued" as AgentCheckpoint["status"] })).not.toBeNull();
+  });
 });
