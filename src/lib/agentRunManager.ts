@@ -13,6 +13,7 @@ export interface ManagedRun {
   conversationId: string;
   status: ManagedRunStatus;
   error?: string;
+  runtimeRunId?: string;
   startedAt: number;
   finishedAt?: number;
 }
@@ -46,6 +47,29 @@ export class AgentRunManager {
     const id = this.activeByConversation.get(conversationId);
     const run = id ? this.runs.get(id) : undefined;
     return run ? { ...run } : null;
+  }
+
+  linkRuntimeRun(managerId: string, runtimeRunId: string): void {
+    const run = this.runs.get(managerId);
+    if (!run) throw new Error("Managed run was not found.");
+    if (!validAgentRunIdentity(runtimeRunId, run.conversationId)) throw new Error("Invalid runtime run ID.");
+    if (run.runtimeRunId && run.runtimeRunId !== runtimeRunId) throw new Error("Managed run already references a different runtime run.");
+    if (this.list().some(other => other.runtimeRunId === runtimeRunId && other.conversationId !== run.conversationId)) {
+      throw new Error("Runtime run is owned by another conversation.");
+    }
+    this.runs.set(managerId, { ...run, runtimeRunId });
+    this.publish();
+  }
+
+  resolveWaiting(runtimeRunId: string, status: "completed" | "failed"): boolean {
+    for (const [managerId, run] of this.runs) {
+      if (run.runtimeRunId === runtimeRunId && run.status === "waiting_for_approval") {
+        this.runs.set(managerId, { ...run, status, finishedAt: Date.now() });
+        this.publish();
+        return true;
+      }
+    }
+    return false;
   }
 
   history(runId: string): ManagedRunEvent[] {

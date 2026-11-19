@@ -140,6 +140,24 @@ describe("AgentRunManager", () => {
     expect(manager.summary("chat").waiting_for_approval).toBe(1);
   });
 
+  it("reconciles approval-waiting manager records with resumed runtime checkpoints", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("first", "chat", async () => "waiting_for_approval");
+    manager.linkRuntimeRun("first", "checkpoint");
+    expect(manager.resolveWaiting("checkpoint", "completed")).toBe(true);
+    expect(manager.list("chat")[0].status).toBe("completed");
+    expect(manager.resolveWaiting("checkpoint", "failed")).toBe(false);
+  });
+
+  it("blocks linking a runtime checkpoint across conversations", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("first", "one", async () => {});
+    await manager.start("second", "two", async () => {});
+    manager.linkRuntimeRun("first", "checkpoint");
+    expect(() => manager.linkRuntimeRun("second", "checkpoint")).toThrow("another conversation");
+    expect(() => manager.linkRuntimeRun("second", "wrong\\nid")).toThrow("Invalid");
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
