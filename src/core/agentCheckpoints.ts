@@ -70,7 +70,7 @@ export class AgentCheckpointService {
 
 export function validateAgentCheckpoint(value: AgentCheckpoint): string | null {
   if (!value || value.schemaVersion !== 1) return "Unsupported checkpoint schema version.";
-  if (![value.runId, value.agentId, value.threadId].every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160)) {
+  if (![value.runId, value.agentId, value.threadId].every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160 && !/[\u0000-\u001f\u007f]/.test(item))) {
     return "Checkpoint run, agent, and thread identifiers are required.";
   }
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1) return "Checkpoint sequence must be a positive safe integer.";
