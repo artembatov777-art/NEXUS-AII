@@ -1416,4 +1416,8 @@ describe("manual recovery gate safety matrix", () => {
     const checkpoint: AgentCheckpoint = { ...baseline, threadId: "id" + String.fromCharCode(11) + "x" };
     expect(evaluateManualRecovery(checkpoint, { noActiveRun: true, operationsReconciled: true, permissionsRevalidated: true })).toEqual({ allowed: false, reason: "invalid_checkpoint" });
   });
+  it("rejects control U+000c in threadId", () => {
+    const checkpoint: AgentCheckpoint = { ...baseline, threadId: "id" + String.fromCharCode(12) + "x" };
+    expect(evaluateManualRecovery(checkpoint, { noActiveRun: true, operationsReconciled: true, permissionsRevalidated: true })).toEqual({ allowed: false, reason: "invalid_checkpoint" });
+  });
 });
