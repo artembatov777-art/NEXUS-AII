@@ -42,7 +42,8 @@ describe("manual agent continuation", () => {
     expect(events).toMatchObject([{ type: "failed" }]);
     expect(authorize).toHaveBeenCalledOnce();
     expect(step).not.toHaveBeenCalled();
-    expect((await service.get(runId)).ok && (await service.get(runId)).value?.sequence).toBe(1);
+    const saved = await service.get(runId);
+    expect(saved.ok && saved.value?.sequence).toBe(1);
   });
   it("refuses to execute when audit verification fails", async () => {
     const { runtime, authorize, step } = await make("allow", false);
@@ -56,13 +57,15 @@ describe("manual agent continuation", () => {
     const events = await collect(runtime.continue(runId));
     expect(events).toMatchObject([{ type: "waiting_for_approval", permission: "tool:execute" }]);
     expect(step).not.toHaveBeenCalled();
-    expect((await service.get(runId)).value?.status).toBe("waiting_for_approval");
+    const saved = await service.get(runId);
+    expect(saved.ok && saved.value?.status).toBe("waiting_for_approval");
   });
   it("continues only after fresh authorization and a verified audit", async () => {
     const { runtime, step, service } = await make("allow", true);
     const events = await collect(runtime.continue(runId));
     expect(events.at(-1)).toMatchObject({ type: "completed" });
     expect(step).toHaveBeenCalledOnce();
-    expect((await service.get(runId)).value?.status).toBe("completed");
+    const saved = await service.get(runId);
+    expect(saved.ok && saved.value?.status).toBe("completed");
   });
 });
