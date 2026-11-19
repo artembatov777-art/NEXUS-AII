@@ -83,16 +83,21 @@ export class AgentRunManager {
     return run ? { ...run } : null;
   }
 
-  linkRuntimeRun(managerId: string, runtimeRunId: string): void {
+  linkRuntimeRun(managerId: string, runtimeRunId: string, allowApprovalHandoff = false): void {
     const run = this.runs.get(managerId);
     if (!run) throw new Error("Managed run was not found.");
     if (!validAgentRunIdentity(runtimeRunId, run.conversationId)) throw new Error("Invalid runtime run ID.");
-    if (run.runtimeRunId && run.runtimeRunId !== runtimeRunId) throw new Error("Managed run already references a different runtime run.");
-    const existingOwner = this.list().find(other => other.id !== managerId && other.runtimeRunId === runtimeRunId);
-    if (existingOwner) {
-      throw new Error(existingOwner.conversationId !== run.conversationId
-        ? "Runtime run is owned by another conversation."
-        : "Runtime run is already linked to another managed run.");
+    if (run.runtimeRunId === runtimeRunId) return; // Further events in the same run are idempotent.
+    if (run.runtimeRunId) throw new Error("Managed run already references a different runtime run.");
+    const existingOwners = this.list().filter(other => other.id !== managerId && other.runtimeRunId === runtimeRunId);
+    if (existingOwners.length) {
+      const sameConversation = existingOwners.every(owner => owner.conversationId === run.conversationId);
+      if (!sameConversation) throw new Error("Runtime run is owned by another conversation.");
+      // Resuming a previously approved checkpoint uses the same runtime ID in
+      // a new manager task. It is the only permitted temporary dual ownership.
+      const validHandoff = allowApprovalHandoff && run.status === "running" &&
+        existingOwners.length === 1 && existingOwners[0].status === "waiting_for_approval";
+      if (!validHandoff) throw new Error("Runtime run is already linked to another managed run.");
     }
     this.runs.set(managerId, { ...run, runtimeRunId });
     this.publish();
