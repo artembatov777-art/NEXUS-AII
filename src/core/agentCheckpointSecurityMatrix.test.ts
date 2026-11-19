@@ -104,4 +104,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects U+001d in runId", () => {
     expect(validateAgentCheckpoint({ ...valid, runId: "part" + String.fromCharCode(29) + "-end" })).not.toBeNull();
   });
+  it("rejects U+001e in runId", () => {
+    expect(validateAgentCheckpoint({ ...valid, runId: "part" + String.fromCharCode(30) + "-end" })).not.toBeNull();
+  });
 });
