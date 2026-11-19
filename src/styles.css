@@ -580,3 +580,5 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .agent-terminal-events [data-kind="error"] pre{color:#ffb6b6}
 .agent-terminal-events [data-kind="approval"] pre{color:#f1d0a0}
 @media(max-width:640px){.agent-terminal-heading{flex-wrap:wrap}.agent-terminal-events li{grid-template-columns:1fr;gap:3px}}
+
+.terminal-session .agent-session-approval{color:#f1c47d;font-weight:800;margin-left:6px}

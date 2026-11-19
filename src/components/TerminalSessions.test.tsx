@@ -18,6 +18,15 @@ describe("terminal session tabs", () => {
     element.remove();
   });
 
+  it("highlights approval requests even when the agent is no longer running", () => {
+    const element = document.createElement("div"); document.body.appendChild(element);
+    const root = createRoot(element);
+    act(() => root.render(<TerminalSessions sessions={[{ id: "one", title: "First" }]} activeId="one" runningAgentSessions={["one"]} awaitingAgentSessions={["one"]} onSelect={() => {}} onClose={() => {}} onCreate={() => {}}/>));
+    expect(element.querySelector('[aria-label="Open session First, agent approval required"]')).not.toBeNull();
+    expect(element.querySelector('[aria-label="Agent approval required"]')).not.toBeNull();
+    act(() => root.unmount()); element.remove();
+  });
+
   it("switches, closes without deleting history, and creates sessions", () => {
     const element = document.createElement("div");
     document.body.appendChild(element);
