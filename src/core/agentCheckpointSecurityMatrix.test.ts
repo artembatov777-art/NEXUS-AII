@@ -455,4 +455,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state prototype pollution key", () => {
     expect(validateAgentCheckpoint({ ...valid, state: JSON.parse('{"__proto__":{"flag":true}}') as AgentCheckpoint["state"] })).not.toBeNull();
   });
+  it("rejects invalid state nested reserved constructor", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: { nested: { constructor: "bad" } } as unknown as AgentCheckpoint["state"] })).not.toBeNull();
+  });
 });
