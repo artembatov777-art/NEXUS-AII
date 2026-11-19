@@ -386,4 +386,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects unsupported status waiting", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "waiting" as AgentCheckpoint["status"] })).not.toBeNull();
   });
+  it("rejects unsupported status resuming", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "resuming" as AgentCheckpoint["status"] })).not.toBeNull();
+  });
 });
