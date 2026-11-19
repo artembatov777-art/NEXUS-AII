@@ -90,4 +90,31 @@ describe("checkpoint recovery ordering", () => {
     expect(manager.list("standalone")[0].status).toBe("completed");
   });
 
+
+  it("permits a same-conversation approval handoff only when explicitly requested", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval-owner", "chat", async () => "waiting_for_approval");
+    manager.linkRuntimeRun("approval-owner", "runtime-1");
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const resumed = manager.start("resume-owner", "chat", async () => { await pending; });
+    expect(() => manager.linkRuntimeRun("resume-owner", "runtime-1")).toThrow("already linked");
+    manager.linkRuntimeRun("resume-owner", "runtime-1", true);
+    expect(manager.list("chat")[1].runtimeRunId).toBe("runtime-1");
+    expect(manager.resolveWaiting("runtime-1", "completed")).toBe(true);
+    expect(manager.list("chat")[0].status).toBe("completed");
+    finish();
+    await resumed;
+  });
+
+  it("blocks approval handoff across conversations and from completed runs", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval-owner", "one", async () => "waiting_for_approval");
+    manager.linkRuntimeRun("approval-owner", "runtime-1");
+    await manager.start("foreign-owner", "two", async () => {});
+    expect(() => manager.linkRuntimeRun("foreign-owner", "runtime-1", true)).toThrow("another conversation");
+    manager.resolveWaiting("runtime-1", "completed");
+    await manager.start("later-owner", "one", async () => {});
+    expect(() => manager.linkRuntimeRun("later-owner", "runtime-1", true)).toThrow("already linked");
+  });
 });
