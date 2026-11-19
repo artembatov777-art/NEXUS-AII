@@ -106,6 +106,13 @@ describe("AgentRunManager", () => {
     expect(manager.summary("chat-a").failed).toBe(0);
     expect(manager.summary().failed).toBe(1);
   });
+  it("exposes truncated terminal event previews", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("run", "chat", async () => {});
+    manager.appendEvent("run", "output", "123456");
+    expect(manager.eventPreview("run", 3)).toEqual(["123…"]);
+    expect(manager.history("run")[0].message).toBe("123456");
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });

@@ -1,3 +1,4 @@
+import { agentRunEventPreview } from "./agentRunEventPreview";
 import { summarizeRuns } from "./agentRunSummary";
 import { validAgentRunIdentity } from "./agentRunIdentity";
 /**
@@ -47,6 +48,10 @@ export class AgentRunManager {
 
   history(runId: string): ManagedRunEvent[] {
     return (this.events.get(runId) ?? []).map(event => ({ ...event }));
+  }
+
+  eventPreview(runId: string, maxLength = 240): string[] {
+    return this.history(runId).map(event => agentRunEventPreview(event.message, maxLength));
   }
 
   appendEvent(runId: string, kind: ManagedRunEvent["kind"], message: string): void {
