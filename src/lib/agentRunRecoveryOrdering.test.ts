@@ -117,4 +117,21 @@ describe("checkpoint recovery ordering", () => {
     await manager.start("later-owner", "one", async () => {});
     expect(() => manager.linkRuntimeRun("later-owner", "runtime-1", true)).toThrow("already linked");
   });
+
+  it("allows an explicit interrupted-checkpoint recovery handoff within one conversation", async () => {
+    const manager = new AgentRunManager();
+    const checkpoint: AgentCheckpoint = {
+      schemaVersion: 1, runId: "interrupted-id", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "running", state: {}, createdAt: 100, updatedAt: 200
+    };
+    manager.restoreCheckpoints("standalone", [checkpoint]);
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const resumed = manager.start("recovery-action", "standalone", async () => { await pending; });
+    expect(() => manager.linkRuntimeRun("recovery-action", "interrupted-id")).toThrow("already linked");
+    manager.linkRuntimeRun("recovery-action", "interrupted-id", true);
+    expect(manager.list("standalone")).toHaveLength(2);
+    finish(); await resumed;
+  });
 });
