@@ -143,16 +143,19 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     if (initialTask?.trim()) setTask(initialTask.slice(0, 6000));
   }, [initialTask]);
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
-  const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
+  const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
   const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
-  const [ambiguousToolSteps, setAmbiguousToolSteps] = useState<AmbiguousToolStep[]>([]);
+  const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const conversationKey = conversationId ?? "standalone";
+  const checkpoints = checkpointsByConversation[conversationKey] ?? [];
+  const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const controller = useRef<AbortController | null>(null);
+  const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
   const activeManagerRequest = useRef<string | null>(null);
+  const activeRunId = activeRunIds[conversationKey] ?? null;
+  const setActiveRunId = (id: string | null) => setActiveRunIds(previous => ({ ...previous, [conversationKey]: id }));
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
   const routedModelId = providerSettings.model.trim() || (providerSettings.routeMode === "manual" ? "" : "auto");
@@ -181,6 +184,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     addFeed(text, tone);
   }
 
+  const addFeedLatest = useRef(addFeed);
+  addFeedLatest.current = addFeed;
+
   const refresh = useCallback(async () => {
     if (!runtime) return;
     const [result, audit] = await Promise.all([
@@ -190,42 +196,45 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
       const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
-      setCheckpoints(checkpoints);
+      setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
       const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled");
       const reconciliationResults = await Promise.all(terminalRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
-      setAmbiguousToolSteps(reconciliationResults.flatMap(item => item.ok ? item.value : []));
+      setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
     } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
     if (audit.ok) setAuditEvents(audit.value);
     else addFeed(audit.error.message, "error");
-  }, [runtime, addFeed, threads]);
+  }, [runtime, addFeed, threads, conversationKey]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     if (!runtime) return;
     const controller = new AbortController();
+    const announce = (message: string, tone: FeedItem["tone"] = "normal") => addFeedLatest.current(message, tone);
     void (async () => {
       const saved = loadMcpServerConfigs(window.localStorage);
-      if (!saved.ok) { addFeed(saved.error.message, "error"); return; }
+      if (!saved.ok) { announce(saved.error.message, "error"); return; }
       for (const server of saved.value) {
         if (controller.signal.aborted) break;
         const connected = await runtime.connectMcpHttp({ ...server, version: "1" }, controller.signal);
-        if (!connected.ok) { addFeed(`MCP ${server.name}: ${connected.error.message}`, "warning"); continue; }
+        if (!connected.ok) { announce(`MCP ${server.name}: ${connected.error.message}`, "warning"); continue; }
         if (controller.signal.aborted) { await runtime.mcpClient.disconnect(server.id); break; }
         const imported = await runtime.discoverAndImportMcpTools(server.id, controller.signal, {
           permissions: ["mcp:execute"], risk: "high", timeoutMs: 30_000
         });
-        if (!imported.ok) addFeed(`MCP ${server.name}: ${imported.error.message}`, "warning");
-        else addFeed(`MCP ${server.name}: discovered ${imported.value.discovered}, imported ${imported.value.imported.length}, rejected ${imported.value.rejected.length} tool(s).`, "success");
+        if (!imported.ok) announce(`MCP ${server.name}: ${imported.error.message}`, "warning");
+        else announce(`MCP ${server.name}: discovered ${imported.value.discovered}, imported ${imported.value.imported.length}, rejected ${imported.value.rejected.length} tool(s).`, "success");
       }
     })();
     return () => {
       controller.abort();
       void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
     };
-  }, [runtime, addFeed]);
-  useEffect(() => () => { controller.current?.abort(); }, []);
+  }, [runtime]);
+  useEffect(() => () => {
+    for (const run of managedRuns.list()) if (run.status === "running") managedRuns.cancel(run.id);
+  }, [managedRuns]);
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
@@ -273,7 +282,6 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       addFeed(cause instanceof Error ? cause.message : "Could not schedule the agent run.", "error");
     } finally {
       activeManagerRequest.current = null;
-      controller.current = null;
       setBusy(false);
       setActiveRunId(null);
       await refresh();
@@ -286,7 +294,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   function cancelActiveRun() {
     if (activeManagerRequest.current) managedRuns.cancel(activeManagerRequest.current);
-    else controller.current?.abort();
+
   }
 
   async function saveProfile() {
@@ -493,7 +501,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
-            {busy && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
+            {busy && managedRuns.activeRun(conversationKey) && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
         </section>
