@@ -60,6 +60,7 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
 export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask, conversationId, conversationIds = [], agentRuns }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string; conversationId?: string; conversationIds?: string[]; agentRuns?: AgentRunManager }) {
   const localRunManager = useMemo(() => new AgentRunManager(), []);
   const managedRuns = agentRuns ?? localRunManager;
+  const [managedRunSnapshot, setManagedRunSnapshot] = useState(() => managedRuns.list());
   const threads = useMemo(() => agentThreads(conversationId), [conversationId]);
   const runtimeState = useMemo<RuntimeState>(() => {
     try {
@@ -151,6 +152,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const conversationKey = conversationId ?? "standalone";
+  const activeManagedRun = managedRunSnapshot.find(run => run.conversationId === conversationKey && run.status === "running") ?? null;
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
   const auditRunFilter = auditRunByConversation[conversationKey] ?? null;
   const auditEvents = auditEventsByConversation[conversationKey] ?? [];
@@ -159,6 +161,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
+  const operationBusy = busy || !!activeManagedRun;
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
   const activeManagerRequest = useRef<string | null>(null);
   const activeRunId = activeRunIds[conversationKey] ?? null;
@@ -186,13 +189,33 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }));
   }, [conversationKey]);
 
-  function reportManagedEvent(runId: string, kind: ManagedRunEvent["kind"], text: string, tone: FeedItem["tone"] = "normal") {
+  function reportManagedEvent(runId: string, kind: ManagedRunEvent["kind"], text: string, _tone: FeedItem["tone"] = "normal") {
+    // Subscribed panels receive every event, including after closing/reopening.
     managedRuns.appendEvent(runId, kind, text);
-    addFeed(text, tone);
   }
 
   const addFeedLatest = useRef(addFeed);
   addFeedLatest.current = addFeed;
+
+  useEffect(() => managedRuns.subscribe(runs => setManagedRunSnapshot([...runs])), [managedRuns]);
+  useEffect(() => {
+    const recent = managedRuns.conversationTimeline(conversationKey).slice(-80);
+    if (recent.length) {
+      setFeedByConversation(current => {
+        if (current[conversationKey]?.length) return current;
+        return { ...current, [conversationKey]: recent.map((event, index) => ({
+          id: index - recent.length,
+          text: event.message,
+          tone: event.kind === "error" ? "error" : event.kind === "approval" ? "warning" : event.kind === "output" ? "success" : "normal"
+        })) };
+      });
+    }
+    return managedRuns.subscribeEvents(event => {
+      if (event.conversationId !== conversationKey) return;
+      const tone: FeedItem["tone"] = event.kind === "error" ? "error" : event.kind === "approval" ? "warning" : event.kind === "output" ? "success" : "normal";
+      addFeedLatest.current(event.message, tone);
+    });
+  }, [managedRuns, conversationKey]);
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
@@ -277,7 +300,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   async function runManagedAction(action: (signal: AbortSignal, managerId: string) => Promise<void | "waiting_for_approval" | "failed">) {
-    if (!runtime || busy) return;
+    if (!runtime || busy || managedRuns.activeRun(conversationKey)) return;
     const managerId = crypto.randomUUID();
     activeManagerRequest.current = managerId;
     setBusy(true);
@@ -318,12 +341,11 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   function cancelActiveRun() {
-    if (activeManagerRequest.current) managedRuns.cancel(activeManagerRequest.current);
-
+    if (!managedRuns.cancelConversation(conversationKey)) addFeed("No active run to cancel.", "warning");
   }
 
   async function saveProfile() {
-    if (!runtime || busy) return;
+    if (!runtime || operationBusy) return;
     setBusy(true);
     const ids = new Set([agentThreads().primary, threads.primary, ...conversationIds.map(id => agentThreads(id).primary)]);
     let listed: Awaited<ReturnType<typeof runtime.checkpointService.listByThread>>[];
@@ -360,7 +382,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   async function startPlannedWorkflow(useTestProvider = false) {
     const workflow = useTestProvider ? testWorkflow : plannedWorkflow;
-    if (!runtime || !workflow || !task.trim() || busy) return;
+    if (!runtime || !workflow || !task.trim() || operationBusy) return;
     const goal = task.trim();
     const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
     if (!useTestProvider && !window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
@@ -420,7 +442,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   function startAgent() {
-    if (!runtime || !task.trim() || task.trim().length > 1_000) return;
+    if (!runtime || operationBusy || !task.trim() || task.trim().length > 1_000) return;
     const input = task.trim();
     setTask("");
     setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
@@ -520,7 +542,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             </div>
             <label className="agent-task-label" htmlFor="agent-task">{t("Task input")}</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
-            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!testWorkflow || !isTauri() || busy || !task.trim()} onClick={() => void startPlannedWorkflow(true)} title='Use list <absolute path>, read <absolute path>, or search {"path":"...","query":"..."}'>Test planner (offline)</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || operationBusy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!testWorkflow || !isTauri() || operationBusy || !task.trim()} onClick={() => void startPlannedWorkflow(true)} title='Use list <absolute path>, read <absolute path>, or search {"path":"...","query":"..."}'>Test planner (offline)</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || operationBusy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
@@ -539,7 +561,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
-            {busy && managedRuns.activeRun(conversationKey) && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
+            {activeManagedRun && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
         </section>
