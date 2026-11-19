@@ -647,6 +647,44 @@ describe("FileSystemPanel native workspace access", () => {
     vi.unstubAllGlobals();
   });
 
+  it("preserves the draft when Windows refuses an unsafe existing-file replacement", async () => {
+    const rootPath = "C:\\\\Users\\\\test\\\\Documents";
+    const filePath = rootPath + "\\\\notes.txt";
+    isTauriMock.mockReturnValue(true);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_workspace_directories") return [rootPath];
+      if (command === "list_workspace_entries") return [{ name: "notes.txt", path: filePath, kind: "file", sizeBytes: 8, modifiedAtMs: 0 }];
+      if (command === "read_workspace_file") return "original";
+      if (command === "write_workspace_file_checked") {
+        throw new Error("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.");
+      }
+      return undefined;
+    });
+
+    await renderPanel();
+    const findButton = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find(button => button.textContent?.includes(label));
+    await act(async () => { findButton("notes.txt")!.click(); });
+    await act(async () => { findButton("Edit file")!.click(); });
+    const editor = container.querySelector<HTMLTextAreaElement>("textarea.file-editor")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, "unsaved Windows draft");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { findButton("Review changes")!.click(); });
+    await act(async () => { findButton("Confirm and save")!.click(); });
+
+    expect(invokeMock).toHaveBeenCalledWith("write_workspace_file_checked", {
+      path: filePath, content: "unsaved Windows draft", expectedContent: "original"
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toContain("Safe replacement of existing Windows workspace files is not available yet");
+    expect(container.querySelector<HTMLTextAreaElement>("textarea.file-editor")?.value)
+      .toBe("unsaved Windows draft");
+    expect(container.textContent).not.toContain("File saved.");
+  });
+
   it("keeps an unsaved draft when another file is selected and discard is declined", async () => {
     const rootPath = "/home/test/Documents";
     const firstPath = rootPath + "/notes.txt";

@@ -650,8 +650,15 @@ fn write_workspace_file_inner(
             if is_capability_link_or_reparse(&metadata) || !metadata.is_file() {
                 return Err("NEXUS will not overwrite a symbolic link or non-file entry.".into());
             }
+            // Until a transactional Windows replacement protocol is verified,
+            // fail before requesting write access to an existing file. The
+            // caller keeps its draft; the on-disk original remains untouched.
+            #[cfg(windows)]
+            return Err("Safe replacement of existing Windows workspace files is not available yet; the original file and your draft are preserved.".into());
+
             // Open relative to the pinned parent handle and refuse a final
             // symlink/reparse point. The comparison and write use this same handle.
+            #[cfg(not(windows))]
             let mut file = open_capability_file(&parent_directory, &name, true, true, false)
                 .map_err(|error| {
                     if error.contains("hard-linked") {
@@ -660,38 +667,41 @@ fn write_workspace_file_inner(
                         "The file changed or is no longer safely readable. Reload it before saving.".to_string()
                     }
                 })?;
-            let opened_metadata = file.metadata()
-                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
-            if !opened_metadata.is_file() {
-                return Err("NEXUS can edit regular files only, not links or special entries.".into());
-            }
-            ensure_no_external_hard_links(&file)?;
-            let opened_metadata = file.metadata()
-                .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
-            if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
-                return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
-            }
-
-            if let Some(expected) = expected_content {
-                let mut current_bytes = Vec::with_capacity(opened_metadata.len() as usize);
-                {
-                    let mut limited = (&mut file).take(MAX_TEXT_FILE_BYTES + 1);
-                    limited.read_to_end(&mut current_bytes)
-                        .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+            #[cfg(not(windows))]
+            {
+                let opened_metadata = file.metadata()
+                    .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+                if !opened_metadata.is_file() {
+                    return Err("NEXUS can edit regular files only, not links or special entries.".into());
                 }
-                if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+                ensure_no_external_hard_links(&file)?;
+                let opened_metadata = file.metadata()
+                    .map_err(|_| "Could not inspect the opened file safely.".to_string())?;
+                if opened_metadata.len() > MAX_TEXT_FILE_BYTES {
                     return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
                 }
-                let current = String::from_utf8(current_bytes)
-                    .map_err(|_| "The file changed or is no longer readable as UTF-8. Reload it before saving.".to_string())?;
-                if current != expected {
-                    return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
+
+                if let Some(expected) = expected_content {
+                    let mut current_bytes = Vec::with_capacity(opened_metadata.len() as usize);
+                    {
+                        let mut limited = (&mut file).take(MAX_TEXT_FILE_BYTES + 1);
+                        limited.read_to_end(&mut current_bytes)
+                            .map_err(|_| "The file changed or is no longer readable. Reload it before saving.".to_string())?;
+                    }
+                    if current_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+                        return Err("The file changed and now exceeds the 2 MB edit limit. Reload it before saving.".into());
+                    }
+                    let current = String::from_utf8(current_bytes)
+                        .map_err(|_| "The file changed or is no longer readable as UTF-8. Reload it before saving.".to_string())?;
+                    if current != expected {
+                        return Err("File changed outside NEXUS since it was opened. Your draft is preserved; reload the file before saving to avoid overwriting newer changes.".into());
+                    }
                 }
+                file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
+                file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
+                file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
+                file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
             }
-            file.set_len(0).map_err(|error| format!("Could not truncate the approved file: {error}"))?;
-            file.seek(SeekFrom::Start(0)).map_err(|error| format!("Could not seek in the approved file: {error}"))?;
-            file.write_all(content.as_bytes()).map_err(|error| format!("Could not save file: {error}"))?;
-            file.sync_all().map_err(|error| format!("Could not flush file: {error}"))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             if expected_content.is_some() {
@@ -887,6 +897,7 @@ mod tests {
         fs::remove_dir_all(base).expect("cleanup");
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn checked_write_rejects_external_changes_without_overwriting_them() {
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
@@ -911,6 +922,62 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "external edit");
 
         fs::remove_dir_all(base).expect("cleanup");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_new_file_creation_remains_available_when_replacement_is_gated() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "nexus-windows-create-gate-{}-{nonce}", std::process::id()
+        ));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("new.txt");
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).unwrap()],
+            base.join("permissions.json"),
+        );
+
+        write_workspace_file_inner(target.to_str().unwrap(), "created", None, &access)
+            .expect("new file creation must remain available");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "created");
+        let error = write_workspace_file_inner(
+            target.to_str().unwrap(), "changed", Some("created"), &access
+        ).unwrap_err();
+        assert!(error.contains("not available yet"), "{error}");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "created");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_checked_write_fails_closed_without_truncating_existing_file() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "nexus-windows-checked-write-gate-{}-{nonce}", std::process::id()
+        ));
+        let root = base.join("approved");
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("important.txt");
+        fs::write(&target, "original").unwrap();
+        let access = WorkspaceAccess::for_test(
+            vec![fs::canonicalize(&root).unwrap()],
+            base.join("permissions.json"),
+        );
+
+        let error = write_workspace_file_inner(
+            target.to_str().unwrap(), "replacement", Some("original"), &access
+        ).unwrap_err();
+        assert!(error.contains("not available yet"), "{error}");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        assert!(write_workspace_file_inner(
+            target.to_str().unwrap(), "replacement", Some("stale"), &access
+        ).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

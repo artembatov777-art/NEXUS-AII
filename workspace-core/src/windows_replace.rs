@@ -269,6 +269,7 @@ struct StageReceipt {
 enum PublishPoint<'a> {
     Staged(&'a StageReceipt),
     Disarmed,
+    VerifiedForPublication,
 }
 
 fn pinned_ancestors(workspace: &Workspace, parent: &Path) -> Result<Vec<Dir>, String> {
@@ -457,8 +458,51 @@ fn edit(
     if revision(&original)? != expected_revision {
         return Err("File changed just before publication".into());
     }
-    rename_over(&stage.file, &directory, name)
-        .map_err(|e| prep(format!("rename staged file: {e}")))?;
+    // Hold the original exclusively during staging and the explicit checkpoint.
+    // Windows requires releasing that handle before replacing its directory
+    // entry. Reopening and revalidating identity, revision and security narrows
+    // the publication window, but cannot exclude a noncooperating process
+    // changing the name between verification and rename. This test-only
+    // primitive is not a transactional compare-and-swap operation and MUST
+    // NOT be enabled in the shipped Windows host without a stronger protocol.
+    let original_identity: FILE_ID_INFO =
+        query(&original, FileIdInfo).map_err(|e| prep(format!("read original identity: {e}")))?;
+    drop(original);
+    let mut publish_options = OpenOptions::new();
+    publish_options.read(true).follow(FollowSymlinks::No);
+    publish_options
+        .access_mode(GENERIC_READ | ACCESS_SYSTEM_SECURITY)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE);
+    let publication_guard = dir
+        .open_with(name, &publish_options)
+        .map_err(|e| prep(format!("reopen original for publication: {e}")))?
+        .into_std();
+    let reopened_identity: FILE_ID_INFO = query(&publication_guard, FileIdInfo)
+        .map_err(|e| prep(format!("verify publication identity: {e}")))?;
+    if reopened_identity.VolumeSerialNumber != original_identity.VolumeSerialNumber
+        || reopened_identity.FileId.Identifier != original_identity.FileId.Identifier
+        || revision(&publication_guard)? != expected_revision
+        || security_descriptor(&publication_guard)
+            .map_err(|e| prep(format!("verify publication security: {e}")))?
+            != security
+    {
+        return Err("Original changed before publication".into());
+    }
+    checkpoint(PublishPoint::VerifiedForPublication).map_err(|error| prep(error.to_string()))?;
+    if let Err(rename_error) = rename_over(&stage.file, &directory, name) {
+        // Disarmed stages are otherwise cleaned up only by Drop, where a
+        // failed delete disposition cannot be reported to the caller.
+        // Restore delete-on-close while the staging identity is still pinned.
+        // Never retry publication through a pathname or release the original
+        // lock to make a sharing violation disappear.
+        let cleanup = disposition(&stage.file, true);
+        return Err(match cleanup {
+            Ok(()) => prep(format!("rename staged file: {rename_error}")),
+            Err(cleanup_error) => prep(format!(
+                "rename staged file: {rename_error}; staging cleanup could not be confirmed: {cleanup_error}"
+            )),
+        });
+    }
     stage.published = true;
     stage
         .file
@@ -472,9 +516,8 @@ fn edit(
     }
     let published = revision(&stage.file)?;
     drop(stage);
-    // The original requests FILE_WRITE_DATA. A new snapshot permits only
-    // shared reads, so release the old handle after rename before reopening.
-    drop(original);
+    // The publication guard no longer refers to the new file after rename.
+    drop(publication_guard);
     let (observed, found) = workspace.snapshot(path)?;
     if found != published || observed != content {
         return Err("Replacement was published but could not be confirmed".into());
@@ -807,6 +850,51 @@ mod tests {
     }
 
     #[test]
+    fn failed_publication_preserves_original_and_removes_disarmed_stage() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("blocked-publication");
+        let path = fixture.0.join("note");
+        fs::write(&path, "original").unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, original_revision) = ws.snapshot(Path::new("note")).unwrap();
+
+        // A handle without FILE_SHARE_DELETE must prevent replacement. The
+        // editor must fail closed, leave the original intact and clean up
+        // the staging file even after its delete disposition was disarmed.
+        let blocker = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&path)
+            .unwrap();
+        let result = edit(
+            &ws,
+            Path::new("note"),
+            "original",
+            &original_revision,
+            "replacement",
+            |_| Ok(()),
+        );
+        assert!(
+            result.is_err(),
+            "a non-delete-sharing handle must block publication"
+        );
+        drop(blocker);
+        assert_eq!(
+            ws.snapshot(Path::new("note")).unwrap(),
+            ("original".into(), original_revision)
+        );
+        assert!(
+            fs::read_dir(&fixture.0).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".nexus-win-edit-")),
+            "failed publication must not leave an unreceipted staging file"
+        );
+    }
+
+    #[test]
     fn holds_the_original_against_an_external_writer_at_the_final_checkpoint() {
         let _privilege =
             AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
@@ -843,6 +931,42 @@ mod tests {
             ("replacement".into(), written)
         );
         assert!(!fixture.0.join("moved-note").exists());
+    }
+
+    #[test]
+    fn demonstrates_external_name_substitution_after_last_revision_check() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("publication-race");
+        let note = fixture.0.join("note");
+        let old = fixture.0.join("old-original");
+        fs::write(&note, "original").unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, revision) = ws.snapshot(Path::new("note")).unwrap();
+        let result = edit(
+            &ws,
+            Path::new("note"),
+            "original",
+            &revision,
+            "replacement",
+            |point| {
+                if matches!(point, PublishPoint::VerifiedForPublication) {
+                    // A separate writer can replace the name while the old
+                    // inode is open with FILE_SHARE_DELETE.
+                    fs::rename(&note, &old)?;
+                    fs::write(&note, "external edit")?;
+                }
+                Ok(())
+            },
+        );
+        assert!(
+            result.is_ok(),
+            "The test must expose an unreported replacement: {result:?}"
+        );
+        assert_eq!(fs::read_to_string(&note).unwrap(), "replacement");
+        assert_eq!(fs::read_to_string(&old).unwrap(), "original");
+        // The external content was overwritten. This is evidence that the
+        // test-only candidate must remain disabled in production.
     }
 
     #[test]

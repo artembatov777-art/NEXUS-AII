@@ -31,11 +31,14 @@ import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/n
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
+import { TerminalSessions } from "./components/TerminalSessions";
+import { useSessionDraft } from "./components/useSessionDraft";
 import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
-import { resolveConversationProjectId } from "./lib/conversationProjectContext";
+import { resolveAgentProjectId, resolveConversationProjectId } from "./lib/conversationProjectContext";
 import { getWorkspacePanelState, type WorkspacePanel } from "./lib/workspacePanels";
 import { isDedicatedCredentialHandle } from "./lib/providerCredentials";
 import { filterConversationHistory } from "./lib/conversationHistory";
+import { parseTerminalCommand } from "./lib/terminalCommands";
 import { resolveConversationTitle } from "./lib/conversationTitle";
 import { decryptWorkspaceBackup, encryptWorkspaceBackup, isEncryptedWorkspaceBackup } from "./lib/workspaceBackupCrypto";
 
@@ -64,6 +67,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsReady, setConversationsReady] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [openSessionIds, setOpenSessionIds] = useState<string[]>([]);
   const [provider, setProvider] = useState<ProviderSettings>(loadProvider);
   const [apiKey, setApiKey] = useState("");
   // Shared owner token is memory-only; a remembered device uses an HttpOnly server-issued cookie.
@@ -95,8 +99,9 @@ export default function App() {
   const [studioOpen, setStudioOpen] = useState(false);
   const [imageGenerationOpen, setImageGenerationOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useSessionDraft(activeId);
   const [busy, setBusy] = useState(false);
+  const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const providerCheckGeneration = useRef(0);
@@ -104,6 +109,7 @@ export default function App() {
   const providerTestAbortController = useRef<AbortController | null>(null);
   const semanticIndexStarted = useRef(false);
   const [error, setError] = useState("");
+  const [terminalNotice, setTerminalNotice] = useState("");
   const [appVersion, setAppVersion] = useState("0.2.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -239,6 +245,13 @@ export default function App() {
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
+  useEffect(() => {
+    if (activeId) setOpenSessionIds(current => current.includes(activeId) ? current : [...current, activeId]);
+  }, [activeId]);
+  const openSessions = useMemo(() => openSessionIds.flatMap(id => {
+    const conversation = conversations.find(item => item.id === id);
+    return conversation ? [{ id, title: conversation.title }] : [];
+  }), [openSessionIds, conversations]);
   const filteredConversations = useMemo(() => filterConversationHistory(conversations, selectedProjectId, historyQuery), [conversations, selectedProjectId, historyQuery]);
   const messages = active?.messages ?? [welcome];
   // The gateway may be local while routing to a cloud model. Never infer
@@ -349,6 +362,44 @@ export default function App() {
   async function submit(overrideText?: string) {
     const text = (overrideText ?? draft).trim();
     if (!text || busy || !conversationsReady) return;
+    const command = parseTerminalCommand(text);
+    if (command) {
+      setDraft("");
+      setError("");
+      setTerminalNotice("");
+      switch (command.type) {
+        case "help":
+          setTerminalNotice("Commands: /help, /clear (start a fresh view; history is retained), /models, /agents [task], /status, /history, /settings. Agent tasks are opened as drafts and require an explicit run.");
+          break;
+        case "clear":
+          setActiveId(null);
+          setTerminalNotice("Fresh conversation view. Previous conversations remain in history.");
+          break;
+        case "models":
+        case "settings":
+          openWorkspacePanel("settings");
+          break;
+        case "agents":
+          // A task sent from a fresh chat needs a durable conversation identity
+          // before its agent checkpoints can be tied to this session.
+          if (command.task && !active) newChat();
+          setAgentInitialTask(command.task ?? "");
+          openWorkspacePanel("agents");
+          break;
+        case "history":
+          setSidebarOpen(true);
+          setTerminalNotice(`History contains ${conversations.length} conversation(s). Select one in the sidebar.`);
+          break;
+        case "status":
+          setTerminalNotice(`Model: ${provider.model || "not selected"}. Endpoint: ${providerConnectionState}. Generation: ${modelTestState}. Agent execution is managed in Agent Center.`);
+          break;
+        case "invalid":
+          setTerminalNotice(command.message);
+          break;
+      }
+      return;
+    }
+    setTerminalNotice("");
     let target = active;
     if (!target) {
       target = { id: makeId(), title: text.slice(0, 36), messages: [welcome], updatedAt: Date.now(), ...(selectedProjectId ? { projectId: selectedProjectId } : {}) };
@@ -360,6 +411,7 @@ export default function App() {
     updateMessages(target.id, next);
     setDraft("");
     setBusy(true);
+    setRunningSessionId(target.id);
     setError("");
     const controller = new AbortController();
     chatAbortController.current = controller;
@@ -426,6 +478,7 @@ export default function App() {
     } finally {
       if (chatAbortController.current === controller) chatAbortController.current = null;
       setBusy(false);
+      setRunningSessionId(null);
     }
   }
   function removeConversation(id: string) {
@@ -843,6 +896,16 @@ export default function App() {
 
     <main className="main-panel">
       <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">{t("Workspace")} <span>/</span> <strong>{t(activeSection)}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? t("DESKTOP") : t("WEB PREVIEW")}</div><button type="button" className="model-pill" onClick={() => openWorkspacePanel("settings")} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot independently verify the provider's upstream processing route. Verify it before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? t("REMOTE") : t("LOCAL*")} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("command")} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); }} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("settings")} aria-label={t("Settings")}><Settings2 size={18}/></button></div></header>
+      <TerminalSessions sessions={openSessions} activeId={activeId} onCreate={newChat}
+        onSelect={id => {
+          const session = conversations.find(item => item.id === id);
+          if (!session) return;
+          setActiveId(id); setSelectedProjectId(session.projectId ?? ""); setError("");
+        }}
+        onClose={id => {
+          setOpenSessionIds(current => current.filter(item => item !== id));
+          if (activeId === id) { setActiveId(null); setError(""); }
+        }}/>
       <section className="chat-area" data-home={active ? "false" : "true"}>
         <div className="chat-heading"><div className="eyebrow"><span/> {t("PERSONAL AI ENVIRONMENT")}</div><div className="nexus-hero-core" aria-label={`${t("NEXUS system core")}: ${busy ? t("PROCESSING") : modelTestState === "passed" ? t("CONNECTED") : t("STANDBY")}`}><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">{t("NEXUS CORE")} <b>{busy ? t("PROCESSING") : modelTestState === "passed" ? t("CONNECTED") : t("STANDBY")}</b></div><div className="core-label core-label-bottom">{t("NEXUS AU")}<span>·</span> {t("SYSTEM INTERFACE")}</div></div><h1>{active?.title ?? t("Your intelligence. Connected.")}</h1><p>{t("Your models, tools and ideas. Connected in one workspace.")}</p>
           <div className="nexus-system-grid" aria-label={t("System overview")}>
@@ -882,7 +945,9 @@ export default function App() {
         </div>
         <div className="messages">
           {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : t("YOU")} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>{m.role === "assistant" && <button className="icon-btn" onClick={() => void copyText(m.content)} aria-label={t("Copy response")}><Copy size={13}/></button>}</div><div className="message-content" aria-live={m.role === "assistant" ? "polite" : undefined}>{m.id === "welcome" ? t(m.content) : m.content}</div>{m.imageAttachment && <div className="message-image-attachment"><img src={`data:${m.imageAttachment.mimeType};base64,${m.imageAttachment.data}`} alt={t("Generated by NEXUS")}/><small>{m.imageAttachment.model} · {m.imageAttachment.aspectRatio} · {m.imageAttachment.imageSize}</small></div>}{m.sourceReferences?.length ? <div className="message-sources"><strong>{t("Sources")}</strong>{m.sourceReferences.map(source => <span key={source.chunkId}>{source.sourceLabel}{source.page ? ` · p. ${source.page}` : ""}{source.section ? ` · ${source.section}` : ""}</span>)}</div> : null}</div></div>)}
-          {busy && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">{t("NEXUS")}</div><div className="typing" role="status" aria-live="polite"><i/><i/><i/> {t("Generating response…")}</div></div></div>}
+          {busy && activeId === runningSessionId && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">{t("NEXUS")}</div><div className="typing" role="status" aria-live="polite"><i/><i/><i/> {t("Generating response…")}</div></div></div>}
+          {busy && activeId !== runningSessionId && <div className="terminal-notice" role="status">Another session is generating. Stop cancels that request; new requests are available after it finishes.</div>}
+          {terminalNotice && <div className="terminal-notice" role="status" aria-live="polite">{terminalNotice}</div>}
           {error && <div className="error-banner" role="alert" aria-live="assertive">{t(error)}</div>}
         </div>
         {!active && <div className="suggestions"><button onClick={() => setDraft(t("Help me plan the next development milestone for NEXUS AU."))}><Zap size={15}/> {t("Plan a project")} <span>↗</span></button><button onClick={() => setDraft(t("Explain a complex technical concept in simple terms."))}><Command size={15}/> {t("Learn something")} <span>↗</span></button><button onClick={() => setDraft(t("Review this idea and identify its biggest risks."))}><Bot size={15}/> {t("Analyze an idea")} <span>↗</span></button></div>}
@@ -931,7 +996,7 @@ export default function App() {
       onOpenChat={() => openWorkspacePanel("chat")}
       onRunWorkflow={task => { setAgentInitialTask(task); setStudioOpen(false); setAgentsOpen(true); }}
     /></Suspense>}
-    {agentsOpen && <Suspense fallback={moduleLoadingFallback}><AgentControlCenter key={`${provider.baseUrl}|${provider.model}|${provider.credentialHandle ?? "default"}|${provider.inferenceLocation}|${hasProviderKey}|${localNoAuth}`} onClose={() => { setAgentsOpen(false); setAgentInitialTask(""); }} providerSettings={provider} hasProviderKey={hasProviderKey || localNoAuth} projectId={selectedProjectId || undefined} initialTask={agentInitialTask} /></Suspense>}
+    {agentsOpen && <Suspense fallback={moduleLoadingFallback}><AgentControlCenter key={`${activeId ?? "standalone"}|${provider.baseUrl}|${provider.model}|${provider.credentialHandle ?? "default"}|${provider.inferenceLocation}|${hasProviderKey}|${localNoAuth}`} onClose={() => { setAgentsOpen(false); setAgentInitialTask(""); }} providerSettings={provider} hasProviderKey={hasProviderKey || localNoAuth} projectId={resolveAgentProjectId(active, selectedProjectId, activeId !== null)} initialTask={agentInitialTask} conversationId={activeId ?? undefined} conversationIds={conversations.map(item => item.id)} /></Suspense>}
     {settingsOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="provider-settings-title"><div className="modal-header"><div><div className="eyebrow">{t("CONFIGURATION")}</div><h2 id="provider-settings-title">{t("Provider settings")}</h2></div><button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label={t("Close settings")}><X size={18}/></button></div><div className="language-setting"><label htmlFor="nexus-language">{t("Язык интерфейса")}</label><select id="nexus-language" value={language} onChange={event => setLanguage(event.target.value as "ru" | "en")}><option value="ru">Русский</option><option value="en">English</option></select></div><p className="modal-description">{t("NEXUS includes OpenAI-compatible presets for OpenAI, Gemini, DeepSeek, Mistral, xAI/Grok, Groq, OpenRouter, SambaNova, NVIDIA, and OmniRoute, plus a native Anthropic Claude Messages adapter and local Ollama profiles. Browser preview sends supported cloud-provider requests through one secured Railway AI Gateway. Provider API keys stay in Railway Variables and are never sent to the browser. Desktop cloud API keys remain in the operating-system credential vault. Saved profiles can be routed by task, with safe failover only before visible output. Preparing or saving a profile does not connect to it; network requests start only when you explicitly check an endpoint, test generation, or send a chat message. NEXUS Public is the public deployment identity, not an upstream model provider.")}</p><label>{t("Model routing mode")}<select value={provider.routeMode ?? "auto"} onChange={event => setProvider(current => ({ ...current, routeMode: event.target.value as NonNullable<ProviderSettings["routeMode"]> }))}><option value="auto">{t("Automatic task-aware routing with safe fallback")}</option><option value="manual">{t("Use only the selected provider profile")}</option></select><small>{t("Automatic mode discovers models across saved profiles and selects a provider by task. Failover is allowed only before any answer text is shown.")}</small></label><Suspense fallback={<div className="module-inline-loading" role="status">{t("Loading provider profiles…")}</div>}><ProviderProfilesPanel currentSettings={provider} gatewaySessionReady={gatewaySessionReady} onSelect={settings => { setProvider(settings); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Provider profile selected. Check the endpoint before use."); setModelTestState("unchecked"); setModelTestMessage("Provider profile selected. Run a new generation test."); }} onDeleteCredential={async credentialHandle => { if (isTauri()) await invoke<void>("delete_provider_key", { credentialHandle }); }} /></Suspense><div className="modal-actions"><button className="secondary-btn" onClick={() => { setProvider(createOllamaProviderProfile().settings); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Ollama profile prepared locally. No network request was made."); setModelTestState("unchecked"); setModelTestMessage("Check the endpoint and run a generation test only when you are ready."); }}>{t("Prepare Ollama (no connection)")}</button><button className="secondary-btn" onClick={() => { setProvider(p => ({ ...p, baseUrl: "", model: "", inferenceLocation: "remote", credentialHandle: "default" })); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Enter a compatible cloud provider endpoint."); setModelTestState("unchecked"); setModelTestMessage("Provider settings changed. Test model generation again."); }}>{t("Configure cloud endpoint")}</button></div>{!isTauri() && <div className="provider-token-field"><label htmlFor="nexus-gateway-token">{t("NEXUS access token (not the Gemini API key)")}</label><input id="nexus-gateway-token" type="password" value={gatewayToken} onChange={event => { setGatewayToken(event.target.value); setGatewaySessionReady(false); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Access token changed. Verify the proxy again."); setModelTestState("unchecked"); setModelTestMessage("Access token changed. Run a new generation test."); }} autoComplete="off" placeholder={t("Paste the NEXUS_API_TOKEN from Railway")}/><div className="modal-actions"><button className="secondary-btn" type="button" onClick={() => { const bytes = crypto.getRandomValues(new Uint8Array(32)); const token = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join(""); setGatewayToken(token); setGatewaySessionReady(false); setError(""); void copyText(token); }}>{t("Generate 256-bit token & copy")}</button><button className="secondary-btn" type="button" onClick={() => void rememberGatewaySession()} disabled={!gatewayToken.trim()}>{t("Remember this device")}</button>{gatewaySessionReady && <button className="secondary-btn" type="button" onClick={() => void forgetGatewaySession()}>{t("Forget this device")}</button>}</div><small>{gatewaySessionReady ? "This device has a 30-day HttpOnly, Secure, SameSite session cookie. The API token itself is not saved in browser storage." : "Enter the shared NEXUS_API_TOKEN once. You can remember this device without storing the secret in JavaScript-accessible browser storage."}</small></div>}<label>{t("Base URL")}<input value={provider.baseUrl} onChange={e => { setProvider(p => ({ ...p, baseUrl: e.target.value })); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("The endpoint has not been checked in this session."); setModelTestState("unchecked"); setModelTestMessage("Provider settings changed. Test model generation again."); }} placeholder="http://127.0.0.1:11434/v1"/></label><label>{t("Declared inference location for selected model")}<select value={provider.inferenceLocation} onChange={e => { setProvider(p => ({ ...p, inferenceLocation: e.target.value as ProviderSettings["inferenceLocation"] })); setModelTestState("unchecked"); setModelTestMessage("The declared inference location changed. Run a new generation test."); }}><option value="remote">{t("Remote cloud model (safe default)")}</option><option value="local">{t("Local model (verify provider route)")}</option></select><small>This is an owner-declared disclosure setting, not a verified runtime fact. NEXUS cannot inspect whether a provider forwards a request to another service. Localhost does not guarantee local inference.</small></label><label>{t("Model ID")}<input list="provider-model-options" value={provider.model} onChange={e => { setProvider(p => ({ ...p, model: e.target.value })); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Model selection changed. Refresh the catalog before testing generation."); setModelTestState("unchecked"); setModelTestMessage("The selected model changed. Run a new generation test."); }} placeholder={t("Select a model from the discovered catalog")}/><datalist id="provider-model-options">{availableModels.map(model => <option key={model} value={model}/>)}</datalist><small>{availableModels.length ? `${availableModels.length} models loaded from the configured endpoint.` : "Load model IDs from the configured /v1/models endpoint."}</small></label><div className="modal-actions"><button className="secondary-btn" onClick={() => void loadProviderModels()} disabled={(!isTauri() && !browserGatewaySelected) || modelsLoading || modelTestState === "testing" || (isTauri() && !localNoAuth && providerVaultStatus !== "available")}>{modelsLoading ? "Checking endpoint…" : "Check endpoint & load models"}</button><button className="secondary-btn" onClick={() => void testProviderModel()} disabled={(!isTauri() && !browserGatewaySelected) || modelsLoading || modelTestState === "testing" || providerConnectionState !== "reachable" || (isTauri() && !localNoAuth && providerVaultStatus !== "available")}>{modelTestState === "testing" ? "Testing generation…" : "Test selected model"}</button></div><div className={`provider-connection ${providerConnectionState}`} role="status"><span className="provider-connection-dot"/><div><strong>{providerConnectionState === "checking" ? "CHECKING ENDPOINT" : providerConnectionState === "reachable" ? (isTauri() ? "MODEL CATALOG REACHABLE" : "RAILWAY AI GATEWAY SELECTED") : providerConnectionState === "failed" ? "ENDPOINT CHECK FAILED" : "ENDPOINT NOT CHECKED"}</strong><small>{t(providerConnectionMessage)}</small></div></div><div className={`provider-connection ${modelTestState === "passed" ? "reachable" : modelTestState === "failed" ? "failed" : modelTestState === "testing" ? "checking" : "unchecked"}`} role="status"><span className="provider-connection-dot"/><div><strong>{modelTestState === "passed" ? "MODEL GENERATION VERIFIED" : modelTestState === "failed" ? "MODEL GENERATION FAILED" : modelTestState === "testing" ? "TESTING MODEL GENERATION" : "MODEL GENERATION NOT TESTED"}</strong><small>{t(modelTestMessage)}</small></div></div><label>{t("Credential profile")}<select value={provider.credentialHandle ?? "default"} disabled={isDedicatedCredentialHandle(provider.credentialHandle)} onChange={e => { const credentialHandle = e.target.value as NonNullable<ProviderSettings["credentialHandle"]>; setProvider(p => ({ ...p, credentialHandle })); setProviderVaultStatus("loading"); setHasProviderKey(false); setApiKey(""); setAvailableModels([]); setProviderConnectionState("unchecked"); setProviderConnectionMessage("Credential profile changed. Check the endpoint again."); setModelTestState("unchecked"); setModelTestMessage("Credential profile changed. Run a new generation test."); }}>{isDedicatedCredentialHandle(provider.credentialHandle) && <option value={provider.credentialHandle}>{t("Dedicated key for this saved profile")}</option>}<option value="default">{t("Shared default provider key")}</option><option value="ollama">{t("Shared additional provider key")}</option><option value="none">{t("No key · local loopback only")}</option></select><small>{isDedicatedCredentialHandle(provider.credentialHandle) ? "This saved cloud profile has its own isolated OS credential-vault entry." : "Default and Additional are shared credential slots. New saved cloud profiles receive a dedicated key entry. No-key mode is restricted to localhost or loopback."}</small></label><label>{t("API key")}<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={localNoAuth ? "Not required for this local endpoint" : hasProviderKey ? "Saved in OS credential vault" : "Enter provider API key"} autoComplete="off" disabled={localNoAuth || !isTauri() || providerVaultStatus === "unavailable"}/><small>{localNoAuth ? "No key is sent. This mode is accepted only for loopback endpoints by the native host." : providerVaultStatus === "available" ? "A provider key is saved in the OS credential vault on this device." : providerVaultStatus === "missing" ? "No provider key is saved." : providerVaultStatus === "unavailable" ? "The OS credential vault is unavailable. NEXUS will not fall back to plaintext storage. On Linux, check that your Secret Service/keyring session is running." : providerVaultStatus === "browser" ? "Provider API keys stay in Railway Variables. Browser requests use the separate NEXUS access token above; this desktop API-key field is not used in preview." : "Checking the OS credential vault…"}</small></label><div className="security-note"><ShieldCheck size={16}/> The selected provider key is written to its own OS credential-vault entry. Chat requests send only the credential profile name, never the secret itself. macOS uses Keychain, Windows uses Credential Manager, and Linux requires a working Secret Service-compatible keyring.</div><div className="modal-actions"><button className="secondary-btn" onClick={() => void deleteProviderKey()} disabled={!isTauri() || !hasProviderKey}>{t("Delete saved key")}</button><button className="primary-btn" onClick={() => void saveProviderSettings()}><Check size={15}/> Save settings</button></div><div className="settings-backup"><h3>{t("Workspace backup")}</h3><p>Backups are encrypted with a passphrase using AES-256-GCM. Projects, conversations, memories, knowledge text, agent checkpoints, Training Lab records, and sanitized audit history are included. Provider credentials and approved folder permissions are excluded.</p><label>{t("Backup passphrase (at least 12 characters)")}<input type="password" value={backupPassphrase} onChange={e => setBackupPassphrase(e.target.value)} autoComplete="new-password" placeholder={t("Enter a private backup passphrase")}/></label><label>{t("Confirm passphrase for export")}<input type="password" value={backupPassphraseConfirm} onChange={e => setBackupPassphraseConfirm(e.target.value)} autoComplete="new-password" placeholder={t("Re-enter the passphrase")}/></label><small>NEXUS never stores this passphrase. You must keep it safe: an encrypted backup cannot be recovered without it. Older plaintext backups can still be imported after an explicit warning.</small>{!isTauri() && <small>{t("Backup import and export require the native desktop app. These controls are disabled in browser preview.")}</small>}<div className="modal-actions"><button className="secondary-btn" onClick={() => void exportWorkspaceBackup()} disabled={!isTauri() || busy || backupWorking}>{backupWorking ? "Preparing backup…" : "Export encrypted backup"}</button><label className="secondary-btn" aria-disabled={!isTauri()}>{t("Import backup")}<input type="file" accept="application/json,.json,.nexusbackup" hidden disabled={!isTauri() || busy || backupWorking} onChange={e => { void importWorkspaceBackup(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }}/></label></div></div></section></div>}
   </div>;
 }
