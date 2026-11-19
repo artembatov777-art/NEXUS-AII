@@ -31,6 +31,7 @@ describe("AgentRunManager", () => {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
     }));
     expect(manager.cancel("cancel-me")).toBe(true);
+    expect(manager.cancel("cancel-me")).toBe(false);
     await run;
     expect(manager.list()[0].status).toBe("cancelled");
     expect(manager.cancel("cancel-me")).toBe(false);

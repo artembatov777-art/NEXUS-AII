@@ -170,7 +170,7 @@ export class AgentRunManager {
 
   cancel(id: string): boolean {
     const controller = this.controllers.get(id);
-    if (!controller) return false;
+    if (!controller || controller.signal.aborted) return false;
     controller.abort();
     return true;
   }
