@@ -144,6 +144,7 @@ describe("AgentRunManager", () => {
     const manager = new AgentRunManager();
     await manager.start("first", "chat", async () => "waiting_for_approval");
     manager.linkRuntimeRun("first", "checkpoint");
+    expect(manager.list("chat")[0].runtimeRunId).toBe("checkpoint");
     expect(manager.resolveWaiting("checkpoint", "completed")).toBe(true);
     expect(manager.list("chat")[0].status).toBe("completed");
     expect(manager.resolveWaiting("checkpoint", "failed")).toBe(false);
@@ -155,7 +156,7 @@ describe("AgentRunManager", () => {
     await manager.start("second", "two", async () => {});
     manager.linkRuntimeRun("first", "checkpoint");
     expect(() => manager.linkRuntimeRun("second", "checkpoint")).toThrow("another conversation");
-    expect(() => manager.linkRuntimeRun("second", "wrong\\nid")).toThrow("Invalid");
+    expect(() => manager.linkRuntimeRun("second", "wrong\nid")).toThrow("Invalid");
   });
 
   it("continues execution if a UI subscriber throws", async () => {

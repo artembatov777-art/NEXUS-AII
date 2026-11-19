@@ -136,10 +136,10 @@ export class AgentRunManager {
     return (async () => {
       try {
         const outcome = await task(controller.signal);
-        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : outcome ?? "completed", startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now() });
+        this.runs.set(id, { ...this.runs.get(id)!, status: controller.signal.aborted ? "cancelled" : outcome ?? "completed", finishedAt: Date.now() });
       } catch (cause) {
         this.runs.set(id, {
-          id, conversationId, startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now(),
+          ...this.runs.get(id)!, finishedAt: Date.now(),
           status: controller.signal.aborted ? "cancelled" : "failed",
           ...(!controller.signal.aborted ? { error: cause instanceof Error ? cause.message : "Agent run failed." } : {})
         });
