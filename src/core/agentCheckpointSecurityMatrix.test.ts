@@ -440,4 +440,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state symbol", () => {
     expect(validateAgentCheckpoint({ ...valid, state: Symbol("x") as unknown as AgentCheckpoint["state"] })).not.toBeNull();
   });
+  it("rejects invalid state Date", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: new Date() as unknown as AgentCheckpoint["state"] })).not.toBeNull();
+  });
 });
