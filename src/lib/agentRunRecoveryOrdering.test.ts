@@ -50,4 +50,22 @@ describe("checkpoint recovery ordering", () => {
     expect(manager.activeRun("standalone")).toBeNull();
   });
 
+  it("prefers sequence over timestamps and is independent of input order", () => {
+    const older: AgentCheckpoint = {
+      schemaVersion: 1, runId: "ordered", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "running", state: {}, createdAt: 10, updatedAt: 1000
+    };
+    const newer: AgentCheckpoint = {
+      ...older, sequence: 3, updatedAt: 1001, status: "failed"
+    };
+    for (const snapshots of [[older, newer], [newer, older]]) {
+      const manager = new AgentRunManager();
+      manager.restoreCheckpoints("standalone", snapshots);
+      expect(manager.list("standalone")).toMatchObject([
+        { id: "ordered", status: "failed", finishedAt: 1001 }
+      ]);
+    }
+  });
+
 });
