@@ -102,7 +102,13 @@ function isSafeJsonValue(value: unknown, depth = 0, seen = new Set<object>()): v
   if (seen.has(value)) return false;
   seen.add(value);
   if (Array.isArray(value)) {
-    const valid = value.every(item => isSafeJsonValue(item, depth + 1, seen));
+    // JSON.stringify silently converts sparse array holes to null and drops
+    // non-index properties. Reject either to preserve checkpoint integrity.
+    const valid = Object.keys(value).length === value.length &&
+      Array.from({ length: value.length }, (_, index) =>
+        Object.prototype.hasOwnProperty.call(value, index) &&
+        isSafeJsonValue(value[index], depth + 1, seen)
+      ).every(Boolean);
     seen.delete(value);
     return valid;
   }
