@@ -31,6 +31,8 @@ import { WorkspaceKnowledgeRepository, WorkspaceMemoryRepository } from "./lib/n
 import { matchesNewConversationShortcut } from "./lib/keyboardShortcuts";
 import { resolveDialogKeyboardAction } from "./lib/dialogKeyboard";
 import { CommandCenter } from "./components/CommandCenter";
+import { TerminalSessions } from "./components/TerminalSessions";
+import { useSessionDraft } from "./components/useSessionDraft";
 import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
 import { resolveConversationProjectId } from "./lib/conversationProjectContext";
 import { getWorkspacePanelState, type WorkspacePanel } from "./lib/workspacePanels";
@@ -65,6 +67,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsReady, setConversationsReady] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [openSessionIds, setOpenSessionIds] = useState<string[]>([]);
   const [provider, setProvider] = useState<ProviderSettings>(loadProvider);
   const [apiKey, setApiKey] = useState("");
   // Shared owner token is memory-only; a remembered device uses an HttpOnly server-issued cookie.
@@ -96,8 +99,9 @@ export default function App() {
   const [studioOpen, setStudioOpen] = useState(false);
   const [imageGenerationOpen, setImageGenerationOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useSessionDraft(activeId);
   const [busy, setBusy] = useState(false);
+  const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const [lastUsage, setLastUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const providerCheckGeneration = useRef(0);
@@ -241,6 +245,13 @@ export default function App() {
   useEffect(() => { invoke<string>("get_app_version").then(setAppVersion).catch(() => undefined); }, []);
 
   const active = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId]);
+  useEffect(() => {
+    if (activeId) setOpenSessionIds(current => current.includes(activeId) ? current : [...current, activeId]);
+  }, [activeId]);
+  const openSessions = useMemo(() => openSessionIds.flatMap(id => {
+    const conversation = conversations.find(item => item.id === id);
+    return conversation ? [{ id, title: conversation.title }] : [];
+  }), [openSessionIds, conversations]);
   const filteredConversations = useMemo(() => filterConversationHistory(conversations, selectedProjectId, historyQuery), [conversations, selectedProjectId, historyQuery]);
   const messages = active?.messages ?? [welcome];
   // The gateway may be local while routing to a cloud model. Never infer
@@ -397,6 +408,7 @@ export default function App() {
     updateMessages(target.id, next);
     setDraft("");
     setBusy(true);
+    setRunningSessionId(target.id);
     setError("");
     const controller = new AbortController();
     chatAbortController.current = controller;
@@ -463,6 +475,7 @@ export default function App() {
     } finally {
       if (chatAbortController.current === controller) chatAbortController.current = null;
       setBusy(false);
+      setRunningSessionId(null);
     }
   }
   function removeConversation(id: string) {
@@ -880,6 +893,16 @@ export default function App() {
 
     <main className="main-panel">
       <header className="topbar"><div className="top-left"><button className="icon-btn" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? "Close navigation" : "Open navigation"} aria-expanded={sidebarOpen} aria-controls="nexus-sidebar"><Menu size={18}/></button><div className="breadcrumb">{t("Workspace")} <span>/</span> <strong>{t(activeSection)}</strong></div></div><div className="top-right"><div className="runtime-indicator" title={isTauri() ? "Native desktop shell detected" : "Browser preview; native system integrations are unavailable"}><span className={`runtime-dot ${isTauri() ? "native" : "preview"}`}/>{isTauri() ? t("DESKTOP") : t("WEB PREVIEW")}</div><button type="button" className="model-pill" onClick={() => openWorkspacePanel("settings")} title={providerRoute === "remote" ? "Declared remote route: your message and selected context may be processed outside this device." : "Declared local route: NEXUS cannot independently verify the provider's upstream processing route. Verify it before sending private context."} aria-label={`${providerRoute === "remote" ? "Declared remote" : "Declared local"} model route ${provider.model}`}><span className="status-dot"/>{providerRoute === "remote" ? t("REMOTE") : t("LOCAL*")} · {provider.model}<ChevronDown size={14}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("command")} aria-label="Open command palette" title="Command palette · Ctrl/Cmd + Shift + P"><Command size={17}/></button><button className={`icon-btn focus-mode-toggle ${focusMode ? "active" : ""}`} onClick={() => { setFocusMode(value => !value); if (window.matchMedia("(max-width: 640px)").matches) setSidebarOpen(false); }} aria-label={focusMode ? "Exit Focus Mode" : "Enter Focus Mode"} title={focusMode ? "Exit Focus Mode" : "Focus Mode"} aria-pressed={focusMode}><Sparkles size={17}/></button><button className="icon-btn" onClick={() => openWorkspacePanel("settings")} aria-label={t("Settings")}><Settings2 size={18}/></button></div></header>
+      <TerminalSessions sessions={openSessions} activeId={activeId} onCreate={newChat}
+        onSelect={id => {
+          const session = conversations.find(item => item.id === id);
+          if (!session) return;
+          setActiveId(id); setSelectedProjectId(session.projectId ?? ""); setError("");
+        }}
+        onClose={id => {
+          setOpenSessionIds(current => current.filter(item => item !== id));
+          if (activeId === id) { setActiveId(null); setError(""); }
+        }}/>
       <section className="chat-area" data-home={active ? "false" : "true"}>
         <div className="chat-heading"><div className="eyebrow"><span/> {t("PERSONAL AI ENVIRONMENT")}</div><div className="nexus-hero-core" aria-label={`${t("NEXUS system core")}: ${busy ? t("PROCESSING") : modelTestState === "passed" ? t("CONNECTED") : t("STANDBY")}`}><div className="core-orbit orbit-one"/><div className="core-orbit orbit-two"/><div className="core-orbit orbit-three"/><div className="core-crosshair"/><div className="core-glow"/><div className="core-center"><span>N</span></div><div className="core-label core-label-top">{t("NEXUS CORE")} <b>{busy ? t("PROCESSING") : modelTestState === "passed" ? t("CONNECTED") : t("STANDBY")}</b></div><div className="core-label core-label-bottom">{t("NEXUS AU")}<span>·</span> {t("SYSTEM INTERFACE")}</div></div><h1>{active?.title ?? t("Your intelligence. Connected.")}</h1><p>{t("Your models, tools and ideas. Connected in one workspace.")}</p>
           <div className="nexus-system-grid" aria-label={t("System overview")}>
@@ -919,7 +942,8 @@ export default function App() {
         </div>
         <div className="messages">
           {messages.map(m => <div className={`message ${m.role}`} key={m.id}><div className="message-avatar">{m.role === "assistant" ? <Sparkles size={16}/> : "Y"}</div><div className="message-body"><div className="message-author">{m.role === "assistant" ? "NEXUS" : t("YOU")} <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>{m.role === "assistant" && <button className="icon-btn" onClick={() => void copyText(m.content)} aria-label={t("Copy response")}><Copy size={13}/></button>}</div><div className="message-content" aria-live={m.role === "assistant" ? "polite" : undefined}>{m.id === "welcome" ? t(m.content) : m.content}</div>{m.imageAttachment && <div className="message-image-attachment"><img src={`data:${m.imageAttachment.mimeType};base64,${m.imageAttachment.data}`} alt={t("Generated by NEXUS")}/><small>{m.imageAttachment.model} · {m.imageAttachment.aspectRatio} · {m.imageAttachment.imageSize}</small></div>}{m.sourceReferences?.length ? <div className="message-sources"><strong>{t("Sources")}</strong>{m.sourceReferences.map(source => <span key={source.chunkId}>{source.sourceLabel}{source.page ? ` · p. ${source.page}` : ""}{source.section ? ` · ${source.section}` : ""}</span>)}</div> : null}</div></div>)}
-          {busy && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">{t("NEXUS")}</div><div className="typing" role="status" aria-live="polite"><i/><i/><i/> {t("Generating response…")}</div></div></div>}
+          {busy && activeId === runningSessionId && <div className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">{t("NEXUS")}</div><div className="typing" role="status" aria-live="polite"><i/><i/><i/> {t("Generating response…")}</div></div></div>}
+          {busy && activeId !== runningSessionId && <div className="terminal-notice" role="status">Another session is generating. Stop cancels that request; new requests are available after it finishes.</div>}
           {terminalNotice && <div className="terminal-notice" role="status" aria-live="polite">{terminalNotice}</div>}
           {error && <div className="error-banner" role="alert" aria-live="assertive">{t(error)}</div>}
         </div>

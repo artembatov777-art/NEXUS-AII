@@ -555,3 +555,12 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 
 /* Local command feedback is separate from model messages and is never persisted as an AI response. */
 .terminal-notice{max-width:760px;margin:0 auto 15px;padding:10px 13px;border:1px solid #45445b;background:#232231;color:#e1dff0;border-radius:8px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+
+.terminal-sessions{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:6px 12px;border-bottom:1px solid var(--nx-line)}
+.terminal-session{display:flex;align-items:center;max-width:220px;border:1px solid #383847;border-radius:6px;background:#22212d}
+.terminal-session button,.terminal-session-add{background:transparent;color:#c7c5d2;border:0;padding:6px 8px;cursor:pointer}
+.terminal-session button:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.terminal-session button[aria-current=page]{color:#fff;font-weight:600}
+.terminal-session-close{display:flex;align-items:center}
+.terminal-session-add{display:flex;align-items:center;border-radius:6px}
+.terminal-sessions button:focus-visible{outline:2px solid #ad9ae4;outline-offset:1px}
