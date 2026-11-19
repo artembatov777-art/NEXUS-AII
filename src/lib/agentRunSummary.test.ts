@@ -8,7 +8,7 @@ describe("summarizeRuns", () => {
       { id: "2", conversationId: "a", status: "failed", startedAt: 2 },
       { id: "3", conversationId: "b", status: "completed", startedAt: 3 }
     ] satisfies ManagedRun[];
-    expect(summarizeRuns(runs, "a")).toEqual({ running: 1, completed: 0, failed: 1, cancelled: 0 });
+    expect(summarizeRuns(runs, "a")).toEqual({ running: 1, waiting_for_approval: 0, completed: 0, failed: 1, cancelled: 0 });
     expect(summarizeRuns(runs).completed).toBe(1);
   });
 });

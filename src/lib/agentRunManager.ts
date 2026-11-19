@@ -7,7 +7,7 @@ import { validAgentRunIdentity } from "./agentRunIdentity";
  * Owns the lifetime of foreground agent tasks independently of React panels.
  * UI subscribers may mount/unmount without cancelling the underlying task.
  */
-export type ManagedRunStatus = "running" | "completed" | "failed" | "cancelled";
+export type ManagedRunStatus = "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
 export interface ManagedRun {
   id: string;
   conversationId: string;
@@ -85,7 +85,7 @@ export class AgentRunManager {
     for (const listener of [...this.listeners]) listener(snapshot);
   }
 
-  start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void>): Promise<void> {
+  start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void | "waiting_for_approval" | "failed">): Promise<void> {
     if (!validAgentRunIdentity(id, conversationId)) throw new Error("Invalid run or conversation ID.");
     if (this.runs.has(id)) throw new Error("A run with this ID already exists.");
     if (this.activeByConversation.has(conversationId)) throw new Error("Conversation already has an active run.");
@@ -96,8 +96,8 @@ export class AgentRunManager {
     this.publish();
     return (async () => {
       try {
-        await task(controller.signal);
-        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : "completed", startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now() });
+        const outcome = await task(controller.signal);
+        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : outcome ?? "completed", startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now() });
       } catch (cause) {
         this.runs.set(id, {
           id, conversationId, startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now(),

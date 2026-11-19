@@ -130,6 +130,16 @@ describe("AgentRunManager", () => {
     manager.appendEvent("b", "error", "b-error");
     expect(manager.eventsByKind("chat-a", ["error"]).map(e => e.message)).toEqual(["a-error"]);
   });
+  it("preserves approval-waiting outcomes for resumable workflows", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval", "chat", async () => "waiting_for_approval");
+    expect(manager.list()[0].status).toBe("waiting_for_approval");
+    expect(manager.activeRun("chat")).toBeNull();
+    await manager.start("next", "chat", async () => "failed");
+    expect(manager.summary("chat").failed).toBe(1);
+    expect(manager.summary("chat").waiting_for_approval).toBe(1);
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
