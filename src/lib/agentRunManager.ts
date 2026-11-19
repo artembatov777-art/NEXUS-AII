@@ -82,8 +82,11 @@ export class AgentRunManager {
     if (!run) throw new Error("Managed run was not found.");
     if (!validAgentRunIdentity(runtimeRunId, run.conversationId)) throw new Error("Invalid runtime run ID.");
     if (run.runtimeRunId && run.runtimeRunId !== runtimeRunId) throw new Error("Managed run already references a different runtime run.");
-    if (this.list().some(other => other.runtimeRunId === runtimeRunId && other.conversationId !== run.conversationId)) {
-      throw new Error("Runtime run is owned by another conversation.");
+    const existingOwner = this.list().find(other => other.id !== managerId && other.runtimeRunId === runtimeRunId);
+    if (existingOwner) {
+      throw new Error(existingOwner.conversationId !== run.conversationId
+        ? "Runtime run is owned by another conversation."
+        : "Runtime run is already linked to another managed run.");
     }
     this.runs.set(managerId, { ...run, runtimeRunId });
     this.publish();
