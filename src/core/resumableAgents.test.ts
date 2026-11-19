@@ -33,7 +33,8 @@ const makeRuntime = (service: AgentCheckpointService) => {
   const runtime = new ResumableAgentRuntime(service,
     { authorize: vi.fn().mockResolvedValue("allow") },
     { runId: () => runId },
-    { now: () => 1_000 });
+    { now: () => 1_000 }, undefined, undefined,
+    { verifySafeContinuation: async () => ok(undefined) });
   runtime.register(makeDefinition());
   return runtime;
 };
