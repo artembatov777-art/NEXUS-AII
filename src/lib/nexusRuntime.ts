@@ -126,7 +126,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const agentToolExecutor = new GatewayAgentToolExecutor(toolGateway, options.actorId);
   const approvalAuthority = new InMemoryAgentApprovalAuthority(checkpointService, ids);
   const agentRuntime = new ResumableAgentRuntime(
-    checkpointService, new AgentPermissionAdapter(policy), ids, clock, agentToolExecutor, approvalAuthority
+    checkpointService, new AgentPermissionAdapter(policy), ids, clock, agentToolExecutor, approvalAuthority, toolReconciliationService
   );
   const createCoordinator = (threadId = "nexus-multi-agent") => new MultiAgentCoordinator(
     new ResumableAgentTaskExecutor(agentRuntime, threadId),
