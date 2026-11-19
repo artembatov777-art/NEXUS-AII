@@ -65,6 +65,7 @@ export class AgentRunManager {
     for (const [managerId, run] of this.runs) {
       if (run.runtimeRunId === runtimeRunId && run.status === "waiting_for_approval") {
         this.runs.set(managerId, { ...run, status, finishedAt: Date.now() });
+        this.pruneFinished();
         this.publish();
         return true;
       }
@@ -104,6 +105,17 @@ export class AgentRunManager {
     return () => { this.listeners.delete(listener); };
   }
 
+  private pruneFinished(): void {
+    const completed = [...this.runs.entries()].filter(([, run]) => run.status === "completed" || run.status === "failed" || run.status === "cancelled");
+    const excess = completed.length - 250;
+    if (excess <= 0) return;
+    completed.sort((a, b) => (a[1].finishedAt ?? a[1].startedAt) - (b[1].finishedAt ?? b[1].startedAt));
+    for (const [id] of completed.slice(0, excess)) {
+      this.runs.delete(id);
+      this.events.delete(id);
+    }
+  }
+
   private publish(): void {
     const snapshot = this.list();
     for (const listener of [...this.listeners]) {
@@ -133,6 +145,7 @@ export class AgentRunManager {
       } finally {
         this.controllers.delete(id);
         if (this.activeByConversation.get(conversationId) === id) this.activeByConversation.delete(conversationId);
+        this.pruneFinished();
         this.publish();
       }
     })();

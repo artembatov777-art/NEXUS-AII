@@ -166,6 +166,20 @@ describe("AgentRunManager", () => {
     unsubscribe();
   });
 
+  it("bounds retained terminal runs without deleting active approval requests", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval", "chat", async () => "waiting_for_approval");
+    for (let index = 0; index < 260; index++) {
+      await manager.start("run-" + index, "chat", async () => {});
+      manager.appendEvent("run-" + index, "output", "completed");
+    }
+    expect(manager.list().length).toBe(251);
+    expect(manager.list().some(run => run.id === "approval")).toBe(true);
+    expect(manager.list().some(run => run.id === "run-0")).toBe(false);
+    expect(manager.history("run-0")).toEqual([]);
+    expect(manager.list().filter(run => run.status === "completed")).toHaveLength(250);
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
