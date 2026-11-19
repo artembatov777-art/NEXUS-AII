@@ -269,6 +269,7 @@ struct StageReceipt {
 enum PublishPoint<'a> {
     Staged(&'a StageReceipt),
     Disarmed,
+    VerifiedForPublication,
 }
 
 fn pinned_ancestors(workspace: &Workspace, parent: &Path) -> Result<Vec<Dir>, String> {
@@ -487,6 +488,7 @@ fn edit(
     {
         return Err("Original changed before publication".into());
     }
+    checkpoint(PublishPoint::VerifiedForPublication).map_err(|error| prep(error.to_string()))?;
     if let Err(rename_error) = rename_over(&stage.file, &directory, name) {
         // Disarmed stages are otherwise cleaned up only by Drop, where a
         // failed delete disposition cannot be reported to the caller.
@@ -873,7 +875,10 @@ mod tests {
             "replacement",
             |_| Ok(()),
         );
-        assert!(result.is_err(), "a non-delete-sharing handle must block publication");
+        assert!(
+            result.is_err(),
+            "a non-delete-sharing handle must block publication"
+        );
         drop(blocker);
         assert_eq!(
             ws.snapshot(Path::new("note")).unwrap(),
@@ -926,6 +931,42 @@ mod tests {
             ("replacement".into(), written)
         );
         assert!(!fixture.0.join("moved-note").exists());
+    }
+
+    #[test]
+    fn demonstrates_external_name_substitution_after_last_revision_check() {
+        let _privilege =
+            AuditPrivilege::enable().expect("Windows runner must allow reading fixture SACLs");
+        let fixture = Fixture::new("publication-race");
+        let note = fixture.0.join("note");
+        let old = fixture.0.join("old-original");
+        fs::write(&note, "original").unwrap();
+        let ws = Workspace::grant(&fixture.0).unwrap();
+        let (_, revision) = ws.snapshot(Path::new("note")).unwrap();
+        let result = edit(
+            &ws,
+            Path::new("note"),
+            "original",
+            &revision,
+            "replacement",
+            |point| {
+                if matches!(point, PublishPoint::VerifiedForPublication) {
+                    // A separate writer can replace the name while the old
+                    // inode is open with FILE_SHARE_DELETE.
+                    fs::rename(&note, &old)?;
+                    fs::write(&note, "external edit")?;
+                }
+                Ok(())
+            },
+        );
+        assert!(
+            result.is_ok(),
+            "The test must expose an unreported replacement: {result:?}"
+        );
+        assert_eq!(fs::read_to_string(&note).unwrap(), "replacement");
+        assert_eq!(fs::read_to_string(&old).unwrap(), "original");
+        // The external content was overwritten. This is evidence that the
+        // test-only candidate must remain disabled in production.
     }
 
     #[test]
