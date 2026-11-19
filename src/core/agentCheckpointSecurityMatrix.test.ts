@@ -221,4 +221,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects U+0002 in threadId", () => {
     expect(validateAgentCheckpoint({ ...valid, threadId: "part" + String.fromCharCode(2) + "-end" })).not.toBeNull();
   });
+  it("rejects U+0003 in threadId", () => {
+    expect(validateAgentCheckpoint({ ...valid, threadId: "part" + String.fromCharCode(3) + "-end" })).not.toBeNull();
+  });
 });
