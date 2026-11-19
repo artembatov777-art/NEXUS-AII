@@ -73,7 +73,7 @@ describe("AgentRunManager", () => {
 
   it("rejects malformed run and conversation IDs", () => {
     const manager = new AgentRunManager();
-    expect(() => manager.start("bad\\nrun", "chat", async () => {})).toThrow("Invalid");
+    expect(() => manager.start("bad\nrun", "chat", async () => {})).toThrow("Invalid");
     expect(() => manager.start("good", " ", async () => {})).toThrow("Invalid");
   });
   it("exposes only the active run for its conversation", async () => {
