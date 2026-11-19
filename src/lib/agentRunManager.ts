@@ -34,6 +34,12 @@ export class AgentRunManager {
       .map(run => ({ ...run }));
   }
 
+  activeRun(conversationId: string): ManagedRun | null {
+    const id = this.activeByConversation.get(conversationId);
+    const run = id ? this.runs.get(id) : undefined;
+    return run ? { ...run } : null;
+  }
+
   history(runId: string): ManagedRunEvent[] {
     return (this.events.get(runId) ?? []).map(event => ({ ...event }));
   }

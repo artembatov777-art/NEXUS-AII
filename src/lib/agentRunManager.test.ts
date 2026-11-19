@@ -76,6 +76,17 @@ describe("AgentRunManager", () => {
     expect(() => manager.start("bad\\nrun", "chat", async () => {})).toThrow("Invalid");
     expect(() => manager.start("good", " ", async () => {})).toThrow("Invalid");
   });
+  it("exposes only the active run for its conversation", async () => {
+    const manager = new AgentRunManager();
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const task = manager.start("active", "chat", async () => { await pending; });
+    expect(manager.activeRun("chat")?.id).toBe("active");
+    expect(manager.activeRun("other")).toBeNull();
+    finish();
+    await task;
+    expect(manager.activeRun("chat")).toBeNull();
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
