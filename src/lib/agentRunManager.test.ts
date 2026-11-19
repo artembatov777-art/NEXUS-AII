@@ -71,6 +71,11 @@ describe("AgentRunManager", () => {
     expect(run.finishedAt).toBeGreaterThanOrEqual(run.startedAt);
   });
 
+  it("rejects malformed run and conversation IDs", () => {
+    const manager = new AgentRunManager();
+    expect(() => manager.start("bad\\nrun", "chat", async () => {})).toThrow("Invalid");
+    expect(() => manager.start("good", " ", async () => {})).toThrow("Invalid");
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });

@@ -1,3 +1,4 @@
+import { validAgentRunIdentity } from "./agentRunIdentity";
 /**
  * Owns the lifetime of foreground agent tasks independently of React panels.
  * UI subscribers may mount/unmount without cancelling the underlying task.
@@ -58,7 +59,7 @@ export class AgentRunManager {
   }
 
   start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void>): Promise<void> {
-    if (!id.trim() || !conversationId.trim()) throw new Error("Run and conversation IDs are required.");
+    if (!validAgentRunIdentity(id, conversationId)) throw new Error("Invalid run or conversation ID.");
     if (this.runs.has(id)) throw new Error("A run with this ID already exists.");
     if (this.activeByConversation.has(conversationId)) throw new Error("Conversation already has an active run.");
     const controller = new AbortController();
