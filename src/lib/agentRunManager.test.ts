@@ -158,6 +158,14 @@ describe("AgentRunManager", () => {
     expect(() => manager.linkRuntimeRun("second", "wrong\\nid")).toThrow("Invalid");
   });
 
+  it("continues execution if a UI subscriber throws", async () => {
+    const manager = new AgentRunManager();
+    const unsubscribe = manager.subscribe(() => { throw new Error("broken panel"); });
+    await manager.start("safe-run", "chat", async () => {});
+    expect(manager.list()[0].status).toBe("completed");
+    unsubscribe();
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });

@@ -100,13 +100,15 @@ export class AgentRunManager {
 
   subscribe(listener: ManagedRunListener): () => void {
     this.listeners.add(listener);
-    listener(this.list());
+    try { listener(this.list()); } catch { /* A broken UI observer must not break the running agent. */ }
     return () => { this.listeners.delete(listener); };
   }
 
   private publish(): void {
     const snapshot = this.list();
-    for (const listener of [...this.listeners]) listener(snapshot);
+    for (const listener of [...this.listeners]) {
+      try { listener(snapshot); } catch { /* UI observers must be isolated from execution. */ }
+    }
   }
 
   start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void | "waiting_for_approval" | "failed">): Promise<void> {
