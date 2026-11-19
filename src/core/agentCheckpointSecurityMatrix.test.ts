@@ -422,4 +422,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state NaN", () => {
     expect(validateAgentCheckpoint({ ...valid, state: Number.NaN })).not.toBeNull();
   });
+  it("rejects invalid state Infinity", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: Infinity })).not.toBeNull();
+  });
 });
