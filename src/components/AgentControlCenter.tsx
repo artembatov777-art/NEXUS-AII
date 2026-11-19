@@ -416,6 +416,20 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }, true);
   }
 
+  function continueInterrupted(checkpoint: AgentCheckpoint) {
+    if (!runtime || busy || managedRuns.activeRun(conversationKey)) return;
+    // Planned workflows require a coordinator plan that this view cannot
+    // reconstruct. Limit manual recovery to the registered local workflow.
+    if (checkpoint.status !== "running" || checkpoint.threadId !== threads.primary ||
+        checkpoint.agentId !== BUILT_IN_AGENT_IDS.localWorkflow || checkpoint.runId === activeRunId) return;
+    if (!window.confirm(
+      "Manually continue this interrupted local agent from its last saved step? " +
+      "NEXUS will verify durable tool history, request fresh permissions, " +
+      "and stop instead of replaying a tool with an uncertain outcome."
+    )) return;
+    void runAction(signal => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, signal), true);
+  }
+
   async function reject(checkpoint: AgentCheckpoint) {
     if (!runtime || checkpoint.status !== "waiting_for_approval") return;
     const rejected: AgentCheckpoint = {
@@ -524,7 +538,15 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && checkpoint.runId !== activeRunId && <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>}
+                {checkpoint.status === "running" && checkpoint.runId !== activeRunId &&
+                  (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
+                    ? <div className="agent-approval-actions">
+                        <p>Interrupted local run. Manual recovery verifies tool history and requests new approval.</p>
+                        <button className="agent-small-button" type="button"
+                          disabled={!runtime || busy || !!managedRuns.activeRun(conversationKey)}
+                          onClick={() => continueInterrupted(checkpoint)}>Continue safely</button>
+                      </div>
+                    : <p>Automatic continuation is disabled for this workflow. Start a new task after reviewing prior tool outcomes.</p>)}
               </div>)}</div>}
           </article>
 
