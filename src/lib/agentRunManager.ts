@@ -1,0 +1,66 @@
+/**
+ * Owns the lifetime of foreground agent tasks independently of React panels.
+ * UI subscribers may mount/unmount without cancelling the underlying task.
+ */
+export type ManagedRunStatus = "running" | "completed" | "failed" | "cancelled";
+export interface ManagedRun {
+  id: string;
+  conversationId: string;
+  status: ManagedRunStatus;
+  error?: string;
+}
+export type ManagedRunListener = (runs: readonly ManagedRun[]) => void;
+
+export class AgentRunManager {
+  private readonly runs = new Map<string, ManagedRun>();
+  private readonly controllers = new Map<string, AbortController>();
+  private readonly listeners = new Set<ManagedRunListener>();
+
+  list(conversationId?: string): ManagedRun[] {
+    return [...this.runs.values()]
+      .filter(run => conversationId === undefined || run.conversationId === conversationId)
+      .map(run => ({ ...run }));
+  }
+
+  subscribe(listener: ManagedRunListener): () => void {
+    this.listeners.add(listener);
+    listener(this.list());
+    return () => { this.listeners.delete(listener); };
+  }
+
+  private publish(): void {
+    const snapshot = this.list();
+    for (const listener of [...this.listeners]) listener(snapshot);
+  }
+
+  start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void>): Promise<void> {
+    if (!id.trim() || !conversationId.trim()) throw new Error("Run and conversation IDs are required.");
+    if (this.runs.has(id)) throw new Error("A run with this ID already exists.");
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
+    this.runs.set(id, { id, conversationId, status: "running" });
+    this.publish();
+    return (async () => {
+      try {
+        await task(controller.signal);
+        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : "completed" });
+      } catch (cause) {
+        this.runs.set(id, {
+          id, conversationId,
+          status: controller.signal.aborted ? "cancelled" : "failed",
+          ...(!controller.signal.aborted ? { error: cause instanceof Error ? cause.message : "Agent run failed." } : {})
+        });
+      } finally {
+        this.controllers.delete(id);
+        this.publish();
+      }
+    })();
+  }
+
+  cancel(id: string): boolean {
+    const controller = this.controllers.get(id);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+}
