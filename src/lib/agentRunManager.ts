@@ -11,6 +11,13 @@ export interface ManagedRun {
   startedAt: number;
   finishedAt?: number;
 }
+export interface ManagedRunEvent {
+  runId: string;
+  conversationId: string;
+  timestamp: number;
+  kind: "progress" | "output" | "approval" | "error";
+  message: string;
+}
 export type ManagedRunListener = (runs: readonly ManagedRun[]) => void;
 
 export class AgentRunManager {
@@ -18,11 +25,25 @@ export class AgentRunManager {
   private readonly controllers = new Map<string, AbortController>();
   private readonly listeners = new Set<ManagedRunListener>();
   private readonly activeByConversation = new Map<string, string>();
+  private readonly events = new Map<string, ManagedRunEvent[]>();
 
   list(conversationId?: string): ManagedRun[] {
     return [...this.runs.values()]
       .filter(run => conversationId === undefined || run.conversationId === conversationId)
       .map(run => ({ ...run }));
+  }
+
+  history(runId: string): ManagedRunEvent[] {
+    return (this.events.get(runId) ?? []).map(event => ({ ...event }));
+  }
+
+  appendEvent(runId: string, kind: ManagedRunEvent["kind"], message: string): void {
+    const run = this.runs.get(runId);
+    if (!run) throw new Error("Unknown run ID.");
+    const events = this.events.get(runId) ?? [];
+    events.push({ runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message });
+    this.events.set(runId, events.slice(-200));
+    this.publish();
   }
 
   subscribe(listener: ManagedRunListener): () => void {

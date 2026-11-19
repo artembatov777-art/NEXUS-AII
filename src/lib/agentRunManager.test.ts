@@ -49,6 +49,21 @@ describe("AgentRunManager", () => {
     expect(manager.list("same").map(run => run.status)).toEqual(["completed", "completed"]);
   });
 
+  it("keeps bounded per-run event history isolated from other conversations", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("a", "one", async () => {});
+    await manager.start("b", "two", async () => {});
+    for (let index = 0; index < 205; index++) manager.appendEvent("a", "progress", String(index));
+    manager.appendEvent("b", "output", "secret");
+    expect(manager.history("a")).toHaveLength(200);
+    expect(manager.history("a")[0].message).toBe("5");
+    expect(manager.history("a").some(event => event.message === "secret")).toBe(false);
+    const events = manager.history("b");
+    events[0].message = "modified";
+    expect(manager.history("b")[0].message).toBe("secret");
+    expect(() => manager.appendEvent("missing", "error", "no")).toThrow("Unknown run");
+  });
+
   it("records start and finish timestamps", async () => {
     const manager = new AgentRunManager();
     await manager.start("timestamp", "chat", async () => {});
