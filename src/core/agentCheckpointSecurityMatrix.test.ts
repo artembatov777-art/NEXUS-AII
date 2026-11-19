@@ -314,4 +314,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects checkpoint sequence 0", () => {
     expect(validateAgentCheckpoint({ ...valid, sequence: 0 })).not.toBeNull();
   });
+  it("rejects checkpoint sequence -1", () => {
+    expect(validateAgentCheckpoint({ ...valid, sequence: -1 })).not.toBeNull();
+  });
 });
