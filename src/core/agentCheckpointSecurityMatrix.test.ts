@@ -356,4 +356,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects timestamp updatedAt = -Infinity", () => {
     expect(validateAgentCheckpoint({ ...valid, updatedAt: -Infinity })).not.toBeNull();
   });
+  it("rejects timestamp updatedAt = 99", () => {
+    expect(validateAgentCheckpoint({ ...valid, updatedAt: 99 })).not.toBeNull();
+  });
 });
