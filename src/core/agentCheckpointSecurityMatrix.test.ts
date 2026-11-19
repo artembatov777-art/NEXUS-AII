@@ -413,4 +413,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects approval time Infinity", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: "workspace:write", requestedAt: Infinity } })).not.toBeNull();
   });
+  it("rejects approval time -Infinity", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: "workspace:write", requestedAt: -Infinity } })).not.toBeNull();
+  });
 });
