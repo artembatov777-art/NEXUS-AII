@@ -144,11 +144,18 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }, [initialTask]);
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
-  const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
+  const [auditEventsByConversation, setAuditEventsByConversation] = useState<Record<string, ToolAuditEvent[]>>({});
+  const [auditRunByConversation, setAuditRunByConversation] = useState<Record<string, string | null>>({});
+  const [historyLimitByConversation, setHistoryLimitByConversation] = useState<Record<string, number>>({});
+  const [historyTruncatedByConversation, setHistoryTruncatedByConversation] = useState<Record<string, boolean>>({});
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const conversationKey = conversationId ?? "standalone";
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
+  const auditRunFilter = auditRunByConversation[conversationKey] ?? null;
+  const auditEvents = auditEventsByConversation[conversationKey] ?? [];
+  const historyLimit = historyLimitByConversation[conversationKey] ?? 50;
+  const visibleHistory = checkpoints.slice(0, historyLimit);
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
@@ -190,22 +197,26 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const refresh = useCallback(async () => {
     if (!runtime) return;
     const [result, audit] = await Promise.all([
-      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 50))),
-      runtime.auditSink.list({ limit: 30 })
+      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 200))),
+      runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 })
     ]);
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
-      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
+      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt);
       setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
-      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled");
+      setHistoryTruncatedByConversation(previous => ({ ...previous, [conversationKey]: result.some(item => item.ok && item.value.length === 200) }));
+      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").slice(0, 50);
       const reconciliationResults = await Promise.all(terminalRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
     } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
-    if (audit.ok) setAuditEvents(audit.value);
-    else addFeed(audit.error.message, "error");
-  }, [runtime, addFeed, threads, conversationKey]);
+    if (audit.ok && !failedResult) {
+      const runIds = new Set(result.flatMap(item => item.ok ? item.value.map(checkpoint => checkpoint.runId) : []));
+      const scoped = audit.value.filter(item => auditRunFilter ? item.runId === auditRunFilter : runIds.has(item.runId));
+      setAuditEventsByConversation(previous => ({ ...previous, [conversationKey]: scoped }));
+    } else if (!audit.ok) addFeed(audit.error.message, "error");
+  }, [runtime, addFeed, threads, conversationKey, auditRunFilter]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -291,6 +302,19 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>, allowApprovalHandoff = false) {
     await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff));
+  }
+
+  function inspectRunAudit(runId: string) {
+    setAuditRunByConversation(previous => ({ ...previous, [conversationKey]: runId }));
+    setAgentView("audit");
+  }
+
+  function showRecentAudit() {
+    setAuditRunByConversation(previous => ({ ...previous, [conversationKey]: null }));
+  }
+
+  function loadMoreHistory() {
+    setHistoryLimitByConversation(previous => ({ ...previous, [conversationKey]: (previous[conversationKey] ?? 50) + 50 }));
   }
 
   function cancelActiveRun() {
@@ -533,9 +557,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "history"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
             {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
-              <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
+              <div className="agent-history">{visibleHistory.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
+                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button></div>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
                 {checkpoint.status === "running" && checkpoint.runId !== activeRunId &&
                   (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
@@ -547,6 +572,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
                       </div>
                     : <p>Automatic continuation is disabled for this workflow. Start a new task after reviewing prior tool outcomes.</p>)}
               </div>)}</div>}
+            {checkpoints.length > 0 && <div className="agent-form-footer"><span>Showing {visibleHistory.length} of {checkpoints.length} runs</span>{visibleHistory.length < checkpoints.length && <button type="button" className="agent-small-button" onClick={loadMoreHistory}>Load more runs</button>}</div>}
+            {historyTruncatedByConversation[conversationKey] && <p className="agent-disclaimer">Some threads reached the 200-run query limit. Older runs may not be included in this view.</p>}
           </article>
 
           <article className="agent-card" hidden={agentView !== "audit"}>
@@ -559,8 +586,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               </div>)}
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
+            {auditRunFilter && <div className="agent-form-footer"><span>Audit for {auditRunFilter}</span><button type="button" className="agent-small-button" onClick={showRecentAudit}>Show recent audits</button></div>
             {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
-              <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
+              <div className="agent-history">{auditEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
                 <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
               </div>)}</div>}
