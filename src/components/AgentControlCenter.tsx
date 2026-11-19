@@ -232,9 +232,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
     };
   }, [runtime]);
-  useEffect(() => () => {
-    for (const run of managedRuns.list()) if (run.status === "running") managedRuns.cancel(run.id);
-  }, [managedRuns]);
+  // The manager outlives this panel. Closing or switching conversations must
+  // not cancel live work: only the explicit Cancel action aborts a run.
 
   async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string, allowApprovalHandoff = false): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
