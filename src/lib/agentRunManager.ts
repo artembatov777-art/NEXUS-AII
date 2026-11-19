@@ -1,3 +1,4 @@
+import { agentRunTimeline } from "./agentRunTimeline";
 import { agentRunEventPreview } from "./agentRunEventPreview";
 import { summarizeRuns } from "./agentRunSummary";
 import { validAgentRunIdentity } from "./agentRunIdentity";
@@ -48,6 +49,11 @@ export class AgentRunManager {
 
   history(runId: string): ManagedRunEvent[] {
     return (this.events.get(runId) ?? []).map(event => ({ ...event }));
+  }
+
+  conversationTimeline(conversationId: string): ManagedRunEvent[] {
+    const events = this.list(conversationId).flatMap(run => this.history(run.id));
+    return agentRunTimeline(events, conversationId);
   }
 
   eventPreview(runId: string, maxLength = 240): string[] {

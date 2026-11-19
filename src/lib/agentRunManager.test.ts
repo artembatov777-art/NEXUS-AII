@@ -113,6 +113,14 @@ describe("AgentRunManager", () => {
     expect(manager.eventPreview("run", 3)).toEqual(["123…"]);
     expect(manager.history("run")[0].message).toBe("123456");
   });
+  it("provides isolated conversation event timelines", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("a", "chat-a", async () => {});
+    await manager.start("b", "chat-b", async () => {});
+    manager.appendEvent("a", "progress", "first");
+    manager.appendEvent("b", "progress", "private");
+    expect(manager.conversationTimeline("chat-a").map(e => e.message)).toEqual(["first"]);
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
