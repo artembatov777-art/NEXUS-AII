@@ -389,4 +389,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects unsupported status resuming", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "resuming" as AgentCheckpoint["status"] })).not.toBeNull();
   });
+  it("rejects approval metadata on running checkpoint", () => {
+    expect(validateAgentCheckpoint({ ...valid, pendingApproval: { permission: "workspace:write", requestedAt: 100 } })).not.toBeNull();
+  });
 });
