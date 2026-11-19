@@ -77,4 +77,17 @@ describe("checkpoint recovery ordering", () => {
       .toThrow("already linked");
   });
 
+  it("never replaces an existing managed run when restoring its checkpoint", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("run-existing", "standalone", async () => {});
+    const checkpoint: AgentCheckpoint = {
+      schemaVersion: 1, runId: "run-existing", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [checkpoint]);
+    expect(manager.list("standalone")).toHaveLength(1);
+    expect(manager.list("standalone")[0].status).toBe("completed");
+  });
+
 });
