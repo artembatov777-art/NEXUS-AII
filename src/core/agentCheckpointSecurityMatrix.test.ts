@@ -338,4 +338,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects checkpoint sequence -0.5", () => {
     expect(validateAgentCheckpoint({ ...valid, sequence: -0.5 })).not.toBeNull();
   });
+  it("rejects timestamp createdAt = Number.NaN", () => {
+    expect(validateAgentCheckpoint({ ...valid, createdAt: Number.NaN })).not.toBeNull();
+  });
 });
