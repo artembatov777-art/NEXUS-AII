@@ -98,6 +98,14 @@ describe("AgentRunManager", () => {
     expect(manager.cancelConversation("chat-b")).toBe(true);
     await second;
   });
+  it("summarizes runs for the selected conversation", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("a", "chat-a", async () => {});
+    await manager.start("b", "chat-b", async () => { throw new Error("failed"); });
+    expect(manager.summary("chat-a").completed).toBe(1);
+    expect(manager.summary("chat-a").failed).toBe(0);
+    expect(manager.summary().failed).toBe(1);
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });

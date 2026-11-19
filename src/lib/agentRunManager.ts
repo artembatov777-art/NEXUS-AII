@@ -1,3 +1,4 @@
+import { summarizeRuns } from "./agentRunSummary";
 import { validAgentRunIdentity } from "./agentRunIdentity";
 /**
  * Owns the lifetime of foreground agent tasks independently of React panels.
@@ -32,6 +33,10 @@ export class AgentRunManager {
     return [...this.runs.values()]
       .filter(run => conversationId === undefined || run.conversationId === conversationId)
       .map(run => ({ ...run }));
+  }
+
+  summary(conversationId?: string) {
+    return summarizeRuns(this.list(), conversationId);
   }
 
   activeRun(conversationId: string): ManagedRun | null {
