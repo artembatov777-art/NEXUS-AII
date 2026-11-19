@@ -1,5 +1,6 @@
 import type { ManagedRun } from "./agentRunManager";
 export function latestAgentRun(runs: readonly ManagedRun[], conversationId: string): ManagedRun | null {
-  const selected = runs.filter(run => run.conversationId === conversationId).sort((a,b) => b.startedAt - a.startedAt)[0];
+  let selected: ManagedRun | undefined;
+  for (const run of runs) if (run.conversationId === conversationId && (!selected || run.startedAt >= selected.startedAt)) selected = run;
   return selected ? { ...selected } : null;
 }
