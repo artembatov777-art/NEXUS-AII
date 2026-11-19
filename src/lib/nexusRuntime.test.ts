@@ -7,6 +7,7 @@ import { ModelRouter } from "../core/model";
 import type { ModelProvider } from "../core/model";
 import type { StorageLike } from "./memoryStorage";
 import { createNexusRuntime, type NexusPermissionPolicy, type NexusRuntimeIds } from "./nexusRuntime";
+import { agentThreads } from "./agentThreads";
 
 class MemoryStorage implements StorageLike {
   private values = new Map<string, string>();
@@ -22,6 +23,29 @@ const agentId = "composition-agent" as AgentId;
 const runId = "composition-run" as AgentRunId;
 const ids: NexusRuntimeIds = { runId: () => runId, approvalId: () => "composition-approval-once" };
 const toolContext = (context: ToolExecutionContext) => context;
+
+describe("terminal session checkpoint isolation", () => {
+  it("restores an approval only in its originating conversation after runtime recreation", async () => {
+    const storage = new MemoryStorage();
+    const policy: NexusPermissionPolicy = {
+      authorizeAgent: async () => "ask_user",
+      authorizeTool: async () => "deny"
+    };
+    const options = { storage, actorId: "host-user", permissions: policy, ids, clock: { now: () => 10_000 } };
+    const runtime = createNexusRuntime(options);
+    const definition: ResumableAgentDefinition<number> = {
+      id: agentId, version: "1.0.0", name: "Test", requiredPermissions: ["tool:execute"],
+      maxSteps: 1, timeoutMs: 5_000, createState: count => ({ count }),
+      async step(state) { return { state, done: true, output: "done" }; }
+    };
+    expect(runtime.agentRuntime.register(definition).ok).toBe(true);
+    const thread = agentThreads("session-a").primary;
+    expect(await collect(runtime.agentRuntime.start(agentId, 0, thread))).toMatchObject([{ type: "waiting_for_approval" }]);
+    const reopened = createNexusRuntime(options);
+    expect(await reopened.checkpointService.listByThread(thread)).toMatchObject({ ok: true, value: [{ status: "waiting_for_approval" }] });
+    expect(await reopened.checkpointService.listByThread(agentThreads("session-b").primary)).toMatchObject({ ok: true, value: [] });
+  });
+});
 
 describe("createNexusRuntime", () => {
   it("composes checkpoints, one-time approval, gateway execution and audit through one runtime", async () => {

@@ -1,4 +1,5 @@
 import { t } from "../lib/i18n";
+import { agentThreads } from "../lib/agentThreads";
 import { ModelRouter } from "../core/model";
 import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,6 @@ import { LocalStorageMemoryRepository } from "../lib/memoryStorage";
 import { LocalTransformerEmbeddingProvider } from "../lib/localEmbeddings";
 import { IndexedDbMemoryVectorIndex } from "../lib/memoryVectorIndex";
 
-const THREAD_ID = "nexus-agent-control-center";
 
 type RuntimeBundle = ReturnType<typeof createWorkspaceNexusRuntime>;
 type RuntimeState = { runtime: RuntimeBundle | null; error: string; profile: AgentProfile | null };
@@ -56,7 +56,8 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
   return labels[status];
 }
 
-export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string }) {
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask, conversationId, conversationIds = [] }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string; conversationId?: string; conversationIds?: string[] }) {
+  const threads = useMemo(() => agentThreads(conversationId), [conversationId]);
   const runtimeState = useMemo<RuntimeState>(() => {
     try {
       const loadedProfile = loadAgentProfile(window.localStorage);
@@ -150,10 +151,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const runtime = runtimeState.runtime;
   const routedModelId = providerSettings.model.trim() || (providerSettings.routeMode === "manual" ? "" : "auto");
   const agentProviderReady = canUseAgentProvider(providerSettings, hasProviderKey) && !!routedModelId;
-  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, routedModelId, THREAD_ID + "-planned", ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, routedModelId]);
+  const plannedWorkflow = useMemo(() => runtime?.createAgentWorkflow(NATIVE_MODEL_PROVIDER_ID, routedModelId, threads.planned, ["workspace.list", "workspace.search", "workspace.search_content", "workspace.read", "workspace.write", "workspace.mkdir", "workspace.rename", "workspace.move", "mcp.*"]) ?? null, [runtime, routedModelId, threads]);
   const testWorkflow = useMemo(() => runtime?.createAgentWorkflow(
-    WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, THREAD_ID + "-workspace-test", WORKSPACE_TEST_TOOLS
-  ) ?? null, [runtime]);
+    WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, threads.test, WORKSPACE_TEST_TOOLS
+  ) ?? null, [runtime, threads]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
   const runningCount = checkpoints.filter(item => item.status === "running").length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
@@ -168,20 +169,22 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const refresh = useCallback(async () => {
     if (!runtime) return;
     const [result, audit] = await Promise.all([
-      runtime.checkpointService.listByThread(THREAD_ID, 50),
+      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 50))),
       runtime.auditSink.list({ limit: 30 })
     ]);
-    if (result.ok) {
-      setCheckpoints(result.value);
-      const terminalRuns = result.value.filter(item => item.status === "failed" || item.status === "cancelled");
+    const failedResult = result.find(item => !item.ok);
+    if (!failedResult) {
+      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
+      setCheckpoints(checkpoints);
+      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled");
       const reconciliationResults = await Promise.all(terminalRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
       setAmbiguousToolSteps(reconciliationResults.flatMap(item => item.ok ? item.value : []));
-    } else addFeed(result.error.message, "error");
+    } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
     if (audit.ok) setAuditEvents(audit.value);
     else addFeed(audit.error.message, "error");
-  }, [runtime, addFeed]);
+  }, [runtime, addFeed, threads]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -251,10 +254,25 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }
   }
 
-  function saveProfile() {
+  async function saveProfile() {
     if (!runtime || busy) return;
-    if (checkpoints.some(item => item.status === "running" || item.status === "waiting_for_approval")) {
-      addFeed("Finish or reject active runs before changing the agent version.", "warning");
+    setBusy(true);
+    const ids = new Set([agentThreads().primary, threads.primary, ...conversationIds.map(id => agentThreads(id).primary)]);
+    let listed: Awaited<ReturnType<typeof runtime.checkpointService.listByThread>>[];
+    try {
+      listed = await Promise.all([...ids].map(id => runtime.checkpointService.listByThread(id, 200)));
+    } catch {
+      setBusy(false);
+      addFeed("Could not verify pending runs; agent profile was not changed.", "error");
+      return;
+    }
+    setBusy(false);
+    if (listed.some(item => !item.ok || item.value.length === 200)) {
+      addFeed("Could not verify all pending runs; agent profile was not changed.", "error");
+      return;
+    }
+    if (listed.some(item => item.ok && item.value.some(checkpoint => checkpoint.status === "running" || checkpoint.status === "waiting_for_approval"))) {
+      addFeed("Finish or reject active runs in every conversation before changing the agent version.", "warning");
       return;
     }
     const next: AgentProfile = { ...profile, name: profile.name.trim(), revision: profile.revision + 1, updatedAt: Date.now() };
@@ -340,7 +358,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const input = task.trim();
     setTask("");
     setFeed([]);
-    void runAction(() => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, THREAD_ID, controller.current?.signal));
+    void runAction(() => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, threads.primary, controller.current?.signal));
   }
 
   function approve(checkpoint: AgentCheckpoint) {
@@ -436,7 +454,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               <label>{t("Maximum steps")}<input type="number" min={1} max={20} value={profile.maxSteps} onChange={event => setProfile(current => ({ ...current, maxSteps: Number(event.target.value) }))}/></label>
               <label>{t("Timeout (seconds)")}<input type="number" min={1} max={60} value={Math.round(profile.timeoutMs / 1_000)} onChange={event => setProfile(current => ({ ...current, timeoutMs: Number(event.target.value) * 1_000 }))}/></label>
             </div>
-            <div className="agent-form-footer"><span>{t("Permission requirement stays fixed: tool:execute")}</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={saveProfile}>{t("Save profile")}</button></div>
+            <div className="agent-form-footer"><span>{t("Permission requirement stays fixed: tool:execute")}</span><button className="agent-small-button" disabled={!runtime || busy || !profile.name.trim() || profile.maxSteps < 1 || profile.maxSteps > 20 || profile.timeoutMs < 1_000 || profile.timeoutMs > 60_000} onClick={() => void saveProfile()}>{t("Save profile")}</button></div>
             <div className="agent-disclaimer">Changing the profile creates a new agent version. Finish or reject active runs first; older checkpoints cannot resume on a different version.</div>
           </article>
 
