@@ -91,6 +91,11 @@ export class AgentRunManager {
     })();
   }
 
+  cancelConversation(conversationId: string): boolean {
+    const id = this.activeByConversation.get(conversationId);
+    return id ? this.cancel(id) : false;
+  }
+
   cancel(id: string): boolean {
     const controller = this.controllers.get(id);
     if (!controller) return false;

@@ -87,6 +87,17 @@ describe("AgentRunManager", () => {
     await task;
     expect(manager.activeRun("chat")).toBeNull();
   });
+  it("cancels only the selected conversation", async () => {
+    const manager = new AgentRunManager();
+    const pending = (signal: AbortSignal) => new Promise<void>((_, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }));
+    const first = manager.start("one", "chat-a", pending);
+    const second = manager.start("two", "chat-b", pending);
+    expect(manager.cancelConversation("chat-a")).toBe(true);
+    await first;
+    expect(manager.activeRun("chat-b")?.id).toBe("two");
+    expect(manager.cancelConversation("chat-b")).toBe(true);
+    await second;
+  });
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
