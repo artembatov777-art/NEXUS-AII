@@ -374,4 +374,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects unsupported status unknown", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "unknown" as AgentCheckpoint["status"] })).not.toBeNull();
   });
+  it("rejects unsupported status replaying", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "replaying" as AgentCheckpoint["status"] })).not.toBeNull();
+  });
 });
