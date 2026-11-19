@@ -23,6 +23,37 @@ export class ToolReconciliationService {
     private readonly now: () => number = () => Date.now()
   ) {}
 
+  /**
+   * Fail-closed verification before continuing an interrupted checkpoint.
+   * Any tool operation beyond the last durably saved step may have caused a
+   * side effect even if it returned success; it must never be replayed.
+   */
+  async verifySafeContinuation(runId: string, completedSteps: number): Promise<Result<void>> {
+    if (!validId(runId) || !Number.isSafeInteger(completedSteps) || completedSteps < 0) {
+      return err("validation", "Continuation identity or step count is invalid.");
+    }
+    let events: Result<ToolAuditEvent[]>;
+    try { events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
+    catch { return err("storage_failed", "Continuation blocked: tool audit could not be read."); }
+    if (!events.ok) return err("storage_failed", "Continuation blocked: tool audit could not be verified.");
+    if (events.value.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS) {
+      return err("storage_failed", "Continuation blocked: tool audit history may be truncated.");
+    }
+    for (const event of events.value) {
+      if (event.runId !== runId) return err("storage_failed", "Continuation blocked: tool audit contains an unrelated run.");
+      if (event.status === "denied") continue;
+      if (!event.traceId.startsWith(runId + ":")) {
+        return err("permission_denied", "Continuation blocked: tool step identity is uncertain.");
+      }
+      const part = event.traceId.slice(runId.length + 1);
+      const step = Number(part);
+      if (!/^[1-9][0-9]*$/.test(part) || !Number.isSafeInteger(step) || step > completedSteps) {
+        return err("permission_denied", "Continuation blocked: an uncheckpointed tool operation may have executed.");
+      }
+    }
+    return ok(undefined);
+  }
+
   async listAmbiguous(runId: string): Promise<Result<AmbiguousToolStep[]>> {
     if (!validId(runId)) return err("validation", "A valid run ID is required.");
     const checkpoint = await this.checkpoints.get(runId);
