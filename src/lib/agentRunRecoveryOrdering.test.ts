@@ -68,4 +68,13 @@ describe("checkpoint recovery ordering", () => {
     }
   });
 
+  it("prevents two managed runs from claiming the same runtime checkpoint", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("manager-a", "chat", async () => {});
+    await manager.start("manager-b", "chat", async () => {});
+    manager.linkRuntimeRun("manager-a", "runtime-shared");
+    expect(() => manager.linkRuntimeRun("manager-b", "runtime-shared"))
+      .toThrow("already linked");
+  });
+
 });
