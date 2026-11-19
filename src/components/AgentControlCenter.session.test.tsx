@@ -56,4 +56,25 @@ describe("agent center session checkpoints", () => {
     await act(async () => root.unmount()); element.remove();
   });
 
+  it("does not cancel a background agent when its control panel unmounts", async () => {
+    localStorage.clear();
+    const manager = new AgentRunManager();
+    let finish!: () => void;
+    const task = manager.start("background-task", "session-one", async () => {
+      await new Promise<void>(resolve => { finish = resolve; });
+    });
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<AgentControlCenter agentRuns={manager} conversationId="session-one"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => root.unmount());
+    expect(manager.activeRun("session-one")?.status).toBe("running");
+    finish();
+    await task;
+    expect(manager.list("session-one")[0].status).toBe("completed");
+    element.remove();
+  });
 });
