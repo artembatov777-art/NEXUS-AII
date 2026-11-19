@@ -213,4 +213,9 @@ describe("manual recovery gate safety matrix", () => {
     const evidence: RecoveryEvidence = { noActiveRun: false, operationsReconciled: true, permissionsRevalidated: true };
     expect(evaluateManualRecovery(checkpoint, evidence)).toEqual({ allowed: false, reason: "concurrent_run" });
   });
+  it("checkpoint running evidence 6 sequence 17 approval true", () => {
+    const checkpoint: AgentCheckpoint = { ...baseline, status: "running", sequence: 17, updatedAt: 117, pendingApproval: { permission: "tool:execute", requestedAt: 100 } };
+    const evidence: RecoveryEvidence = { noActiveRun: false, operationsReconciled: true, permissionsRevalidated: true };
+    expect(evaluateManualRecovery(checkpoint, evidence)).toEqual({ allowed: false, reason: "invalid_checkpoint" });
+  });
 });
