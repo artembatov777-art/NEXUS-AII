@@ -18,4 +18,36 @@ describe("checkpoint recovery ordering", () => {
       { id: "run-1", status: "completed", finishedAt: 200 }
     ]);
   });
+  it("ignores malformed and unrelated checkpoints without masking a valid snapshot", () => {
+    const manager = new AgentRunManager();
+    const base: AgentCheckpoint = {
+      schemaVersion: 1, runId: "run-safe", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [
+      { ...base, sequence: 99, updatedAt: 999, state: { value: Number.NaN } },
+      { ...base, threadId: "other-thread", sequence: 100, updatedAt: 1000 },
+      { ...base, sequence: 2, updatedAt: 200, status: "waiting_for_approval",
+        pendingApproval: { permission: "workspace:write", requestedAt: 150 } },
+      base
+    ]);
+    expect(manager.list("standalone")).toMatchObject([
+      { id: "run-safe", status: "waiting_for_approval" }
+    ]);
+  });
+
+  it("restores 250 independent runs without executing tasks", () => {
+    const manager = new AgentRunManager();
+    const checkpoints: AgentCheckpoint[] = Array.from({ length: 250 }, (_, index) => ({
+      schemaVersion: 1, runId: "run-" + index, agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: index, updatedAt: index
+    }));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(manager.list("standalone")).toHaveLength(250);
+    expect(manager.list("standalone").every(run => run.status === "interrupted")).toBe(true);
+    expect(manager.activeRun("standalone")).toBeNull();
+  });
+
 });
