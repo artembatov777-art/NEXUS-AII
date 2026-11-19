@@ -96,7 +96,7 @@ export class AgentRunManager {
       // Resuming a previously approved checkpoint uses the same runtime ID in
       // a new manager task. It is the only permitted temporary dual ownership.
       const validHandoff = allowApprovalHandoff && run.status === "running" &&
-        existingOwners.length === 1 && existingOwners[0].status === "waiting_for_approval";
+        existingOwners.length === 1 && (existingOwners[0].status === "waiting_for_approval" || existingOwners[0].status === "interrupted");
       if (!validHandoff) throw new Error("Runtime run is already linked to another managed run.");
     }
     this.runs.set(managerId, { ...run, runtimeRunId });
