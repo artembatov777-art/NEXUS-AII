@@ -1,5 +1,6 @@
 import { t } from "../lib/i18n";
 import { agentThreads } from "../lib/agentThreads";
+import { AgentRunManager, type ManagedRunEvent } from "../lib/agentRunManager";
 import { ModelRouter } from "../core/model";
 import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,7 +57,9 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
   return labels[status];
 }
 
-export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask, conversationId, conversationIds = [] }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string; conversationId?: string; conversationIds?: string[] }) {
+export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask, conversationId, conversationIds = [], agentRuns }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string; conversationId?: string; conversationIds?: string[]; agentRuns?: AgentRunManager }) {
+  const localRunManager = useMemo(() => new AgentRunManager(), []);
+  const managedRuns = agentRuns ?? localRunManager;
   const threads = useMemo(() => agentThreads(conversationId), [conversationId]);
   const runtimeState = useMemo<RuntimeState>(() => {
     try {
@@ -143,10 +146,13 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [checkpoints, setCheckpoints] = useState<AgentCheckpoint[]>([]);
   const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
   const [ambiguousToolSteps, setAmbiguousToolSteps] = useState<AmbiguousToolStep[]>([]);
-  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
+  const conversationKey = conversationId ?? "standalone";
+  const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const activeManagerRequest = useRef<string | null>(null);
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
   const routedModelId = providerSettings.model.trim() || (providerSettings.routeMode === "manual" ? "" : "auto");
@@ -163,8 +169,17 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   const addFeed = useCallback((text: string, tone: FeedItem["tone"] = "normal") => {
     feedSequence.current += 1;
-    setFeed(current => [...current, { id: feedSequence.current, text, tone }].slice(-80));
-  }, []);
+    const item: FeedItem = { id: feedSequence.current, text, tone };
+    setFeedByConversation(current => ({
+      ...current,
+      [conversationKey]: [...(current[conversationKey] ?? []), item].slice(-80)
+    }));
+  }, [conversationKey]);
+
+  function reportManagedEvent(runId: string, kind: ManagedRunEvent["kind"], text: string, tone: FeedItem["tone"] = "normal") {
+    managedRuns.appendEvent(runId, kind, text);
+    addFeed(text, tone);
+  }
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
@@ -212,7 +227,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }, [runtime, addFeed]);
   useEffect(() => () => { controller.current?.abort(); }, []);
 
-  async function consume(events: AsyncIterable<ResumableAgentEvent>) {
+  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
+    let outcome: void | "waiting_for_approval" | "failed";
     for await (const event of events) {
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
@@ -220,38 +236,57 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       }
       if (event.type === "started") {
         setActiveRunId(event.runId);
-        addFeed("Agent run started: " + event.runId);
+        reportManagedEvent(managerId, "progress", "Agent run started: " + event.runId);
       } else if (event.type === "progress") {
-        addFeed("Step " + event.step + "/" + event.maxSteps + ": " + event.label);
+        reportManagedEvent(managerId, "progress", "Step " + event.step + "/" + event.maxSteps + ": " + event.label);
       } else if (event.type === "output") {
-        addFeed(event.content, "success");
+        reportManagedEvent(managerId, "output", event.content, "success");
       } else if (event.type === "waiting_for_approval") {
-        addFeed("Approval required: " + event.permission, "warning");
+        outcome = "waiting_for_approval";
+        reportManagedEvent(managerId, "approval", "Approval required: " + event.permission, "warning");
       } else if (event.type === "completed") {
-        addFeed("Run completed in " + event.steps + " step(s).", "success");
+        outcome = undefined;
+        reportManagedEvent(managerId, "output", "Run completed in " + event.steps + " step(s).", "success");
       } else if (event.type === "failed") {
-        addFeed(event.message, "error");
+        outcome = "failed";
+        reportManagedEvent(managerId, "error", event.message, "error");
       }
     }
-    await refresh();
+    return outcome;
   }
 
-  async function runAction(action: () => AsyncIterable<ResumableAgentEvent>) {
+  async function runManagedAction(action: (signal: AbortSignal, managerId: string) => Promise<void | "waiting_for_approval" | "failed">) {
     if (!runtime || busy) return;
-    const nextController = new AbortController();
-    controller.current = nextController;
+    const managerId = crypto.randomUUID();
+    activeManagerRequest.current = managerId;
     setBusy(true);
     try {
-      await consume(action());
+      await managedRuns.start(managerId, conversationKey, async signal => {
+        try {
+          return await action(signal, managerId);
+        } catch (cause) {
+          reportManagedEvent(managerId, "error", cause instanceof Error ? cause.message : "Agent execution failed.", "error");
+          return "failed";
+        }
+      });
     } catch (cause) {
-      addFeed(cause instanceof Error ? cause.message : "Agent execution failed.", "error");
-      await refresh();
+      addFeed(cause instanceof Error ? cause.message : "Could not schedule the agent run.", "error");
     } finally {
+      activeManagerRequest.current = null;
       controller.current = null;
       setBusy(false);
       setActiveRunId(null);
       await refresh();
     }
+  }
+
+  async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>) {
+    await runManagedAction((signal, managerId) => consume(action(signal), managerId));
+  }
+
+  function cancelActiveRun() {
+    if (activeManagerRequest.current) managedRuns.cancel(activeManagerRequest.current);
+    else controller.current?.abort();
   }
 
   async function saveProfile() {
@@ -297,79 +332,76 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
     if (!useTestProvider && !window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
     setTask("");
-    setFeed([]);
-    const nextController = new AbortController();
-    controller.current = nextController;
-    setBusy(true);
-    try {
+    setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
+    await runManagedAction(async (signal, managerId) => {
       let referenceContext: string | undefined;
       if (useTestProvider) {
-        addFeed("Test planner · offline read-only inspection");
+        reportManagedEvent(managerId, "progress", "Test planner · offline read-only inspection");
       } else {
-        addFeed("Retrieving relevant saved profile and project context…");
+        reportManagedEvent(managerId, "progress", "Retrieving relevant saved profile and project context…");
         const contextWarnings: string[] = [];
-        const memories = await memoryRetriever.search(goal, "profile", 4, nextController.signal);
+        const memories = await memoryRetriever.search(goal, "profile", 4, signal);
         const contextParts = memories.ok ? memories.value.map(item => `[Profile memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`) : [];
         if (!memories.ok) contextWarnings.push("Profile memory unavailable: " + memories.error.message);
         if (projectId) {
           const [knowledge, projectMemories] = await Promise.all([
-            runtime.knowledgeService.retrieve(goal, projectId, 4, nextController.signal),
-            memoryRetriever.search(goal, "project", 3, nextController.signal, projectId)
+            runtime.knowledgeService.retrieve(goal, projectId, 4, signal),
+            memoryRetriever.search(goal, "project", 3, signal, projectId)
           ]);
           if (!knowledge.ok) contextWarnings.push("Project knowledge unavailable: " + knowledge.error.message);
           else if (knowledge.value.context) contextParts.push("Selected project knowledge (source-grounded reference data):\n" + knowledge.value.context);
           if (!projectMemories.ok) contextWarnings.push("Project memory unavailable: " + projectMemories.error.message);
           else contextParts.push(...projectMemories.value.map(item => `[Project memory: ${item.record.category}; source: ${item.record.source.label}] ${item.record.content}`));
         }
-        if (contextWarnings.length) addFeed("Continuing without some saved context. " + contextWarnings.join(" "), "warning");
+        if (contextWarnings.length) reportManagedEvent(managerId, "progress", "Continuing without some saved context. " + contextWarnings.join(" "), "warning");
         referenceContext = contextParts.join("\n\n").slice(0, 12_000);
-        addFeed("Sending the task and approved reference context to the configured model planner…");
+        reportManagedEvent(managerId, "progress", "Sending the task and approved reference context to the configured model planner…");
       }
-      const planned = await workflow.plan(goal, nextController.signal, referenceContext);
-      if (!planned.ok) {
-        addFeed("Planning failed: " + planned.error.message, "error");
-        return;
+      const result = await workflow.plan(goal, signal, referenceContext);
+      if (!result.ok) {
+        reportManagedEvent(managerId, "error", "Planning failed: " + result.error.message, "error");
+        return "failed";
       }
-      addFeed("Validated plan: " + planned.value.steps.length + " bounded tool step(s).", "success");
+      reportManagedEvent(managerId, "progress", "Validated plan: " + result.value.steps.length + " bounded tool step(s).", "success");
       const coordinationId = crypto.randomUUID() as AgentRunId;
       setActiveRunId(coordinationId);
-      for await (const event of workflow.run(planned.value, coordinationId, nextController.signal)) {
-        if (event.type === "started") addFeed("Planned workflow started: " + event.runId);
-        else if (event.type === "agent_started") addFeed("Executing step " + event.step + " with " + event.agentId + "…");
-        else if (event.type === "agent_completed") addFeed("Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
-        else if (event.type === "waiting_for_approval") addFeed("Approval required for step " + event.step + ".", "warning");
-        else if (event.type === "completed") addFeed(event.detail ?? "Planned workflow completed.", "success");
-        else if (event.type === "failed") addFeed(event.detail ?? "Planned workflow failed.", "error");
+      let outcome: void | "waiting_for_approval" | "failed";
+      for await (const event of workflow.run(result.value, coordinationId, signal)) {
+        if (event.type === "started") reportManagedEvent(managerId, "progress", "Planned workflow started: " + event.runId);
+        else if (event.type === "agent_started") reportManagedEvent(managerId, "progress", "Executing step " + event.step + " with " + event.agentId + "…");
+        else if (event.type === "agent_completed") reportManagedEvent(managerId, "output", "Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
+        else if (event.type === "waiting_for_approval") {
+          outcome = "waiting_for_approval";
+          reportManagedEvent(managerId, "approval", "Approval required for step " + event.step + ".", "warning");
+        } else if (event.type === "completed") {
+          outcome = undefined;
+          reportManagedEvent(managerId, "output", event.detail ?? "Planned workflow completed.", "success");
+        } else if (event.type === "failed") {
+          outcome = "failed";
+          reportManagedEvent(managerId, "error", event.detail ?? "Planned workflow failed.", "error");
+        }
       }
-      await refresh();
-    } catch (cause) {
-      addFeed(cause instanceof Error ? cause.message : "Planned workflow failed.", "error");
-      await refresh();
-    } finally {
-      controller.current = null;
-      setBusy(false);
-      setActiveRunId(null);
-      await refresh();
-    }
+      return outcome;
+    });
   }
 
   function startAgent() {
     if (!runtime || !task.trim() || task.trim().length > 1_000) return;
     const input = task.trim();
     setTask("");
-    setFeed([]);
-    void runAction(() => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, threads.primary, controller.current?.signal));
+    setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
+    void runAction(signal => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, threads.primary, signal));
   }
 
   function approve(checkpoint: AgentCheckpoint) {
     if (!runtime) return;
-    void runAction(async function* () {
+    void runAction(async function* (signal: AbortSignal) {
       const grant = await runtime.issueApproval(checkpoint.runId as AgentRunId);
       if (!grant.ok) {
         yield { type: "failed", runId: checkpoint.runId as AgentRunId, message: grant.error.message } as ResumableAgentEvent;
         return;
       }
-      yield* runtime.agentRuntime.resume(checkpoint.runId as AgentRunId, grant.value, controller.current?.signal);
+      yield* runtime.agentRuntime.resume(checkpoint.runId as AgentRunId, grant.value, signal);
     });
   }
 
@@ -390,7 +422,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   function continueRun(checkpoint: AgentCheckpoint) {
     if (!runtime) return;
-    void runAction(() => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, controller.current?.signal));
+    void runAction(signal => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, signal));
   }
 
   async function reconcileToolStep(step: AmbiguousToolStep) {
@@ -461,7 +493,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
-            {busy && <button className="agent-danger-button" onClick={() => controller.current?.abort()}><X size={13}/> Cancel active run</button>}
+            {busy && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
         </section>
