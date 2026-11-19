@@ -368,4 +368,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects unsupported status paused", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "paused" as AgentCheckpoint["status"] })).not.toBeNull();
   });
+  it("rejects unsupported status interrupted", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "interrupted" as AgentCheckpoint["status"] })).not.toBeNull();
+  });
 });
