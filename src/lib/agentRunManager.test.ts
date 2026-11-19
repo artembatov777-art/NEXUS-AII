@@ -180,6 +180,19 @@ describe("AgentRunManager", () => {
     expect(manager.list().filter(run => run.status === "completed")).toHaveLength(250);
   });
 
+  it("does not broadcast unchanged run status for every progress event", async () => {
+    const manager = new AgentRunManager();
+    const listener = vi.fn();
+    const unsubscribe = manager.subscribe(listener);
+    await manager.start("run", "chat", async () => {});
+    const notified = listener.mock.calls.length;
+    manager.appendEvent("run", "progress", "step one");
+    manager.appendEvent("run", "output", "result");
+    expect(listener).toHaveBeenCalledTimes(notified);
+    expect(manager.history("run")).toHaveLength(2);
+    unsubscribe();
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });

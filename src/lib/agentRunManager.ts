@@ -96,7 +96,8 @@ export class AgentRunManager {
     const events = this.events.get(runId) ?? [];
     events.push({ runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message });
     this.events.set(runId, events.slice(-200));
-    this.publish();
+    // Run-state subscribers need no rerender for high-frequency progress messages.
+    // Consumers of event history can request the latest bounded snapshot explicitly.
   }
 
   subscribe(listener: ManagedRunListener): () => void {
