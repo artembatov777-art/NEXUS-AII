@@ -419,4 +419,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects approval time \"100\" as unknown as number", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: "workspace:write", requestedAt: "100" as unknown as number } })).not.toBeNull();
   });
+  it("rejects invalid state NaN", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: Number.NaN })).not.toBeNull();
+  });
 });
