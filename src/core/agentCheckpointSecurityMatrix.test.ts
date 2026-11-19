@@ -434,4 +434,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state function", () => {
     expect(validateAgentCheckpoint({ ...valid, state: (() => 1) as unknown as AgentCheckpoint["state"] })).not.toBeNull();
   });
+  it("rejects invalid state bigint", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: 1n as unknown as AgentCheckpoint["state"] })).not.toBeNull();
+  });
 });
