@@ -458,4 +458,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects invalid state nested reserved constructor", () => {
     expect(validateAgentCheckpoint({ ...valid, state: { nested: { constructor: "bad" } } as unknown as AgentCheckpoint["state"] })).not.toBeNull();
   });
+  it("rejects invalid state sparse array", () => {
+    expect(validateAgentCheckpoint({ ...valid, state: Array(2) as unknown as AgentCheckpoint["state"] })).not.toBeNull();
+  });
 });
