@@ -226,3 +226,42 @@ describe("AgentRunManager", () => {
     expect(manager.list()[0]).toMatchObject({ status: "failed", error: "offline" });
   });
 });
+
+describe("checkpoint recovery", () => {
+  it("restores interrupted and pending runs without executing tasks or duplicating records", async () => {
+    const manager = new AgentRunManager();
+    const { agentThreads } = await import("./agentThreads");
+    const checkpoint = { schemaVersion: 1 as const, runId: "saved-run", agentId: "agent", threadId: agentThreads("chat-a").primary, sequence: 1, status: "running" as const, state: {}, createdAt: 1, updatedAt: 2 };
+    manager.restoreCheckpoints("chat-a", [checkpoint]);
+    manager.restoreCheckpoints("chat-a", [checkpoint]);
+    expect(manager.list("chat-a")).toMatchObject([{ runtimeRunId: "saved-run", status: "interrupted" }]);
+    expect(manager.list("chat-b")).toEqual([]);
+    expect(manager.activeRun("chat-a")).toBeNull();
+    manager.restoreCheckpoints("chat-b", [checkpoint]);
+    expect(manager.list("chat-b")).toEqual([]);
+  });
+});
+
+it("loads saved approvals from the checkpoint repository without running an agent", async () => {
+  const { LocalStorageAgentCheckpointRepository } = await import("./agentCheckpointStorage");
+  const { agentThreads } = await import("./agentThreads");
+  const data = new Map<string, string>();
+  const repository = new LocalStorageAgentCheckpointRepository({ getItem: key => data.get(key) ?? null, setItem: (key, value) => { data.set(key, value); } });
+  const saved = { schemaVersion: 1 as const, runId: "waiting-run", agentId: "agent", threadId: agentThreads("chat-a").primary, sequence: 1, status: "waiting_for_approval" as const, state: {}, pendingApproval: { permission: "tool:execute", requestedAt: 2 }, createdAt: 1, updatedAt: 2 };
+  expect((await repository.save(saved, null)).ok).toBe(true);
+  const reloaded = await repository.listByThread(saved.threadId, 50);
+  expect(reloaded.ok).toBe(true);
+  if (!reloaded.ok) throw new Error("checkpoint missing");
+  const manager = new AgentRunManager();
+  manager.restoreCheckpoints("chat-a", reloaded.value);
+  expect(manager.list("chat-a")).toMatchObject([{ status: "waiting_for_approval", runtimeRunId: "waiting-run" }]);
+  expect(manager.activeRun("chat-a")).toBeNull();
+});
+
+it("fails closed for corrupted checkpoint storage", async () => {
+  const { LocalStorageAgentCheckpointRepository } = await import("./agentCheckpointStorage");
+  const repository = new LocalStorageAgentCheckpointRepository({ getItem: () => "{broken", setItem: () => { throw new Error("must not write"); } });
+  const result = await repository.listByThread("thread", 50);
+  expect(result.ok).toBe(false);
+  expect(new AgentRunManager().list()).toEqual([]);
+});

@@ -35,6 +35,10 @@ import { TerminalSessions } from "./components/TerminalSessions";
 import { AgentTerminalOutput } from "./components/AgentTerminalOutput";
 import { KeepAlivePanel } from "./components/KeepAlivePanel";
 import { AgentRunManager } from "./lib/agentRunManager";
+import { agentThreads } from "./lib/agentThreads";
+import { AgentCheckpointService } from "./core/agentCheckpoints";
+import { LocalStorageAgentCheckpointRepository } from "./lib/agentCheckpointStorage";
+import { NativeAgentCheckpointRepository } from "./lib/nativeAgentCheckpointRepository";
 import { useSessionDraft } from "./components/useSessionDraft";
 import { CommandPalette, type NexusCommandId } from "./components/CommandPalette";
 import { resolveAgentProjectId, resolveConversationProjectId } from "./lib/conversationProjectContext";
@@ -222,6 +226,26 @@ export default function App() {
     void loadConversations().then(items => { if (mounted) { setConversations(items); setConversationsReady(true); } }).catch(e => { if (mounted) { setError(e instanceof Error ? e.message : "Could not load conversations."); setConversationsReady(true); } });
     return () => { mounted = false; };
   }, []);
+  const checkpointService = useMemo(() => new AgentCheckpointService(isTauri()
+    ? new NativeAgentCheckpointRepository()
+    : new LocalStorageAgentCheckpointRepository(window.localStorage)), []);
+  const conversationIdsForRecovery = useMemo(() => JSON.stringify(conversations.map(item => item.id).sort()), [conversations]);
+  useEffect(() => {
+    if (!conversationsReady) return;
+    let mounted = true;
+    const ids = [...JSON.parse(conversationIdsForRecovery) as string[], "standalone"];
+    void (async () => {
+      for (const id of ids) {
+        const threads = Object.values(agentThreads(id === "standalone" ? undefined : id));
+        const results = await Promise.all(threads.map(thread => checkpointService.listByThread(thread, 200)));
+        if (!mounted) return;
+        const failure = results.find(result => !result.ok);
+        if (failure && !failure.ok) { setError("Agent history unavailable: " + failure.error.message); return; }
+        agentRuns.restoreCheckpoints(id, results.flatMap(result => result.ok ? result.value : []));
+      }
+    })().catch(() => { if (mounted) setError("Agent history could not be restored."); });
+    return () => { mounted = false; };
+  }, [agentRuns, checkpointService, conversationsReady, conversationIdsForRecovery]);
   // Streaming deltas are ephemeral UI state. The application facade commits the final (or partial-on-failure) turn atomically; do not let a stale React snapshot overwrite that durable write mid-stream.
   useEffect(() => { if (conversationsReady && !busy) void conversationRepository.replaceAll(conversations).catch(e => setError(e instanceof Error ? e.message : "Could not save conversations.")); }, [conversations, conversationsReady, conversationRepository, busy]);
   useEffect(() => { saveProvider(provider); }, [provider]);

@@ -165,7 +165,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, threads.test, WORKSPACE_TEST_TOOLS
   ) ?? null, [runtime, threads]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
-  const runningCount = checkpoints.filter(item => item.status === "running").length;
+  const runningCount = checkpoints.filter(item => item.status === "running" && item.runId === activeRunId).length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
   const completedCount = checkpoints.filter(item => item.status === "completed").length;
   const failedCount = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").length;
@@ -434,11 +434,6 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     await refresh();
   }
 
-  function continueRun(checkpoint: AgentCheckpoint) {
-    if (!runtime) return;
-    void runAction(signal => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, signal));
-  }
-
   async function reconcileToolStep(step: AmbiguousToolStep) {
     if (!runtime || busy) return;
     const confirmed = window.confirm(
@@ -526,10 +521,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
             {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
               <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
-                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
+                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && <button className="agent-small-button" disabled={busy} onClick={() => continueRun(checkpoint)}>{t("Continue checkpoint")}</button>}
+                {checkpoint.status === "running" && checkpoint.runId !== activeRunId && <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>}
               </div>)}</div>}
           </article>
 

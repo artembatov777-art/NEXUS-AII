@@ -1,3 +1,5 @@
+import { validateAgentCheckpoint, type AgentCheckpoint } from "../core/agentCheckpoints";
+import { agentThreads } from "./agentThreads";
 import { filterAgentEvents } from "./agentRunEventFilter";
 import { agentRunTimeline } from "./agentRunTimeline";
 import { agentRunEventPreview } from "./agentRunEventPreview";
@@ -7,7 +9,7 @@ import { validAgentRunIdentity } from "./agentRunIdentity";
  * Owns the lifetime of foreground agent tasks independently of React panels.
  * UI subscribers may mount/unmount without cancelling the underlying task.
  */
-export type ManagedRunStatus = "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
+export type ManagedRunStatus = "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "interrupted";
 export interface ManagedRun {
   id: string;
   conversationId: string;
@@ -39,6 +41,21 @@ export class AgentRunManager {
     return [...this.runs.values()]
       .filter(run => conversationId === undefined || run.conversationId === conversationId)
       .map(run => ({ ...run }));
+  }
+
+  /** Reconstruct display state from durable checkpoints; never resumes a task. */
+  restoreCheckpoints(conversationId: string, checkpoints: readonly AgentCheckpoint[]): void {
+    if (this.activeByConversation.has(conversationId)) return;
+    const threads = Object.values(agentThreads(conversationId === "standalone" ? undefined : conversationId));
+    let changed = false;
+    for (const checkpoint of checkpoints) {
+      if (validateAgentCheckpoint(checkpoint) || !threads.includes(checkpoint.threadId) || !validAgentRunIdentity(checkpoint.runId, conversationId)) continue;
+      if (this.list().some(run => run.runtimeRunId === checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
+      const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
+      this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(status !== "interrupted" && status !== "waiting_for_approval" ? { finishedAt: checkpoint.updatedAt } : {}) });
+      changed = true;
+    }
+    if (changed) this.publish();
   }
 
   summary(conversationId?: string) {

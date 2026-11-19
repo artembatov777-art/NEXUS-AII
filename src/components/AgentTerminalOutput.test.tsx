@@ -34,3 +34,18 @@ describe("AgentTerminalOutput", () => {
     await act(async () => root.unmount()); element.remove();
   });
 });
+
+it("shows recovered interrupted state only in its conversation", async () => {
+  const { agentThreads } = await import("../lib/agentThreads");
+  const manager = new AgentRunManager();
+  const checkpoint = { schemaVersion: 1 as const, runId: "saved", agentId: "agent", threadId: agentThreads("one").primary, sequence: 1, status: "running" as const, state: {}, createdAt: 1, updatedAt: 2 };
+  manager.restoreCheckpoints("one", [checkpoint]);
+  const element = document.createElement("div"); document.body.appendChild(element);
+  const root = createRoot(element);
+  await act(async () => root.render(<AgentTerminalOutput agentRuns={manager} conversationId="one" onOpen={() => {}}/>));
+  expect(element.textContent).toContain("Interrupted");
+  expect(element.querySelector('[aria-label="Cancel this agent run"]')).toBeNull();
+  await act(async () => root.render(<AgentTerminalOutput agentRuns={manager} conversationId="two" onOpen={() => {}}/>));
+  expect(element.querySelector(".agent-terminal-output")).toBeNull();
+  await act(async () => root.unmount()); element.remove();
+});
