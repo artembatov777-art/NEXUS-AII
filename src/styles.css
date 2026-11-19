@@ -564,3 +564,19 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 .terminal-session-close{display:flex;align-items:center}
 .terminal-session-add{display:flex;align-items:center;border-radius:6px}
 .terminal-sessions button:focus-visible{outline:2px solid #ad9ae4;outline-offset:1px}
+
+/* Active agent logs share the terminal session, not the provider chat transcript. */
+.agent-running-banner{display:block;max-width:760px;width:calc(100% - 24px);margin:7px auto;padding:8px 12px;border:1px solid #665a87;border-radius:8px;background:#211c2d;color:#ded5fa;text-align:left;font:inherit;font-size:12px;cursor:pointer}
+.agent-running-banner:focus-visible,.agent-terminal-controls button:focus-visible{outline:2px solid #ad9ae4;outline-offset:2px}
+.agent-terminal-output{max-width:760px;width:calc(100% - 24px);margin:6px auto 14px;border:1px solid #4b4564;border-radius:10px;background:#181822;color:#dcd9e8;overflow:hidden}
+.agent-terminal-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #383449;font-size:11px;letter-spacing:.04em}
+.agent-terminal-controls{display:flex;gap:7px;flex-wrap:wrap}
+.agent-terminal-controls button{border:1px solid #5a526f;border-radius:6px;padding:5px 8px;background:#282338;color:#eee8fb;cursor:pointer;font:inherit;font-size:11px}
+.agent-terminal-events{list-style:none;margin:0;padding:6px 12px;max-height:170px;overflow:auto}
+.agent-terminal-events li{display:grid;grid-template-columns:70px minmax(0,1fr);align-items:start;gap:8px;padding:5px 0;border-bottom:1px solid #302d3a;font-size:11px}
+.agent-terminal-events li:last-child{border-bottom:0}
+.agent-terminal-events span{font-size:9px;color:#ad9ecb;letter-spacing:.06em}
+.agent-terminal-events pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font:inherit;color:#d1cee0}
+.agent-terminal-events [data-kind="error"] pre{color:#ffb6b6}
+.agent-terminal-events [data-kind="approval"] pre{color:#f1d0a0}
+@media(max-width:640px){.agent-terminal-heading{flex-wrap:wrap}.agent-terminal-events li{grid-template-columns:1fr;gap:3px}}
