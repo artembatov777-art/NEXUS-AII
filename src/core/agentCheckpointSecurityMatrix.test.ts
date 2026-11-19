@@ -332,4 +332,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects checkpoint sequence Number.NEGATIVE_INFINITY", () => {
     expect(validateAgentCheckpoint({ ...valid, sequence: Number.NEGATIVE_INFINITY })).not.toBeNull();
   });
+  it("rejects checkpoint sequence Number.MAX_SAFE_INTEGER + 1", () => {
+    expect(validateAgentCheckpoint({ ...valid, sequence: Number.MAX_SAFE_INTEGER + 1 })).not.toBeNull();
+  });
 });
