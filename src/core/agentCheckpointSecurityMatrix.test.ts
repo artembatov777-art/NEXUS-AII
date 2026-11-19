@@ -344,4 +344,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects timestamp createdAt = Infinity", () => {
     expect(validateAgentCheckpoint({ ...valid, createdAt: Infinity })).not.toBeNull();
   });
+  it("rejects timestamp createdAt = -Infinity", () => {
+    expect(validateAgentCheckpoint({ ...valid, createdAt: -Infinity })).not.toBeNull();
+  });
 });
