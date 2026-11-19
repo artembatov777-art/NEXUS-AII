@@ -552,3 +552,6 @@ body{background:radial-gradient(ellipse at 50% 5%,#14283a 0%,#080e17 42%,#05080e
 
 /* Language selection */
 .language-setting{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:12px;padding:12px 13px;margin:0 0 14px;border:1px solid #34394a;border-radius:9px;background:#10151e}.language-setting label{margin:0!important;color:#d5d9e3!important;font-size:12px!important}.language-setting select{width:100%;background:#0d1119;border:1px solid #454d60;border-radius:8px;padding:9px 10px;color:#edf0f6;font:inherit;font-size:12px}.language-setting select:focus{outline:2px solid #816bb7;outline-offset:2px}
+
+/* Local command feedback is separate from model messages and is never persisted as an AI response. */
+.terminal-notice{max-width:760px;margin:0 auto 15px;padding:10px 13px;border:1px solid #45445b;background:#232231;color:#e1dff0;border-radius:8px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
