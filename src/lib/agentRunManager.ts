@@ -96,7 +96,8 @@ export class AgentRunManager {
     const run = this.runs.get(runId);
     if (!run) throw new Error("Unknown run ID.");
     const events = this.events.get(runId) ?? [];
-    const event: ManagedRunEvent = { runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message };
+    const boundedMessage = message.length > 16_000 ? message.slice(0, 16_000) + "\n[Event output truncated]" : message;
+    const event: ManagedRunEvent = { runId, conversationId: run.conversationId, timestamp: Date.now(), kind, message: boundedMessage };
     events.push(event);
     this.events.set(runId, events.slice(-200));
     for (const listener of [...this.eventListeners]) {

@@ -211,6 +211,15 @@ describe("AgentRunManager", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  it("bounds retained event content to prevent unbounded tool-output memory use", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("large", "chat", async () => {});
+    manager.appendEvent("large", "output", "x".repeat(50_000));
+    const saved = manager.history("large")[0].message;
+    expect(saved.length).toBeLessThan(16_050);
+    expect(saved).toContain("[Event output truncated]");
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
