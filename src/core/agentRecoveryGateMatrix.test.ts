@@ -348,4 +348,9 @@ describe("manual recovery gate safety matrix", () => {
     const evidence: RecoveryEvidence = { noActiveRun: true, operationsReconciled: true, permissionsRevalidated: false };
     expect(evaluateManualRecovery(checkpoint, evidence)).toEqual({ allowed: false, reason: "pending_approval" });
   });
+  it("checkpoint waiting_for_approval evidence 3 sequence 2 approval false", () => {
+    const checkpoint: AgentCheckpoint = { ...baseline, status: "waiting_for_approval", sequence: 2, updatedAt: 102 };
+    const evidence: RecoveryEvidence = { noActiveRun: true, operationsReconciled: true, permissionsRevalidated: false };
+    expect(evaluateManualRecovery(checkpoint, evidence)).toEqual({ allowed: false, reason: "pending_approval" });
+  });
 });
