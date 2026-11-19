@@ -13,7 +13,7 @@ describe("terminal session tabs", () => {
     const root = createRoot(element);
     act(() => root.render(<TerminalSessions sessions={[{ id: "one", title: "First" }, { id: "two", title: "Second" }]} activeId="one" runningAgentSessions={["two"]} onSelect={() => {}} onClose={() => {}} onCreate={() => {}} />));
     expect(element.querySelector('[aria-label="Open session First"] [aria-label="Agent running"]')).toBeNull();
-    expect(element.querySelector('[aria-label="Open session Second"] [aria-label="Agent running"]')).not.toBeNull();
+    expect(element.querySelector('[aria-label="Open session Second, agent running"] [aria-label="Agent running"]')).not.toBeNull();
     act(() => root.unmount());
     element.remove();
   });
