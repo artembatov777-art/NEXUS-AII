@@ -8,6 +8,8 @@ export interface ManagedRun {
   conversationId: string;
   status: ManagedRunStatus;
   error?: string;
+  startedAt: number;
+  finishedAt?: number;
 }
 export type ManagedRunListener = (runs: readonly ManagedRun[]) => void;
 
@@ -15,6 +17,7 @@ export class AgentRunManager {
   private readonly runs = new Map<string, ManagedRun>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly listeners = new Set<ManagedRunListener>();
+  private readonly activeByConversation = new Map<string, string>();
 
   list(conversationId?: string): ManagedRun[] {
     return [...this.runs.values()]
@@ -36,22 +39,25 @@ export class AgentRunManager {
   start(id: string, conversationId: string, task: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (!id.trim() || !conversationId.trim()) throw new Error("Run and conversation IDs are required.");
     if (this.runs.has(id)) throw new Error("A run with this ID already exists.");
+    if (this.activeByConversation.has(conversationId)) throw new Error("Conversation already has an active run.");
     const controller = new AbortController();
     this.controllers.set(id, controller);
-    this.runs.set(id, { id, conversationId, status: "running" });
+    this.activeByConversation.set(conversationId, id);
+    this.runs.set(id, { id, conversationId, status: "running", startedAt: Date.now() });
     this.publish();
     return (async () => {
       try {
         await task(controller.signal);
-        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : "completed" });
+        this.runs.set(id, { id, conversationId, status: controller.signal.aborted ? "cancelled" : "completed", startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now() });
       } catch (cause) {
         this.runs.set(id, {
-          id, conversationId,
+          id, conversationId, startedAt: this.runs.get(id)!.startedAt, finishedAt: Date.now(),
           status: controller.signal.aborted ? "cancelled" : "failed",
           ...(!controller.signal.aborted ? { error: cause instanceof Error ? cause.message : "Agent run failed." } : {})
         });
       } finally {
         this.controllers.delete(id);
+        if (this.activeByConversation.get(conversationId) === id) this.activeByConversation.delete(conversationId);
         this.publish();
       }
     })();

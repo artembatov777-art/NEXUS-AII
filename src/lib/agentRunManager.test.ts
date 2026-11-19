@@ -36,6 +36,26 @@ describe("AgentRunManager", () => {
     expect(manager.cancel("cancel-me")).toBe(false);
   });
 
+  it("allows independent conversations but prevents overlapping runs in one conversation", async () => {
+    const manager = new AgentRunManager();
+    let finish!: () => void;
+    const waiting = new Promise<void>(resolve => { finish = resolve; });
+    const first = manager.start("first", "same", async () => { await waiting; });
+    expect(() => manager.start("second", "same", async () => {})).toThrow("active run");
+    await manager.start("third", "other", async () => {});
+    finish();
+    await first;
+    await manager.start("fourth", "same", async () => {});
+    expect(manager.list("same").map(run => run.status)).toEqual(["completed", "completed"]);
+  });
+
+  it("records start and finish timestamps", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("timestamp", "chat", async () => {});
+    const run = manager.list()[0];
+    expect(run.finishedAt).toBeGreaterThanOrEqual(run.startedAt);
+  });
+
   it("records failures without rejecting the manager task", async () => {
     const manager = new AgentRunManager();
     await manager.start("broken", "chat", async () => { throw new Error("offline"); });
