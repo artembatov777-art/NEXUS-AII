@@ -239,6 +239,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
     for await (const event of events) {
+      managedRuns.linkRuntimeRun(managerId, event.runId);
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
         await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
@@ -254,6 +255,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         outcome = "waiting_for_approval";
         reportManagedEvent(managerId, "approval", "Approval required: " + event.permission, "warning");
       } else if (event.type === "completed") {
+        managedRuns.resolveWaiting(event.runId, "completed");
         outcome = undefined;
         reportManagedEvent(managerId, "output", "Run completed in " + event.steps + " step(s).", "success");
       } else if (event.type === "failed") {
@@ -372,6 +374,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       }
       reportManagedEvent(managerId, "progress", "Validated plan: " + result.value.steps.length + " bounded tool step(s).", "success");
       const coordinationId = crypto.randomUUID() as AgentRunId;
+      managedRuns.linkRuntimeRun(managerId, coordinationId);
       setActiveRunId(coordinationId);
       let outcome: void | "waiting_for_approval" | "failed" = undefined;
       for await (const event of workflow.run(result.value, coordinationId, signal)) {
@@ -424,7 +427,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     delete rejected.pendingApproval;
     const result = await runtime.checkpointService.persist(rejected);
     if (!result.ok) addFeed(result.error.message, "error");
-    else addFeed("Approval rejected. The run was closed without executing the tool.", "warning");
+    else {
+      managedRuns.resolveWaiting(checkpoint.runId, "failed");
+      addFeed("Approval rejected. The run was closed without executing the tool.", "warning");
+    }
     await refresh();
   }
 
