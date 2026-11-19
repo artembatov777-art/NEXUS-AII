@@ -7,7 +7,7 @@ describe("checkpoint recovery ordering", () => {
     const manager = new AgentRunManager();
     const base: AgentCheckpoint = {
       schemaVersion: 1, runId: "run-1", agentId: "agent-1",
-      threadId: "standalone", sequence: 1, status: "running",
+      threadId: "nexus-agent-control-center", sequence: 1, status: "running",
       state: {}, createdAt: 100, updatedAt: 100
     };
     manager.restoreCheckpoints("standalone", [
