@@ -398,4 +398,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects approval permission \"  \"", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: "  ", requestedAt: 100 } })).not.toBeNull();
   });
+  it("rejects approval permission \"\\t\"", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: "\t", requestedAt: 100 } })).not.toBeNull();
+  });
 });
