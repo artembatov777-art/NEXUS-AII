@@ -1,3 +1,4 @@
+import { filterAgentEvents } from "./agentRunEventFilter";
 import { agentRunTimeline } from "./agentRunTimeline";
 import { agentRunEventPreview } from "./agentRunEventPreview";
 import { summarizeRuns } from "./agentRunSummary";
@@ -49,6 +50,10 @@ export class AgentRunManager {
 
   history(runId: string): ManagedRunEvent[] {
     return (this.events.get(runId) ?? []).map(event => ({ ...event }));
+  }
+
+  eventsByKind(conversationId: string, kinds: readonly ManagedRunEvent["kind"][]): ManagedRunEvent[] {
+    return filterAgentEvents(this.conversationTimeline(conversationId), conversationId, kinds);
   }
 
   conversationTimeline(conversationId: string): ManagedRunEvent[] {
