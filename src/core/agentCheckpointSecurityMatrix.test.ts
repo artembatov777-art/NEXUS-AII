@@ -404,4 +404,7 @@ describe("checkpoint security regression matrix", () => {
   it("rejects approval permission 123 as unknown as string", () => {
     expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: 123 as unknown as string, requestedAt: 100 } })).not.toBeNull();
   });
+  it("rejects approval permission undefined as unknown as string", () => {
+    expect(validateAgentCheckpoint({ ...valid, status: "waiting_for_approval", pendingApproval: { permission: undefined as unknown as string, requestedAt: 100 } })).not.toBeNull();
+  });
 });
