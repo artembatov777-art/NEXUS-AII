@@ -236,10 +236,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     for (const run of managedRuns.list()) if (run.status === "running") managedRuns.cancel(run.id);
   }, [managedRuns]);
 
-  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
+  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string, allowApprovalHandoff = false): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
     for await (const event of events) {
-      managedRuns.linkRuntimeRun(managerId, event.runId);
+      managedRuns.linkRuntimeRun(managerId, event.runId, allowApprovalHandoff);
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
         await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
@@ -290,8 +290,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }
   }
 
-  async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>) {
-    await runManagedAction((signal, managerId) => consume(action(signal), managerId));
+  async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>, allowApprovalHandoff = false) {
+    await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff));
   }
 
   function cancelActiveRun() {
@@ -413,7 +413,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         return;
       }
       yield* runtime.agentRuntime.resume(checkpoint.runId as AgentRunId, grant.value, signal);
-    });
+    }, true);
   }
 
   async function reject(checkpoint: AgentCheckpoint) {
