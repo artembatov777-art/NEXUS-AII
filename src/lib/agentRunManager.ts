@@ -64,7 +64,16 @@ export class AgentRunManager {
     const ownedRuntimeIds = new Set(
       [...this.runs.values()].map(run => run.runtimeRunId).filter((id): id is string => id !== undefined)
     );
-    for (const checkpoint of latest.values()) {
+    // Retain the newest 250 terminal snapshots, matching pruneFinished.
+    // Otherwise refresh would repeatedly reinsert the oldest 50 of 300 and
+    // publish an unchanged list on every request.
+    const candidates = [...latest.values()];
+    const terminalSnapshots = candidates
+      .filter(cp => cp.status === "completed" || cp.status === "failed" || cp.status === "cancelled")
+      .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 250);
+    const resumableSnapshots = candidates
+      .filter(cp => cp.status === "running" || cp.status === "waiting_for_approval");
+    for (const checkpoint of [...resumableSnapshots, ...terminalSnapshots]) {
       const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
       const terminal = status === "completed" || status === "failed" || status === "cancelled";
       const previousSequence = this.restoredRunSequences.get(checkpoint.runId);
