@@ -64,4 +64,31 @@ describe('offline workspace inspections use the shared strict plan contract', ()
     expect(calls).toEqual([{ toolId: 'cli.workspace.search',
       input: { root: 'C:\\workspace', path: '', query: 'old first' } }]);
   });
+
+  it('builds a complete offline draft-inspection plan using the strict JSON execution boundary', async () => {
+    const { planner, calls } = createWorkspacePlanner();
+    const read = vi.fn(async () => ok({ path: 'first.txt', content: 'old first', revision: 'test:1' }));
+    const result = await planner.plan('C:\\workspace', JSON.stringify({ goal: 'review fixture' }),
+      read, new AbortController().signal);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.plan.goal).toBe('review fixture');
+    expect(result.value.plan.entries).toEqual(['first.txt']);
+    expect(result.value.plan.actions).toEqual([]);
+    expect(calls).toEqual([{ toolId: 'cli.workspace.list', input: { root: 'C:\\workspace', path: '' } }]);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('only sends a query for the actual search step in structured plans', async () => {
+    const { planner, calls } = createWorkspacePlanner();
+    const result = await planner.plan('C:\\workspace',
+      JSON.stringify({ goal: 'inspect', query: 'first', directory: '.' }),
+      async () => ok({ path: 'first.txt', content: 'old first' }),
+      new AbortController().signal);
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      { toolId: 'cli.workspace.list', input: { root: 'C:\\workspace', path: '.' } },
+      { toolId: 'cli.workspace.search', input: { root: 'C:\\workspace', path: '.', query: 'first' } }
+    ]);
+  });
 });
