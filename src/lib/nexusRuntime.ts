@@ -35,6 +35,9 @@ import { LocalStorageKnowledgeRepository } from "./knowledgeStorage";
 import { DocumentIngestionService } from "../core/documentIngestion";
 import { createToolInvocationAgent, TOOL_INVOCATION_AGENT_ID } from "../core/toolInvocationAgent";
 import { ToolReconciliationService } from "../core/toolReconciliation";
+import type { AgentActivityRepository } from "./agentActivity";
+import { LocalStorageAgentActivityRepository } from "./agentActivityStorage";
+import { NativeAgentActivityRepository } from "./nativeAgentActivityRepository";
 
 export interface NexusPermissionPolicy {
   authorizeAgent(input: { agentId: AgentId; permission: AgentPermission; reason: string }): Promise<"allow" | "deny" | "ask_user">;
@@ -57,6 +60,7 @@ export interface NexusRuntimeOptions {
   checkpointRepository?: AgentCheckpointRepository;
   auditSink?: NexusAuditSink;
   traceSink?: TraceSink;
+  activityRepository?: AgentActivityRepository;
 }
 
 const denyByDefault: NexusPermissionPolicy = {
@@ -103,6 +107,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
   const checkpointService = new AgentCheckpointService(checkpointRepository);
   const auditSink = options.auditSink ?? new LocalStorageToolAuditSink(options.storage);
   const toolReconciliationService = new ToolReconciliationService(auditSink, checkpointRepository);
+  const activityRepository = options.activityRepository ?? new LocalStorageAgentActivityRepository(options.storage);
   const toolGateway = new ToolGateway(new ToolPermissionAdapter(policy), auditSink, clock);
   const toolRegistry = new ToolRegistry(toolGateway);
   const mcpClient = new McpClient(toolRegistry, toolGateway);
@@ -171,6 +176,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
     },
     checkpointService,
     checkpointRepository,
+    activityRepository,
     toolReconciliationService,
     auditSink,
     approvalAuthority,
@@ -186,7 +192,8 @@ export function createWorkspaceNexusRuntime(actorId: string, permissions?: Nexus
     ...(isTauri() ? {
       checkpointRepository: new NativeAgentCheckpointRepository(),
       auditSink: new NativeToolAuditSink(),
-      traceSink: new NativeTraceSink()
+      traceSink: new NativeTraceSink(),
+      activityRepository: new NativeAgentActivityRepository()
     } : {})
   });
 }
