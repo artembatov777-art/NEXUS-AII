@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ToolReconciliationService } from "./toolReconciliation";
+import { ToolReconciliationService, findAmbiguous } from "./toolReconciliation";
 import type { AgentCheckpoint, AgentCheckpointRepository } from "./agentCheckpoints";
 import type { ToolAuditEvent, ToolAuditSink } from "./tools";
 import { ok } from "./result";
@@ -112,5 +112,50 @@ describe("ToolReconciliationService", () => {
     const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
     expect(await service.listAmbiguous("run-1")).toMatchObject({ ok: false, error: { code: "storage_failed" } });
     expect(await service.reconcile(" ", "workspace.write", "trace", true)).toMatchObject({ ok: false, error: { code: "validation" } });
+  });
+});
+
+
+describe("cross-run audit isolation and complete-history reconciliation", () => {
+  it("does not clear an ambiguous step when another run has the same tool/trace tuple", () => {
+    const mixed: ToolAuditEvent[] = [
+      started,
+      { ...started, runId: "run-2", status: "completed", timestamp: 11 },
+      { ...started, runId: "run-3", status: "reconciled", timestamp: 12 }
+    ];
+    expect(findAmbiguous(mixed)).toEqual([
+      { toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 10 }
+    ]);
+  });
+
+  it("blocks manual reconciliation when the audit reader returns records from another run", async () => {
+    const audit = new FakeAudit();
+    audit.events = [
+      started, { ...started, runId: "run-2", status: "completed", timestamp: 11 }
+    ];
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
+    expect(await service.listAmbiguous("run-1"))
+      .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+    expect(await service.reconcile("run-1", started.toolId, started.traceId, true))
+      .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+    expect(audit.events).toHaveLength(2);
+  });
+
+  it("rejects malformed audit receipts instead of treating them as no ambiguous work", async () => {
+    const audit = new FakeAudit();
+    audit.events = [{ ...started, timestamp: Number.NaN }];
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
+    expect(await service.listAmbiguous("run-1"))
+      .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+  });
+
+  it("rejects a suspiciously full bounded history that could be truncated", async () => {
+    const audit = new FakeAudit();
+    audit.events = Array.from({ length: 5_000 }, (_, i) => ({
+      ...started, traceId: "trace-" + i, timestamp: 10 + i
+    }));
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
+    expect(await service.listAmbiguous("run-1"))
+      .toMatchObject({ ok: false, error: { code: "storage_failed" } });
   });
 });
