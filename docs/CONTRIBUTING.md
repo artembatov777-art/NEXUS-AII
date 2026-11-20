@@ -61,7 +61,7 @@ Prefer concise conventional prefixes:
 ## Continuation rules
 
 - Read README, `docs/ROADMAP.md`, `DEVELOPMENT_STATUS.md`, relevant contracts and any available owner instruction file before editing. `docs/AGENTS.md` documents the product runtime; it is not a substitute for owner instructions.
-- Use the seven-phase roadmap rather than historical milestone checkboxes. Keep implemented code, automated evidence and manual acceptance separate; identify the exact source SHA for CI claims.
+- Follow the owner's 12-phase NEXUS AU 2.0 plan in root `AGENTS.md` and `tasks/todo.md`. The seven-phase Desktop roadmap is historical implementation evidence, not the active delivery order. Keep implemented code, automated evidence and manual acceptance separate; identify the exact source SHA for CI claims.
 - Inspect and preserve working implementations and serialized contracts. Never replace them with demos or stubs to satisfy a check.
 - Do not connect OmniRoute, Ollama or real provider keys during core development; live integration is deferred to the owner's final integration stage.
 - Native filesystem lookups must retain pinned-directory, no-follow and no-overwrite behavior. Windows capability options require the extension traits from `cap-fs-ext` and `cap-std`, rather than the standard-library options trait.
