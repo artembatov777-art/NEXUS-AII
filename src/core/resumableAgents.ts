@@ -144,7 +144,7 @@ export class ResumableAgentRuntime {
     if (auth.kind === "denied") { yield* this.finishFailure(resumed, runId, "A required permission was denied."); return; }
     if (auth.kind === "approval") {
       const waiting: AgentCheckpoint = { ...resumed, sequence: resumed.sequence + 1, status: "waiting_for_approval",
-        state: packState(payload, auth.nextIndex, agent.version), pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
+        state: packState(payload, auth.nextIndex, agent.version, cp.state.steps), pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
         updatedAt: this.clock.now() };
       const result = await this.checkpoints.persist(waiting);
       if (!result.ok) { yield { type: "failed", runId, message: result.error.message }; return; }
@@ -179,7 +179,32 @@ export class ResumableAgentRuntime {
       yield { type: "failed", runId, message: "Checkpoint could not be claimed; another worker may already be continuing it." };
       return;
     }
-    yield* this.execute(agent, claimed, cp.state.payload, cp.state.permissionIndex, cp.state.steps, signal);
+    // Permission decisions made before a process restart are not durable grants.
+    // Claim the checkpoint first so that an approval pause is persisted before any tool can run.
+    const auth = await this.authorizeRemaining(agent, 0);
+    if (signal?.aborted) {
+      const cancelled: AgentCheckpoint = { ...claimed, sequence: claimed.sequence + 1,
+        status: "cancelled", updatedAt: this.clock.now() };
+      const persisted = await this.checkpoints.persist(cancelled);
+      yield { type: "failed", runId, message: persisted.ok ? "Agent run was cancelled." : persisted.error.message };
+      return;
+    }
+    if (auth.kind === "denied") {
+      yield* this.finishFailure(claimed, runId, "A required permission was denied.");
+      return;
+    }
+    if (auth.kind === "approval") {
+      const waiting: AgentCheckpoint = { ...claimed, sequence: claimed.sequence + 1,
+        status: "waiting_for_approval",
+        state: packState(cp.state.payload, auth.nextIndex, agent.version, cp.state.steps),
+        pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
+        updatedAt: this.clock.now() };
+      const persisted = await this.checkpoints.persist(waiting);
+      if (!persisted.ok) { yield { type: "failed", runId, message: persisted.error.message }; return; }
+      yield { type: "waiting_for_approval", runId, permission: auth.permission };
+      return;
+    }
+    yield* this.execute(agent, claimed, cp.state.payload, auth.nextIndex, cp.state.steps, signal);
   }
 
   private async authorizeRemaining(agent: ResumableAgentDefinition<unknown>, startIndex: number):
