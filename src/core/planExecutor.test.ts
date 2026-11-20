@@ -121,4 +121,73 @@ describe('terminal agent', () => {
       .toMatchObject({ ok: false, error: { code: 'validation' } });
     expect(invoked).toHaveBeenCalledTimes(1);
   });
+
+  it('reports cancellation even if a tool adapter ignores the abort and returns success', async () => {
+    const controller = new AbortController();
+    const gateway = new ToolGateway({ authorize: async () => "allow" }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: "read.a", version: "1", description: "Read", requiredPermissions: [],
+      risk: "low", timeoutMs: 1_000, validateInput: input => ok(input), execute: async () => ok({}) });
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
+      { id: "one", toolId: "read.a", purpose: "Read", input: {}, dependsOn: [] }
+    ] }) });
+    const executor: AgentToolExecutor = { execute: async <Output = unknown>() => {
+      controller.abort();
+      return ok({ uncertainOutcome: true } as Output);
+    } };
+    const onStep = vi.fn();
+    const agent = new TerminalAgent(planner, registry, executor);
+    expect(await agent.run("inspect", "cancelled-after-execution", controller.signal, onStep))
+      .toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(onStep).not.toHaveBeenCalled();
+  });
+
+  it('normalizes an exception from a tool adapter to an ambiguous, non-retryable failure', async () => {
+    const gateway = new ToolGateway({ authorize: async () => "allow" }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: "read.a", version: "1", description: "Read", requiredPermissions: [],
+      risk: "low", timeoutMs: 1_000, validateInput: input => ok(input), execute: async () => ok({}) });
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
+      { id: "one", toolId: "read.a", purpose: "Read", input: {}, dependsOn: [] }
+    ] }) });
+    const executor: AgentToolExecutor = { execute: async () => { throw new Error("Adapter crashed after dispatch"); } };
+    const agent = new TerminalAgent(planner, registry, executor);
+    const result = await agent.run("inspect", "executor-throws", new AbortController().signal);
+    expect(result).toMatchObject({ ok: false, error: { code: "tool_failed", retryable: false } });
+    if (!result.ok) expect(result.error.message).toMatch(/audit|unknown|outcome/i);
+  });
+
+  it('returns a typed error if the planner crashes rather than rejecting the whole run', async () => {
+    const gateway = new ToolGateway({ authorize: async () => "allow" }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const planner = new AgentPlanner({ createPlan: async () => { throw new Error("Provider crashed"); } });
+    const agent = new TerminalAgent(planner, new ToolRegistry(gateway), {
+      execute: async () => ok({})
+    });
+    expect(await agent.run("inspect", "planner-exception", new AbortController().signal))
+      .toMatchObject({ ok: false, error: { code: "provider_unavailable" } });
+  });
+
+  it('returns an auditable failure if a UI step callback throws after the tool completed', async () => {
+    const gateway = new ToolGateway({ authorize: async () => "allow" }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: "read.a", version: "1", description: "Read", requiredPermissions: [],
+      risk: "low", timeoutMs: 1_000, validateInput: input => ok(input), execute: async () => ok({}) });
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
+      { id: "one", toolId: "read.a", purpose: "Read", input: {}, dependsOn: [] }
+    ] }) });
+    const executor = { execute: async () => ok({ executed: true }) };
+    const agent = new TerminalAgent(planner, registry, executor);
+    const result = await agent.run("inspect", "observer-error", new AbortController().signal,
+      () => { throw new Error("Terminal output disconnected"); });
+    expect(result).toMatchObject({ ok: false, error: { code: "internal", retryable: false } });
+    if (!result.ok) expect(result.error.message).toMatch(/audit|completed|observer/i);
+  });
 });
