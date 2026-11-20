@@ -34,6 +34,10 @@ describe("ToolGateway complete audit evidence", () => {
     ["invalid timestamp", [{ ...started, timestamp: Number.NaN }]],
     ["unrecognized status", [{ ...started, status: "ghost" }]],
     ["malformed list", { unexpected: "shape" }],
+    ["sparse journal", [started, , started]],
+    ["accessor-backed receipt", Object.assign([started], { 0: Object.defineProperty({ ...started }, "status", {
+      enumerable: true, get: () => "started"
+    }) })],
     ["ambiguous limit", Array.from({ length: 5_000 }, (_, i) => ({
       ...started, traceId: "trace-" + i, timestamp: i
     }))]
