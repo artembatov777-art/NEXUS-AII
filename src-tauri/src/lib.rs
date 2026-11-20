@@ -1105,15 +1105,18 @@ fn agent_checkpoint_validation_error(checkpoint: &serde_json::Value) -> Option<&
     if !state_is_bounded {
         return Some("missing or oversized checkpoint state");
     }
-    let pending_is_valid = checkpoint.get("pendingApproval").map_or(true, |pending| {
-        pending.is_null() || (
-            status == "waiting_for_approval"
-                && pending.get("permission").and_then(|value| value.as_str())
-                    .map_or(false, |value| !value.trim().is_empty() && value.len() <= 160)
-                && pending.get("requestedAt").and_then(|value| value.as_f64())
-                    .map_or(false, |value| value.is_finite())
-        )
-    });
+    // Waiting snapshots must always carry a recognized, non-null approval scope.
+    // Match the TypeScript checkpoint validator so native writes fail closed too.
+    let pending_is_valid = if status == "waiting_for_approval" {
+        checkpoint.get("pendingApproval").map_or(false, |pending| {
+            ["memory:read", "conversation:read", "tool:execute"].contains(
+                &pending.get("permission").and_then(|value| value.as_str()).unwrap_or("")
+            ) && pending.get("requestedAt").and_then(|value| value.as_f64())
+                .map_or(false, |value| value.is_finite())
+        })
+    } else {
+        checkpoint.get("pendingApproval").map_or(true, |pending| pending.is_null())
+    };
     if !pending_is_valid {
         return Some("invalid pending approval metadata");
     }
