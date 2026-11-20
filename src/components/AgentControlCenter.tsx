@@ -247,7 +247,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       const reviewableRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled" ||
         (item.status === "running" && item.runId !== effectiveActiveRunId)).slice(0, 50);
       const reconciliationResults = await Promise.all(reviewableRuns.map(item =>
-        runtime.toolReconciliationService.listAmbiguous(item.runId)
+        runtime.toolReconciliationService.listAmbiguous(item.runId, item.status === "running")
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
     } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
@@ -518,8 +518,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       "This tool step may have timed out or been cancelled after its external operation began. Verify in the external system whether it completed or is still running. Marking it reconciled only blocks retries; it does not stop an operation already in progress. Continue?"
     );
     if (!confirmed) return;
+    const interrupted = checkpoints.some(item => item.runId === step.runId && item.status === "running" && item.runId !== effectiveActiveRunId);
     const result = await runtime.toolReconciliationService.reconcile(
-      step.runId, step.toolId, step.traceId, true
+      step.runId, step.toolId, step.traceId, true, interrupted
     );
     if (!result.ok) addFeed(result.error.message, "error");
     else addFeed(`Manually reconciled ${step.toolId}. No tool was rerun.`, "success");
