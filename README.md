@@ -99,6 +99,19 @@ Inspect existing runs without a configured AI model using `/checkpoints` (or `/c
 
 The CLI does not yet guarantee exactly-once external tool effects after a crash. Journal and checkpoint permissions use POSIX owner checks on Unix; Windows ACL policy must additionally be checked on the installed desktop by the owner.
 
+### Read-only Git inspection from the CLI
+
+After explicitly selecting a local project with `/project <absolute directory>`, NEXUS CLI offers **local, read-only** Git inspection:
+
+- `/git status`: tracked changes and untracked paths, without staging them
+- `/git diff`: bounded unstaged patch
+- `/git diff staged`: bounded staged patch
+- `/git log`: up to 10 recent commit summaries
+
+The selected directory must itself be a real Git working-tree root with a direct `.git` directory; nested repositories, bare repositories, symlinked project roots and external/symlinked Git metadata are not accepted. Git is spawned with `shell: false`, an exact argument allowlist, no model/tool-supplied pathspecs, no pager or external diff, no inherited `GIT_*` overrides and no optional index locks. Output is capped at 64 KiB and terminal-escaped; excess output fails rather than silently presenting an incomplete patch.
+
+No `git add`, `commit`, `push`, `checkout`, `reset`, `fetch` or arbitrary shell commands are exposed. This does **not** provide automatic Git workflows or authorization for Git write operations. Git status is intentionally tied to the owner-selected workspace and stays local, without contacting a model provider or network service.
+
 ### CLI workspace
 
 With stable Rust and the npm dependencies installed, run `npm run build:workspace` and `npm run cli` in a terminal. Use `/project <absolute directory>` to grant access for this session. Use `/files [relative directory]`, `/read <relative file>`, or `/search <literal text>` and confirm the displayed read permission. Search returns matching paths, scanning at most 1,000 entries down to eight subdirectory levels and returning up to 100 paths. Files must be UTF-8 and at most 48,000 bytes. Ctrl-C closes the session. The CLI stores tool audit records under `~/.nexus-au/workspace-audit/`.
