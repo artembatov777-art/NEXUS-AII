@@ -65,6 +65,26 @@ function planState(value: unknown): { steps: PlanStepIdentity[];
 }
 
 /**
+ * Presentation-safe summary of a validated plan checkpoint. This does not
+ * inspect external tool outcomes, grant permissions, or allow continuation.
+ */
+export function summarizePlanCheckpoint(checkpoint: AgentCheckpoint): {
+  confirmedSteps: number;
+  totalSteps: number;
+  inFlight: (PlanStepIdentity & { index: number }) | null;
+} | null {
+  try {
+    if (validateAgentCheckpoint(checkpoint) !== null) return null;
+    const state = planState(checkpoint.state);
+    if (!state || (checkpoint.status === "completed" &&
+        (state.active !== null || state.nextStep !== state.steps.length)) ||
+        (checkpoint.status === "waiting_for_approval" && state.active !== null)) return null;
+    return { confirmedSteps: state.nextStep, totalSteps: state.steps.length,
+      inFlight: state.active };
+  } catch { return null; }
+}
+
+/**
  * Correlate *read-only* plan progress and tool audit for an owner-selected run.
  * This is not a restart protocol: even when the audit is complete and no
  * ambiguous receipt exists, no replay or continuation may be inferred.
