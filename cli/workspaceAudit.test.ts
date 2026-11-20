@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ToolGateway } from "../src/core/tools";
+import { ok } from "../src/core/result";
 import { mkdtemp, mkdir, readFile, rm, symlink, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -110,6 +112,29 @@ describe("durable CLI workspace audit journal", () => {
       await symlink(target, join(directory, "run-9.jsonl"));
       const audit = new FileWorkspaceAuditSink(directory);
       expect((await audit.recent()).ok).toBe(false);
+    });
+  });
+
+  it("prevents ToolGateway from executing when the prior run audit is corrupted", async () => {
+    await withAuditDir(async directory => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await writeFile(join(directory, "run-1.jsonl"), '{"status":"truncated"\n', { mode: 0o600 });
+      const permissions = { authorize: vi.fn(async () => "allow" as const) };
+      const execute = vi.fn(async () => ok({ result: "should not run" }));
+      const audit = new FileWorkspaceAuditSink(directory);
+      const gateway = new ToolGateway(permissions, audit, { now: () => 100 });
+      expect(gateway.register({
+        id: "test.read", version: "1", description: "Safe test tool",
+        requiredPermissions: [], risk: "low", timeoutMs: 1_000,
+        validateInput: () => ok({}),
+        execute
+      }).ok).toBe(true);
+      const result = await gateway.execute("test.read", {}, {
+        runId: "run-1", traceId: "step-1", signal: new AbortController().signal
+      }, "owner");
+      expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
+      expect(execute).not.toHaveBeenCalled();
+      expect(permissions.authorize).not.toHaveBeenCalled();
     });
   });
 });
