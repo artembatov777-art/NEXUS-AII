@@ -31,3 +31,38 @@ it('reports workspace backend unavailable for workspace commands without sending
   expect(output.join('')).toMatch(/workspace backend.*unavailable/i);
   expect(output).toHaveLength(4);
 });
+
+
+it("handles local history inspection without invoking the agent or chat provider", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not run"));
+  const history = vi.fn(() => [
+    { role: "user" as const, content: "private question" },
+    { role: "assistant" as const, content: "private answer" }
+  ]);
+  const context = {
+    run, history, write: (text: string) => output.push(text),
+    newId: () => "run-1", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/history last 1", context)).toBe(true);
+  expect(output.join("")).toContain("private answer");
+  expect(history).toHaveBeenCalledOnce();
+  expect(run).not.toHaveBeenCalled();
+  expect(await dispatchCommand("/history find private", context)).toBe(true);
+  expect(output.join("")).toContain("matching turn");
+});
+
+it("never routes unavailable or invalid history commands to a model", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not run"));
+  const context = {
+    run, write: (text: string) => output.push(text),
+    newId: () => "run-1", signal: new AbortController().signal
+  };
+  for (const input of ["/history", "/history find private", "/history delete"]) {
+    expect(await dispatchCommand(input, context)).toBe(true);
+  }
+  expect(output).toHaveLength(3);
+  expect(output.join("")).toMatch(/history.*unavailable/i);
+  expect(run).not.toHaveBeenCalled();
+});
