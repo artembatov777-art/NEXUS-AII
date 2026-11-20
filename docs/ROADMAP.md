@@ -1,8 +1,10 @@
 # NEXUS AU — Active Development Roadmap
 
-NEXUS AU is a private, single-owner AI environment. The active delivery order is intentionally **interface first, intelligence second**: finish the complete desktop and mobile experience before expanding the runtime behind it.
+NEXUS AU is a private, single-owner AI environment. **NEXUS AU 2.0 is now the active direction:** a real local Windows coding agent with CLI and Tauri Desktop using one shared Agent Engine, with existing Desktop functions and user data preserved.
 
-The seven phases below are the authoritative project sequence. Earlier milestone notes in other documents are historical implementation records and do not change this order.
+**Active execution order (owner's 12-phase plan):** audit → shared engine → CLI → filesystem → terminal → agent loop → Git → memory → MCP/models → desktop → security → cross-platform verification and release. See [the 12-stage task list](../tasks/todo.md), [transition plan](../tasks/plan.md), and the repository root `AGENTS.md`. Live providers and credentials remain deferred until separately authorized.
+
+**The seven phases below are historical Desktop implementation and acceptance evidence, not the current project phase order.** Their checked items do not prove CLI/Desktop integration, live model availability or release readiness. Preserve these milestones without replacing or regressing working Desktop functions.
 
 ## Product direction
 
