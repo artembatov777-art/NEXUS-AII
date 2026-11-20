@@ -16,7 +16,7 @@ describe('shared agent workflow', () => {
     let offered: string[] = [];
     const planner = new AgentPlanner({ createPlan: async ({ goal, tools }) => { offered = tools.map(tool => tool.id); return ok({ goal, steps: [] }); } });
     const coordinator = new MultiAgentCoordinator({ execute: async () => ok(null) }, { authorize: async () => 'deny' }, { append: async () => ok(undefined), list: async () => ok([]) }, { now: () => 0 });
-    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ownerAllowedTools);
+    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ['safe.read']);
     expect((await workflow.plan('inspect', new AbortController().signal)).ok).toBe(true);
     expect(offered).toEqual(['safe.read']);
   });
@@ -38,7 +38,7 @@ describe('shared agent workflow', () => {
     const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
       { id: 'step-1', toolId: 'safe.read', purpose: 'Inspect file', input: { path: 'a.txt' }, dependsOn: [] }
     ] }) });
-    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ['safe.read']);
+    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ownerAllowedTools);
     const events = async (source: AsyncIterable<unknown>) => { const received: unknown[] = []; for await (const value of source) received.push(value); return received; };
     const id = 'run-security' as AgentRunId;
     return { registry, execute, workflow, events, id, ownerAllowedTools,
