@@ -165,9 +165,18 @@ describe("createNexusRuntime", () => {
     expect(events.at(-1)?.type).toBe("completed");
     expect(execute).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledWith({ query: "NEXUS" }, expect.any(Object));
-    expect(await runtime.checkpointService.listByThread("planned-thread")).toMatchObject({
-      ok: true, value: [expect.objectContaining({ status: "completed", agentId: "nexus.tool-invocation" })]
-    });
+    // The parent coordinator and delegated tool agent now each keep their own
+    // durable checkpoint, even when IDs come from overlapping host factories.
+    const savedPlans = await runtime.checkpointService.listByThread("planned-thread");
+    expect(savedPlans.ok).toBe(true);
+    if (savedPlans.ok) {
+      expect(savedPlans.value).toHaveLength(2);
+      expect(savedPlans.value).toEqual(expect.arrayContaining([
+        expect.objectContaining({ runId: "coord_coordination-1", status: "completed",
+          agentId: "nexus.desktop.workflow" }),
+        expect.objectContaining({ status: "completed", agentId: "nexus.tool-invocation" })
+      ]));
+    }
     expect(await runtime.auditSink.list()).toMatchObject({ ok: true, value: [
       expect.objectContaining({ status: "started", toolId: "notes.search" }),
       expect.objectContaining({ status: "completed", toolId: "notes.search" })
