@@ -42,6 +42,23 @@ describe("Agent Center persisted run history", () => {
     await act(async () => { button(node, "Load more runs")!.click(); });
     expect(node.querySelectorAll(".agent-history-item")).toHaveLength(75);
     expect(node.textContent).toContain("Showing 75 of 75 runs");
+    const search = node.querySelector<HTMLInputElement>('input[aria-label="Search saved runs"]');
+    expect(search).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(search, "Saved task 17");
+      search!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(1);
+    expect(node.textContent).toContain("Showing 1 of 1 runs");
+    const status = node.querySelector<HTMLSelectElement>('select[aria-label="Filter runs by status"]');
+    expect(status).not.toBeNull();
+    await act(async () => {
+      status!.value = "failed";
+      status!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(0);
+    expect(node.textContent).toContain("No saved runs match your filters");
     await act(async () => root.unmount());
     node.remove();
   });
