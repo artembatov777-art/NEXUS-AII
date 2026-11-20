@@ -36,6 +36,7 @@ export class AgentRunManager {
   private readonly eventListeners = new Set<ManagedRunEventListener>();
   private readonly activeByConversation = new Map<string, string>();
   private readonly events = new Map<string, ManagedRunEvent[]>();
+  private readonly restoredRunSequences = new Map<string, number>();
 
   list(conversationId?: string): ManagedRun[] {
     return [...this.runs.values()]
@@ -64,13 +65,31 @@ export class AgentRunManager {
       [...this.runs.values()].map(run => run.runtimeRunId).filter((id): id is string => id !== undefined)
     );
     for (const checkpoint of latest.values()) {
-      if (ownedRuntimeIds.has(checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
       const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
-      this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(status !== "interrupted" && status !== "waiting_for_approval" ? { finishedAt: checkpoint.updatedAt } : {}) });
+      const terminal = status === "completed" || status === "failed" || status === "cancelled";
+      const previousSequence = this.restoredRunSequences.get(checkpoint.runId);
+      if (previousSequence !== undefined) {
+        if (checkpoint.sequence <= previousSequence) continue;
+        const restored = this.runs.get(checkpoint.runId);
+        if (restored && restored.conversationId === conversationId && restored.runtimeRunId === checkpoint.runId) {
+          this.runs.set(checkpoint.runId, {
+            ...restored, status, finishedAt: terminal ? checkpoint.updatedAt : undefined
+          });
+          this.restoredRunSequences.set(checkpoint.runId, checkpoint.sequence);
+          changed = true;
+        }
+        continue;
+      }
+      if (ownedRuntimeIds.has(checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
+      this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(terminal ? { finishedAt: checkpoint.updatedAt } : {}) });
+      this.restoredRunSequences.set(checkpoint.runId, checkpoint.sequence);
       ownedRuntimeIds.add(checkpoint.runId);
       changed = true;
     }
-    if (changed) this.publish();
+    if (changed) {
+      this.pruneFinished();
+      this.publish();
+    }
   }
 
   summary(conversationId?: string) {
@@ -166,6 +185,7 @@ export class AgentRunManager {
     for (const [id] of completed.slice(0, excess)) {
       this.runs.delete(id);
       this.events.delete(id);
+      this.restoredRunSequences.delete(id);
     }
   }
 
