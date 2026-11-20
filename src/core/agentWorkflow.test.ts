@@ -16,12 +16,12 @@ describe('shared agent workflow', () => {
     let offered: string[] = [];
     const planner = new AgentPlanner({ createPlan: async ({ goal, tools }) => { offered = tools.map(tool => tool.id); return ok({ goal, steps: [] }); } });
     const coordinator = new MultiAgentCoordinator({ execute: async () => ok(null) }, { authorize: async () => 'deny' }, { append: async () => ok(undefined), list: async () => ok([]) }, { now: () => 0 });
-    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ['safe.read']);
+    const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ownerAllowedTools);
     expect((await workflow.plan('inspect', new AbortController().signal)).ok).toBe(true);
     expect(offered).toEqual(['safe.read']);
   });
 
-  function setupExecution() {
+  function setupExecution(ownerAllowedTools: string[] = ['safe.read']) {
     const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
       record: async () => ok(undefined), list: async () => ok([])
     }, { now: () => 0 });
@@ -41,7 +41,8 @@ describe('shared agent workflow', () => {
     const workflow = createAgentWorkflow(planner, registry, coordinator, 'agent' as AgentId, ['safe.read']);
     const events = async (source: AsyncIterable<unknown>) => { const received: unknown[] = []; for await (const value of source) received.push(value); return received; };
     const id = 'run-security' as AgentRunId;
-    return { registry, execute, workflow, events, id, setDecision: (next: 'allow' | 'ask_user') => { decision = next; } };
+    return { registry, execute, workflow, events, id, ownerAllowedTools,
+      setDecision: (next: 'allow' | 'ask_user') => { decision = next; } };
   }
 
   it('blocks a forged high-risk tool plan at the Desktop execution boundary', async () => {
@@ -109,6 +110,36 @@ describe('shared agent workflow', () => {
     setDecision('allow');
     const resumed = await events(workflow.resume(id, new AbortController().signal));
     expect(resumed).toContainEqual(expect.objectContaining({ type: 'failed' }));
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('honors a narrowed owner tool list while an earlier plan waits for approval', async () => {
+    const allowed = ['safe.read'];
+    const { workflow, execute, events, id, setDecision } = setupExecution(allowed);
+    const planned = await workflow.plan('inspect', new AbortController().signal);
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+
+    setDecision('ask_user');
+    expect(await events(workflow.run(planned.value, id, new AbortController().signal)))
+      .toContainEqual(expect.objectContaining({ type: 'waiting_for_approval' }));
+    allowed.length = 0; // Owner revoked the previously allowed tool.
+    setDecision('allow');
+
+    expect(await events(workflow.resume(id, new AbortController().signal)))
+      .toContainEqual(expect.objectContaining({ type: 'failed' }));
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('does not delegate a planned tool after the owner revoked it before execution', async () => {
+    const allowed = ['safe.read'];
+    const { workflow, execute, events, id } = setupExecution(allowed);
+    const planned = await workflow.plan('inspect', new AbortController().signal);
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    allowed.length = 0;
+    expect(await events(workflow.run(planned.value, id, new AbortController().signal)))
+      .toEqual([expect.objectContaining({ type: 'failed' })]);
     expect(execute).not.toHaveBeenCalled();
   });
 });
