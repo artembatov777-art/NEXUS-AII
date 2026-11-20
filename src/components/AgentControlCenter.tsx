@@ -1,6 +1,7 @@
 import { t } from "../lib/i18n";
 import { agentThreads } from "../lib/agentThreads";
 import { formatAgentRunDiagnostics } from "../lib/agentRunDiagnostics";
+import { agentActivityLabel, type AgentActivityEvent, type AgentActivityKind } from "../lib/agentActivity";
 import { AgentRunManager, type ManagedRunEvent } from "../lib/agentRunManager";
 import { ModelRouter } from "../core/model";
 import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
@@ -157,6 +158,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [historyTruncatedByConversation, setHistoryTruncatedByConversation] = useState<Record<string, boolean>>({});
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
+  const [activityByConversation, setActivityByConversation] = useState<Record<string, AgentActivityEvent[]>>({});
   const conversationKey = conversationId ?? "standalone";
   const activeManagedRun = managedRunSnapshot.find(run => run.conversationId === conversationKey && run.status === "running") ?? null;
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
@@ -168,6 +170,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const historyStatus = historyStatusByConversation[conversationKey] ?? "all";
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
+  const savedActivity = activityByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
   const operationBusy = busy || !!activeManagedRun;
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
@@ -235,10 +238,11 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
-    const [result, audit, traces] = await Promise.all([
+    const [result, audit, traces, activity] = await Promise.all([
       Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 200))),
       runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 }),
-      auditRunFilter ? runtime.traceSink.list({ runId: auditRunFilter, limit: 100 }) : Promise.resolve(null)
+      auditRunFilter ? runtime.traceSink.list({ runId: auditRunFilter, limit: 100 }) : Promise.resolve(null),
+      runtime.activityRepository.listByConversation(conversationKey, 100)
     ]);
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
@@ -270,6 +274,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } else if (!audit.ok) addFeed(audit.error.message, "error");
     if (traces?.ok) setTraceEventsByConversation(previous => ({ ...previous, [conversationKey]: traces.value }));
     else if (traces && !traces.ok) addFeed(traces.error.message, "error");
+    if (activity.ok) setActivityByConversation(previous => ({ ...previous, [conversationKey]: activity.value }));
+    else addFeed("Saved agent activity could not be loaded.", "warning");
   }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns, effectiveActiveRunId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -300,10 +306,31 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   // The manager outlives this panel. Closing or switching conversations must
   // not cancel live work: only the explicit Cancel action aborts a run.
 
-  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string, allowApprovalHandoff = false): Promise<void | "waiting_for_approval" | "failed"> {
+  async function persistActivity(runId: string, kind: AgentActivityKind, step?: number, maxSteps?: number) {
+    if (!runtime) return;
+    const event: AgentActivityEvent = { runId, conversationId: conversationKey, kind, timestamp: Date.now(),
+      ...(step !== undefined ? { step } : {}), ...(maxSteps !== undefined ? { maxSteps } : {}) };
+    const stored = await runtime.activityRepository.append(event);
+    if (!stored.ok) {
+      addFeed("This event could not be saved to the activity journal.", "warning");
+      return;
+    }
+    setActivityByConversation(previous => ({ ...previous,
+      [conversationKey]: [...(previous[conversationKey] ?? []), event].slice(-100)
+    }));
+  }
+
+  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string, allowApprovalHandoff = false, signal?: AbortSignal): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
     for await (const event of events) {
       managedRuns.linkRuntimeRun(managerId, event.runId, allowApprovalHandoff);
+      if (event.type !== "output") {
+        const activityKind: AgentActivityKind = event.type === "waiting_for_approval" ? "approval" :
+          event.type === "failed" && signal?.aborted ? "cancelled" : event.type === "failed" ? "failed" : event.type;
+        await persistActivity(event.runId, activityKind,
+          event.type === "progress" ? event.step : undefined,
+          event.type === "progress" ? event.maxSteps : undefined);
+      }
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
         await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
@@ -355,7 +382,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>, allowApprovalHandoff = false) {
-    await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff));
+    await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff, signal));
   }
 
   async function copyRunDiagnostics(checkpoint: AgentCheckpoint) {
@@ -443,6 +470,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     setTask("");
     setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
     await runManagedAction(async (signal, managerId) => {
+      await persistActivity(managerId, "started");
       let referenceContext: string | undefined;
       if (useTestProvider) {
         reportManagedEvent(managerId, "progress", "Test planner · offline read-only inspection");
@@ -468,6 +496,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       }
       const result = await workflow.plan(goal, signal, referenceContext);
       if (!result.ok) {
+        await persistActivity(managerId, signal.aborted ? "cancelled" : "failed");
         reportManagedEvent(managerId, "error", "Planning failed: " + result.error.message, "error");
         return "failed";
       }
@@ -477,6 +506,13 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       setActiveRunId(coordinationId);
       let outcome: void | "waiting_for_approval" | "failed" = undefined;
       for await (const event of workflow.run(result.value, coordinationId, signal)) {
+        const kind: AgentActivityKind | null = event.type === "started" ? "started" :
+          event.type === "agent_started" || event.type === "agent_completed" ? "progress" :
+          event.type === "waiting_for_approval" ? "approval" :
+          event.type === "completed" ? "completed" : event.type === "failed" ? (signal.aborted ? "cancelled" : "failed") : null;
+        if (kind) await persistActivity(coordinationId, kind,
+          event.type === "agent_started" || event.type === "agent_completed" ? event.step : undefined,
+          event.type === "agent_started" || event.type === "agent_completed" ? result.value.steps.length : undefined);
         if (event.type === "started") reportManagedEvent(managerId, "progress", "Planned workflow started: " + event.runId);
         else if (event.type === "agent_started") reportManagedEvent(managerId, "progress", "Executing step " + event.step + " with " + event.agentId + "…");
         else if (event.type === "agent_completed") reportManagedEvent(managerId, "output", "Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
@@ -616,6 +652,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
+            <section className="agent-card" aria-label="Saved agent activity">
+              <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED HISTORY</span><h3>Saved activity</h3></div><span className="agent-count">{savedActivity.length}</span></div>
+              {savedActivity.length === 0 ? <div className="agent-empty">No saved activity yet.</div> :
+                <div className="agent-feed">{savedActivity.slice(-50).map((event, index) => <div className="agent-feed-item" key={event.runId + ":" + event.timestamp + ":" + index}>
+                  <span className="agent-feed-dot"/><div><strong>{agentActivityLabel(event)}</strong><small> · {new Date(event.timestamp).toLocaleString()} · {event.runId}</small></div>
+                </div>)}</div>}
+              <p className="agent-disclaimer">Saved activity contains timestamps, statuses and step numbers only. Task text and tool output are not copied into this journal.</p>
+            </section>
             {activeManagedRun && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
