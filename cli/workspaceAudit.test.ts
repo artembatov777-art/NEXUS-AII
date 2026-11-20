@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ToolGateway } from "../src/core/tools";
 import { ok } from "../src/core/result";
-import { mkdtemp, mkdir, readFile, rm, symlink, truncate, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, truncate, utimes, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileWorkspaceAuditSink } from "./workspaceAudit";
@@ -135,6 +135,71 @@ describe("durable CLI workspace audit journal", () => {
       expect(result).toMatchObject({ ok: false, error: { code: "storage_failed" } });
       expect(execute).not.toHaveBeenCalled();
       expect(permissions.authorize).not.toHaveBeenCalled();
+    });
+  });
+
+  it("atomically claims a run step across distinct audit writer instances", async () => {
+    await withAuditDir(async directory => {
+      const first = new FileWorkspaceAuditSink(directory);
+      const second = new FileWorkspaceAuditSink(directory);
+      const results = await Promise.all([first.record(started), second.record(started)]);
+      expect(results.filter(result => result.ok)).toHaveLength(1);
+      expect(results.filter(result => !result.ok)).toHaveLength(1);
+      expect(await first.list({ runId: "run-1", limit: 10 }))
+        .toEqual({ ok: true, value: [started] });
+      await expect(access(join(directory, "run-1.jsonl.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect((await second.record(started)).ok).toBe(false);
+    });
+  });
+
+  it("rejects a malformed earlier event rather than appending a valid started record", async () => {
+    await withAuditDir(async directory => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const path = join(directory, "run-1.jsonl");
+      await writeFile(path, '{"untrusted":"record"}\n', { mode: 0o600 });
+      const audit = new FileWorkspaceAuditSink(directory);
+      const original = await readFile(path, "utf8");
+      expect((await audit.record(started)).ok).toBe(false);
+      expect(await readFile(path, "utf8")).toBe(original);
+    });
+  });
+
+  it("fails closed when another writer crashed leaving a lock file", async () => {
+    await withAuditDir(async directory => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const locked = join(directory, "run-1.jsonl.lock");
+      await writeFile(locked, "stale lock\n", { flag: "wx", mode: 0o600 });
+      const audit = new FileWorkspaceAuditSink(directory);
+      expect((await audit.record(started)).ok).toBe(false);
+      expect(await readFile(locked, "utf8")).toBe("stale lock\n");
+      expect(await audit.list({ runId: "run-1" })).toEqual({ ok: true, value: [] });
+    });
+  });
+
+  it("prevents concurrent ToolGateway instances from executing the same audited step", async () => {
+    await withAuditDir(async directory => {
+      const permissions = { authorize: vi.fn(async () => "allow" as const) };
+      const executed = vi.fn(async () => ok({ value: "one side effect" }));
+      const gateway = () => {
+        const instance = new ToolGateway(permissions, new FileWorkspaceAuditSink(directory), { now: () => 123 });
+        expect(instance.register({
+          id: "test.claim", version: "1", description: "A deliberately replay-sensitive test",
+          requiredPermissions: [], risk: "high", timeoutMs: 3_000,
+          validateInput: () => ok({}),
+          execute: executed
+        }).ok).toBe(true);
+        return instance;
+      };
+      const [a, b] = [gateway(), gateway()];
+      const options = { runId: "run-1", traceId: "step-claim", signal: new AbortController().signal };
+      const results = await Promise.all([
+        a.execute("test.claim", {}, options, "owner"),
+        b.execute("test.claim", {}, options, "owner")
+      ]);
+      expect(results.filter(result => result.ok)).toHaveLength(1);
+      expect(executed).toHaveBeenCalledTimes(1);
+      const journal = await new FileWorkspaceAuditSink(directory).list({ runId: "run-1", limit: 10 });
+      expect(journal.ok && journal.value.some(event => event.status === "started")).toBe(true);
     });
   });
 });
