@@ -57,4 +57,20 @@ describe("persisted agent activity UI", () => {
     await act(async () => root.unmount());
     node.remove();
   });
+  it("records an explicitly rejected approval without executing its tool", async () => {
+    localStorage.clear();
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId="reject-journal"
+        initialTask="Preview a harmless workflow" onClose={() => {}}
+        providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => { button(node, "Run demo")!.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+    await act(async () => { button(node, "Approvals")!.click(); });
+    await act(async () => { button(node, "Reject")!.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+    const activity = await new LocalStorageAgentActivityRepository(localStorage).listByConversation("reject-journal", 20);
+    expect(activity.ok && activity.value.some(event => event.kind === "failed")).toBe(true);
+    await act(async () => root.unmount()); node.remove();
+  });
 });
