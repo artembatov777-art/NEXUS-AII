@@ -1,5 +1,6 @@
 import { t } from "../lib/i18n";
 import { agentThreads } from "../lib/agentThreads";
+import { formatAgentRunDiagnostics } from "../lib/agentRunDiagnostics";
 import { AgentRunManager, type ManagedRunEvent } from "../lib/agentRunManager";
 import { ModelRouter } from "../core/model";
 import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
@@ -149,6 +150,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [auditEventsByConversation, setAuditEventsByConversation] = useState<Record<string, ToolAuditEvent[]>>({});
   const [traceEventsByConversation, setTraceEventsByConversation] = useState<Record<string, TraceEvent[]>>({});
   const [auditRunByConversation, setAuditRunByConversation] = useState<Record<string, string | null>>({});
+  const [copiedDiagnosticsRunId, setCopiedDiagnosticsRunId] = useState<string | null>(null);
   const [historyLimitByConversation, setHistoryLimitByConversation] = useState<Record<string, number>>({});
   const [historyQueryByConversation, setHistoryQueryByConversation] = useState<Record<string, string>>({});
   const [historyStatusByConversation, setHistoryStatusByConversation] = useState<Record<string, string>>({});
@@ -354,6 +356,29 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>, allowApprovalHandoff = false) {
     await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff));
+  }
+
+  async function copyRunDiagnostics(checkpoint: AgentCheckpoint) {
+    if (!runtime || busy) return;
+    try {
+      const [audit, traces] = await Promise.all([
+        runtime.auditSink.list({ runId: checkpoint.runId, limit: 5_000 }),
+        runtime.traceSink.list({ runId: checkpoint.runId, limit: 1_000 })
+      ]);
+      if (!audit.ok || !traces.ok) {
+        addFeed("Could not load the complete run diagnostics.", "error");
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        addFeed("Clipboard access is unavailable on this device.", "warning");
+        return;
+      }
+      await navigator.clipboard.writeText(formatAgentRunDiagnostics(checkpoint, audit.value, traces.value));
+      setCopiedDiagnosticsRunId(checkpoint.runId);
+      addFeed("Copied metadata-only diagnostics for " + checkpoint.runId + ".", "success");
+    } catch {
+      addFeed("Could not copy run diagnostics. No data was sent externally.", "error");
+    }
   }
 
   function inspectRunAudit(runId: string) {
@@ -624,7 +649,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               <div className="agent-history">{visibleHistory.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
-                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button></div>
+                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button><button className="agent-small-button" type="button" disabled={!runtime || busy} onClick={() => void copyRunDiagnostics(checkpoint)}>{copiedDiagnosticsRunId === checkpoint.runId ? "Copied diagnostics" : "Copy diagnostics"}</button></div>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
                 {checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId &&
                   (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
