@@ -93,3 +93,33 @@ it("reports unavailable audit storage and never forwards audit commands to a mod
   expect(output.join("")).toMatch(/audit.*unavailable/i);
   expect(run).not.toHaveBeenCalled();
 });
+
+
+it("routes checkpoint inspection locally without contacting the model or workspace backend", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not execute"));
+  const checkpoint = vi.fn(async (command: string) => "Checkpoint viewed: " + command + "\n");
+  const context = {
+    run, checkpoint, write: (value: string) => output.push(value),
+    newId: () => "run", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/checkpoints", context)).toBe(true);
+  expect(await dispatchCommand("/checkpoint run-1", context)).toBe(true);
+  expect(checkpoint).toHaveBeenNthCalledWith(1, "/checkpoints");
+  expect(checkpoint).toHaveBeenNthCalledWith(2, "/checkpoint run-1");
+  expect(run).not.toHaveBeenCalled();
+  expect(output.join("")).toContain("Checkpoint viewed:");
+});
+
+it("blocks checkpoint commands even when the inspector is unavailable", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not execute"));
+  const context = {
+    run, write: (value: string) => output.push(value),
+    newId: () => "run", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/checkpoint run-1", context)).toBe(true);
+  expect(await dispatchCommand("/checkpoints 5", context)).toBe(true);
+  expect(output.join("")).toMatch(/checkpoint.*unavailable/i);
+  expect(run).not.toHaveBeenCalled();
+});
