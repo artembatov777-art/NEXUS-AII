@@ -106,7 +106,7 @@ export async function renderPlanCheckpointCommand(
     if (!loaded.ok) return "Checkpoint is unavailable or unreadable. No tool was executed.\n";
     if (!loaded.value || loaded.value.threadId !== THREAD_ID ||
         loaded.value.agentId !== AGENT_ID) {
-      return "No saved CLI plan checkpoint found for " + quoteTerminal(runId) + ".\n";
+      return "Checkpoint not found for " + quoteTerminal(runId) + ".\n";
     }
     const checkpoint = loaded.value;
     const detail = describe(checkpoint);
@@ -117,10 +117,10 @@ export async function renderPlanCheckpointCommand(
     const caution = state.active
       ? "Dispatch of " + quoteTerminal(state.active.toolId) +
         " was recorded, but its external outcome is unconfirmed. Inspect /audit status " +
-        quoteTerminal(runId) + " before any new run."
+        runId + " before any new run."
       : checkpoint.status === "completed"
         ? "The plan completion checkpoint is durable; no tool was executed by this inspection."
-        : "Incomplete checkpoint: inspect /audit status " + quoteTerminal(runId) +
+        : "Incomplete checkpoint: inspect /audit status " + runId +
           " and /audit locks. Never infer a tool is safe to retry.";
     return "CLI plan checkpoint:\n" + detail + "\n" + caution + "\n";
   } catch {
