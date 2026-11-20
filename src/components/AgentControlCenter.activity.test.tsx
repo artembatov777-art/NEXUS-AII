@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import { AgentControlCenter } from "./AgentControlCenter";
 import { DEFAULT_PROVIDER } from "../types";
 import { LocalStorageAgentActivityRepository } from "../lib/agentActivityStorage";
+import { AgentCheckpointService } from "../core/agentCheckpoints";
+import { LocalStorageAgentCheckpointRepository } from "../lib/agentCheckpointStorage";
+import { agentThreads } from "../lib/agentThreads";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const button = (node: HTMLElement, label: string) =>
@@ -71,6 +74,42 @@ describe("persisted agent activity UI", () => {
     await act(async () => { button(node, "Reject")!.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
     const activity = await new LocalStorageAgentActivityRepository(localStorage).listByConversation("reject-journal", 20);
     expect(activity.ok && activity.value.some(event => event.kind === "failed")).toBe(true);
+    await act(async () => root.unmount()); node.remove();
+  });
+  it("opens an older run's exact journal even after a hundred newer events", async () => {
+    localStorage.clear();
+    const checkpoints = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    for (const runId of ["old-run", "recent-run"]) {
+      expect((await checkpoints.persist({ schemaVersion: 1, runId, agentId: "nexus.local-workflow",
+        threadId: agentThreads("busy-chat").primary, sequence: 1, status: "completed",
+        state: { payload: { task: runId } }, createdAt: runId === "old-run" ? 1 : 200,
+        updatedAt: runId === "old-run" ? 1 : 200 })).ok).toBe(true);
+    }
+    const activity = new LocalStorageAgentActivityRepository(localStorage);
+    expect((await activity.append({ runId: "old-run", conversationId: "busy-chat",
+      kind: "started", timestamp: 1 })).ok).toBe(true);
+    for (let i = 0; i < 110; i++) {
+      expect((await activity.append({ runId: "recent-run", conversationId: "busy-chat",
+        kind: "completed", timestamp: i + 200 })).ok).toBe(true);
+    }
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => { root.render(<AgentControlCenter conversationId="busy-chat"
+      onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    await act(async () => { button(node, "Run history")!.click(); });
+    const selected = [...node.querySelectorAll(".agent-history-item")]
+      .find(item => item.textContent?.includes("old-run")) as HTMLElement;
+    expect(selected).toBeTruthy();
+    await act(async () => { button(selected, "Inspect activity")!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    const saved = node.querySelector('[aria-label="Saved agent activity"]');
+    expect(saved?.textContent).toContain("Activity for old-run");
+    expect(saved?.textContent).toContain("Agent started");
+    expect(saved?.textContent).not.toContain("recent-run");
+    await act(async () => { button(node, "Show all activity")!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    expect(node.querySelector('[aria-label="Saved agent activity"]')?.textContent).toContain("recent-run");
     await act(async () => root.unmount()); node.remove();
   });
 });
