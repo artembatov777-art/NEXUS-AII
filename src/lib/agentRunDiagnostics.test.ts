@@ -47,4 +47,9 @@ describe("safe agent run diagnostics", () => {
     const report = formatAgentRunDiagnostics(checkpoint, [{ ...audit[0], detail: "Raw external response" }], []);
     expect(report).not.toContain("Raw external response");
   });
+
+  it("handles timestamps outside the JavaScript date range safely", () => {
+    const report = formatAgentRunDiagnostics({ ...checkpoint, updatedAt: Number.MAX_VALUE }, [], []);
+    expect(report).toContain("Updated: unavailable");
+  });
 });
