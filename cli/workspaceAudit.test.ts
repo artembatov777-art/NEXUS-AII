@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileWorkspaceAuditSink } from "./workspaceAudit";
@@ -81,6 +81,35 @@ describe("durable CLI workspace audit journal", () => {
       const audit = new FileWorkspaceAuditSink(directory);
       expect((await audit.list({ runId: "run-1" })).ok).toBe(false);
       expect((await audit.record(started)).ok).toBe(false);
+    });
+  });
+
+  it("discovers recent run IDs without needing to know the audit file name", async () => {
+    await withAuditDir(async directory => {
+      const audit = new FileWorkspaceAuditSink(directory);
+      expect(await audit.recent()).toEqual({ ok: true, value: [] });
+      expect((await audit.record(started)).ok).toBe(true);
+      expect((await audit.record({ ...started, runId: "run-2" })).ok).toBe(true);
+      await utimes(join(directory, "run-1.jsonl"), new Date(1000), new Date(1000));
+      await utimes(join(directory, "run-2.jsonl"), new Date(2000), new Date(2000));
+      await writeFile(join(directory, "ignored.edit.json"), "not a tool journal", { mode: 0o600 });
+      const recent = await audit.recent(2);
+      expect(recent.ok && recent.value.map(item => item.runId)).toEqual(["run-2", "run-1"]);
+      const limited = await audit.recent(1);
+      expect(limited.ok && limited.value.map(item => item.runId)).toEqual(["run-2"]);
+      expect((await audit.recent(51)).ok).toBe(false);
+    });
+  });
+
+  it("does not silently include symlinked run journals in recent discovery", async () => {
+    if (process.platform === "win32") return;
+    await withAuditDir(async directory => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const target = join(directory, "other.txt");
+      await writeFile(target, "unrelated", { mode: 0o600 });
+      await symlink(target, join(directory, "run-9.jsonl"));
+      const audit = new FileWorkspaceAuditSink(directory);
+      expect((await audit.recent()).ok).toBe(false);
     });
   });
 });
