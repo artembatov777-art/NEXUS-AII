@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentControlCenter } from "./AgentControlCenter";
 import { DEFAULT_PROVIDER } from "../types";
 import { AgentRunManager } from "../lib/agentRunManager";
@@ -113,6 +113,22 @@ describe("agent center session checkpoints", () => {
     await act(async () => { findButton(element, "Run history")!.click(); });
     expect(element.textContent).toContain("Interrupted");
     expect(findButton(element, "Continue local preview")?.disabled).toBe(false);
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      await act(async () => {
+        findButton(element, "Continue local preview")!.click();
+        await new Promise(resolve => setTimeout(resolve, 30));
+      });
+      const saved = JSON.parse(localStorage.getItem("nexus-au:agent-checkpoints:v1")!);
+      expect(saved[0]).toMatchObject({
+        runId: "preview-interrupted", status: "waiting_for_approval",
+        state: { steps: 0, permissionIndex: 0 },
+        pendingApproval: { permission: "tool:execute" }
+      });
+      expect(localStorage.getItem("nexus-au:tool-audit:v1")).toBeNull();
+    } finally {
+      confirmation.mockRestore();
+    }
     await act(async () => root.unmount());
     element.remove();
     localStorage.clear();
