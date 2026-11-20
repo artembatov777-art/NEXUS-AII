@@ -2761,6 +2761,21 @@ mod database_tests {
         let mut oversized = checkpoint(1, "running");
         oversized["state"] = serde_json::json!({"payload": "x".repeat(MAX_AGENT_CHECKPOINT_BYTES + 1)});
         assert!(save_agent_checkpoint_record(&mut connection, oversized, None).is_err());
+
+        let mut missing_approval = checkpoint(1, "waiting_for_approval");
+        missing_approval.as_object_mut().unwrap().remove("pendingApproval");
+        assert!(save_agent_checkpoint_record(&mut connection, missing_approval, None).is_err(),
+            "waiting checkpoints must retain their pending approval");
+
+        let mut null_approval = checkpoint(1, "waiting_for_approval");
+        null_approval["pendingApproval"] = serde_json::Value::Null;
+        assert!(save_agent_checkpoint_record(&mut connection, null_approval, None).is_err(),
+            "null pending approval cannot authorize an interrupted step");
+
+        let mut foreign_permission = checkpoint(1, "waiting_for_approval");
+        foreign_permission["pendingApproval"]["permission"] = serde_json::json!("filesystem:write");
+        assert!(save_agent_checkpoint_record(&mut connection, foreign_permission, None).is_err(),
+            "pending approval permission must be part of the agent permission vocabulary");
     }
 
     #[test]
