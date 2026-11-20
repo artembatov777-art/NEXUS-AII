@@ -58,7 +58,10 @@ export class ToolReconciliationService {
     if (!validId(runId)) return err("validation", "A valid run ID is required.");
     const checkpoint = await this.checkpoints.get(runId);
     if (!checkpoint.ok) return checkpoint;
-    if (!checkpoint.value || !["failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
+    // A crashed process leaves its checkpoint "running", even though an
+    // in-flight external tool may have an unknown outcome. Surface those
+    // records for manual review; reconciliation NEVER authorizes replay.
+    if (!checkpoint.value || !["running", "failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
 
     const events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
     if (!events.ok) return events;
