@@ -268,8 +268,8 @@ export class ResumableAgentRuntime {
     let timedOut = false;
     // The timeout applies to active execution, not time spent waiting for user approval or app restart.
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, agent.timeoutMs);
-    yield { type: "started", runId, agentId: agent.id };
     try {
+      yield { type: "started", runId, agentId: agent.id };
       while (steps < agent.maxSteps) {
         if (controller.signal.aborted) throw new Error(timedOut ? "Agent timed out." : "Agent was cancelled.");
         const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort",
