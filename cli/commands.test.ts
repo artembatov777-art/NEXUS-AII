@@ -66,3 +66,30 @@ it("never routes unavailable or invalid history commands to a model", async () =
   expect(output.join("")).toMatch(/history.*unavailable/i);
   expect(run).not.toHaveBeenCalled();
 });
+
+
+it("routes /audit to read-only journal inspection without contacting the agent", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not execute"));
+  const audit = vi.fn(async () => "Audit run-1: 1 event\n");
+  const context = {
+    run, audit, write: (value: string) => output.push(value),
+    newId: () => "run-1", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/audit run-1", context)).toBe(true);
+  expect(audit).toHaveBeenCalledExactlyOnceWith("/audit run-1");
+  expect(output).toEqual(["Audit run-1: 1 event\n"]);
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("reports unavailable audit storage and never forwards audit commands to a model", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not execute"));
+  const context = {
+    run, write: (value: string) => output.push(value),
+    newId: () => "run-1", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/audit run-1", context)).toBe(true);
+  expect(output.join("")).toMatch(/audit.*unavailable/i);
+  expect(run).not.toHaveBeenCalled();
+});
