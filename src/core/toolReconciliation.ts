@@ -1,6 +1,6 @@
 import type { AgentCheckpointRepository } from "./agentCheckpoints";
 import { err, ok, type Result } from "./result";
-import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent, type ToolAuditSink } from "./tools";
+import { MAX_TOOL_AUDIT_HISTORY_EVENTS, validateCompleteToolAuditHistory, type ToolAuditEvent, type ToolAuditSink } from "./tools";
 
 export interface AmbiguousToolStep {
   toolId: string;
@@ -28,9 +28,15 @@ export class ToolReconciliationService {
     const checkpoint = await this.checkpoints.get(runId);
     if (!checkpoint.ok) return checkpoint;
     if (!checkpoint.value || !["running", "failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
+    if (checkpoint.value.runId !== runId) {
+      return err("storage_failed", "Checkpoint does not match the requested run.");
+    }
 
     const events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
     if (!events.ok) return events;
+    if (!validateCompleteToolAuditHistory(runId, events.value)) {
+      return err("storage_failed", "Audit history is incomplete, mixed, or malformed; manual reconciliation is blocked.");
+    }
     return ok(findAmbiguous(events.value));
   }
 
@@ -76,7 +82,7 @@ function validId(value: string): boolean {
 export function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
   const pending = new Map<string, AmbiguousToolStep>();
   for (const event of events) {
-    const key = JSON.stringify([event.toolId, event.traceId]);
+    const key = JSON.stringify([event.runId, event.toolId, event.traceId]);
     if (event.status === "started") {
       pending.set(key, {
         toolId: event.toolId, runId: event.runId,
