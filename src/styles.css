@@ -45,6 +45,10 @@
 .agent-approval-item,.agent-history-item{border-top:1px solid #2a3342;padding:12px 0}.agent-approval-item strong{font-size:11px;color:#e2c58b}.agent-approval-item p,.agent-history-item p{font-size:10px;line-height:1.5;color:#c3c9d5;margin:6px 0;overflow-wrap:anywhere}.agent-approval-item small,.agent-history-item small{font-size:8px;color:#748095;overflow-wrap:anywhere}
 .agent-approval-actions{gap:7px;margin-top:10px}.agent-approval-actions button{display:flex;align-items:center;gap:5px;background:#244332;border:1px solid #37664a;color:#c4ead2;border-radius:6px;padding:6px 8px;font-size:9px}.agent-approval-actions button+button{background:#34232b;border-color:#65404c;color:#e8b8c2}.agent-approval-actions button:disabled{opacity:.45}
 .agent-history{max-height:310px;overflow:auto}.agent-history-top{gap:8px}.agent-history-top time{font-size:8px;color:#738094}.agent-status{font-size:8px;border-radius:20px;padding:4px 7px;background:#282f3b;color:#b9c3d2}.agent-status.running{background:#26364b;color:#a8c9ed}.agent-status.waiting_for_approval{background:#453923;color:#e6c98d}.agent-status.completed{background:#1d382b;color:#9dd8b4}.agent-status.failed,.agent-status.cancelled{background:#412832;color:#e3a2b0}.agent-history-item .agent-small-button{margin-top:8px}
+.agent-plan-checkpoint-progress{margin:9px 0 3px;padding:8px 10px;border-left:2px solid #be9961;border-radius:0 6px 6px 0;background:rgba(34,43,57,.62)}
+.agent-history-item .agent-plan-checkpoint-progress p{color:#d3dce5;font-size:10px;line-height:1.5;margin:3px 0;overflow-wrap:anywhere}
+.agent-history-item .agent-plan-checkpoint-progress p:last-child{color:#c7ab7e}
+
 .agent-center-footer{border-top:1px solid #293140;padding-top:12px;gap:10px;flex-wrap:wrap;color:#768296;font-size:9px}.agent-error{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #633d48;background:#2b1820;color:#f0a8b4;border-radius:8px;font-size:11px}
 @media(max-width:800px){.agent-center-grid{grid-template-columns:1fr}.agent-center{height:96vh;padding:15px}.agent-center-title h2{font-size:18px}.agent-center-title p{max-width:260px}.agent-center-footer{font-size:8px}}
 
