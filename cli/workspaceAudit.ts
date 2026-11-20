@@ -199,6 +199,44 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
     }
   }
 
+  /**
+   * Inspect writer locks without altering them. They can be active or abandoned:
+   * never infer that a lock is stale or that an external action is safe to retry.
+   */
+  async locked(limit = 10): Promise<Result<Array<{ runId: string; updatedAt: number }>>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return err("validation", "Audit lock limit must be between 1 and 50.");
+    }
+    try {
+      try {
+        await assertPrivateDirectory(dirname(this.directory));
+        await assertPrivateDirectory(this.directory);
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code === "ENOENT") return ok([]);
+        throw cause;
+      }
+      const directory = await opendir(this.directory);
+      const locks: Array<{ runId: string; updatedAt: number }> = [];
+      let scanned = 0;
+      for await (const entry of directory) {
+        if (++scanned > 5_000) throw new Error("Too many workspace audit files.");
+        if (!/^[A-Za-z0-9_-]{1,120}\.jsonl\.lock$/.test(entry.name)) continue;
+        const metadata = await lstat(join(this.directory, entry.name), { bigint: true });
+        if (!metadata.isFile() || metadata.nlink !== 1n ||
+            !fileModeIsPrivate(metadata.mode, metadata.uid)) {
+          throw new Error("Unsafe workspace audit writer lock.");
+        }
+        const updatedAt = Number(metadata.mtimeMs);
+        if (!Number.isFinite(updatedAt)) throw new Error("Invalid workspace audit lock timestamp.");
+        locks.push({ runId: entry.name.slice(0, -11), updatedAt });
+      }
+      locks.sort((a, b) => b.updatedAt - a.updatedAt || a.runId.localeCompare(b.runId));
+      return ok(locks.slice(0, limit));
+    } catch {
+      return err("storage_failed", "Could not safely inspect workspace audit locks.", true);
+    }
+  }
+
   /** List bounded run metadata only; reading an individual journal still validates each record. */
   async recent(limit = 10): Promise<Result<Array<{ runId: string; updatedAt: number }>>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
