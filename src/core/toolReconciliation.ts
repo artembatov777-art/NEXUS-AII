@@ -27,7 +27,7 @@ export class ToolReconciliationService {
     if (!validId(runId)) return err("validation", "A valid run ID is required.");
     const checkpoint = await this.checkpoints.get(runId);
     if (!checkpoint.ok) return checkpoint;
-    if (!checkpoint.value || !["failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
+    if (!checkpoint.value || !["running", "failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
 
     const events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
     if (!events.ok) return events;
@@ -45,6 +45,13 @@ export class ToolReconciliationService {
     }
     if (confirmedByUser !== true) {
       return err("permission_denied", "Manual tool reconciliation requires explicit owner confirmation.");
+    }
+    // An interrupted running checkpoint can be inspected, but not marked reconciled.
+    // Reconciliation is a final owner acknowledgement for stopped runs only.
+    const checkpoint = await this.checkpoints.get(runId);
+    if (!checkpoint.ok) return checkpoint;
+    if (!checkpoint.value || !["failed", "cancelled"].includes(checkpoint.value.status)) {
+      return err("validation", "Only failed or cancelled agent runs may be reconciled.");
     }
     const ambiguous = await this.listAmbiguous(runId);
     if (!ambiguous.ok) return ambiguous;
