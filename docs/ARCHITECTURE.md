@@ -77,6 +77,16 @@ a deterministic workspace planner and a separate native workspace process.
 See [the CLI planner contract](AGENTS.md#cli-workspace-planner) for the
 approval, audit and recovery boundaries.
 
+#### Shared execution boundary for CLI and Desktop (NEXUS AU 2.0)
+
+`src/core/agentExecutionPolicy.ts` defines a host-neutral, fail-closed dispatch contract. Both `PlanExecutor` (CLI) and `createAgentWorkflow` (Desktop) validate a planned tool sequence against the **current** registered tools, bounded JSON input, unique step IDs, ordered dependencies, and the step budget before dispatch. Validation returns a detached JSON snapshot so later mutations by the caller do not change the admitted plan.
+
+Desktop additionally enforces its owner-specified tool allowlist when the plan **runs**, not only when the model plans; the `MultiAgentCoordinator` carries a live tool guard through approval pauses and reevaluates it before every resumed or subsequent delegation. The CLI rechecks the registered tool immediately before each execution. An unregistered or newly disallowed tool fails closed; a model description or previously approved plan is not a capability grant. Wildcard `mcp.*` applies only to currently registered `mcp.` tools.
+
+CLI plan execution now returns typed, non-retryable errors when a planner or tool adapter crashes, when execution finishes after cancellation, or when a progress observer fails after a completed tool step. Uncertain external outcomes must be inspected in the Tool Gateway audit before a new run is created.
+
+**Not yet a single durable engine:** Desktop remains backed by its checkpointed coordinator and native SQLite/preview adapters, while CLI retains a sequential runner and a separate history store. This common policy is a verified prerequisite for unifying run identities, checkpoint ownership, state migration and progress events; it is not evidence that those migrations or exactly-once external side effects are complete.
+
 ### Storage and privacy
 SQLite is authoritative for structured desktop state. Large files and model artifacts use managed paths and opaque identifiers. Secrets belong in the OS credential vault. Backups exclude secrets by default.
 
