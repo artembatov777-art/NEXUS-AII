@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { inspectPlanRecovery } from "./planRecoveryInspection";
+import { inspectPlanRecovery, summarizePlanCheckpoint } from "./planRecoveryInspection";
 import type { AgentCheckpoint } from "./agentCheckpoints";
 import type { ToolAuditEvent } from "./tools";
 import { ok, err } from "./result";
@@ -111,5 +111,24 @@ describe("combined read-only plan recovery inspection", () => {
     repository.get.mockResolvedValue(err("storage_failed", "unavailable"));
     expect(await inspectPlanRecovery("run-1", repository, audit, options))
       .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+  });
+});
+
+
+describe("read-only Desktop plan checkpoint presentation", () => {
+  it("shows bounded confirmed and in-flight steps without goals or file data", () => {
+    expect(summarizePlanCheckpoint(checkpoint())).toEqual({
+      confirmedSteps: 1, totalSteps: 2,
+      inFlight: { index: 1, id: "second", toolId: "cli.workspace.search" }
+    });
+  });
+
+  it("rejects malformed or non-plan checkpoints", () => {
+    expect(summarizePlanCheckpoint({
+      ...checkpoint(), state: { kind: "unexpected", steps: [], nextStep: 0, active: null }
+    })).toBeNull();
+    expect(summarizePlanCheckpoint({
+      ...checkpoint(), status: "completed"
+    })).toBeNull();
   });
 });
