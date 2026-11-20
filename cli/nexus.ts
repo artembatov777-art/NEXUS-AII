@@ -26,7 +26,7 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode (local, not encrypted)
 
-Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
+Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 Workspace planner: /agent plan <task>, /agent inspect, /agent diff, /agent status.
 The workspace planner runs locally and requires explicit replacements for changes.
