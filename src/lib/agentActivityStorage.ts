@@ -27,13 +27,15 @@ export class LocalStorageAgentActivityRepository implements AgentActivityReposit
     }
   }
 
-  async listByConversation(conversationId: string, limit = 100): Promise<Result<AgentActivityEvent[]>> {
-    if (!validActivityId(conversationId) || !Number.isInteger(limit) || limit < 1 || limit > 200) {
+  async listByConversation(conversationId: string, limit = 100, runId?: string): Promise<Result<AgentActivityEvent[]>> {
+    if (!validActivityId(conversationId) || (runId !== undefined && !validActivityId(runId)) ||
+      !Number.isInteger(limit) || limit < 1 || limit > 200) {
       return err("validation", "Activity conversation or limit is invalid.");
     }
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
-    return ok(loaded.value.filter(item => item.conversationId === conversationId)
+    return ok(loaded.value.filter(item => item.conversationId === conversationId &&
+      (runId === undefined || item.runId === runId))
       .slice(-limit).map(item => ({ ...item })));
   }
 
