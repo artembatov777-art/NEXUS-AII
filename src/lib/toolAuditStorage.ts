@@ -28,7 +28,13 @@ export class LocalStorageToolAuditSink implements ToolAuditSink {
     if (!isToolAuditEvent(event)) return err("validation", "Tool audit event is invalid.");
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
-    const next = [...loaded.value, { ...event }].slice(-MAX_EVENTS);
+    // Never evict earlier execution receipts. After capacity is reached the
+    // owner must archive/migrate explicitly; running with truncated history
+    // could make an already executed tool step appear safe to replay.
+    if (loaded.value.length >= MAX_EVENTS) {
+      return err("storage_failed", "Audit history is full; preserve and inspect it before starting more tools.");
+    }
+    const next = [...loaded.value, { ...event }];
     try {
       const serialized = JSON.stringify(next);
       if (new TextEncoder().encode(serialized).byteLength > 4 * 1024 * 1024) {
@@ -51,6 +57,10 @@ export class LocalStorageToolAuditSink implements ToolAuditSink {
     }
     const loaded = this.readAll();
     if (!loaded.ok) return loaded;
+    if (loaded.value.length >= MAX_EVENTS) {
+      return err("storage_failed",
+        "Audit history may be truncated at capacity and cannot authorize automatic tool replay.");
+    }
     return ok(loaded.value
       .filter(event => options.runId === undefined || event.runId === options.runId)
       .slice(-limit)
