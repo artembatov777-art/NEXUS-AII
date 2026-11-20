@@ -70,7 +70,7 @@ export class AgentCheckpointService {
 
 export function validateAgentCheckpoint(value: AgentCheckpoint): string | null {
   if (!value || value.schemaVersion !== 1) return "Unsupported checkpoint schema version.";
-  if (![value.runId, value.agentId, value.threadId].every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160)) {
+  if (![value.runId, value.agentId, value.threadId].every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 160 && !/[\u0000-\u001f\u007f]/.test(item))) {
     return "Checkpoint run, agent, and thread identifiers are required.";
   }
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1) return "Checkpoint sequence must be a positive safe integer.";
@@ -102,7 +102,13 @@ function isSafeJsonValue(value: unknown, depth = 0, seen = new Set<object>()): v
   if (seen.has(value)) return false;
   seen.add(value);
   if (Array.isArray(value)) {
-    const valid = value.every(item => isSafeJsonValue(item, depth + 1, seen));
+    // JSON.stringify silently converts sparse array holes to null and drops
+    // non-index properties. Reject either to preserve checkpoint integrity.
+    const valid = Object.keys(value).length === value.length &&
+      Array.from({ length: value.length }, (_, index) =>
+        Object.prototype.hasOwnProperty.call(value, index) &&
+        isSafeJsonValue(value[index], depth + 1, seen)
+      ).every(Boolean);
     seen.delete(value);
     return valid;
   }

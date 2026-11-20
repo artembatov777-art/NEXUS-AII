@@ -36,6 +36,7 @@ export class AgentRunManager {
   private readonly eventListeners = new Set<ManagedRunEventListener>();
   private readonly activeByConversation = new Map<string, string>();
   private readonly events = new Map<string, ManagedRunEvent[]>();
+  private readonly restoredRunSequences = new Map<string, number>();
 
   list(conversationId?: string): ManagedRun[] {
     return [...this.runs.values()]
@@ -48,14 +49,56 @@ export class AgentRunManager {
     if (this.activeByConversation.has(conversationId)) return;
     const threads = Object.values(agentThreads(conversationId === "standalone" ? undefined : conversationId));
     let changed = false;
+    // Multiple versions of a run may be returned by a repository or import.
+    // Recover from the newest valid snapshot, never from whichever arrives first.
+    const latest = new Map<string, AgentCheckpoint>();
     for (const checkpoint of checkpoints) {
       if (validateAgentCheckpoint(checkpoint) || !threads.includes(checkpoint.threadId) || !validAgentRunIdentity(checkpoint.runId, conversationId)) continue;
-      if (this.list().some(run => run.runtimeRunId === checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
+      const previous = latest.get(checkpoint.runId);
+      if (!previous || checkpoint.sequence > previous.sequence || (checkpoint.sequence === previous.sequence && checkpoint.updatedAt > previous.updatedAt)) {
+        latest.set(checkpoint.runId, checkpoint);
+      }
+    }
+    // Index existing owners once: bulk recovery must not scan every run for
+    // each restored checkpoint (quadratic time on large histories).
+    const ownedRuntimeIds = new Set(
+      [...this.runs.values()].map(run => run.runtimeRunId).filter((id): id is string => id !== undefined)
+    );
+    // Retain the newest 250 terminal snapshots, matching pruneFinished.
+    // Otherwise refresh would repeatedly reinsert the oldest 50 of 300 and
+    // publish an unchanged list on every request.
+    const candidates = [...latest.values()];
+    const terminalSnapshots = candidates
+      .filter(cp => cp.status === "completed" || cp.status === "failed" || cp.status === "cancelled")
+      .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 250);
+    const resumableSnapshots = candidates
+      .filter(cp => cp.status === "running" || cp.status === "waiting_for_approval");
+    for (const checkpoint of [...resumableSnapshots, ...terminalSnapshots]) {
       const status = checkpoint.status === "running" ? "interrupted" : checkpoint.status;
-      this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(status !== "interrupted" && status !== "waiting_for_approval" ? { finishedAt: checkpoint.updatedAt } : {}) });
+      const terminal = status === "completed" || status === "failed" || status === "cancelled";
+      const previousSequence = this.restoredRunSequences.get(checkpoint.runId);
+      if (previousSequence !== undefined) {
+        if (checkpoint.sequence <= previousSequence) continue;
+        const restored = this.runs.get(checkpoint.runId);
+        if (restored && restored.conversationId === conversationId && restored.runtimeRunId === checkpoint.runId) {
+          this.runs.set(checkpoint.runId, {
+            ...restored, status, finishedAt: terminal ? checkpoint.updatedAt : undefined
+          });
+          this.restoredRunSequences.set(checkpoint.runId, checkpoint.sequence);
+          changed = true;
+        }
+        continue;
+      }
+      if (ownedRuntimeIds.has(checkpoint.runId) || this.runs.has(checkpoint.runId)) continue;
+      this.runs.set(checkpoint.runId, { id: checkpoint.runId, runtimeRunId: checkpoint.runId, conversationId, status, startedAt: checkpoint.createdAt, ...(terminal ? { finishedAt: checkpoint.updatedAt } : {}) });
+      this.restoredRunSequences.set(checkpoint.runId, checkpoint.sequence);
+      ownedRuntimeIds.add(checkpoint.runId);
       changed = true;
     }
-    if (changed) this.publish();
+    if (changed) {
+      this.pruneFinished();
+      this.publish();
+    }
   }
 
   summary(conversationId?: string) {
@@ -68,13 +111,21 @@ export class AgentRunManager {
     return run ? { ...run } : null;
   }
 
-  linkRuntimeRun(managerId: string, runtimeRunId: string): void {
+  linkRuntimeRun(managerId: string, runtimeRunId: string, allowApprovalHandoff = false): void {
     const run = this.runs.get(managerId);
     if (!run) throw new Error("Managed run was not found.");
     if (!validAgentRunIdentity(runtimeRunId, run.conversationId)) throw new Error("Invalid runtime run ID.");
-    if (run.runtimeRunId && run.runtimeRunId !== runtimeRunId) throw new Error("Managed run already references a different runtime run.");
-    if (this.list().some(other => other.runtimeRunId === runtimeRunId && other.conversationId !== run.conversationId)) {
-      throw new Error("Runtime run is owned by another conversation.");
+    if (run.runtimeRunId === runtimeRunId) return; // Further events in the same run are idempotent.
+    if (run.runtimeRunId) throw new Error("Managed run already references a different runtime run.");
+    const existingOwners = this.list().filter(other => other.id !== managerId && other.runtimeRunId === runtimeRunId);
+    if (existingOwners.length) {
+      const sameConversation = existingOwners.every(owner => owner.conversationId === run.conversationId);
+      if (!sameConversation) throw new Error("Runtime run is owned by another conversation.");
+      // Resuming a previously approved checkpoint uses the same runtime ID in
+      // a new manager task. It is the only permitted temporary dual ownership.
+      const validHandoff = allowApprovalHandoff && run.status === "running" &&
+        existingOwners.length === 1 && (existingOwners[0].status === "waiting_for_approval" || existingOwners[0].status === "interrupted");
+      if (!validHandoff) throw new Error("Runtime run is already linked to another managed run.");
     }
     this.runs.set(managerId, { ...run, runtimeRunId });
     this.publish();
@@ -143,6 +194,7 @@ export class AgentRunManager {
     for (const [id] of completed.slice(0, excess)) {
       this.runs.delete(id);
       this.events.delete(id);
+      this.restoredRunSequences.delete(id);
     }
   }
 

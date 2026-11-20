@@ -3,6 +3,7 @@ import type { AgentClock, AgentId, AgentIdFactory, AgentPermission, AgentPermiss
 import { err, ok, type Result } from "./result";
 import type { AgentToolExecutor } from "./agentToolBridge";
 import type { AgentApprovalAuthority } from "./agentApprovals";
+import type { ToolReconciliationService } from "./toolReconciliation";
 
 export interface ResumableAgentContext {
   readonly runId: AgentRunId;
@@ -43,6 +44,12 @@ const isStoredAgentState = (value: JsonValue): value is JsonValue & StoredAgentS
 const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0): JsonValue =>
   ({ payload, permissionIndex, agentVersion, steps } as JsonValue);
 
+// One JavaScript process may have multiple runtime instances (for example, when
+// Agent Center is closed and reopened). Prevent two instances from executing
+// the same durable run concurrently. Cross-process safety still relies on CAS.
+const activeAgentExecutions = new Set<string>();
+const activeContinuationClaims = new Set<string>();
+
 /** Serializable step execution. Each successful step is persisted before its events are emitted. */
 export class ResumableAgentRuntime {
   private readonly definitions = new Map<AgentId, ResumableAgentDefinition<unknown>>();
@@ -52,7 +59,8 @@ export class ResumableAgentRuntime {
     private readonly ids: AgentIdFactory,
     private readonly clock: AgentClock,
     private readonly tools: AgentToolExecutor = { execute: async () => err("permission_denied", "Agent tool execution is not configured.") },
-    private readonly approvals: AgentApprovalAuthority = { consume: async () => false }
+    private readonly approvals: AgentApprovalAuthority = { consume: async () => false },
+    private readonly continuationAudit?: Pick<ToolReconciliationService, "verifySafeContinuation">
   ) {}
 
   register<Input>(definition: ResumableAgentDefinition<Input>): Result<void> {
@@ -161,6 +169,12 @@ export class ResumableAgentRuntime {
 
   /** Claims an interrupted running checkpoint with CAS, then continues from its saved state. */
   async *continue(runId: AgentRunId, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+    if (activeAgentExecutions.has(runId) || activeContinuationClaims.has(runId)) {
+      yield { type: "failed", runId, message: "This agent run is already executing or being continued in this process." };
+      return;
+    }
+    activeContinuationClaims.add(runId);
+    try {
     const loaded = await this.checkpoints.get(runId);
     if (!loaded.ok || !loaded.value) {
       yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message };
@@ -173,13 +187,54 @@ export class ResumableAgentRuntime {
       return;
     }
     if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled." }; return; }
-    const claimed: AgentCheckpoint = { ...cp, sequence: cp.sequence + 1, updatedAt: this.clock.now() };
+    if (!this.continuationAudit) {
+      yield { type: "failed", runId, message: "Manual continuation is unavailable without durable tool audit verification." };
+      return;
+    }
+    // The saved permissionIndex is not authority after a restart. Before any
+    // checkpoint is claimed, verify that the next step has no ambiguous side
+    // effects and ask the current permission policy again from index zero.
+    let verified: Awaited<ReturnType<ToolReconciliationService["verifySafeContinuation"]>>;
+    try { verified = await this.continuationAudit.verifySafeContinuation(runId, cp.state.steps); }
+    catch {
+      yield { type: "failed", runId, message: "Tool audit verification failed closed." };
+      return;
+    }
+    if (!verified.ok) {
+      yield { type: "failed", runId, message: verified.error.message };
+      return;
+    }
+    const auth = await this.authorizeRemaining(agent, 0);
+    if (auth.kind === "denied") {
+      yield { type: "failed", runId, message: "Fresh permission verification denied manual continuation." };
+      return;
+    }
+    if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled." }; return; }
+    if (auth.kind === "approval") {
+      const waiting: AgentCheckpoint = {
+        ...cp, sequence: cp.sequence + 1, status: "waiting_for_approval",
+        state: packState(cp.state.payload, auth.nextIndex, agent.version, cp.state.steps),
+        pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
+        updatedAt: this.clock.now()
+      };
+      const stored = await this.checkpoints.persist(waiting);
+      yield stored.ok
+        ? { type: "waiting_for_approval", runId, permission: auth.permission }
+        : { type: "failed", runId, message: stored.error.message };
+      return;
+    }
+    const claimed: AgentCheckpoint = { ...cp, sequence: cp.sequence + 1,
+      state: packState(cp.state.payload, auth.nextIndex, agent.version, cp.state.steps),
+      updatedAt: this.clock.now() };
     const saved = await this.checkpoints.persist(claimed);
     if (!saved.ok) {
       yield { type: "failed", runId, message: "Checkpoint could not be claimed; another worker may already be continuing it." };
       return;
     }
-    yield* this.execute(agent, claimed, cp.state.payload, cp.state.permissionIndex, cp.state.steps, signal);
+    yield* this.execute(agent, claimed, cp.state.payload, auth.nextIndex, cp.state.steps, signal);
+    } finally {
+      activeContinuationClaims.delete(runId);
+    }
   }
 
   private async authorizeRemaining(agent: ResumableAgentDefinition<unknown>, startIndex: number):
@@ -198,6 +253,11 @@ export class ResumableAgentRuntime {
   private async *execute(agent: ResumableAgentDefinition<unknown>, checkpoint: AgentCheckpoint,
     initialState: JsonValue, permissionIndex: number, completedSteps: number, externalSignal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
     const runId = checkpoint.runId as AgentRunId;
+    if (activeAgentExecutions.has(runId)) {
+      yield { type: "failed", runId, message: "This agent run is already executing in this process." };
+      return;
+    }
+    activeAgentExecutions.add(runId);
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     if (externalSignal?.aborted) controller.abort();
@@ -208,8 +268,8 @@ export class ResumableAgentRuntime {
     let timedOut = false;
     // The timeout applies to active execution, not time spent waiting for user approval or app restart.
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, agent.timeoutMs);
-    yield { type: "started", runId, agentId: agent.id };
     try {
+      yield { type: "started", runId, agentId: agent.id };
       while (steps < agent.maxSteps) {
         if (controller.signal.aborted) throw new Error(timedOut ? "Agent timed out." : "Agent was cancelled.");
         const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort",
@@ -244,6 +304,7 @@ export class ResumableAgentRuntime {
       }
       yield { type: "failed", runId, message };
     } finally {
+      activeAgentExecutions.delete(runId);
       clearTimeout(timeout);
       externalSignal?.removeEventListener("abort", onAbort);
     }

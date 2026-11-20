@@ -1,0 +1,182 @@
+import { describe, expect, it } from "vitest";
+import { AgentRunManager } from "./agentRunManager";
+import type { AgentCheckpoint } from "../core/agentCheckpoints";
+
+describe("checkpoint recovery ordering", () => {
+  it("restores the newest valid snapshot when a run has multiple checkpoint versions", () => {
+    const manager = new AgentRunManager();
+    const base: AgentCheckpoint = {
+      schemaVersion: 1, runId: "run-1", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1, status: "running",
+      state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [
+      base,
+      { ...base, sequence: 2, status: "completed", updatedAt: 200 }
+    ]);
+    expect(manager.list("standalone")).toMatchObject([
+      { id: "run-1", status: "completed", finishedAt: 200 }
+    ]);
+  });
+  it("ignores malformed and unrelated checkpoints without masking a valid snapshot", () => {
+    const manager = new AgentRunManager();
+    const base: AgentCheckpoint = {
+      schemaVersion: 1, runId: "run-safe", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [
+      { ...base, sequence: 99, updatedAt: 999, state: { value: Number.NaN } },
+      { ...base, threadId: "other-thread", sequence: 100, updatedAt: 1000 },
+      { ...base, sequence: 2, updatedAt: 200, status: "waiting_for_approval",
+        pendingApproval: { permission: "workspace:write", requestedAt: 150 } },
+      base
+    ]);
+    expect(manager.list("standalone")).toMatchObject([
+      { id: "run-safe", status: "waiting_for_approval" }
+    ]);
+  });
+
+  it("restores 250 independent runs without executing tasks", () => {
+    const manager = new AgentRunManager();
+    const checkpoints: AgentCheckpoint[] = Array.from({ length: 250 }, (_, index) => ({
+      schemaVersion: 1, runId: "run-" + index, agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: index, updatedAt: index
+    }));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(manager.list("standalone")).toHaveLength(250);
+    expect(manager.list("standalone").every(run => run.status === "interrupted")).toBe(true);
+    expect(manager.activeRun("standalone")).toBeNull();
+  });
+
+  it("prefers sequence over timestamps and is independent of input order", () => {
+    const older: AgentCheckpoint = {
+      schemaVersion: 1, runId: "ordered", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "running", state: {}, createdAt: 10, updatedAt: 1000
+    };
+    const newer: AgentCheckpoint = {
+      ...older, sequence: 3, updatedAt: 1001, status: "failed"
+    };
+    for (const snapshots of [[older, newer], [newer, older]]) {
+      const manager = new AgentRunManager();
+      manager.restoreCheckpoints("standalone", snapshots);
+      expect(manager.list("standalone")).toMatchObject([
+        { id: "ordered", status: "failed", finishedAt: 1001 }
+      ]);
+    }
+  });
+
+  it("prevents two managed runs from claiming the same runtime checkpoint", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("manager-a", "chat", async () => {});
+    await manager.start("manager-b", "chat", async () => {});
+    manager.linkRuntimeRun("manager-a", "runtime-shared");
+    expect(() => manager.linkRuntimeRun("manager-b", "runtime-shared"))
+      .toThrow("already linked");
+  });
+
+  it("never replaces an existing managed run when restoring its checkpoint", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("run-existing", "standalone", async () => {});
+    const checkpoint: AgentCheckpoint = {
+      schemaVersion: 1, runId: "run-existing", agentId: "agent-1",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [checkpoint]);
+    expect(manager.list("standalone")).toHaveLength(1);
+    expect(manager.list("standalone")[0].status).toBe("completed");
+  });
+
+
+  it("permits a same-conversation approval handoff only when explicitly requested", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval-owner", "chat", async () => "waiting_for_approval");
+    manager.linkRuntimeRun("approval-owner", "runtime-1");
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const resumed = manager.start("resume-owner", "chat", async () => { await pending; });
+    expect(() => manager.linkRuntimeRun("resume-owner", "runtime-1")).toThrow("already linked");
+    manager.linkRuntimeRun("resume-owner", "runtime-1", true);
+    expect(manager.list("chat")[1].runtimeRunId).toBe("runtime-1");
+    expect(manager.resolveWaiting("runtime-1", "completed")).toBe(true);
+    expect(manager.list("chat")[0].status).toBe("completed");
+    finish();
+    await resumed;
+  });
+
+  it("blocks approval handoff across conversations and from completed runs", async () => {
+    const manager = new AgentRunManager();
+    await manager.start("approval-owner", "one", async () => "waiting_for_approval");
+    manager.linkRuntimeRun("approval-owner", "runtime-1");
+    await manager.start("foreign-owner", "two", async () => {});
+    expect(() => manager.linkRuntimeRun("foreign-owner", "runtime-1", true)).toThrow("another conversation");
+    manager.resolveWaiting("runtime-1", "completed");
+    await manager.start("later-owner", "one", async () => {});
+    expect(() => manager.linkRuntimeRun("later-owner", "runtime-1", true)).toThrow("already linked");
+  });
+
+  it("allows an explicit interrupted-checkpoint recovery handoff within one conversation", async () => {
+    const manager = new AgentRunManager();
+    const checkpoint: AgentCheckpoint = {
+      schemaVersion: 1, runId: "interrupted-id", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "running", state: {}, createdAt: 100, updatedAt: 200
+    };
+    manager.restoreCheckpoints("standalone", [checkpoint]);
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const resumed = manager.start("recovery-action", "standalone", async () => { await pending; });
+    expect(() => manager.linkRuntimeRun("recovery-action", "interrupted-id")).toThrow("already linked");
+    manager.linkRuntimeRun("recovery-action", "interrupted-id", true);
+    expect(manager.list("standalone")).toHaveLength(2);
+    finish(); await resumed;
+  });
+
+  it("synchronizes a restored interrupted run when its checkpoint later completes", () => {
+    const manager = new AgentRunManager();
+    const running: AgentCheckpoint = {
+      schemaVersion: 1, runId: "recovered-progress", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [running]);
+    expect(manager.list("standalone")).toMatchObject([{ id: "recovered-progress", status: "interrupted" }]);
+    const completed = { ...running, sequence: 3, status: "completed" as const, updatedAt: 250 };
+    manager.restoreCheckpoints("standalone", [completed]);
+    expect(manager.list("standalone")).toMatchObject([{ id: "recovered-progress", status: "completed", finishedAt: 250 }]);
+    manager.restoreCheckpoints("standalone", [running]);
+    expect(manager.list("standalone")[0].status).toBe("completed");
+  });
+
+  it("synchronizes a previously recovered approval that was rejected", () => {
+    const manager = new AgentRunManager();
+    const waiting: AgentCheckpoint = {
+      schemaVersion: 1, runId: "approval-recovered", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "waiting_for_approval", state: {}, createdAt: 100, updatedAt: 100,
+      pendingApproval: { permission: "tool:execute", requestedAt: 100 }
+    };
+    manager.restoreCheckpoints("standalone", [waiting]);
+    manager.restoreCheckpoints("standalone", [{ ...waiting, sequence: 2, status: "failed", updatedAt: 150, pendingApproval: undefined }]);
+    expect(manager.list("standalone")).toMatchObject([{ status: "failed", finishedAt: 150 }]);
+  });
+
+  it("does not re-add pruned terminal runs on repeated bulk refreshes", () => {
+    const manager = new AgentRunManager();
+    const checkpoints: AgentCheckpoint[] = Array.from({ length: 300 }, (_, index) => ({
+      schemaVersion: 1, runId: "terminal-" + index, agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "completed", state: {}, createdAt: index, updatedAt: index + 1
+    }));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(manager.list("standalone")).toHaveLength(250);
+    const snapshots: number[] = [];
+    const unsubscribe = manager.subscribe(runs => snapshots.push(runs.length));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(snapshots).toEqual([250]);
+    unsubscribe();
+  });
+});

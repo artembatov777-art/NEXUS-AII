@@ -1,0 +1,181 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+import { AgentControlCenter } from "./AgentControlCenter";
+import { DEFAULT_PROVIDER } from "../types";
+import { AgentCheckpointService } from "../core/agentCheckpoints";
+import { LocalStorageAgentCheckpointRepository } from "../lib/agentCheckpointStorage";
+import { LocalStorageToolAuditSink } from "../lib/toolAuditStorage";
+import { LocalStorageTraceSink } from "../lib/traceStorage";
+import { agentThreads } from "../lib/agentThreads";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+const button = (root: HTMLElement, label: string) =>
+  [...root.querySelectorAll("button")].find(item => item.textContent?.includes(label));
+
+describe("Agent Center persisted run history", () => {
+  it("loads more than 50 saved checkpoints on demand without dropping older runs", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    for (let i = 0; i < 75; i++) {
+      const saved = await service.persist({
+        schemaVersion: 1, runId: "historic-" + i,
+        agentId: "nexus.local-workflow",
+        threadId: agentThreads("history-session").primary,
+        sequence: 1, status: "completed", state: { payload: { task: "Saved task " + i } },
+        createdAt: 1_000 + i, updatedAt: 1_000 + i
+      });
+      expect(saved.ok).toBe(true);
+    }
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId="history-session"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    await act(async () => { button(node, "Run history")!.click(); });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(50);
+    expect(node.textContent).toContain("Showing 50 of 75 runs");
+    await act(async () => { button(node, "Load more runs")!.click(); });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(75);
+    expect(node.textContent).toContain("Showing 75 of 75 runs");
+    const search = node.querySelector<HTMLInputElement>('input[aria-label="Search saved runs"]');
+    expect(search).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(search, "Saved task 17");
+      search!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(1);
+    expect(node.textContent).toContain("Showing 1 of 1 runs");
+    const status = node.querySelector<HTMLSelectElement>('select[aria-label="Filter runs by status"]');
+    expect(status).not.toBeNull();
+    await act(async () => {
+      status!.value = "failed";
+      status!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(node.querySelectorAll(".agent-history-item")).toHaveLength(0);
+    expect(node.textContent).toContain("No saved runs match your filters");
+    await act(async () => root.unmount());
+    node.remove();
+  });
+
+  it("opens the real tool audit scoped to the chosen saved run", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    for (const runId of ["history-one", "history-two"]) {
+      expect((await service.persist({
+        schemaVersion: 1, runId, agentId: "nexus.local-workflow",
+        threadId: agentThreads("history-session").primary,
+        sequence: 1, status: "completed", state: { payload: { task: runId } },
+        createdAt: 1_000, updatedAt: 1_000
+      })).ok).toBe(true);
+    }
+    const audit = new LocalStorageToolAuditSink(localStorage);
+    expect((await audit.record({ runId: "history-one", traceId: "history-one:1",
+      toolId: "workspace.read", status: "completed", timestamp: 2_000 })).ok).toBe(true);
+    expect((await audit.record({ runId: "history-two", traceId: "history-two:1",
+      toolId: "workspace.write", status: "completed", timestamp: 2_001 })).ok).toBe(true);
+    const trace = new LocalStorageTraceSink(localStorage);
+    expect((await trace.append({ runId: "history-one", traceId: "history-one", name: "agent.run",
+      status: "completed", timestamp: 3_000, attributes: { event: "completed" } })).ok).toBe(true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId="history-session"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    await act(async () => { button(node, "Run history")!.click(); });
+    const row = [...node.querySelectorAll(".agent-history-item")].find(item => item.textContent?.includes("history-one"));
+    expect(row).toBeDefined();
+    await act(async () => { button(row as HTMLElement, "Inspect audit")!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(node.textContent).toContain("Audit for history-one");
+    const auditPanel = [...node.querySelectorAll(".agent-card")].find(item => item.textContent?.includes("Recent tool audit"));
+    expect(auditPanel?.textContent).toContain("workspace.read");
+    expect(auditPanel?.textContent).not.toContain("workspace.write");
+    expect(auditPanel?.textContent).toContain("Run trace");
+    expect(auditPanel?.textContent).toContain("agent.run");
+    await act(async () => root.unmount());
+    node.remove();
+  });
+
+  it("shows unresolved tool effects when inspecting an older interrupted run", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    for (let i = 0; i < 55; i++) {
+      expect((await service.persist({
+        schemaVersion: 1, runId: "older-run-" + i, agentId: "nexus.local-workflow",
+        threadId: agentThreads("history-session").primary,
+        sequence: 1, status: "running",
+        state: { payload: { task: "Task " + i }, permissionIndex: 1, agentVersion: "1.1.0", steps: 0 },
+        createdAt: 1_000 + i, updatedAt: 1_000 + i
+      })).ok).toBe(true);
+    }
+    const audit = new LocalStorageToolAuditSink(localStorage);
+    expect((await audit.record({
+      runId: "older-run-0", traceId: "older-run-0:1", toolId: "workspace.write",
+      status: "started", timestamp: 1_500
+    })).ok).toBe(true);
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId="history-session"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    await act(async () => { button(node, "Run history")!.click(); });
+    const search = node.querySelector<HTMLInputElement>('input[aria-label="Search saved runs"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "older-run-0");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const row = node.querySelector(".agent-history-item") as HTMLElement;
+    expect(row.textContent).toContain("older-run-0");
+    await act(async () => { button(row, "Inspect audit")!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(node.textContent).toContain("Ambiguous tool outcomes");
+    expect(node.textContent).toContain("workspace.write");
+    await act(async () => root.unmount()); node.remove();
+  });
+  it("copies a redacted local report from a saved run without exposing its task", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    expect((await service.persist({
+      schemaVersion: 1, runId: "diagnostic-copy", agentId: "nexus.local-workflow",
+      threadId: agentThreads("copy-session").primary,
+      sequence: 1, status: "completed",
+      state: { payload: { task: "PRIVATE_USER_TASK_SHOULD_NOT_COPY" } },
+      createdAt: 1000, updatedAt: 1000
+    })).ok).toBe(true);
+    const writeText = vi.fn(async (_text: string) => {});
+    const prior = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () => {
+        root.render(<AgentControlCenter conversationId="copy-session"
+          onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+      await act(async () => { button(node, "Run history")!.click(); });
+      await act(async () => { button(node, "Copy diagnostics")!.click(); });
+      expect(writeText).toHaveBeenCalledOnce();
+      const copied = writeText.mock.calls[0][0];
+      expect(copied).toContain("Run: diagnostic-copy");
+      expect(copied).not.toContain("PRIVATE_USER_TASK_SHOULD_NOT_COPY");
+      expect(button(node, "Copied diagnostics")).toBeDefined();
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      if (prior) Object.defineProperty(navigator, "clipboard", prior);
+      else delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+});

@@ -1,5 +1,7 @@
 import { t } from "../lib/i18n";
 import { agentThreads } from "../lib/agentThreads";
+import { formatAgentRunDiagnostics } from "../lib/agentRunDiagnostics";
+import { agentActivityLabel, type AgentActivityEvent, type AgentActivityKind } from "../lib/agentActivity";
 import { AgentRunManager, type ManagedRunEvent } from "../lib/agentRunManager";
 import { ModelRouter } from "../core/model";
 import { WORKSPACE_TEST_MODEL, WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_TOOLS, workspaceTestProvider } from "../lib/workspaceTestProvider";
@@ -10,6 +12,7 @@ import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
 import type { ToolAuditEvent } from "../core/tools";
+import type { TraceEvent } from "../core/observability";
 import type { AmbiguousToolStep } from "../core/toolReconciliation";
 import { createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { loadProviderProfiles } from "../lib/providerProfiles";
@@ -60,6 +63,7 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
 export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, projectId, initialTask, conversationId, conversationIds = [], agentRuns }: { onClose: () => void; providerSettings: ProviderSettings; hasProviderKey: boolean; projectId?: string; initialTask?: string; conversationId?: string; conversationIds?: string[]; agentRuns?: AgentRunManager }) {
   const localRunManager = useMemo(() => new AgentRunManager(), []);
   const managedRuns = agentRuns ?? localRunManager;
+  const [managedRunSnapshot, setManagedRunSnapshot] = useState(() => managedRuns.list());
   const threads = useMemo(() => agentThreads(conversationId), [conversationId]);
   const runtimeState = useMemo<RuntimeState>(() => {
     try {
@@ -144,17 +148,45 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }, [initialTask]);
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
-  const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
+  const [auditEventsByConversation, setAuditEventsByConversation] = useState<Record<string, ToolAuditEvent[]>>({});
+  const [traceEventsByConversation, setTraceEventsByConversation] = useState<Record<string, TraceEvent[]>>({});
+  const [auditRunByConversation, setAuditRunByConversation] = useState<Record<string, string | null>>({});
+  const [copiedDiagnosticsRunId, setCopiedDiagnosticsRunId] = useState<string | null>(null);
+  const [historyLimitByConversation, setHistoryLimitByConversation] = useState<Record<string, number>>({});
+  const [historyQueryByConversation, setHistoryQueryByConversation] = useState<Record<string, string>>({});
+  const [historyStatusByConversation, setHistoryStatusByConversation] = useState<Record<string, string>>({});
+  const [historyTruncatedByConversation, setHistoryTruncatedByConversation] = useState<Record<string, boolean>>({});
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
+  const [activityByConversation, setActivityByConversation] = useState<Record<string, AgentActivityEvent[]>>({});
+  const [activityRunByConversation, setActivityRunByConversation] = useState<Record<string, string | null>>({});
   const conversationKey = conversationId ?? "standalone";
+  const activeManagedRun = managedRunSnapshot.find(run => run.conversationId === conversationKey && run.status === "running") ?? null;
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
+  const auditRunFilter = auditRunByConversation[conversationKey] ?? null;
+  const auditEvents = auditEventsByConversation[conversationKey] ?? [];
+  const traceEvents = traceEventsByConversation[conversationKey] ?? [];
+  const historyLimit = historyLimitByConversation[conversationKey] ?? 50;
+  const historyQuery = historyQueryByConversation[conversationKey] ?? "";
+  const historyStatus = historyStatusByConversation[conversationKey] ?? "all";
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
+  const savedActivity = activityByConversation[conversationKey] ?? [];
+  const activityRunFilter = activityRunByConversation[conversationKey] ?? null;
+  const displayedActivity = activityRunFilter ? savedActivity.filter(event => event.runId === activityRunFilter) : savedActivity;
   const [busy, setBusy] = useState(false);
+  const operationBusy = busy || !!activeManagedRun;
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
   const activeManagerRequest = useRef<string | null>(null);
   const activeRunId = activeRunIds[conversationKey] ?? null;
+  const effectiveActiveRunId = activeRunId ?? activeManagedRun?.runtimeRunId ?? null;
+  const filteredHistory = checkpoints.filter(checkpoint => {
+    const label = checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "interrupted" : checkpoint.status;
+    return (historyStatus === "all" || label === historyStatus) &&
+      (!historyQuery.trim() || [checkpoint.runId, checkpoint.agentId, taskFromCheckpoint(checkpoint)]
+        .join(" ").toLocaleLowerCase().includes(historyQuery.trim().toLocaleLowerCase()));
+  });
+  const visibleHistory = filteredHistory.slice(0, historyLimit);
   const setActiveRunId = (id: string | null) => setActiveRunIds(previous => ({ ...previous, [conversationKey]: id }));
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
@@ -165,7 +197,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, threads.test, WORKSPACE_TEST_TOOLS
   ) ?? null, [runtime, threads]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
-  const runningCount = checkpoints.filter(item => item.status === "running" && item.runId === activeRunId).length;
+  const runningCount = checkpoints.filter(item => item.status === "running" && item.runId === effectiveActiveRunId).length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
   const completedCount = checkpoints.filter(item => item.status === "completed").length;
   const failedCount = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").length;
@@ -179,33 +211,75 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }));
   }, [conversationKey]);
 
-  function reportManagedEvent(runId: string, kind: ManagedRunEvent["kind"], text: string, tone: FeedItem["tone"] = "normal") {
+  function reportManagedEvent(runId: string, kind: ManagedRunEvent["kind"], text: string, _tone: FeedItem["tone"] = "normal") {
+    // Subscribed panels receive every event, including after closing/reopening.
     managedRuns.appendEvent(runId, kind, text);
-    addFeed(text, tone);
   }
 
   const addFeedLatest = useRef(addFeed);
   addFeedLatest.current = addFeed;
 
+  useEffect(() => managedRuns.subscribe(runs => setManagedRunSnapshot([...runs])), [managedRuns]);
+  useEffect(() => {
+    const recent = managedRuns.conversationTimeline(conversationKey).slice(-80);
+    if (recent.length) {
+      setFeedByConversation(current => {
+        if (current[conversationKey]?.length) return current;
+        return { ...current, [conversationKey]: recent.map((event, index) => ({
+          id: index - recent.length,
+          text: event.message,
+          tone: event.kind === "error" ? "error" : event.kind === "approval" ? "warning" : event.kind === "output" ? "success" : "normal"
+        })) };
+      });
+    }
+    return managedRuns.subscribeEvents(event => {
+      if (event.conversationId !== conversationKey) return;
+      const tone: FeedItem["tone"] = event.kind === "error" ? "error" : event.kind === "approval" ? "warning" : event.kind === "output" ? "success" : "normal";
+      addFeedLatest.current(event.message, tone);
+    });
+  }, [managedRuns, conversationKey]);
+
   const refresh = useCallback(async () => {
     if (!runtime) return;
-    const [result, audit] = await Promise.all([
-      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 50))),
-      runtime.auditSink.list({ limit: 30 })
+    const [result, audit, traces, activity] = await Promise.all([
+      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 200))),
+      runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 }),
+      auditRunFilter ? runtime.traceSink.list({ runId: auditRunFilter, limit: 100 }) : Promise.resolve(null),
+      runtime.activityRepository.listByConversation(conversationKey, 100, activityRunFilter ?? undefined)
     ]);
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
-      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
+      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt);
+      managedRuns.restoreCheckpoints(conversationKey, checkpoints);
       setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
-      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled");
-      const reconciliationResults = await Promise.all(terminalRuns.map(item =>
-        runtime.toolReconciliationService.listAmbiguous(item.runId)
+      setHistoryTruncatedByConversation(previous => ({ ...previous, [conversationKey]: result.some(item => item.ok && item.value.length === 200) }));
+      const reviewableRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled" ||
+        (item.status === "running" && item.runId !== effectiveActiveRunId)).slice(0, 50);
+      // An owner can inspect an older saved run even when it falls outside the
+      // 50 most recent review candidates. Only query that additional run.
+      if (auditRunFilter) {
+        const focused = checkpoints.find(item => item.runId === auditRunFilter);
+        if (focused && (focused.status === "failed" || focused.status === "cancelled" ||
+          (focused.status === "running" && focused.runId !== effectiveActiveRunId)) &&
+          !reviewableRuns.some(item => item.runId === focused.runId)) {
+          reviewableRuns.push(focused);
+        }
+      }
+      const reconciliationResults = await Promise.all(reviewableRuns.map(item =>
+        runtime.toolReconciliationService.listAmbiguous(item.runId, item.status === "running")
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
     } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
-    if (audit.ok) setAuditEvents(audit.value);
-    else addFeed(audit.error.message, "error");
-  }, [runtime, addFeed, threads, conversationKey]);
+    if (audit.ok && !failedResult) {
+      const runIds = new Set(result.flatMap(item => item.ok ? item.value.map(checkpoint => checkpoint.runId) : []));
+      const scoped = audit.value.filter(item => auditRunFilter ? item.runId === auditRunFilter : runIds.has(item.runId));
+      setAuditEventsByConversation(previous => ({ ...previous, [conversationKey]: scoped }));
+    } else if (!audit.ok) addFeed(audit.error.message, "error");
+    if (traces?.ok) setTraceEventsByConversation(previous => ({ ...previous, [conversationKey]: traces.value }));
+    else if (traces && !traces.ok) addFeed(traces.error.message, "error");
+    if (activity.ok) setActivityByConversation(previous => ({ ...previous, [conversationKey]: activity.value }));
+    else addFeed("Saved agent activity could not be loaded.", "warning");
+  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns, effectiveActiveRunId, activityRunFilter]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -232,14 +306,34 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       void Promise.all(runtime.mcpClient.listServers().map(server => runtime.mcpClient.disconnect(server.id)));
     };
   }, [runtime]);
-  useEffect(() => () => {
-    for (const run of managedRuns.list()) if (run.status === "running") managedRuns.cancel(run.id);
-  }, [managedRuns]);
+  // The manager outlives this panel. Closing or switching conversations must
+  // not cancel live work: only the explicit Cancel action aborts a run.
 
-  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string): Promise<void | "waiting_for_approval" | "failed"> {
+  async function persistActivity(runId: string, kind: AgentActivityKind, step?: number, maxSteps?: number) {
+    if (!runtime) return;
+    const event: AgentActivityEvent = { runId, conversationId: conversationKey, kind, timestamp: Date.now(),
+      ...(step !== undefined ? { step } : {}), ...(maxSteps !== undefined ? { maxSteps } : {}) };
+    const stored = await runtime.activityRepository.append(event);
+    if (!stored.ok) {
+      addFeed("This event could not be saved to the activity journal.", "warning");
+      return;
+    }
+    setActivityByConversation(previous => ({ ...previous,
+      [conversationKey]: [...(previous[conversationKey] ?? []), event].slice(-100)
+    }));
+  }
+
+  async function consume(events: AsyncIterable<ResumableAgentEvent>, managerId: string, allowApprovalHandoff = false, signal?: AbortSignal): Promise<void | "waiting_for_approval" | "failed"> {
     let outcome: void | "waiting_for_approval" | "failed" = undefined;
     for await (const event of events) {
-      managedRuns.linkRuntimeRun(managerId, event.runId);
+      managedRuns.linkRuntimeRun(managerId, event.runId, allowApprovalHandoff);
+      if (event.type !== "output") {
+        const activityKind: AgentActivityKind = event.type === "waiting_for_approval" ? "approval" :
+          event.type === "failed" && signal?.aborted ? "cancelled" : event.type === "failed" ? "failed" : event.type;
+        await persistActivity(event.runId, activityKind,
+          event.type === "progress" ? event.step : undefined,
+          event.type === "progress" ? event.maxSteps : undefined);
+      }
       if (runtime) {
         const status = event.type === "started" ? "started" : event.type === "progress" || event.type === "output" ? "progress" : event.type === "waiting_for_approval" ? "waiting_for_approval" : event.type === "completed" ? "completed" : "failed";
         await runtime.traceSink.append({ traceId: event.runId, runId: event.runId, name: "agent.run", status, timestamp: Date.now(), ...(event.type === "completed" ? { durationMs: 0 } : {}), attributes: { event: event.type } });
@@ -267,7 +361,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   async function runManagedAction(action: (signal: AbortSignal, managerId: string) => Promise<void | "waiting_for_approval" | "failed">) {
-    if (!runtime || busy) return;
+    if (!runtime || busy || managedRuns.activeRun(conversationKey)) return;
     const managerId = crypto.randomUUID();
     activeManagerRequest.current = managerId;
     setBusy(true);
@@ -276,6 +370,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         try {
           return await action(signal, managerId);
         } catch (cause) {
+          await persistActivity(managerId, signal.aborted ? "cancelled" : "failed");
           reportManagedEvent(managerId, "error", cause instanceof Error ? cause.message : "Agent execution failed.", "error");
           return "failed";
         }
@@ -290,17 +385,63 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     }
   }
 
-  async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>) {
-    await runManagedAction((signal, managerId) => consume(action(signal), managerId));
+  async function runAction(action: (signal: AbortSignal) => AsyncIterable<ResumableAgentEvent>, allowApprovalHandoff = false) {
+    await runManagedAction((signal, managerId) => consume(action(signal), managerId, allowApprovalHandoff, signal));
+  }
+
+  async function copyRunDiagnostics(checkpoint: AgentCheckpoint) {
+    if (!runtime || busy) return;
+    try {
+      const [audit, traces] = await Promise.all([
+        runtime.auditSink.list({ runId: checkpoint.runId, limit: 5_000 }),
+        runtime.traceSink.list({ runId: checkpoint.runId, limit: 1_000 })
+      ]);
+      if (!audit.ok || !traces.ok) {
+        addFeed("Could not load the complete run diagnostics.", "error");
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        addFeed("Clipboard access is unavailable on this device.", "warning");
+        return;
+      }
+      await navigator.clipboard.writeText(formatAgentRunDiagnostics(checkpoint, audit.value, traces.value));
+      setCopiedDiagnosticsRunId(checkpoint.runId);
+      addFeed("Copied metadata-only diagnostics for " + checkpoint.runId + ".", "success");
+    } catch {
+      addFeed("Could not copy run diagnostics. No data was sent externally.", "error");
+    }
+  }
+
+  function inspectRunActivity(runId: string) {
+    setActivityRunByConversation(previous => ({ ...previous, [conversationKey]: runId }));
+    setActivityByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+    setAgentView("progress");
+  }
+
+  function showAllActivity() {
+    setActivityRunByConversation(previous => ({ ...previous, [conversationKey]: null }));
+    setActivityByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+  }
+
+  function inspectRunAudit(runId: string) {
+    setAuditRunByConversation(previous => ({ ...previous, [conversationKey]: runId }));
+    setAgentView("audit");
+  }
+
+  function showRecentAudit() {
+    setAuditRunByConversation(previous => ({ ...previous, [conversationKey]: null }));
+  }
+
+  function loadMoreHistory() {
+    setHistoryLimitByConversation(previous => ({ ...previous, [conversationKey]: (previous[conversationKey] ?? 50) + 50 }));
   }
 
   function cancelActiveRun() {
-    if (activeManagerRequest.current) managedRuns.cancel(activeManagerRequest.current);
-
+    if (!managedRuns.cancelConversation(conversationKey)) addFeed("No active run to cancel.", "warning");
   }
 
   async function saveProfile() {
-    if (!runtime || busy) return;
+    if (!runtime || operationBusy) return;
     setBusy(true);
     const ids = new Set([agentThreads().primary, threads.primary, ...conversationIds.map(id => agentThreads(id).primary)]);
     let listed: Awaited<ReturnType<typeof runtime.checkpointService.listByThread>>[];
@@ -337,13 +478,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   async function startPlannedWorkflow(useTestProvider = false) {
     const workflow = useTestProvider ? testWorkflow : plannedWorkflow;
-    if (!runtime || !workflow || !task.trim() || busy) return;
+    if (!runtime || !workflow || !task.trim() || operationBusy) return;
     const goal = task.trim();
     const projectDisclosure = projectId ? " and relevant knowledge from the selected project" : "";
     if (!useTestProvider && !window.confirm(`Send this task, saved profile memories${projectDisclosure} to your configured AI provider? The planner may use approved workspace tools and MCP servers you explicitly connected. Each file operation and each MCP tool call requires a separate confirmation. External MCP servers may process the approved input.`)) return;
     setTask("");
     setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
     await runManagedAction(async (signal, managerId) => {
+      await persistActivity(managerId, "started");
       let referenceContext: string | undefined;
       if (useTestProvider) {
         reportManagedEvent(managerId, "progress", "Test planner · offline read-only inspection");
@@ -369,6 +511,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       }
       const result = await workflow.plan(goal, signal, referenceContext);
       if (!result.ok) {
+        await persistActivity(managerId, signal.aborted ? "cancelled" : "failed");
         reportManagedEvent(managerId, "error", "Planning failed: " + result.error.message, "error");
         return "failed";
       }
@@ -378,6 +521,13 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       setActiveRunId(coordinationId);
       let outcome: void | "waiting_for_approval" | "failed" = undefined;
       for await (const event of workflow.run(result.value, coordinationId, signal)) {
+        const kind: AgentActivityKind | null = event.type === "started" ? "started" :
+          event.type === "agent_started" || event.type === "agent_completed" ? "progress" :
+          event.type === "waiting_for_approval" ? "approval" :
+          event.type === "completed" ? "completed" : event.type === "failed" ? (signal.aborted ? "cancelled" : "failed") : null;
+        if (kind) await persistActivity(coordinationId, kind,
+          event.type === "agent_started" || event.type === "agent_completed" ? event.step : undefined,
+          event.type === "agent_started" || event.type === "agent_completed" ? result.value.steps.length : undefined);
         if (event.type === "started") reportManagedEvent(managerId, "progress", "Planned workflow started: " + event.runId);
         else if (event.type === "agent_started") reportManagedEvent(managerId, "progress", "Executing step " + event.step + " with " + event.agentId + "…");
         else if (event.type === "agent_completed") reportManagedEvent(managerId, "output", "Step " + event.step + " completed.\n" + (event.detail ?? "No output returned."), "success");
@@ -397,7 +547,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   function startAgent() {
-    if (!runtime || !task.trim() || task.trim().length > 1_000) return;
+    if (!runtime || operationBusy || !task.trim() || task.trim().length > 1_000) return;
     const input = task.trim();
     setTask("");
     setFeedByConversation(current => ({ ...current, [conversationKey]: [] }));
@@ -413,7 +563,21 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         return;
       }
       yield* runtime.agentRuntime.resume(checkpoint.runId as AgentRunId, grant.value, signal);
-    });
+    }, true);
+  }
+
+  function continueInterrupted(checkpoint: AgentCheckpoint) {
+    if (!runtime || busy || managedRuns.activeRun(conversationKey)) return;
+    // Planned workflows require a coordinator plan that this view cannot
+    // reconstruct. Limit manual recovery to the registered local workflow.
+    if (checkpoint.status !== "running" || checkpoint.threadId !== threads.primary ||
+        checkpoint.agentId !== BUILT_IN_AGENT_IDS.localWorkflow || checkpoint.runId === activeRunId) return;
+    if (!window.confirm(
+      "Manually continue this interrupted local agent from its last saved step? " +
+      "NEXUS will verify durable tool history, request fresh permissions, " +
+      "and stop instead of replaying a tool with an uncertain outcome."
+    )) return;
+    void runAction(signal => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, signal), true);
   }
 
   async function reject(checkpoint: AgentCheckpoint) {
@@ -428,6 +592,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const result = await runtime.checkpointService.persist(rejected);
     if (!result.ok) addFeed(result.error.message, "error");
     else {
+      await persistActivity(checkpoint.runId, "failed");
       managedRuns.resolveWaiting(checkpoint.runId, "failed");
       addFeed("Approval rejected. The run was closed without executing the tool.", "warning");
     }
@@ -440,8 +605,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       "This tool step may have timed out or been cancelled after its external operation began. Verify in the external system whether it completed or is still running. Marking it reconciled only blocks retries; it does not stop an operation already in progress. Continue?"
     );
     if (!confirmed) return;
+    const interrupted = checkpoints.some(item => item.runId === step.runId && item.status === "running" && item.runId !== effectiveActiveRunId);
     const result = await runtime.toolReconciliationService.reconcile(
-      step.runId, step.toolId, step.traceId, true
+      step.runId, step.toolId, step.traceId, true, interrupted
     );
     if (!result.ok) addFeed(result.error.message, "error");
     else addFeed(`Manually reconciled ${step.toolId}. No tool was rerun.`, "success");
@@ -483,7 +649,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             </div>
             <label className="agent-task-label" htmlFor="agent-task">{t("Task input")}</label>
             <textarea id="agent-task" value={task} onChange={event => setTask(event.target.value)} maxLength={1_000} rows={3} placeholder="Describe a task for the local workflow preview…"/>
-            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || busy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!testWorkflow || !isTauri() || busy || !task.trim()} onClick={() => void startPlannedWorkflow(true)} title='Use list <absolute path>, read <absolute path>, or search {"path":"...","query":"..."}'>Test planner (offline)</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || busy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
+            <div className="agent-form-footer"><span>{task.length}/1000 characters</span><div className="agent-run-actions"><button className="agent-primary-button" disabled={!runtime || operationBusy || !task.trim()} onClick={startAgent}><Play size={14}/> Run demo</button><button className="agent-small-button" disabled={!testWorkflow || !isTauri() || operationBusy || !task.trim()} onClick={() => void startPlannedWorkflow(true)} title='Use list <absolute path>, read <absolute path>, or search {"path":"...","query":"..."}'>Test planner (offline)</button><button className="agent-small-button" disabled={!agentProviderReady || !plannedWorkflow || operationBusy || !task.trim()} onClick={() => void startPlannedWorkflow()} title={plannedWorkflow && agentProviderReady ? "Create a model plan and execute registered tools through the permission-gated runtime" : providerSettings.credentialHandle === "none" ? "Select a model for the local provider to enable AI planning" : "Save a provider API key and select a model in Settings to enable AI planning"}><Sparkles size={14}/> Plan with AI</button></div></div>
             <div className="agent-disclaimer">The demo agent creates a local preview. The AI planner uses your configured provider and can list, read, create or edit files only inside folders you approved in File System. Each file operation requires confirmation; unapproved external tools remain blocked.</div>
           </article>
 
@@ -502,7 +668,16 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "progress"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
-            {busy && managedRuns.activeRun(conversationKey) && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
+            <section className="agent-card" aria-label="Saved agent activity">
+              <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED HISTORY</span><h3>Saved activity</h3></div><span className="agent-count">{displayedActivity.length}</span></div>
+              {activityRunFilter && <div className="agent-form-footer"><span>Activity for {activityRunFilter}</span><button className="agent-small-button" type="button" onClick={showAllActivity}>Show all activity</button></div>}
+              {displayedActivity.length === 0 ? <div className="agent-empty">No saved activity yet.</div> :
+                <div className="agent-feed">{displayedActivity.slice(-50).map((event, index) => <div className="agent-feed-item" key={event.runId + ":" + event.timestamp + ":" + index}>
+                  <span className="agent-feed-dot"/><div><strong>{agentActivityLabel(event)}</strong><small> · {new Date(event.timestamp).toLocaleString()} · {event.runId}</small></div>
+                </div>)}</div>}
+              <p className="agent-disclaimer">Saved activity contains timestamps, statuses and step numbers only. Task text and tool output are not copied into this journal.</p>
+            </section>
+            {activeManagedRun && <button className="agent-danger-button" onClick={cancelActiveRun}><X size={13}/> Cancel active run</button>}
             {activeRunId && <span className="agent-active-id">Active run: {activeRunId}</span>}
           </article>
         </section>
@@ -519,27 +694,59 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
           <article className="agent-card" hidden={agentView !== "history"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
+            <div className="agent-profile-fields">
+              <label>Search saved runs<input aria-label="Search saved runs" className="agent-profile-input" type="search"
+                value={historyQuery} onChange={event => setHistoryQueryByConversation(current => ({ ...current, [conversationKey]: event.target.value }))}
+                placeholder="Task or run ID"/></label>
+              <label>Status<select aria-label="Filter runs by status" className="agent-profile-input"
+                value={historyStatus} onChange={event => setHistoryStatusByConversation(current => ({ ...current, [conversationKey]: event.target.value }))}>
+                  <option value="all">All statuses</option><option value="running">Running</option>
+                  <option value="interrupted">Interrupted</option><option value="waiting_for_approval">Waiting for approval</option>
+                  <option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option>
+                </select></label>
+            </div>
             {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
-              <div className="agent-history">{checkpoints.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
-                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
+              filteredHistory.length === 0 ? <div className="agent-empty">No saved runs match your filters.</div> :
+              <div className="agent-history">{visibleHistory.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
+                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
+                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunActivity(checkpoint.runId)}>Inspect activity</button><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button><button className="agent-small-button" type="button" disabled={!runtime || busy} onClick={() => void copyRunDiagnostics(checkpoint)}>{copiedDiagnosticsRunId === checkpoint.runId ? "Copied diagnostics" : "Copy diagnostics"}</button></div>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && checkpoint.runId !== activeRunId && <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>}
+                {checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId &&
+                  (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
+                    ? <div className="agent-approval-actions">
+                        <p>Interrupted local run. Manual recovery verifies tool history and requests new approval.</p>
+                        <button className="agent-small-button" type="button"
+                          disabled={!runtime || busy || !!managedRuns.activeRun(conversationKey)}
+                          onClick={() => continueInterrupted(checkpoint)}>Continue safely</button>
+                      </div>
+                    : <p>Automatic continuation is disabled for this workflow. Start a new task after reviewing prior tool outcomes.</p>)}
               </div>)}</div>}
+            {checkpoints.length > 0 && <div className="agent-form-footer"><span>Showing {visibleHistory.length} of {filteredHistory.length} runs</span>{visibleHistory.length < filteredHistory.length && <button type="button" className="agent-small-button" onClick={loadMoreHistory}>Load more runs</button>}</div>}
+            {historyTruncatedByConversation[conversationKey] && <p className="agent-disclaimer">Some threads reached the 200-run query limit. Older runs may not be included in this view.</p>}
           </article>
 
           <article className="agent-card" hidden={agentView !== "audit"}>
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
               <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
-              <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
+              <p>These tool steps started before a run failed, was cancelled, or was interrupted. Their outcome is uncertain. Inspect the external system before marking one reconciled. This will never retry the tool.</p>
               {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
                 <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
                 <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>{t("Mark manually reconciled")}</button>
               </div>)}
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
+            {auditRunFilter && <div className="agent-form-footer"><span>Audit for {auditRunFilter}</span><button type="button" className="agent-small-button" onClick={showRecentAudit}>Show recent audits</button></div>}
+            {auditRunFilter && <section className="agent-reconciliation" aria-label="Persisted run trace">
+              <div className="agent-card-heading"><div><span className="agent-kicker">DURABLE ACTIVITY</span><h3>Run trace</h3></div><span className="agent-count">{traceEvents.length}</span></div>
+              {traceEvents.length === 0 ? <div className="agent-empty">No persisted trace events for this run.</div> :
+                <div className="agent-history">{traceEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.name + event.timestamp + index}>
+                  <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
+                  <p>{event.name}</p><small>{event.durationMs === undefined ? "Recorded event" : "Duration: " + event.durationMs + " ms"}</small>
+                </div>)}</div>}
+            </section>}
             {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
-              <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
+              <div className="agent-history">{auditEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
                 <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
               </div>)}</div>}

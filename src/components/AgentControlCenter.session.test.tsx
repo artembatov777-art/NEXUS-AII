@@ -56,4 +56,50 @@ describe("agent center session checkpoints", () => {
     await act(async () => root.unmount()); element.remove();
   });
 
+  it("does not cancel a background agent when its control panel unmounts", async () => {
+    localStorage.clear();
+    const manager = new AgentRunManager();
+    let finish!: () => void;
+    const task = manager.start("background-task", "session-one", async () => {
+      await new Promise<void>(resolve => { finish = resolve; });
+    });
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<AgentControlCenter agentRuns={manager} conversationId="session-one"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => root.unmount());
+    expect(manager.activeRun("session-one")?.status).toBe("running");
+    finish();
+    await task;
+    expect(manager.list("session-one")[0].status).toBe("completed");
+    element.remove();
+  });
+  it("reopens a running agent, restores its event stream, and can cancel it", async () => {
+    localStorage.clear();
+    const manager = new AgentRunManager();
+    let finish!: () => void;
+    const pending = manager.start("background-reopen", "session-one", async () => {
+      await new Promise<void>(resolve => { finish = resolve; });
+    });
+    manager.appendEvent("background-reopen", "progress", "Background scan is progressing");
+    const element = document.createElement("div"); document.body.appendChild(element);
+    let root = createRoot(element);
+    const render = () => <AgentControlCenter agentRuns={manager} conversationId="session-one"
+      onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />;
+    await act(async () => { root.render(render()); });
+    await act(async () => root.unmount());
+    root = createRoot(element);
+    await act(async () => { root.render(render()); });
+    await act(async () => { findButton(element, "Run event stream")!.click(); });
+    expect(element.querySelector(".agent-feed")?.textContent).toContain("Background scan is progressing");
+    expect(findButton(element, "Cancel active run")).toBeDefined();
+    await act(async () => { findButton(element, "Cancel active run")!.click(); });
+    finish();
+    await pending;
+    expect(manager.list("session-one").find(run => run.id === "background-reopen")?.status).toBe("cancelled");
+    await act(async () => root.unmount()); element.remove();
+  });
 });

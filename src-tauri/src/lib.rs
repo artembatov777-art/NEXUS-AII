@@ -254,6 +254,11 @@ fn migrate_database(connection: &mut Connection) -> rusqlite::Result<()> {
         version = 10;
         transaction.pragma_update(None, "user_version", version)?;
     }
+    if version < 11 {
+        transaction.execute_batch("CREATE TABLE agent_activity_events (id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL,conversation_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('started','progress','approval','completed','failed','cancelled')),timestamp REAL NOT NULL,step INTEGER,max_steps INTEGER); CREATE INDEX idx_agent_activity_conversation ON agent_activity_events(conversation_id,id DESC);")?;
+        version = 11;
+        transaction.pragma_update(None, "user_version", version)?;
+    }
     transaction.commit()
 }
 
@@ -1412,6 +1417,99 @@ fn list_trace_events(database: State<'_, AppDatabase>, run_id: Option<String>, t
     list_trace_event_records(&connection,run_id.as_deref(),trace_id.as_deref(),limit)
 }
 
+// Metadata-only journal; text prompts, tool output, API responses and arbitrary
+// event fields never cross into this table.
+fn activity_identifier(value: &str) -> bool {
+    !value.trim().is_empty() && value.len() <= 160 &&
+        !value.chars().any(char::is_control)
+}
+
+fn record_agent_activity_event_record(
+    connection: &mut Connection,
+    event: serde_json::Value,
+) -> Result<(), String> {
+    let object = event.as_object().ok_or("Activity event must be an object.")?;
+    if object.keys().any(|key| !["runId","conversationId","kind","timestamp","step","maxSteps"].contains(&key.as_str())) {
+        return Err("Activity event contains unsupported fields.".into());
+    }
+    let run_id = event_string(&event, "runId", 160)?;
+    let conversation_id = event_string(&event, "conversationId", 160)?;
+    if !activity_identifier(&run_id) || !activity_identifier(&conversation_id) {
+        return Err("Activity identity is invalid.".into());
+    }
+    let kind = event_string(&event, "kind", 32)?;
+    if !["started", "progress", "approval", "completed", "failed", "cancelled"].contains(&kind.as_str()) {
+        return Err("Activity kind is invalid.".into());
+    }
+    let timestamp = event.get("timestamp").and_then(|v| v.as_f64())
+        .filter(|v| v.is_finite() && *v >= 0.0).ok_or("Activity timestamp is invalid.")?;
+    let parse_step = |key: &str| -> Result<Option<i64>, String> {
+        match event.get(key) {
+            None => Ok(None),
+            Some(value) => value.as_i64().filter(|step| (1..=100).contains(step))
+                .map(Some).ok_or_else(|| format!("Activity {key} is invalid.")),
+        }
+    };
+    let step = parse_step("step")?;
+    let max_steps = parse_step("maxSteps")?;
+    if max_steps.is_some() && step.is_none() || step.is_some() && kind != "progress" ||
+        max_steps.zip(step).map_or(false, |(max, current)| current > max) {
+        return Err("Activity step metadata is invalid.".into());
+    }
+    let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT INTO agent_activity_events(run_id,conversation_id,kind,timestamp,step,max_steps) VALUES(?1,?2,?3,?4,?5,?6)",
+        params![run_id, conversation_id, kind, timestamp, step, max_steps],
+    ).map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM agent_activity_events WHERE id NOT IN (SELECT id FROM agent_activity_events ORDER BY id DESC LIMIT ?1)",
+        params![MAX_PERSISTED_EVENTS],
+    ).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())
+}
+
+fn list_agent_activity_event_records(
+    connection: &Connection, conversation_id: &str, limit: i64, run_id: Option<&str>
+) -> Result<Vec<serde_json::Value>, String> {
+    if !activity_identifier(conversation_id) || !(1..=200).contains(&limit) ||
+        run_id.map_or(false, |value| !activity_identifier(value)) {
+        return Err("Activity conversation or limit is invalid.".into());
+    }
+    let mut statement = connection.prepare(
+        "SELECT run_id,conversation_id,kind,timestamp,step,max_steps FROM agent_activity_events WHERE conversation_id=?1 AND (?3 IS NULL OR run_id=?3) ORDER BY id DESC LIMIT ?2"
+    ).map_err(|e| e.to_string())?;
+    let rows = statement.query_map(params![conversation_id, limit, run_id], |row| {
+        let mut event = serde_json::json!({
+            "runId": row.get::<_, String>(0)?,
+            "conversationId": row.get::<_, String>(1)?,
+            "kind": row.get::<_, String>(2)?,
+            "timestamp": row.get::<_, f64>(3)?
+        });
+        if let Some(step) = row.get::<_, Option<i64>>(4)? { event["step"] = serde_json::json!(step); }
+        if let Some(max) = row.get::<_, Option<i64>>(5)? { event["maxSteps"] = serde_json::json!(max); }
+        Ok(event)
+    }).map_err(|e| e.to_string())?;
+    let mut output = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?;
+    output.reverse();
+    Ok(output)
+}
+
+#[tauri::command]
+fn record_agent_activity_event(
+    database: State<'_, AppDatabase>, event: serde_json::Value
+) -> Result<(), String> {
+    let mut connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    record_agent_activity_event_record(&mut connection, event)
+}
+
+#[tauri::command]
+fn list_agent_activity_events(
+    database: State<'_, AppDatabase>, conversation_id: String, limit: i64, run_id: Option<String>
+) -> Result<Vec<serde_json::Value>, String> {
+    let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
+    list_agent_activity_event_records(&connection, &conversation_id, limit, run_id.as_deref())
+}
+
 #[tauri::command]
 fn write_clipboard(text: String) -> Result<(), String> {
     if text.len() > 1_000_000 { return Err("Clipboard text exceeds the 1 MB limit.".into()); }
@@ -2221,13 +2319,54 @@ pub fn run() {
             app.manage(operation_journal);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, save_training_dataset, list_training_datasets, save_training_experiment, list_training_experiments, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, write_clipboard, read_clipboard, workspace_fs::list_workspace_directories, workspace_fs::grant_workspace_directory, workspace_fs::revoke_workspace_directory, workspace_fs::list_workspace_entries, workspace_fs::read_workspace_file, workspace_fs::snapshot_workspace_file, workspace_fs::write_workspace_file, workspace_fs::write_workspace_file_checked, workspace_fs::create_workspace_directory, workspace_fs::search_workspace_entries, workspace_fs_search::search_workspace_contents, workspace_fs_ops::rename_workspace_entry, workspace_fs_ops::rename_workspace_entries_batch, workspace_fs_ops::move_workspace_entries_batch, workspace_fs_recovery::get_workspace_operation_recovery_status, workspace_fs_recovery::get_workspace_operation_recovery_details, workspace_fs_recovery::retry_workspace_operation_recovery, workspace_fs_recovery::acknowledge_workspace_operation_recovery, workspace_fs_ops::move_workspace_entry, workspace_fs_ops::read_workspace_image_preview])
+        .invoke_handler(tauri::generate_handler![get_app_version, send_chat, send_chat_stream, cancel_chat_stream, list_provider_models, save_training_dataset, list_training_datasets, save_training_experiment, list_training_experiments, load_conversations, save_conversations, load_projects, save_project, delete_project, load_memories, save_memory, delete_memory, load_knowledge_chunks, save_knowledge_chunks, replace_knowledge_document, delete_knowledge_document, export_workspace, import_workspace, store_provider_key, provider_vault_status, has_provider_key, delete_provider_key, load_agent_checkpoint, list_agent_checkpoints, save_agent_checkpoint, delete_agent_checkpoint, record_tool_audit_event, list_tool_audit_events, append_trace_event, list_trace_events, record_agent_activity_event, list_agent_activity_events, write_clipboard, read_clipboard, workspace_fs::list_workspace_directories, workspace_fs::grant_workspace_directory, workspace_fs::revoke_workspace_directory, workspace_fs::list_workspace_entries, workspace_fs::read_workspace_file, workspace_fs::snapshot_workspace_file, workspace_fs::write_workspace_file, workspace_fs::write_workspace_file_checked, workspace_fs::create_workspace_directory, workspace_fs::search_workspace_entries, workspace_fs_search::search_workspace_contents, workspace_fs_ops::rename_workspace_entry, workspace_fs_ops::rename_workspace_entries_batch, workspace_fs_ops::move_workspace_entries_batch, workspace_fs_recovery::get_workspace_operation_recovery_status, workspace_fs_recovery::get_workspace_operation_recovery_details, workspace_fs_recovery::retry_workspace_operation_recovery, workspace_fs_recovery::acknowledge_workspace_operation_recovery, workspace_fs_ops::move_workspace_entry, workspace_fs_ops::read_workspace_image_preview])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS AU");
 }
 #[cfg(test)]
 mod database_tests {
     use super::*;
+
+    #[test]
+    fn activity_journal_migration_is_idempotent_and_scopes_saved_events() {
+        let mut db = Connection::open_in_memory().expect("memory sqlite");
+        migrate_database(&mut db).expect("migrate through activity journal");
+        migrate_database(&mut db).expect("idempotent migration");
+        let version: i64 = db.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(version, 11);
+        let record = |run_id: &str, conversation_id: &str, kind: &str, timestamp: f64| {
+            serde_json::json!({"runId":run_id,"conversationId":conversation_id,"kind":kind,"timestamp":timestamp})
+        };
+        record_agent_activity_event_record(&mut db, record("run-one", "chat-a", "started", 1.0)).unwrap();
+        record_agent_activity_event_record(&mut db, record("run-two", "chat-b", "approval", 2.0)).unwrap();
+        record_agent_activity_event_record(&mut db, record("run-one", "chat-a", "completed", 3.0)).unwrap();
+        let saved = list_agent_activity_event_records(&db, "chat-a", 10, None).unwrap();
+        assert_eq!(saved.len(), 2);
+        assert_eq!(saved[0]["kind"], "started");
+        assert_eq!(saved[1]["kind"], "completed");
+        assert_eq!(list_agent_activity_event_records(&db, "chat-a", 10, Some("run-one")).unwrap().len(), 2);
+        assert!(list_agent_activity_event_records(&db, "chat-a", 10, Some("bad\nrun")).is_err());
+        assert_eq!(list_agent_activity_event_records(&db, "chat-a", 1, None).unwrap().len(), 1);
+        assert!(list_agent_activity_event_records(&db, "chat-a", 0, None).is_err());
+    }
+
+    #[test]
+    fn activity_journal_rejects_untrusted_text_and_invalid_step_metadata() {
+        let mut db = Connection::open_in_memory().unwrap();
+        migrate_database(&mut db).unwrap();
+        let ordinary = serde_json::json!({"runId":"run","conversationId":"chat","kind":"progress","timestamp":10.0,"step":1,"maxSteps":3});
+        assert!(record_agent_activity_event_record(&mut db, ordinary.clone()).is_ok());
+        let mut unsafe_event = ordinary.clone();
+        unsafe_event["message"] = serde_json::json!("secret from model");
+        assert!(record_agent_activity_event_record(&mut db, unsafe_event).is_err());
+        let mut impossible = ordinary.clone();
+        impossible["step"] = serde_json::json!(4);
+        assert!(record_agent_activity_event_record(&mut db, impossible).is_err());
+        let mut control = ordinary;
+        control["conversationId"] = serde_json::json!("chat\nother");
+        assert!(record_agent_activity_event_record(&mut db, control).is_err());
+        assert_eq!(list_agent_activity_event_records(&db, "chat", 200, None).unwrap().len(), 1);
+    }
     #[test]
     fn native_image_attachments_are_validated_and_have_a_migrated_storage_column() {
         let valid = serde_json::json!({
@@ -2251,7 +2390,7 @@ mod database_tests {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         migrate_database(&mut connection).expect("apply image attachment migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         connection.execute("INSERT INTO conversations(id,title,updated_at) VALUES('chat-image','Image',1)", []).expect("create conversation");
         let image_json = valid.to_string();
         connection.execute(
@@ -2693,15 +2832,15 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_ten() {
+    fn upgrades_schema_version_four_atomically_to_eleven() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
-        connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets; ALTER TABLE messages DROP COLUMN image_attachment;").expect("remove v5 and v6 tables");
-        migrate_database(&mut connection).expect("upgrade v4 to v10");
+        connection.execute_batch("DROP TABLE agent_activity_events; DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets; ALTER TABLE messages DROP COLUMN image_attachment;").expect("remove v5 and v6 tables");
+        migrate_database(&mut connection).expect("upgrade v4 to v11");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
         assert_eq!(table, 1);
         let audit: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tool_audit_events'", [], |row| row.get(0)).expect("audit table");
@@ -2712,9 +2851,9 @@ mod database_tests {
     fn schema_v8_upgrade_preserves_audit_history_and_adds_reconciled_status() {
         let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("CREATE TABLE messages (id TEXT PRIMARY KEY NOT NULL,conversation_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,source_references TEXT); CREATE TABLE tool_audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,tool_id TEXT NOT NULL,run_id TEXT NOT NULL,trace_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','completed','failed','denied')),timestamp REAL NOT NULL,detail TEXT); CREATE INDEX idx_tool_audit_run_id ON tool_audit_events(run_id,id DESC); INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES('tool.read','run-legacy','trace-legacy','completed',1.0,'preserve me'); PRAGMA user_version=8;").expect("create v8 schema");
-        migrate_database(&mut connection).expect("upgrade schema to v10");
+        migrate_database(&mut connection).expect("upgrade schema to v11");
         let version:i64=connection.pragma_query_value(None,"user_version",|row|row.get(0)).expect("schema version");
-        assert_eq!(version,10);
+        assert_eq!(version,11);
         let image_column: i64 = connection.query_row("SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name='image_attachment'", [], |row| row.get(0)).expect("image attachment column");
         assert_eq!(image_column, 1);
         let events=list_tool_audit_event_records(&connection,Some("run-legacy"),10).expect("load preserved audit history");
@@ -2777,7 +2916,7 @@ mod database_tests {
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("apply initial migration");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         let project_table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'", [], |row| row.get(0)).expect("projects table");
         assert_eq!(project_table, 1);
         let result = connection.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('m1','missing','user','test',1)", []);
