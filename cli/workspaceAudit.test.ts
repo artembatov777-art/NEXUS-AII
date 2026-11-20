@@ -215,4 +215,32 @@ describe("durable CLI workspace audit journal", () => {
       expect(history.ok && history.value.map(entry => entry.status)).toEqual(["denied", "started", "completed"]);
     });
   });
+
+  it("lists owner-inspectable run writer locks without automatically releasing them", async () => {
+    await withAuditDir(async directory => {
+      const audit = new FileWorkspaceAuditSink(directory);
+      expect(await audit.locked()).toEqual({ ok: true, value: [] });
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const lock = join(directory, "run-2.jsonl.lock");
+      await writeFile(lock, '{"pid":123,"createdAt":1}\n', { flag: "wx", mode: 0o600 });
+      const result = await audit.locked(10);
+      expect(result.ok && result.value.map(entry => entry.runId)).toEqual(["run-2"]);
+      expect((await audit.locked(0)).ok).toBe(false);
+      expect((await audit.locked(51)).ok).toBe(false);
+      expect(await readFile(lock, "utf8")).toContain('"pid":123');
+    });
+  });
+
+  it("rejects unsafe lock metadata instead of presenting a symlink as a valid lock", async () => {
+    if (process.platform === "win32") return;
+    await withAuditDir(async directory => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const target = join(directory, "unrelated");
+      await writeFile(target, "hello", { mode: 0o600 });
+      await symlink(target, join(directory, "run-3.jsonl.lock"));
+      const audit = new FileWorkspaceAuditSink(directory);
+      expect((await audit.locked()).ok).toBe(false);
+      expect(await readFile(target, "utf8")).toBe("hello");
+    });
+  });
 });
