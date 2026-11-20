@@ -7,6 +7,7 @@ import type { Result } from '../src/core/result';
 interface CommandContext {
   workspace?: (line: string, signal: AbortSignal) => Promise<string>;
   history?: () => readonly ModelMessage[];
+  audit?: (line: string) => Promise<string>;
   run(goal: string, runId: string, signal: AbortSignal, onStep: (step: TerminalStepResult) => void): Promise<Result<TerminalStepResult[]>>;
   write(text: string): void;
   newId(): string;
@@ -15,6 +16,15 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
+  if (/^\/audit(?:\s|$)/.test(input)) {
+    if (!context.audit) {
+      context.write("Local workspace audit is unavailable in this session.\n");
+    } else {
+      try { context.write(await context.audit(input)); }
+      catch { context.write("Workspace audit is unavailable or unreadable.\n"); }
+    }
+    return true;
+  }
   if (/^\/history(?:\s|$)/.test(input)) {
     if (!context.history) context.write('Local CLI history is unavailable in this session.\n');
     else context.write(renderHistoryCommand(input, context.history()) ?? 'History command is invalid.\n');
