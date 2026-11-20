@@ -52,6 +52,17 @@ describe("durable agent activity journal", () => {
       timestamp: 10, step: 1, maxSteps: 3 })).toBe("Step 1 of 3");
   });
 
+  it("loads an older run independently of newer events in the same conversation", async () => {
+    const repo = new LocalStorageAgentActivityRepository(makeStorage());
+    expect((await repo.append({ runId: "old", conversationId: "chat", kind: "started", timestamp: 1 })).ok).toBe(true);
+    for (let i = 0; i < 120; i++) {
+      expect((await repo.append({ runId: "new-" + i, conversationId: "chat", kind: "completed", timestamp: i + 2 })).ok).toBe(true);
+    }
+    const selected = await repo.listByConversation("chat", 10, "old");
+    expect(selected).toMatchObject({ ok: true, value: [{ runId: "old", timestamp: 1 }] });
+    expect((await repo.listByConversation("chat", 10, "bad\\nid")).ok).toBe(false);
+  });
+
   it("rejects corrupt persisted data without silently replacing it", async () => {
     const storage: StorageLike = {
       getItem: () => "{invalid", setItem: () => { throw Error("must not write"); }
