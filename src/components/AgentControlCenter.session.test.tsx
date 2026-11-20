@@ -91,4 +91,59 @@ describe("agent center session checkpoints", () => {
     element.remove();
     localStorage.clear();
   });
+
+  it("offers a user-driven continuation for an interrupted local preview without tool receipts", async () => {
+    localStorage.clear();
+    const conversationId = "preview-restore";
+    const threadId = `nexus-session:${conversationId.length}:${conversationId}`;
+    localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([{
+      schemaVersion: 1, runId: "preview-interrupted", agentId: "nexus.local-workflow",
+      threadId, sequence: 1, status: "running",
+      state: { payload: { task: "Document a safe plan" }, permissionIndex: 1, steps: 0, agentVersion: "1.1.0" },
+      createdAt: 1_000, updatedAt: 1_000
+    }]));
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId} conversationIds={[conversationId]}
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(element, "Run history")!.click(); });
+    expect(element.textContent).toContain("Interrupted");
+    expect(findButton(element, "Continue local preview")?.disabled).toBe(false);
+    await act(async () => root.unmount());
+    element.remove();
+    localStorage.clear();
+  });
+
+  it("never offers local preview continuation when its tool outcome is ambiguous", async () => {
+    localStorage.clear();
+    const conversationId = "preview-ambiguous";
+    const threadId = `nexus-session:${conversationId.length}:${conversationId}`;
+    const runId = "preview-with-unknown-tool";
+    localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([{
+      schemaVersion: 1, runId, agentId: "nexus.local-workflow", threadId,
+      sequence: 1, status: "running",
+      state: { payload: { task: "Do not replay" }, permissionIndex: 1, steps: 0, agentVersion: "1.1.0" },
+      createdAt: 1_000, updatedAt: 1_000
+    }]));
+    localStorage.setItem("nexus-au:tool-audit:v1", JSON.stringify([{
+      toolId: "workspace.preview", runId, traceId: `${runId}:1`, status: "started", timestamp: 1_100
+    }]));
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId} conversationIds={[conversationId]}
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(element, "Run history")!.click(); });
+    expect(findButton(element, "Continue local preview")).toBeUndefined();
+    await act(async () => root.unmount());
+    element.remove();
+    localStorage.clear();
+  });
 });
