@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AgentCheckpointService, type AgentCheckpoint } from "./agentCheckpoints";
+import { AgentCheckpointService } from "./agentCheckpoints";
 import { LocalStorageAgentCheckpointRepository } from "../lib/agentCheckpointStorage";
 import { PlanRunCheckpointService } from "./planRunCheckpoints";
-import { ok, err } from "./result";
+import { ok } from "./result";
 
 const plan = { goal: "inspect without secrets in checkpoint", steps: [
   { id: "read", toolId: "workspace.read", purpose: "Inspect", input: { token: "never-persist-this" }, dependsOn: [] },
