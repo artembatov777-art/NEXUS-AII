@@ -72,3 +72,18 @@ describe("LocalStorageToolAuditSink", () => {
     expect(await sink.record(event())).toMatchObject({ ok: false, error: { code: "storage_failed" } });
   });
 });
+
+
+it("never silently discards earlier audit receipts after reaching the storage cap", async () => {
+  const storage = new MemoryStorage();
+  const events = Array.from({ length: 5_000 }, (_, index) =>
+    event({ traceId: "trace-" + index, timestamp: index, status: "started" }));
+  const saved = JSON.stringify(events);
+  storage.setItem("nexus-au:tool-audit:v1", saved);
+  const sink = new LocalStorageToolAuditSink(storage);
+  expect(await sink.record(event({ runId: "run-new", traceId: "next" })))
+    .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+  expect(storage.getItem("nexus-au:tool-audit:v1")).toBe(saved);
+  expect(await sink.list({ runId: "run-1", limit: 5_000 }))
+    .toMatchObject({ ok: false, error: { code: "storage_failed" } });
+});
