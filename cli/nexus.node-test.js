@@ -66,11 +66,11 @@ test('history commands inspect saved test turns without sending prompts or writi
   const { join } = await import('node:path');
   const history = join(mkdtempSync(join(tmpdir(), 'nexus-history-view-')), 'history.json');
   const fixture = input => spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input });
-  const first = fixture('hello world\\n');
+  const first = fixture('hello world\n');
   assert.equal(first.status, 0, first.stderr);
   const before = readFileSync(history, 'utf8');
 
-  const inspected = fixture('/history\\n/history last 1\\n/history find HELLO\\n');
+  const inspected = fixture('/history\n/history last 1\n/history find HELLO\n');
   assert.equal(inspected.status, 0, inspected.stderr);
   assert.match(inspected.stdout, /History: 1 completed turns/);
   assert.match(inspected.stdout, /Turn 1/);
@@ -83,5 +83,5 @@ test('history commands inspect saved test turns without sending prompts or writi
 test('history is not silently forwarded to the model in unconfigured terminal mode', async () => {
   const output = run('--help');
   assert.equal(output.status, 0);
-  assert.match(output.stdout, /\\/history/);
+  assert.match(output.stdout, /\/history/);
 });
