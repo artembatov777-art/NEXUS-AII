@@ -83,4 +83,14 @@ describe("manual agent continuation", () => {
     expect(remaining.at(-1)).toMatchObject({ type: "completed" });
     expect(step).toHaveBeenCalledOnce();
   });
+
+  it("releases continuation ownership when its event consumer closes early", async () => {
+    const { runtime, step } = await make("allow", true);
+    const first = runtime.continue(runId)[Symbol.asyncIterator]();
+    expect((await first.next()).value).toMatchObject({ type: "started" });
+    await first.return?.(undefined);
+    const retried = await collect(runtime.continue(runId));
+    expect(retried.at(-1)).toMatchObject({ type: "completed" });
+    expect(step).toHaveBeenCalledOnce();
+  });
 });
