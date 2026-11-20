@@ -22,13 +22,14 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --help       Show this help
   --version    Show version
   --test-model Use deterministic offline echo fixture (not AI)
-  --history    History file for test mode
+  --history    History file for test mode (local, not encrypted)
 
-Interactive commands: /help, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
+Interactive commands: /help, /history, /history last N, /history find TEXT, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 Workspace planner: /agent plan <task>, /agent inspect, /agent diff, /agent status.
 The workspace planner runs locally and requires explicit replacements for changes.
 In interactive test mode: /agent read <file>, /agent list [directory], /agent search <text>.
+History commands in --test-model inspect completed turns locally, without model calls.
 A model is not configured yet.
 `;
 const args = process.argv.slice(2);
@@ -57,12 +58,18 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
   const run = testMode && workspace ? workspace.run : async () => err('provider_unavailable', 'Offline planner requires an interactive --test-model session.');
   const controller = new AbortController();
   terminal.on('SIGINT', () => { controller.abort(); terminal.close(); });
+  const commandContext = {
+    workspace: workspace?.command, run,
+    history: testMode ? () => session.history() : undefined,
+    write: (text: string) => stdout.write(text),
+    newId: randomUUID, signal: controller.signal
+  };
   if (stdin.isTTY) stdout.write(`NEXUS AU · terminal preview${testMode ? ' · TEST MODEL (offline echo, not AI)' : ''}\nType /help for commands.\n`);
   try {
     if (!stdin.isTTY && testMode) {
       for await (const line of terminal) {
         if (!line.trim()) continue;
-        if (await dispatchCommand(line.trim(), { workspace: workspace?.command, run, write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
+        if (await dispatchCommand(line.trim(), commandContext)) continue;
         if (await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal)) process.exitCode = 1;
       }
     } else while (true) {
@@ -70,7 +77,7 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
       try { line = (await terminal.question('❯ ')).trim(); } catch { break; }
       if (line === '/exit' || line === '/quit') break;
       if (line === '/help') stdout.write(help);
-      else if (await dispatchCommand(line, { workspace: workspace?.command, run, write: text => stdout.write(text), newId: randomUUID, signal: controller.signal })) continue;
+      else if (await dispatchCommand(line, commandContext)) continue;
       else if (line) await runPrompt(session, line, text => stdout.write(text), text => stderr.write(text), controller.signal);
     }
   } finally { workspace?.close(); terminal.close(); }
