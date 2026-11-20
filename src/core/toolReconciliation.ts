@@ -54,14 +54,15 @@ export class ToolReconciliationService {
     return ok(undefined);
   }
 
-  async listAmbiguous(runId: string): Promise<Result<AmbiguousToolStep[]>> {
+  async listAmbiguous(runId: string, includeInterrupted = false): Promise<Result<AmbiguousToolStep[]>> {
     if (!validId(runId)) return err("validation", "A valid run ID is required.");
     const checkpoint = await this.checkpoints.get(runId);
     if (!checkpoint.ok) return checkpoint;
     // A crashed process leaves its checkpoint "running", even though an
     // in-flight external tool may have an unknown outcome. Surface those
     // records for manual review; reconciliation NEVER authorizes replay.
-    if (!checkpoint.value || !["running", "failed", "cancelled"].includes(checkpoint.value.status)) return ok([]);
+    if (!checkpoint.value || !(checkpoint.value.status === "failed" || checkpoint.value.status === "cancelled" ||
+      (includeInterrupted && checkpoint.value.status === "running"))) return ok([]);
 
     const events = await this.audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
     if (!events.ok) return events;
@@ -72,7 +73,8 @@ export class ToolReconciliationService {
     runId: string,
     toolId: string,
     traceId: string,
-    confirmedByUser: boolean
+    confirmedByUser: boolean,
+    includeInterrupted = false
   ): Promise<Result<void>> {
     if (!validId(runId) || !validId(toolId) || !validId(traceId)) {
       return err("validation", "Tool reconciliation identifiers are invalid.");
@@ -80,7 +82,7 @@ export class ToolReconciliationService {
     if (confirmedByUser !== true) {
       return err("permission_denied", "Manual tool reconciliation requires explicit owner confirmation.");
     }
-    const ambiguous = await this.listAmbiguous(runId);
+    const ambiguous = await this.listAmbiguous(runId, includeInterrupted);
     if (!ambiguous.ok) return ambiguous;
     if (!ambiguous.value.some(item => item.toolId === toolId && item.traceId === traceId)) {
       return err("validation", "This tool step is not awaiting manual reconciliation.");
