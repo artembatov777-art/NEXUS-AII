@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, mkdir, open } from "node:fs/promises";
+import { lstat, mkdir, open, opendir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { err, ok, type Result } from "../src/core/result";
 import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent, type ToolAuditSink } from "../src/core/tools";
@@ -148,6 +148,41 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
       return ok(undefined);
     } catch {
       return err("storage_failed", "Could not safely persist the workspace audit event.", true);
+    }
+  }
+
+  /** List bounded run metadata only; reading an individual journal still validates each record. */
+  async recent(limit = 10): Promise<Result<Array<{ runId: string; updatedAt: number }>>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return err("validation", "Recent audit limit must be between 1 and 50.");
+    }
+    try {
+      try {
+        await assertPrivateDirectory(dirname(this.directory));
+        await assertPrivateDirectory(this.directory);
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code === "ENOENT") return ok([]);
+        throw cause;
+      }
+      const directory = await opendir(this.directory);
+      const runs: Array<{ runId: string; updatedAt: number }> = [];
+      let scanned = 0;
+      for await (const entry of directory) {
+        if (++scanned > 5_000) throw new Error("Too many workspace audit files.");
+        if (!/^[A-Za-z0-9_-]{1,120}\.jsonl$/.test(entry.name)) continue;
+        const metadata = await lstat(join(this.directory, entry.name), { bigint: true });
+        if (!metadata.isFile() || metadata.nlink !== 1n ||
+            !fileModeIsPrivate(metadata.mode, metadata.uid)) {
+          throw new Error("Unsafe workspace audit journal.");
+        }
+        const updatedAt = Number(metadata.mtimeMs);
+        if (!Number.isFinite(updatedAt)) throw new Error("Invalid audit file timestamp.");
+        runs.push({ runId: entry.name.slice(0, -6), updatedAt });
+      }
+      runs.sort((a, b) => b.updatedAt - a.updatedAt || a.runId.localeCompare(b.runId));
+      return ok(runs.slice(0, limit));
+    } catch {
+      return err("storage_failed", "Could not safely list workspace audit runs.", true);
     }
   }
 
