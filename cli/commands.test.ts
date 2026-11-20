@@ -123,3 +123,34 @@ it("blocks checkpoint commands even when the inspector is unavailable", async ()
   expect(output.join("")).toMatch(/checkpoint.*unavailable/i);
   expect(run).not.toHaveBeenCalled();
 });
+
+
+it("routes only explicit Git inspection through the selected workspace, never the agent", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "model must not execute"));
+  const workspace = vi.fn(async (command: string) => "Checked: " + command);
+  const context = {
+    run, workspace, write: (text: string) => output.push(text),
+    newId: () => "run", signal: new AbortController().signal
+  };
+  for (const command of ["/git status", "/git diff", "/git diff staged", "/git log", "/git push --force"]) {
+    expect(await dispatchCommand(command, context)).toBe(true);
+  }
+  expect(workspace.mock.calls.map(args => args[0])).toEqual([
+    "/git status", "/git diff", "/git diff staged", "/git log", "/git push --force"
+  ]);
+  expect(output.join("")).toContain("Checked: /git status");
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("fails closed if Git inspection is requested before a workspace is selected", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not execute"));
+  const context = {
+    run, write: (text: string) => output.push(text),
+    newId: () => "run", signal: new AbortController().signal
+  };
+  expect(await dispatchCommand("/git status", context)).toBe(true);
+  expect(output.join("")).toMatch(/workspace backend.*unavailable/i);
+  expect(run).not.toHaveBeenCalled();
+});
