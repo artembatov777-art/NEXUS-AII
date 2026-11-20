@@ -72,6 +72,30 @@ const isValidIdentifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 160 &&
   !/[\u0000-\u001f\u007f]/.test(value);
 
+/**
+ * Full-history safety boundary shared by tool execution and manual recovery.
+ * A reader that returns exactly the limit may have truncated earlier records;
+ * never use it as proof a trace has not already executed.
+ */
+export function validateCompleteToolAuditHistory(runId: string, candidate: unknown): candidate is ToolAuditEvent[] {
+  try {
+    if (!isValidIdentifier(runId) || !Array.isArray(candidate) ||
+        candidate.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS) return false;
+    return candidate.every((item: unknown) => {
+      if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
+      const event = item as Partial<ToolAuditEvent>;
+      return event.runId === runId &&
+        isValidIdentifier(event.toolId) && isValidIdentifier(event.traceId) &&
+        ["started", "completed", "failed", "denied", "reconciled"].includes(String(event.status)) &&
+        typeof event.timestamp === "number" && Number.isFinite(event.timestamp) &&
+        (event.detail === undefined ||
+          (typeof event.detail === "string" && event.detail.length <= 1_000));
+    });
+  } catch {
+    return false;
+  }
+}
+
 const isAbortSignalLike = (value: unknown): value is AbortSignal => {
   try {
     if (typeof value !== "object" || value === null) return false;
@@ -171,8 +195,12 @@ export class ToolGateway {
       let history: Result<ToolAuditEvent[]>;
       try { history = await this.audit.list({ runId: context.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
       catch { return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified."); }
-      if (!history.ok) return err("storage_failed", "Tool execution was blocked because prior-step audit history could not be verified.");
-      const prior = history.value.find(event => event.runId === context.runId && event.toolId === toolId && event.traceId === context.traceId && event.status !== "denied");
+      if (!history.ok || !validateCompleteToolAuditHistory(context.runId, history.value)) {
+        return err("storage_failed",
+          "Tool execution blocked because the full, valid run audit history cannot be verified.");
+      }
+      const prior = history.value.find(event => event.toolId === toolId &&
+        event.traceId === context.traceId && event.status !== "denied");
       if (prior) return err("tool_failed", "This tool step already has an audit record and will not be replayed automatically. Review its outcome before starting a new run.");
   
       let resource: string;
