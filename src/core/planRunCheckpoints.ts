@@ -25,12 +25,17 @@ function boundedIdentity(value: unknown, regex: RegExp): value is string {
 export class PlanRunCheckpointService {
   constructor(
     private readonly checkpoints: AgentCheckpointService,
-    private readonly host: { agentId: string; threadId: string; now(): number }
+    private readonly host: { agentId: string; threadId: string; now(): number; runIdPrefix?: string }
   ) {}
 
   async begin(runId: string, plan: ValidatedPlan): Promise<Result<PlanRunCheckpointSession>> {
     try {
+      // Desktop parent coordinations and nested resumable agents can be given
+      // the same external run ID by a host factory. Namespace the persisted
+      // parent checkpoint to prevent identity collisions in shared SQLite.
+      const storageRunId = (this.host.runIdPrefix ?? "") + runId;
       if (!boundedIdentity(runId, /^[A-Za-z0-9_-]{1,120}$/) ||
+          !boundedIdentity(storageRunId, /^[A-Za-z0-9_-]{1,120}$/) ||
           (typeof this.host.threadId !== "string" || !this.host.threadId.trim() ||
             this.host.threadId.length > 160 || /[\u0000-\u001f\u007f]/.test(this.host.threadId)) ||
           !boundedIdentity(this.host.agentId, /^[A-Za-z0-9._-]{1,120}$/) ||
@@ -54,7 +59,7 @@ export class PlanRunCheckpointService {
       };
       const now = this.host.now();
       const checkpoint: AgentCheckpoint = {
-        schemaVersion: 1, runId, agentId: this.host.agentId,
+        schemaVersion: 1, runId: storageRunId, agentId: this.host.agentId,
         threadId: this.host.threadId, sequence: 1, status: "running",
         state: state as unknown as JsonValue, createdAt: now, updatedAt: now
       };
