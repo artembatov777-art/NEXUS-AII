@@ -5,10 +5,11 @@ import { quoteTerminal } from "./quote";
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 const MAX_DETAIL_PREVIEW = 160;
-const USAGE = "Usage: /audit <run-id> [last <1-50>]\n";
+const USAGE = "Usage: /audit <run-id> [last <1-50>] | /audit recent [1-50]\n";
 
 interface AuditReader {
   list(options: { runId: string; limit: number }): Promise<Result<ToolAuditEvent[]>>;
+  recent?(limit: number): Promise<Result<Array<{ runId: string; updatedAt: number }>>>;
 }
 
 function preview(value: string): string {
@@ -28,6 +29,20 @@ function safeTime(timestamp: number): string {
 export async function renderAuditCommand(input: string, audit: AuditReader): Promise<string | null> {
   const command = input.trim();
   if (!/^\/audit(?:\s|$)/.test(command)) return null;
+  if (/^\/audit recent(?:\s|$)/.test(command)) {
+    const recent = /^\/audit recent(?: (\d+))?$/.exec(command);
+    if (!recent) return USAGE;
+    const limit = recent[1] === undefined ? 10 : Number(recent[1]);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) return USAGE;
+    if (!audit.recent) return "Recent audit discovery is unavailable.\n";
+    let results: Result<Array<{ runId: string; updatedAt: number }>>;
+    try { results = await audit.recent(limit); }
+    catch { return "Recent audit discovery is unavailable or unsafe.\n"; }
+    if (!results.ok) return "Recent audit discovery is unavailable or unreadable.\n";
+    if (!results.value.length) return "No audit runs found.\n";
+    const visible = results.value.slice(0, limit);
+    return `Recent audit runs (${visible.length}):\n${visible.map(item => `${safeTime(item.updatedAt)}  ${quoteTerminal(item.runId)}`).join("\n")}\n`;
+  }
   const matched = /^\/audit ([A-Za-z0-9_-]{1,120})(?: last (\d+))?$/.exec(command);
   if (!matched) return USAGE;
   const runId = matched[1];
