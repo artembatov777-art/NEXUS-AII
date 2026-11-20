@@ -30,7 +30,7 @@ Positive:
 
 Trade-offs:
 - NEXUS must implement safe resume semantics itself.
-- The current async-generator runtime cannot be resumed by restoring a checkpoint.
+- The original generator-based runtime cannot be restored from a checkpoint; the separate serializable step-based runtime supports bounded checkpoint continuation.
 - LocalStorage is not encrypted, transactional across tabs, or suitable for sensitive production state.
 - The checkpoint contract is groundwork, not a complete durable agent engine.
 
@@ -46,3 +46,9 @@ Trade-offs:
 - SQLite checkpoint storage and migrations are available.
 - Approval interrupts can be resumed with one-time, run-bound authorization.
 - A measured requirement demonstrates that a graph scheduler materially improves the product.
+
+## Continuation hardening (2026-11-20)
+
+The serializable `ResumableAgentRuntime` now treats permission decisions from before a restart as expired. An explicit continuation first claims a running checkpoint with compare-and-swap, then reauthorizes the registered permissions. A denied permission fails closed; `ask_user` persists a waiting checkpoint before executing another step. Approval grants are one-time and must match both the run and the required permission at the persisted index. Multiple approval pauses preserve the number of completed steps.
+
+These guarantees do **not** establish exactly-once execution of arbitrary external side effects. A checkpoint may be saved before or after a tool action, and a crashed or still-running worker is not distinguished by the current schema. Before enabling automatic restart or consequential write-tool replay, the runtime needs durable tool-operation receipts or idempotency keys, an execution-owner lease, recovery conflict inspection, and end-to-end crash tests. Manual continuation must remain deliberate rather than an unattended retry.
