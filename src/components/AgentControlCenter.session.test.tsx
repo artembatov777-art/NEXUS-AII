@@ -163,3 +163,45 @@ describe("agent center session checkpoints", () => {
     localStorage.clear();
   });
 });
+
+
+it("shows durable parent-plan progress read-only in Desktop run history without replay controls", async () => {
+  localStorage.clear();
+  const conversationId = "parent-plan-inspection";
+  const threadId = "nexus-session:" + conversationId.length + ":" + conversationId + "-planned";
+  const checkpoint = {
+    schemaVersion: 1, runId: "coord_parent-1", agentId: "nexus.desktop.workflow",
+    threadId, sequence: 4, status: "failed",
+    state: {
+      kind: "nexus.plan-run.v1",
+      steps: [
+        { id: "read", toolId: "workspace.read" },
+        { id: "write", toolId: "workspace.write" }
+      ],
+      nextStep: 1,
+      active: { index: 1, id: "write", toolId: "workspace.write" }
+    },
+    createdAt: 1_000, updatedAt: 2_000
+  };
+  localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([checkpoint]));
+  const before = localStorage.getItem("nexus-au:agent-checkpoints:v1");
+  const node = document.createElement("div");
+  document.body.appendChild(node);
+  const root = createRoot(node);
+  await act(async () => {
+    root.render(<AgentControlCenter conversationId={conversationId}
+      conversationIds={[conversationId]} onClose={() => {}}
+      providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    await new Promise(resolve => setTimeout(resolve, 30));
+  });
+  await act(async () => { findButton(node, "Run history")!.click(); });
+  expect(node.textContent).toContain("Plan progress: 1/2 confirmed");
+  expect(node.textContent).toContain("Unconfirmed dispatch");
+  expect(node.textContent).toContain("workspace.write");
+  expect(node.textContent).toContain("Owner inspection required");
+  expect(findButton(node, "Continue local preview")).toBeUndefined();
+  expect(localStorage.getItem("nexus-au:agent-checkpoints:v1")).toBe(before);
+  await act(async () => root.unmount());
+  node.remove();
+  localStorage.clear();
+});
