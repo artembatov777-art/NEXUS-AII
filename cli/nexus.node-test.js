@@ -58,3 +58,30 @@ test('workspace commands in test mode report unavailable rather than being sent 
   assert.equal(result.stdout.match(/workspace backend.*unavailable/gi)?.length, 5);
   assert.doesNotMatch(result.stdout, /TEST MODEL/);
 });
+
+
+test('history commands inspect saved test turns without sending prompts or writing history', async () => {
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const history = join(mkdtempSync(join(tmpdir(), 'nexus-history-view-')), 'history.json');
+  const fixture = input => spawnSync(process.execPath, ['build-cli/nexus.js', '--test-model', '--history', history], { encoding: 'utf8', input });
+  const first = fixture('hello world\\n');
+  assert.equal(first.status, 0, first.stderr);
+  const before = readFileSync(history, 'utf8');
+
+  const inspected = fixture('/history\\n/history last 1\\n/history find HELLO\\n');
+  assert.equal(inspected.status, 0, inspected.stderr);
+  assert.match(inspected.stdout, /History: 1 completed turns/);
+  assert.match(inspected.stdout, /Turn 1/);
+  assert.match(inspected.stdout, /History search.*1 matching turn/);
+  assert.match(inspected.stdout, /hello world/);
+  assert.doesNotMatch(inspected.stdout, /TEST MODEL/);
+  assert.equal(readFileSync(history, 'utf8'), before, 'inspection must not modify persisted turns');
+});
+
+test('history is not silently forwarded to the model in unconfigured terminal mode', async () => {
+  const output = run('--help');
+  assert.equal(output.status, 0);
+  assert.match(output.stdout, /\\/history/);
+});
