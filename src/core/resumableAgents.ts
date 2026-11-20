@@ -127,6 +127,13 @@ export class ResumableAgentRuntime {
     if (!agent || cp.status !== "waiting_for_approval" || !cp.pendingApproval || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
       yield { type: "failed", runId, message: "Checkpoint is not awaiting approval, or its agent is unavailable." }; return;
     }
+    // A persisted approval must refer to exactly the permission at its registered index.
+    // Otherwise stale or modified checkpoint data could skip a different permission.
+    if (!Number.isSafeInteger(cp.state.permissionIndex) ||
+        agent.requiredPermissions[cp.state.permissionIndex] !== cp.pendingApproval.permission) {
+      yield { type: "failed", runId, message: "Checkpoint approval does not match the agent's requested permission." };
+      return;
+    }
     let approved = false;
     try { approved = await this.approvals.consume({ approvalId, runId, agentId: agent.id, permission: cp.pendingApproval.permission as AgentPermission }); }
     catch { approved = false; }
