@@ -8,6 +8,7 @@ interface CommandContext {
   workspace?: (line: string, signal: AbortSignal) => Promise<string>;
   history?: () => readonly ModelMessage[];
   audit?: (line: string) => Promise<string>;
+  checkpoint?: (line: string) => Promise<string>;
   run(goal: string, runId: string, signal: AbortSignal, onStep: (step: TerminalStepResult) => void): Promise<Result<TerminalStepResult[]>>;
   write(text: string): void;
   newId(): string;
@@ -16,6 +17,15 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
+  if (/^\/checkpoints?(?:\s|$)/.test(input)) {
+    if (!context.checkpoint) {
+      context.write("Local CLI checkpoint inspection is unavailable.\n");
+    } else {
+      try { context.write(await context.checkpoint(input)); }
+      catch { context.write("CLI checkpoint storage is unavailable or unreadable.\n"); }
+    }
+    return true;
+  }
   if (/^\/audit(?:\s|$)/.test(input)) {
     if (!context.audit) {
       context.write("Local workspace audit is unavailable in this session.\n");
