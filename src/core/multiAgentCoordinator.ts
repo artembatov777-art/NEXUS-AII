@@ -21,6 +21,7 @@ interface PendingCoordination {
   assignments: Record<string, AgentId>;
   nextIndex: number;
   outputs: Map<string, unknown>;
+  mayExecute?: (step: AgentPlanStep) => boolean;
 }
 
 const MAX_PLAN_BYTES = 64_000;
@@ -91,7 +92,8 @@ export class MultiAgentCoordinator {
     private readonly maxAgents = 4
   ) {}
 
-  async *run(runId: AgentRunId, plan: AgentPlan, assignments: Record<string, AgentId>, signal: AbortSignal): AsyncIterable<CoordinationEvent> {
+  async *run(runId: AgentRunId, plan: AgentPlan, assignments: Record<string, AgentId>, signal: AbortSignal,
+    mayExecute?: (step: AgentPlanStep) => boolean): AsyncIterable<CoordinationEvent> {
     if (this.pending.has(runId)) {
       yield { type: "failed", runId, detail: "A coordination with this run ID is already waiting for approval." };
       return;
@@ -110,7 +112,7 @@ export class MultiAgentCoordinator {
     const outputs = new Map<string, unknown>();
     yield { type: "started", runId };
     await this.trace(runId, "started");
-    yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal);
+    yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal, mayExecute);
   }
 
   /** Continues from the first unexecuted step after the host has granted the requested permission. */
@@ -123,7 +125,7 @@ export class MultiAgentCoordinator {
       yield { type: "failed", runId, detail: "Coordination was cancelled." };
       return;
     }
-    yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal);
+    yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal, pending.mayExecute);
   }
 
   private async *executeFrom(
@@ -132,7 +134,8 @@ export class MultiAgentCoordinator {
     assignments: Record<string, AgentId>,
     start: number,
     outputs: Map<string, unknown>,
-    signal: AbortSignal
+    signal: AbortSignal,
+    mayExecute?: (step: AgentPlanStep) => boolean
   ): AsyncIterable<CoordinationEvent> {
     for (let index = start; index < plan.steps.length; index++) {
       const step: AgentPlanStep = plan.steps[index];
@@ -141,6 +144,20 @@ export class MultiAgentCoordinator {
         await this.trace(runId, "cancelled", { step: index + 1 });
         yield { type: "failed", runId, detail: "Coordination cancelled." };
         return;
+      }
+      // A host allowlist can change after a plan was created or while approval
+      // is pending. Check immediately before every delegation, on both run
+      // and resume. Missing, throwing, or revoked host grants fail closed.
+      if (mayExecute) {
+        let permitted = false;
+        try { permitted = mayExecute(step) === true; }
+        catch { permitted = false; }
+        if (!permitted) {
+          await this.trace(runId, "failed", { step: index + 1 });
+          yield { type: "failed", runId, agentId, step: index + 1,
+            detail: "Planned tool is no longer permitted or registered." };
+          return;
+        }
       }
       if (!agentId) {
         await this.trace(runId, "failed", { step: index + 1 });
@@ -164,7 +181,7 @@ export class MultiAgentCoordinator {
         return;
       }
       if (decision === "ask_user") {
-        this.pending.set(runId, { plan, assignments, nextIndex: index, outputs });
+        this.pending.set(runId, { plan, assignments, nextIndex: index, outputs, mayExecute });
         await this.trace(runId, "waiting_for_approval", { step: index + 1 });
         yield { type: "waiting_for_approval", runId, agentId, step: index + 1,
           detail: "Explicit host approval is required before this agent starts." };
