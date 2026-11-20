@@ -23,6 +23,44 @@ export function isExecutableToolStep(
 }
 
 /**
+ * Tool IDs are not stable capabilities. Capture the exact currently
+ * registered implementation identity at dispatch, and require that it still
+ * matches when a step is delegated or resumed after owner approval.
+ */
+export type ToolRegistrationBindings = ReadonlyMap<string, symbol>;
+
+export function captureExecutableToolRegistrations(
+  plan: ValidatedPlan,
+  registry: ToolRegistry,
+  allowedToolIds?: readonly string[]
+): Result<ToolRegistrationBindings> {
+  if (!plan || !Array.isArray(plan.steps)) {
+    return err("validation", "Agent tool registrations require a valid plan.");
+  }
+  const registrations = new Map<string, symbol>();
+  for (const step of plan.steps) {
+    if (!step || !isExecutableToolStep(step.toolId, registry, allowedToolIds)) {
+      return err("validation", "Planned tool is not registered or permitted.");
+    }
+    const token = registry.registrationToken(step.toolId);
+    if (!token) return err("validation", "Planned tool has no active registration.");
+    registrations.set(step.toolId, token);
+  }
+  return ok(registrations);
+}
+
+export function isBoundExecutableToolStep(
+  toolId: string,
+  registry: ToolRegistry,
+  bindings: ToolRegistrationBindings,
+  allowedToolIds?: readonly string[]
+): boolean {
+  const token = bindings.get(toolId);
+  return token !== undefined && registry.registrationToken(toolId) === token &&
+    isExecutableToolStep(toolId, registry, allowedToolIds);
+}
+
+/**
  * JSON is the only supported plan payload. Reject getters, exotic objects,
  * non-finite numbers, cycles, sparse arrays and prototype-pollution keys
  * before detaching untrusted input from the caller.
