@@ -97,9 +97,10 @@ test('audit lookup remains local without a model or workspace backend', async ()
   const history = join(home, 'test-history.json');
   const result = spawnSync(process.execPath,
     ['build-cli/nexus.js', '--test-model', '--history', history],
-    { encoding: 'utf8', env: { ...process.env, HOME: home }, input: '/audit recent\n/audit run-audit-smoke\n' });
+    { encoding: 'utf8', env: { ...process.env, HOME: home }, input: '/audit recent\n/audit locks\n/audit run-audit-smoke\n' });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /No audit runs found/);
+  assert.match(result.stdout, /No audit writer locks found/);
   assert.match(result.stdout, /No audit events for/);
   assert.doesNotMatch(result.stdout, /TEST MODEL/);
 });
