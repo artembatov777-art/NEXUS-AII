@@ -104,3 +104,44 @@ test('audit lookup remains local without a model or workspace backend', async ()
   assert.match(result.stdout, /No audit events for/);
   assert.doesNotMatch(result.stdout, /TEST MODEL/);
 });
+
+
+test("checkpoint commands inspect a persisted CLI plan without model requests or replay", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = mkdtempSync(join(tmpdir(), 'nexus-cli-checkpoint-'));
+  const folder = join(home, '.nexus-au', 'agent-checkpoints');
+  const history = join(home, 'test-history.json');
+  const record = join(folder, 'run-inspected.json');
+  try {
+    mkdirSync(folder, { recursive: true, mode: 0o700 });
+    const checkpoint = {
+      schemaVersion: 1, runId: 'run-inspected', agentId: 'nexus.cli.workspace',
+      threadId: 'workspace-cli', sequence: 2, status: 'running',
+      state: {
+        kind: 'nexus.plan-run.v1',
+        steps: [{ id: 'read', toolId: 'cli.workspace.read' }],
+        nextStep: 0, active: { index: 0, id: 'read', toolId: 'cli.workspace.read' }
+      },
+      createdAt: 100, updatedAt: 200
+    };
+    writeFileSync(record, JSON.stringify(checkpoint), { mode: 0o600 });
+    const before = readFileSync(record, 'utf8');
+    const env = process.platform === 'win32'
+      ? { ...process.env, USERPROFILE: home }
+      : { ...process.env, HOME: home };
+    const result = spawnSync(process.execPath,
+      ['build-cli/nexus.js', '--test-model', '--history', history],
+      { encoding: 'utf8', env, input: '/checkpoints\n/checkpoint run-inspected\n' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Saved CLI plan checkpoints/);
+    assert.match(result.stdout, /cli\.workspace\.read/);
+    assert.match(result.stdout, /unconfirmed/);
+    assert.match(result.stdout, /audit status run-inspected/);
+    assert.doesNotMatch(result.stdout, /\[TEST MODEL\]/);
+    assert.equal(readFileSync(record, 'utf8'), before);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
