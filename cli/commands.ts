@@ -1,9 +1,12 @@
 import { quoteTerminal } from './quote';
+import { renderHistoryCommand } from './historyView';
+import type { ModelMessage } from '../src/core/model';
 import type { TerminalStepResult } from './agent';
 import type { Result } from '../src/core/result';
 
 interface CommandContext {
   workspace?: (line: string, signal: AbortSignal) => Promise<string>;
+  history?: () => readonly ModelMessage[];
   run(goal: string, runId: string, signal: AbortSignal, onStep: (step: TerminalStepResult) => void): Promise<Result<TerminalStepResult[]>>;
   write(text: string): void;
   newId(): string;
@@ -12,6 +15,11 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
+  if (/^\/history(?:\s|$)/.test(input)) {
+    if (!context.history) context.write('Local CLI history is unavailable in this session.\n');
+    else context.write(renderHistoryCommand(input, context.history()) ?? 'History command is invalid.\n');
+    return true;
+  }
   if (/^\/(project|files|read|search|draft|approve|apply|recover|rollback|discard)(?:\s|$)/.test(input) ||
       /^\/agent\s+(?:plan(?:\s|$)|(?:inspect|diff|status)\s*$)/.test(input)) {
     if (context.workspace) { context.write(await context.workspace(input, context.signal) + '\n'); return true; }
