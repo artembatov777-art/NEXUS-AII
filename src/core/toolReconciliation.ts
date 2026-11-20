@@ -70,7 +70,10 @@ function validId(value: string): boolean {
     value.length <= 160 && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
+/** Shared audit analysis for Desktop reconciliation and read-only CLI diagnostics.
+ * A failed return can still follow an external side effect; do not infer retry safety.
+ */
+export function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
   const pending = new Map<string, AmbiguousToolStep>();
   for (const event of events) {
     const key = JSON.stringify([event.toolId, event.traceId]);
