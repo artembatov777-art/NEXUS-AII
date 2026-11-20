@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, mkdir, open, opendir } from "node:fs/promises";
+import { lstat, mkdir, open, opendir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { err, ok, type Result } from "../src/core/result";
 import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent, type ToolAuditSink } from "../src/core/tools";
@@ -80,6 +80,23 @@ async function readVerifiedJournal(path: string): Promise<string | null> {
   } finally { await handle.close(); }
 }
 
+
+/** Parse and validate every receipt, not just the last newline. Never treat damage as an empty run. */
+function parseJournal(raw: string, runId: string): ToolAuditEvent[] {
+  if (!raw || !raw.endsWith("\n")) throw new Error("Incomplete workspace audit journal.");
+  const lines = raw.slice(0, -1).split("\n");
+  if (lines.length > MAX_TOOL_AUDIT_HISTORY_EVENTS) throw new Error("Workspace audit contains too many events.");
+  return lines.map(line => {
+    let value: unknown;
+    try { value = JSON.parse(line); }
+    catch { throw new Error("Invalid workspace audit JSON."); }
+    if (!validEvent(value) || value.runId !== runId) {
+      throw new Error("Invalid workspace audit event record.");
+    }
+    return value;
+  });
+}
+
 /**
  * Append-only CLI tool audit, scoped to a private run directory.
  * A damaged journal causes ToolGateway to refuse replay, not to treat the run
@@ -97,13 +114,40 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
     if (!validEvent(event)) return err("validation", "Invalid workspace audit event.");
     const line = Buffer.from(JSON.stringify(event) + "\n", "utf8");
     if (line.byteLength > MAX_EVENT_BYTES) return err("validation", "Workspace audit event exceeds its limit.");
+
+    let lock: Awaited<ReturnType<typeof open>> | undefined;
+    let lockPath = "";
     try {
       await mkdir(dirname(this.directory), { recursive: true, mode: 0o700 });
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
       await assertPrivateDirectory(dirname(this.directory));
       await assertPrivateDirectory(this.directory);
       const path = this.path(event.runId);
-      let file;
+      lockPath = path + ".lock";
+
+      // O_EXCL serializes all cooperative writers in different CLI processes.
+      // Never steal an existing lock. A crash leaves the run blocked for manual
+      // inspection rather than risking ambiguous or duplicated side effects.
+      lock = await open(lockPath, constants.O_WRONLY | constants.O_CREAT |
+        constants.O_EXCL | unixFlags(), 0o600);
+      await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }) + "\n", "utf8");
+      await lock.sync();
+
+      // Under the writer lock, validate the *whole* history before appending.
+      // A second ToolGateway may have read "empty" before the first one started;
+      // only one may durably claim the same (run, tool, trace) for execution.
+      const priorRaw = await readVerifiedJournal(path);
+      const prior = priorRaw === null ? [] : parseJournal(priorRaw, event.runId);
+      if (prior.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS) {
+        throw new Error("Workspace audit event count limit reached.");
+      }
+      if (event.status === "started" && prior.some(earlier =>
+        earlier.toolId === event.toolId && earlier.traceId === event.traceId &&
+        earlier.status !== "denied")) {
+        return err("storage_failed", "This tool step already has durable execution evidence. Review before retrying.");
+      }
+
+      let file: Awaited<ReturnType<typeof open>>;
       let created = false;
       try {
         file = await open(path, constants.O_RDWR | constants.O_APPEND | constants.O_CREAT |
@@ -123,24 +167,23 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
           throw new Error("Workspace audit journal changed during open.");
         }
       }
+
       try {
         const opened = await file.stat({ bigint: true });
         if (!opened.isFile() || opened.nlink !== 1n ||
             !fileModeIsPrivate(opened.mode, opened.uid) ||
-            opened.size + BigInt(line.length) > BigInt(MAX_JOURNAL_BYTES)) {
-          throw new Error("Unsafe or oversized workspace audit journal.");
+            opened.size + BigInt(line.length) > BigInt(MAX_JOURNAL_BYTES) ||
+            opened.size !== BigInt(Buffer.byteLength(priorRaw ?? "", "utf8"))) {
+          throw new Error("Unsafe, changed or oversized workspace audit journal.");
         }
-        if (opened.size > 0n) {
-          const last = Buffer.alloc(1);
-          const { bytesRead } = await file.read(last, 0, 1, Number(opened.size - 1n));
-          if (bytesRead !== 1 || last[0] !== 10) {
-            throw new Error("Incomplete workspace audit journal.");
-          }
-        }
+        // A non-cooperative writer can corrupt a journal; read paths fail
+        // closed on such corruption. Cross-process cooperative writes use
+        // this run-scoped lock and an atomic append before acknowledgement.
         const { bytesWritten } = await file.write(line);
         if (bytesWritten !== line.length) throw new Error("Incomplete workspace audit write.");
         await file.sync();
       } finally { await file.close(); }
+
       if (created && process.platform !== "win32") {
         const directory = await open(this.directory, "r");
         try { await directory.sync(); } finally { await directory.close(); }
@@ -148,6 +191,11 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
       return ok(undefined);
     } catch {
       return err("storage_failed", "Could not safely persist the workspace audit event.", true);
+    } finally {
+      if (lock) {
+        await lock.close().catch(() => {});
+        await unlink(lockPath).catch(() => {});
+      }
     }
   }
 
@@ -197,18 +245,7 @@ export class FileWorkspaceAuditSink implements ToolAuditSink {
       if (journal === null) return ok([]);
       await assertPrivateDirectory(dirname(this.directory));
       await assertPrivateDirectory(this.directory);
-      if (!journal || !journal.endsWith("\n")) throw new Error("Incomplete workspace audit journal.");
-      const lines = journal.slice(0, -1).split("\n");
-      if (lines.length > MAX_TOOL_AUDIT_HISTORY_EVENTS) throw new Error("Workspace audit contains too many events.");
-      const events: ToolAuditEvent[] = [];
-      for (const line of lines) {
-        let value: unknown;
-        try { value = JSON.parse(line); }
-        catch { throw new Error("Invalid workspace audit JSON."); }
-        if (!validEvent(value) || value.runId !== runId) throw new Error("Invalid workspace audit event record.");
-        events.push(value);
-      }
-      return ok(events.slice(-limit));
+      return ok(parseJournal(journal, runId).slice(-limit));
     } catch {
       return err("storage_failed", "Workspace audit journal is unreadable or unsafe.", true);
     }
