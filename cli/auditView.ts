@@ -5,11 +5,12 @@ import { quoteTerminal } from "./quote";
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 const MAX_DETAIL_PREVIEW = 160;
-const USAGE = "Usage: /audit <run-id> [last <1-50>] | /audit recent [1-50]\n";
+const USAGE = "Usage: /audit <run-id> [last <1-50>] | /audit recent [1-50] | /audit locks [1-50]\n";
 
 interface AuditReader {
   list(options: { runId: string; limit: number }): Promise<Result<ToolAuditEvent[]>>;
   recent?(limit: number): Promise<Result<Array<{ runId: string; updatedAt: number }>>>;
+  locked?(limit: number): Promise<Result<Array<{ runId: string; updatedAt: number }>>>;
 }
 
 function preview(value: string): string {
@@ -29,6 +30,20 @@ function safeTime(timestamp: number): string {
 export async function renderAuditCommand(input: string, audit: AuditReader): Promise<string | null> {
   const command = input.trim();
   if (!/^\/audit(?:\s|$)/.test(command)) return null;
+  if (/^\/audit locks(?:\s|$)/.test(command)) {
+    const matched = /^\/audit locks(?: (\d+))?$/.exec(command);
+    if (!matched) return USAGE;
+    const limit = matched[1] === undefined ? 10 : Number(matched[1]);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) return USAGE;
+    if (!audit.locked) return "Audit lock inspection is unavailable.\n";
+    let result: Result<Array<{ runId: string; updatedAt: number }>>;
+    try { result = await audit.locked(limit); }
+    catch { return "Audit lock inspection is unavailable or unsafe.\n"; }
+    if (!result.ok) return "Audit lock inspection is unavailable or unreadable.\n";
+    if (!result.value.length) return "No audit writer locks found.\n";
+    const records = result.value.slice(0, limit);
+    return `Audit writer locks (${records.length}; active or interrupted, inspect before retrying):\n${records.map(item => `${safeTime(item.updatedAt)}  ${quoteTerminal(item.runId)}`).join("\n")}\n`;
+  }
   if (/^\/audit recent(?:\s|$)/.test(command)) {
     const recent = /^\/audit recent(?: (\d+))?$/.exec(command);
     if (!recent) return USAGE;
