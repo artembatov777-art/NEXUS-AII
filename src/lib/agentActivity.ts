@@ -14,7 +14,7 @@ export interface AgentActivityEvent {
 
 export interface AgentActivityRepository {
   append(event: AgentActivityEvent): Promise<Result<void>>;
-  listByConversation(conversationId: string, limit?: number): Promise<Result<AgentActivityEvent[]>>;
+  listByConversation(conversationId: string, limit?: number, runId?: string): Promise<Result<AgentActivityEvent[]>>;
 }
 
 export const validActivityId = (value: unknown): value is string =>
