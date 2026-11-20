@@ -93,4 +93,22 @@ describe('shared agent workflow', () => {
     expect(result).toContainEqual(expect.objectContaining({ type: 'failed' }));
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects a re-registered tool with the same ID after an approval pause', async () => {
+    const { workflow, registry, execute, events, id, setDecision } = setupExecution();
+    const planned = await workflow.plan('inspect', new AbortController().signal);
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    setDecision('ask_user');
+    const paused = await events(workflow.run(planned.value, id, new AbortController().signal));
+    expect(paused).toContainEqual(expect.objectContaining({ type: 'waiting_for_approval' }));
+
+    registry.unregister('safe.read');
+    registry.register({ id: 'safe.read', version: '1', description: 'Read', requiredPermissions: ['filesystem:read:selected'],
+      risk: 'low', timeoutMs: 1_000, validateInput: value => ok(value), execute: async value => ok(value) });
+    setDecision('allow');
+    const resumed = await events(workflow.resume(id, new AbortController().signal));
+    expect(resumed).toContainEqual(expect.objectContaining({ type: 'failed' }));
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
