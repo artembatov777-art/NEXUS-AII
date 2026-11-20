@@ -70,18 +70,70 @@ export async function loadHistory(path: string): Promise<ModelMessage[]> {
   return parsed.messages.map(message => ({ role: message.role, content: message.content }));
 }
 
+/** This CLI history is plaintext. Keep it in an owner-private directory on Unix. */
+async function assertHistoryDirectory(path: string): Promise<void> {
+  const info = await lstat(path, { bigint: true });
+  const owner = process.getuid?.();
+  if (!info.isDirectory() || (process.platform !== 'win32' &&
+      ((info.mode & 0o077n) !== 0n ||
+       (owner !== undefined && info.uid !== BigInt(owner))))) {
+    throw new Error('History directory is not private.');
+  }
+}
+
+function sameMessage(a: ModelMessage, b: ModelMessage): boolean {
+  return a.role === b.role && a.content === b.content;
+}
+
+/**
+ * Persist complete turns using a per-history exclusive lock and an optimistic
+ * prefix check. The last writer must not erase turns saved by another CLI
+ * process with an older snapshot. A stale lock or unexpected file change fails
+ * closed; neither is automatically removed or silently overwritten.
+ */
 export async function saveHistory(path: string, messages: ModelMessage[]): Promise<void> {
   if (!validMessages(messages)) throw new Error('Invalid history format.');
   const serialized = JSON.stringify({ version: 1, messages });
   if (Buffer.byteLength(serialized, 'utf8') > MAX_HISTORY_BYTES) throw new Error('History limit reached.');
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${randomUUID()}.tmp`;
+
+  const directory = dirname(path);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await assertHistoryDirectory(directory);
+  const lockPath = path + '.lock';
+  const lockFlags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL |
+    (process.platform === 'win32' ? 0 : (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  let lock: Awaited<ReturnType<typeof open>>;
+  try { lock = await open(lockPath, lockFlags, 0o600); }
+  catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error('History is locked by another writer; no changes were saved.');
+    }
+    throw cause;
+  }
+
   try {
-    const file = await open(temporary, 'wx', 0o600);
+    await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }) + '\n', 'utf8');
+    await lock.sync();
+    const current = await loadHistory(path);
+    // The incoming snapshot must include everything already committed to this
+    // history. A competing writer changes that prefix and causes a safe error.
+    if (current.length > messages.length ||
+        current.some((previous, index) => !sameMessage(previous, messages[index]))) {
+      throw new Error('History changed in another session. Reload it before sending another message.');
+    }
+    if (current.length === messages.length) return; // Exact idempotent save.
+
+    const temporary = `${path}.${randomUUID()}.tmp`;
     try {
-      await file.writeFile(serialized, 'utf8');
-      await file.sync();
-    } finally { await file.close(); }
-    await rename(temporary, path);
-  } finally { await unlink(temporary).catch(() => {}); }
+      const file = await open(temporary, 'wx', 0o600);
+      try {
+        await file.writeFile(serialized, 'utf8');
+        await file.sync();
+      } finally { await file.close(); }
+      await rename(temporary, path);
+    } finally { await unlink(temporary).catch(() => {}); }
+  } finally {
+    await lock.close().catch(() => {});
+    await unlink(lockPath).catch(() => {});
+  }
 }
