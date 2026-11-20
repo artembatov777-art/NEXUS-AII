@@ -103,11 +103,17 @@ describe("ToolGateway", () => {
   it("does not confuse an audit record from another run with the current step", async () => {
     const execute = vi.fn(async () => ok({ answer: 42 }));
     const prior = { toolId: "sample", runId: "another-run", traceId: "trace-1", status: "started" as const, timestamp: 100 };
-    const audit = { record: vi.fn().mockResolvedValue(ok(undefined)), list: vi.fn().mockResolvedValue(ok([prior])) };
+    const audit = {
+      record: vi.fn().mockResolvedValue(ok(undefined)),
+      // list({runId}) promises to filter receipts to that run. A sink that
+      // returns mixed runs must fail closed, as separately tested.
+      list: vi.fn(async (filter?: { runId?: string }) => ok(filter?.runId === prior.runId ? [prior] : []))
+    };
     const gateway = new ToolGateway({ authorize: vi.fn().mockResolvedValue("allow") }, audit, { now: () => 123 });
     expect(gateway.register(definition(execute)).ok).toBe(true);
     const result = await gateway.execute("sample", { query: "x" }, context(), "actor-1");
     expect(result.ok).toBe(true);
+    expect(audit.list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
     expect(execute).toHaveBeenCalledOnce();
   });
   it("serializes concurrent attempts for the same run and step before audit lookup completes", async () => {
