@@ -99,7 +99,6 @@ export function validateCompleteToolAuditHistory(runId: string, candidate: unkno
       const names = Object.keys(fields);
       if (names.some(key => ["__proto__", "prototype", "constructor"].includes(key) ||
           !fields[key].enumerable || !("value" in fields[key]))) return false;
-      const event = item as ToolAuditEvent;
       if (fields.runId?.value !== runId ||
           !isValidIdentifier(fields.toolId?.value) ||
           !isValidIdentifier(fields.traceId?.value) ||
@@ -108,9 +107,6 @@ export function validateCompleteToolAuditHistory(runId: string, candidate: unkno
           !Number.isFinite(fields.timestamp.value) ||
           (fields.detail !== undefined &&
             (typeof fields.detail.value !== "string" || fields.detail.value.length > 1_000))) return false;
-      // Preserve the type boundary without invoking any accessors on the
-      // untrusted receipt object.
-      void event;
     }
     return true;
   } catch {
