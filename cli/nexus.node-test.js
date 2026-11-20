@@ -76,7 +76,9 @@ test('history commands inspect saved test turns without sending prompts or writi
   assert.match(inspected.stdout, /Turn 1/);
   assert.match(inspected.stdout, /History search.*1 matching turn/);
   assert.match(inspected.stdout, /hello world/);
-  assert.doesNotMatch(inspected.stdout, /TEST MODEL/);
+  // History includes a previously persisted echo answer, so TEST MODEL text is expected.
+  // A command must never be echoed as a fresh model prompt.
+  assert.doesNotMatch(inspected.stdout, /\[TEST MODEL\]\s*\/(?:history|audit)\b/);
   assert.equal(readFileSync(history, 'utf8'), before, 'inspection must not modify persisted turns');
 });
 
