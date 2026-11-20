@@ -80,17 +80,39 @@ const isValidIdentifier = (value: unknown): value is string =>
 export function validateCompleteToolAuditHistory(runId: string, candidate: unknown): candidate is ToolAuditEvent[] {
   try {
     if (!isValidIdentifier(runId) || !Array.isArray(candidate) ||
-        candidate.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS) return false;
-    return candidate.every((item: unknown) => {
-      if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
-      const event = item as Partial<ToolAuditEvent>;
-      return event.runId === runId &&
-        isValidIdentifier(event.toolId) && isValidIdentifier(event.traceId) &&
-        ["started", "completed", "failed", "denied", "reconciled"].includes(String(event.status)) &&
-        typeof event.timestamp === "number" && Number.isFinite(event.timestamp) &&
-        (event.detail === undefined ||
-          (typeof event.detail === "string" && event.detail.length <= 1_000));
-    });
+        candidate.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS ||
+        Object.getOwnPropertyNames(candidate).length !== candidate.length + 1 ||
+        Object.getOwnPropertySymbols(candidate).length !== 0) return false;
+
+    // Indexed access through a descriptor rejects holes and getters, while
+    // accepting immutable plain JSON snapshots. Array.every skips holes,
+    // which would otherwise conceal missing receipts.
+    for (let index = 0; index < candidate.length; index++) {
+      const slot = Object.getOwnPropertyDescriptor(candidate, String(index));
+      if (!slot || !("value" in slot)) return false;
+      const item: unknown = slot.value;
+      if (item === null || typeof item !== "object" || Array.isArray(item) ||
+          (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) ||
+          Object.getOwnPropertySymbols(item).length !== 0) return false;
+
+      const fields = Object.getOwnPropertyDescriptors(item);
+      const names = Object.keys(fields);
+      if (names.some(key => ["__proto__", "prototype", "constructor"].includes(key) ||
+          !fields[key].enumerable || !("value" in fields[key]))) return false;
+      const event = item as ToolAuditEvent;
+      if (fields.runId?.value !== runId ||
+          !isValidIdentifier(fields.toolId?.value) ||
+          !isValidIdentifier(fields.traceId?.value) ||
+          !["started", "completed", "failed", "denied", "reconciled"].includes(fields.status?.value) ||
+          typeof fields.timestamp?.value !== "number" ||
+          !Number.isFinite(fields.timestamp.value) ||
+          (fields.detail !== undefined &&
+            (typeof fields.detail.value !== "string" || fields.detail.value.length > 1_000))) return false;
+      // Preserve the type boundary without invoking any accessors on the
+      // untrusted receipt object.
+      void event;
+    }
+    return true;
   } catch {
     return false;
   }
