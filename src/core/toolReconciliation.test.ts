@@ -149,6 +149,20 @@ describe("cross-run audit isolation and complete-history reconciliation", () => 
       .toMatchObject({ ok: false, error: { code: "storage_failed" } });
   });
 
+  it("never mistakes a late denial for proof that an already dispatched tool had no effect", async () => {
+    const audit = new FakeAudit();
+    audit.events = [
+      started,
+      { ...started, status: "denied", timestamp: 11,
+        detail: "Later permission decision" }
+    ];
+    const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("failed")));
+    expect(await service.listAmbiguous("run-1")).toEqual({
+      ok: true,
+      value: [{ toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 10 }]
+    });
+  });
+
   it("rejects a suspiciously full bounded history that could be truncated", async () => {
     const audit = new FakeAudit();
     audit.events = Array.from({ length: 5_000 }, (_, i) => ({
