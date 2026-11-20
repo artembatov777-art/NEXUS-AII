@@ -73,4 +73,29 @@ describe("read-only workspace audit terminal command", () => {
     expect(audit.recent).toHaveBeenCalledWith(1);
     expect(await renderAuditCommand("/audit recent 0", audit)).toContain("Usage: /audit");
   });
+
+  it("shows stranded or active writer locks as inspection-only evidence", async () => {
+    const locked = vi.fn(async () => ok([{ runId: "run-9", updatedAt: 1_000 }]));
+    const reader = { list: vi.fn(async () => ok(sample)), locked };
+    const output = await renderAuditCommand("/audit locks", reader);
+    expect(output).toContain("run-9");
+    expect(output).toMatch(/lock|writer/i);
+    expect(output).toMatch(/inspect|review/i);
+    expect(locked).toHaveBeenCalledWith(10);
+    expect(reader.list).not.toHaveBeenCalled();
+    await renderAuditCommand("/audit locks 1", reader);
+    expect(locked).toHaveBeenCalledWith(1);
+    expect(await renderAuditCommand("/audit locks 0", reader)).toContain("Usage: /audit");
+    expect(await renderAuditCommand("/audit locks 51", reader)).toContain("Usage: /audit");
+  });
+
+  it("makes invalid lock evidence visible rather than assuming no locks exist", async () => {
+    const reader = {
+      list: async () => ok(sample),
+      locked: async () => err("storage_failed", "Unsafe writer lock", true)
+    };
+    const output = await renderAuditCommand("/audit locks", reader);
+    expect(output).toMatch(/unavailable|unsafe|unreadable/i);
+    expect(output).not.toContain("No audit writer locks");
+  });
 });
