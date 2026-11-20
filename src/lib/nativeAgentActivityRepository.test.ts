@@ -27,6 +27,16 @@ describe("native SQLite agent activity repository", () => {
     });
   });
 
+  it("scopes an older run without loading unrelated activity", async () => {
+    const events = [{ runId: "old", conversationId: "chat", kind: "started", timestamp: 1 }];
+    mockedInvoke.mockResolvedValueOnce(events);
+    const result = await new NativeAgentActivityRepository().listByConversation("chat", 20, "old");
+    expect(result).toMatchObject({ ok: true, value: events });
+    expect(mockedInvoke).toHaveBeenCalledWith("list_agent_activity_events", {
+      conversationId: "chat", limit: 20, runId: "old"
+    });
+  });
+
   it("rejects unsafe arbitrary text before issuing a native command", async () => {
     const repo = new NativeAgentActivityRepository();
     expect((await repo.append({ runId: "run", conversationId: "chat", kind: "output",
