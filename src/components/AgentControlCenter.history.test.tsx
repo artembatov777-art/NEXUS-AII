@@ -7,6 +7,7 @@ import { DEFAULT_PROVIDER } from "../types";
 import { AgentCheckpointService } from "../core/agentCheckpoints";
 import { LocalStorageAgentCheckpointRepository } from "../lib/agentCheckpointStorage";
 import { LocalStorageToolAuditSink } from "../lib/toolAuditStorage";
+import { LocalStorageTraceSink } from "../lib/traceStorage";
 import { agentThreads } from "../lib/agentThreads";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -61,6 +62,9 @@ describe("Agent Center persisted run history", () => {
       toolId: "workspace.read", status: "completed", timestamp: 2_000 })).ok).toBe(true);
     expect((await audit.record({ runId: "history-two", traceId: "history-two:1",
       toolId: "workspace.write", status: "completed", timestamp: 2_001 })).ok).toBe(true);
+    const trace = new LocalStorageTraceSink(localStorage);
+    expect((await trace.append({ runId: "history-one", traceId: "history-one", name: "agent.run",
+      status: "completed", timestamp: 3_000, attributes: { event: "completed" } })).ok).toBe(true);
     const node = document.createElement("div");
     document.body.append(node);
     const root = createRoot(node);
@@ -78,6 +82,8 @@ describe("Agent Center persisted run history", () => {
     const auditPanel = [...node.querySelectorAll(".agent-card")].find(item => item.textContent?.includes("Recent tool audit"));
     expect(auditPanel?.textContent).toContain("workspace.read");
     expect(auditPanel?.textContent).not.toContain("workspace.write");
+    expect(auditPanel?.textContent).toContain("Run trace");
+    expect(auditPanel?.textContent).toContain("agent.run");
     await act(async () => root.unmount());
     node.remove();
   });
