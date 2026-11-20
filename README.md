@@ -47,7 +47,7 @@ Prompting, retrieval, fine-tuning, and foundation-model pretraining are differen
 ## Current implementation
 The repository already contains a React + TypeScript + Vite frontend, a Tauri 2 / Rust desktop host, local persistence, memory and knowledge retrieval, agent runtime foundations, MCP HTTP integration, permission-gated tool execution, credential-vault support, and cross-platform CI.
 
-These facts do not mean every planned feature is production-ready. See `docs/ROADMAP.md` and `DEVELOPMENT_STATUS.md` for the active seven-phase order and verified status; use `docs/PLATFORM_SMOKE_TESTS.md` and `docs/OWNER_SMOKE_TESTS.md` for manual acceptance.
+These facts do not mean every planned feature is production-ready. The active NEXUS AU 2.0 delivery order is the owner's 12-phase plan in `AGENTS.md` and `tasks/todo.md`; `docs/ROADMAP.md` preserves the earlier seven-phase Desktop evidence. See `DEVELOPMENT_STATUS.md` for verified implementation status and `docs/PLATFORM_SMOKE_TESTS.md` / `docs/OWNER_SMOKE_TESTS.md` for manual acceptance.
 
 ## Technology
 - Frontend: React, TypeScript, Vite.
@@ -89,9 +89,9 @@ npm run tauri dev
 
 ### Inspect local CLI history and audit
 
-In offline test mode, `/history` shows the last 10 completed turns; `/history last 5` selects a smaller window and `/history find text` searches locally without calling a model. Content previews are length-bounded and terminal-escaped. The CLI reads history using a bounded, no-follow file inspection path and validates complete user/assistant turn pairs before saving. The test history file is plaintext and is **not** a Desktop history database.
+In offline test mode, `/history` shows the last 10 completed turns; `/history last 5` selects a smaller window and `/history find text` searches locally without calling a model. Content previews are length-bounded and terminal-escaped. The CLI reads history using a bounded, no-follow file inspection path and validates complete user/assistant turn pairs before saving. Saves now use an exclusive per-history writer lock and check that the saved conversation is an unchanged prefix of the new snapshot; a stale concurrent session cannot silently overwrite another session's completed turns. An unexpected/corrupt file or abandoned lock stops saving for manual inspection. The test history file is plaintext and is **not** a Desktop history database.
 
-The interactive CLI can inspect the local Tool Gateway audit even without an AI provider. Use `/audit recent` to find recent run IDs, `/audit <run-id>` to view the last 20 recorded events, or `/audit <run-id> last 10` for a shorter window. Audit records are written to `~/.nexus-au/workspace-audit/` with bounded append-only journals and file checks. Missing or damaged records are not treated as proof that a tool is safe to replay. The command only reads the audit, never executes actions or approves a retry.
+The interactive CLI can inspect the local Tool Gateway audit even without an AI provider. Use `/audit recent` to find recent run IDs, `/audit <run-id>` to view the last 20 recorded events, or `/audit <run-id> last 10` for a shorter window. Audit records are written to `~/.nexus-au/workspace-audit/` with bounded append-only journals and file checks. Run-scoped exclusive locks serialize cooperating CLI processes; a durable `started` event atomically claims a (run, tool, trace) step, preventing another CLI process from independently starting the same step. An abandoned writer lock, missing evidence, or damaged record is **not** proof that a tool is safe to replay; it requires manual inspection rather than automatic lock removal or tool retry. The command only reads the audit, never executes actions or approves a retry.
 
 The CLI does not yet guarantee exactly-once external tool effects after a crash. Journal permissions use POSIX owner checks on Unix; Windows ACL policy must additionally be checked on the installed desktop by the owner.
 
