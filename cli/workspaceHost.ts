@@ -12,6 +12,9 @@ import { registerCliWorkspaceTools } from './workspace';
 import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
 import type { PlanStepResult } from '../src/core/planExecutor';
 import { ToolRegistry } from '../src/core/toolRegistry';
+import { AgentCheckpointService } from '../src/core/agentCheckpoints';
+import { PlanRunCheckpointService } from '../src/core/planRunCheckpoints';
+import { FileAgentCheckpointRepository } from './fileAgentCheckpoints';
 import { quoteTerminal } from './quote';
 import {
   assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
@@ -285,7 +288,17 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
     runId = randomUUID(), traceId: string = randomUUID()) =>
     gateway.execute<T>(`cli.workspace.${operation}`, input, {runId, traceId, signal}, 'owner');
 
-  const planner = new WorkspacePlanner(registry, new GatewayAgentToolExecutor(gateway, 'owner'));
+  // Native CLI uses the same versioned CAS checkpoint format as Desktop, but
+  // keeps a separate private file-backed repository until audited migration.
+  // The runner persists pre-dispatch intents; it never auto-resumes tools.
+  const checkpointService = new AgentCheckpointService(
+    new FileAgentCheckpointRepository(join(homedir(), '.nexus-au', 'agent-checkpoints'))
+  );
+  const planCheckpoints = new PlanRunCheckpointService(checkpointService, {
+    agentId: 'nexus.cli.workspace', threadId: 'workspace-cli', now: Date.now
+  });
+  const planner = new WorkspacePlanner(registry,
+    new GatewayAgentToolExecutor(gateway, 'owner'), planCheckpoints);
   const readSnapshot = (path: string, signal: AbortSignal, planId?: string) =>
     invoke<WorkspaceSnapshot>('read', { root, path }, signal, randomUUID(), planId ? `plan:${planId}:${randomUUID()}` : undefined);
 
