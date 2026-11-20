@@ -31,6 +31,7 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
 Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit status <run-id>, /audit <run-id>, /checkpoints, /checkpoint <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 Workspace planner: /agent plan <task>, /agent inspect, /agent diff, /agent status.
+Local Git (selected repository only): /git status, /git diff, /git diff staged, /git log. Read-only, bounded, no network.
 The workspace planner runs locally and requires explicit replacements for changes.
 In interactive test mode: /agent read <file>, /agent list [directory], /agent search <text>.
 History commands in --test-model inspect completed turns locally, without model calls.
