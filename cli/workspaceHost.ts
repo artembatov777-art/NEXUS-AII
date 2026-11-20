@@ -16,7 +16,7 @@ import { AgentCheckpointService } from '../src/core/agentCheckpoints';
 import { PlanRunCheckpointService } from '../src/core/planRunCheckpoints';
 import { FileAgentCheckpointRepository } from './fileAgentCheckpoints';
 import { quoteTerminal } from './quote';
-import { inspectLocalGit } from './gitInspection';
+import { gitToolIdForCommand, registerCliGitTools } from './gitTools';
 import {
   assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
   MAX_INTENT_BYTES, MAX_STEPS_BYTES, parseEditEvidence, readInspectionJournal, readPrivateJournal,
@@ -144,6 +144,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       return err('tool_failed','Invalid workspace backend response.');
     }
   });
+  registerCliGitTools(registry, () => host ? root : null);
   const resource = (plan: DraftPlan) => plan.files.length === 1 && !plan.rollbackOf && !plan.agentDiff
     ? `${root}/${plan.files[0].path}`
     : `${root} (${plan.files.length} files; plan ${plan.hash}${plan.rollbackOf ? `; rollback of ${plan.rollbackOf}` : ''})`;
@@ -340,10 +341,14 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
       }
       if (!host) return 'No project selected. Use /project <absolute directory>.';
       if (command === '/git') {
-        // Inspection is strictly read-only and bound to the project selected
-        // through the native workspace host. No arbitrary Git arguments can
-        // be forwarded from a model, paste, or interactive prompt.
-        const result = await inspectLocalGit(root, line, signal);
+        // Only registered read capabilities may run Git. The same Gateway
+        // performs owner permission checks, durable audit, cancellation and
+        // duplicate trace protections as the Rust-backed workspace tools.
+        const toolId = gitToolIdForCommand(line);
+        if (!toolId) return 'Usage: /git status | /git diff [staged] | /git log';
+        const result = await gateway.execute<string>(toolId, { root }, {
+          runId: randomUUID(), traceId: randomUUID(), signal
+        }, 'owner');
         return result.ok
           ? 'Local Git inspection (read-only):\n' + quoteTerminal(result.value)
           : 'Git inspection stopped: ' + quoteTerminal(result.error.message);
