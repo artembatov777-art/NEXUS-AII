@@ -68,4 +68,19 @@ describe("manual agent continuation", () => {
     const saved = await service.get(runId);
     expect(saved.ok && saved.value?.status).toBe("completed");
   });
+
+  it("refuses a second continuation while the same runtime run is still executing", async () => {
+    const { runtime, step } = await make("allow", true);
+    let finishStep!: (value: { state: { count: number }; done: boolean }) => void;
+    step.mockImplementationOnce(() => new Promise(resolve => { finishStep = resolve; }));
+    const first = runtime.continue(runId)[Symbol.asyncIterator]();
+    expect((await first.next()).value).toMatchObject({ type: "started" });
+    const second = await collect(runtime.continue(runId));
+    expect(second[0]).toMatchObject({ type: "failed" });
+    finishStep({ state: { count: 1 }, done: true });
+    const remaining: unknown[] = [];
+    for await (const event of { [Symbol.asyncIterator]: () => first }) remaining.push(event);
+    expect(remaining.at(-1)).toMatchObject({ type: "completed" });
+    expect(step).toHaveBeenCalledOnce();
+  });
 });
