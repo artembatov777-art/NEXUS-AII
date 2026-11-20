@@ -85,6 +85,10 @@ Desktop additionally enforces its owner-specified tool allowlist when the plan *
 
 CLI plan execution now returns typed, non-retryable errors when a planner or tool adapter crashes, when execution finishes after cancellation, or when a progress observer fails after a completed tool step. Uncertain external outcomes must be inspected in the Tool Gateway audit before a new run is created.
 
+The shared `executeSequentialPlan()` function handles already-known deterministic or model-backed plans: the CLI's model-backed `PlanExecutor.run()` delegates to it, and `WorkspacePlanner.runInspection()` / `WorkspacePlanner.plan()` now call it directly. Offline workspace tasks no longer pretend a model planned them. The strict plan boundary requires plain JSON, so callers omit absent optional fields (such as `query`) rather than passing `undefined`. This preserves native Windows read/list and plan-preview functionality without weakening untrusted-model validation.
+
+For run inspection, `/audit status <run-id>` reuses the same `findAmbiguous()` analysis as Desktop `ToolReconciliationService` and reads the whole bounded run journal. It can identify tool steps needing external outcome review, but does not reconcile, execute or authorize retries.
+
 **Not yet a single durable engine:** Desktop remains backed by its checkpointed coordinator and native SQLite/preview adapters, while CLI retains a sequential runner and a separate history store. This common policy is a verified prerequisite for unifying run identities, checkpoint ownership, state migration and progress events; it is not evidence that those migrations or exactly-once external side effects are complete.
 
 ### Storage and privacy
