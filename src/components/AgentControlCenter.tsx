@@ -230,6 +230,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
       const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt);
+      managedRuns.restoreCheckpoints(conversationKey, checkpoints);
       setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
       setHistoryTruncatedByConversation(previous => ({ ...previous, [conversationKey]: result.some(item => item.ok && item.value.length === 200) }));
       const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").slice(0, 50);
@@ -245,7 +246,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } else if (!audit.ok) addFeed(audit.error.message, "error");
     if (traces?.ok) setTraceEventsByConversation(previous => ({ ...previous, [conversationKey]: traces.value }));
     else if (traces && !traces.ok) addFeed(traces.error.message, "error");
-  }, [runtime, addFeed, threads, conversationKey, auditRunFilter]);
+  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
