@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentPlanStep } from '../src/core/agentPlanner';
 import type { AgentToolExecutor } from '../src/core/agentToolBridge';
 import { executeSequentialPlan, type PlanStepResult } from '../src/core/planExecutor';
+import type { PlanRunCheckpointService } from '../src/core/planRunCheckpoints';
 import { err, ok, type Result } from '../src/core/result';
 import type { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
@@ -79,7 +80,8 @@ function entries(output: unknown): string[] {
 
 /** Deterministic workspace analysis. User-supplied exact replacements are the only source of edits. */
 export class WorkspacePlanner {
-  constructor(private readonly registry: ToolRegistry, private readonly tools: AgentToolExecutor) {}
+  constructor(private readonly registry: ToolRegistry, private readonly tools: AgentToolExecutor,
+    private readonly checkpoints?: PlanRunCheckpointService) {}
 
   async runInspection(
     root: string,
@@ -98,7 +100,7 @@ export class WorkspacePlanner {
       : [workspaceStep(root, operation === 'list' ? 'list' : 'read', arg)];
     // The offline path has no planner model. Execute the deterministic,
     // bounded plan through the same checked executor used by model-backed CLI.
-    return executeSequentialPlan({ goal, steps }, runId, signal, this.registry, this.tools, onStep);
+    return executeSequentialPlan({ goal, steps }, runId, signal, this.registry, this.tools, onStep, this.checkpoints);
   }
 
   async plan(root: string, input: string, read: (path: string, planId: string) => Promise<Result<WorkspaceSnapshot>>, signal: AbortSignal) {
@@ -108,7 +110,7 @@ export class WorkspacePlanner {
     const id = randomUUID();
     const steps = [workspaceStep(root, 'list', directory)];
     if (query) steps.push(workspaceStep(root, 'search', directory, query));
-    const discovery = await executeSequentialPlan({ goal, steps }, id, signal, this.registry, this.tools);
+    const discovery = await executeSequentialPlan({ goal, steps }, id, signal, this.registry, this.tools, undefined, this.checkpoints);
     if (!discovery.ok) return discovery;
 
     const prepared = await prepareChanges(changes, path => read(path, id), signal);
