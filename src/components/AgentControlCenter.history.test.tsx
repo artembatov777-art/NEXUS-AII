@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentControlCenter } from "./AgentControlCenter";
 import { DEFAULT_PROVIDER } from "../types";
 import { AgentCheckpointService } from "../core/agentCheckpoints";
@@ -142,5 +142,40 @@ describe("Agent Center persisted run history", () => {
     expect(node.textContent).toContain("Ambiguous tool outcomes");
     expect(node.textContent).toContain("workspace.write");
     await act(async () => root.unmount()); node.remove();
+  });
+  it("copies a redacted local report from a saved run without exposing its task", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    expect((await service.persist({
+      schemaVersion: 1, runId: "diagnostic-copy", agentId: "nexus.local-workflow",
+      threadId: agentThreads("copy-session").primary,
+      sequence: 1, status: "completed",
+      state: { payload: { task: "PRIVATE_USER_TASK_SHOULD_NOT_COPY" } },
+      createdAt: 1000, updatedAt: 1000
+    })).ok).toBe(true);
+    const writeText = vi.fn(async (_text: string) => {});
+    const prior = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () => {
+        root.render(<AgentControlCenter conversationId="copy-session"
+          onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+      await act(async () => { button(node, "Run history")!.click(); });
+      await act(async () => { button(node, "Copy diagnostics")!.click(); });
+      expect(writeText).toHaveBeenCalledOnce();
+      const copied = writeText.mock.calls[0][0];
+      expect(copied).toContain("Run: diagnostic-copy");
+      expect(copied).not.toContain("PRIVATE_USER_TASK_SHOULD_NOT_COPY");
+      expect(button(node, "Copied diagnostics")).toBeDefined();
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      if (prior) Object.defineProperty(navigator, "clipboard", prior);
+      else delete (navigator as { clipboard?: unknown }).clipboard;
+    }
   });
 });
