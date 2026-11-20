@@ -4,6 +4,9 @@ import { ToolGateway } from '../src/core/tools';
 import { ToolRegistry } from '../src/core/toolRegistry';
 import type { AgentToolExecutor } from '../src/core/agentToolBridge';
 import { ok } from '../src/core/result';
+import { AgentCheckpointService } from '../src/core/agentCheckpoints';
+import { LocalStorageAgentCheckpointRepository } from '../src/lib/agentCheckpointStorage';
+import { PlanRunCheckpointService } from '../src/core/planRunCheckpoints';
 
 function createWorkspacePlanner() {
   const registry = new ToolRegistry(new ToolGateway(
@@ -33,7 +36,7 @@ function createWorkspacePlanner() {
     execute: async <Output = unknown>(toolId: string, input: unknown) =>
       await execute(toolId, input) as ReturnType<typeof ok<Output>>
   };
-  return { planner: new WorkspacePlanner(registry, tools), calls, execute };
+  return { planner: new WorkspacePlanner(registry, tools), registry, tools, calls, execute };
 }
 
 function actionResult(toolId: string) {
@@ -90,5 +93,31 @@ describe('offline workspace inspections use the shared strict plan contract', ()
       { toolId: 'cli.workspace.list', input: { root: 'C:\\workspace', path: '.' } },
       { toolId: 'cli.workspace.search', input: { root: 'C:\\workspace', path: '.', query: 'first' } }
     ]);
+  });
+
+  it('persists real offline workspace inspection progress via the shared checkpoint contract', async () => {
+    const { registry, tools, execute } = createWorkspacePlanner();
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); }
+    };
+    const checkpoints = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(storage));
+    const recorder = new PlanRunCheckpointService(checkpoints, {
+      agentId: 'nexus.cli.workspace', threadId: 'workspace-cli', now: () => 100
+    });
+    const planner = new WorkspacePlanner(registry, tools, recorder);
+    const result = await planner.runInspection('C:\\workspace', 'list', 'run-persistent',
+      new AbortController().signal);
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
+    const saved = await checkpoints.get('run-persistent');
+    expect(saved.ok && saved.value?.status).toBe('completed');
+    expect(saved.ok && saved.value?.sequence).toBe(4);
+    expect((saved.ok && saved.value?.state as {nextStep?: number})?.nextStep).toBe(1);
+    expect(JSON.stringify([...values.values()])).not.toContain('C:\\workspace');
+    expect((await planner.runInspection('C:\\workspace', 'list', 'run-persistent',
+      new AbortController().signal)).ok).toBe(false);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
