@@ -6,6 +6,8 @@ import { TerminalPermissions } from './permissions';
 import { dispatchCommand } from './commands';
 import { renderAuditCommand } from './auditView';
 import { FileWorkspaceAuditSink } from './workspaceAudit';
+import { FileAgentCheckpointRepository } from './fileAgentCheckpoints';
+import { renderPlanCheckpointCommand } from './planCheckpointView';
 import { stdin, stdout, stderr } from 'node:process';
 import { ModelRouter } from '../src/core/model';
 import { TerminalSession } from './session';
@@ -26,13 +28,13 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode (local, not encrypted)
 
-Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit status <run-id>, /audit <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
+Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit status <run-id>, /audit <run-id>, /checkpoints, /checkpoint <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 Workspace planner: /agent plan <task>, /agent inspect, /agent diff, /agent status.
 The workspace planner runs locally and requires explicit replacements for changes.
 In interactive test mode: /agent read <file>, /agent list [directory], /agent search <text>.
 History commands in --test-model inspect completed turns locally, without model calls.
-Audit commands inspect locally saved workspace tool receipts without executing actions.
+Audit and checkpoint commands inspect locally saved run evidence without executing actions or resuming tools.
 A model is not configured yet.
 `;
 const args = process.argv.slice(2);
@@ -62,9 +64,11 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
   const controller = new AbortController();
   terminal.on('SIGINT', () => { controller.abort(); terminal.close(); });
   const auditSink = new FileWorkspaceAuditSink(join(homedir(), '.nexus-au', 'workspace-audit'));
+  const checkpointStore = new FileAgentCheckpointRepository(join(homedir(), '.nexus-au', 'agent-checkpoints'));
   const commandContext = {
     workspace: workspace?.command, run,
     audit: async (line: string) => await renderAuditCommand(line, auditSink) ?? 'Usage: /audit <run-id> [last <1-50>]\n',
+    checkpoint: async (line: string) => await renderPlanCheckpointCommand(line, checkpointStore) ?? 'Usage: /checkpoints [1-50] | /checkpoint <run-id>\n',
     history: testMode ? () => session.history() : undefined,
     write: (text: string) => stdout.write(text),
     newId: randomUUID, signal: controller.signal
