@@ -110,7 +110,7 @@ After explicitly selecting a local project with `/project <absolute directory>`,
 
 The selected directory must itself be a real Git working-tree root with a direct `.git` directory; nested repositories, bare repositories, symlinked project roots and external/symlinked Git metadata are not accepted. Git is spawned with `shell: false`, an exact argument allowlist, no model/tool-supplied pathspecs, no pager or external diff, no inherited `GIT_*` overrides and no optional index locks. Output is capped at 64 KiB and terminal-escaped; excess output fails rather than silently presenting an incomplete patch.
 
-No `git add`, `commit`, `push`, `checkout`, `reset`, `fetch` or arbitrary shell commands are exposed. This does **not** provide automatic Git workflows or authorization for Git write operations. Git status is intentionally tied to the owner-selected workspace and stays local, without contacting a model provider or network service.
+Git inspection passes through the same **Tool Gateway** as filesystem operations. Each request checks the live selected project root again after any asynchronous approval, requires an explicit `filesystem:read:selected` permission decision from the owner, and records started/completed/denied outcomes in the private per-run tool audit. Revoking the selected project before delegation blocks execution. No `git add`, `commit`, `push`, `checkout`, `reset`, `fetch` or arbitrary shell commands are exposed. This does **not** provide automatic Git workflows or authorization for Git write operations. Git status is intentionally tied to the owner-selected workspace and stays local, without contacting a model provider or network service.
 
 ### CLI workspace
 
