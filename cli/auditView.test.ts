@@ -54,4 +54,23 @@ describe("read-only workspace audit terminal command", () => {
     const audit = { list: async () => ok([] as ToolAuditEvent[]) };
     expect(await renderAuditCommand("/audit run-1", audit)).toContain("No audit events");
   });
+
+  it("shows recent run identifiers so an owner can locate existing tool receipts", async () => {
+    const audit = {
+      list: vi.fn(async () => ok(sample)),
+      recent: vi.fn(async () => ok([
+        { runId: "run-2", updatedAt: 2_000 },
+        { runId: "run-1", updatedAt: 1_000 }
+      ]))
+    };
+    const result = await renderAuditCommand("/audit recent", audit);
+    expect(result).toContain("Recent audit runs");
+    expect(result).toContain("run-2");
+    expect(result).toContain("run-1");
+    expect(audit.recent).toHaveBeenCalledWith(10);
+    expect(audit.list).not.toHaveBeenCalled();
+    expect(await renderAuditCommand("/audit recent 1", audit)).toContain("run-2");
+    expect(audit.recent).toHaveBeenCalledWith(1);
+    expect(await renderAuditCommand("/audit recent 0", audit)).toContain("Usage: /audit");
+  });
 });
