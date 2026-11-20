@@ -202,4 +202,17 @@ describe("durable CLI workspace audit journal", () => {
       expect(journal.ok && journal.value.some(event => event.status === "started")).toBe(true);
     });
   });
+
+  it("allows a new start after denied permission, but never after a started execution", async () => {
+    await withAuditDir(async directory => {
+      const audit = new FileWorkspaceAuditSink(directory);
+      const denied = { ...started, status: "denied" as const, detail: "Approval required." };
+      expect((await audit.record(denied)).ok).toBe(true);
+      expect((await audit.record(started)).ok).toBe(true);
+      expect((await audit.record({ ...started, status: "completed", timestamp: 11 })).ok).toBe(true);
+      expect((await audit.record(started)).ok).toBe(false);
+      const history = await audit.list({ runId: "run-1", limit: 10 });
+      expect(history.ok && history.value.map(entry => entry.status)).toEqual(["denied", "started", "completed"]);
+    });
+  });
 });
