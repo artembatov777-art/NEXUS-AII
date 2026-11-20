@@ -19,14 +19,17 @@ export class NativeAgentActivityRepository implements AgentActivityRepository {
     }
   }
 
-  async listByConversation(conversationId: string, limit = 100): Promise<Result<AgentActivityEvent[]>> {
-    if (!validActivityId(conversationId) || !Number.isInteger(limit) || limit < 1 || limit > 200) {
+  async listByConversation(conversationId: string, limit = 100, runId?: string): Promise<Result<AgentActivityEvent[]>> {
+    if (!validActivityId(conversationId) || (runId !== undefined && !validActivityId(runId)) ||
+      !Number.isInteger(limit) || limit < 1 || limit > 200) {
       return err("validation", "Activity conversation or limit is invalid.");
     }
     try {
-      const events = await invoke<unknown>("list_agent_activity_events", { conversationId, limit });
+      const events = await invoke<unknown>("list_agent_activity_events", { conversationId, limit,
+        ...(runId === undefined ? {} : { runId }) });
       if (!Array.isArray(events) || events.length > limit || !events.every(item =>
-        validAgentActivityEvent(item) && item.conversationId === conversationId
+        validAgentActivityEvent(item) && item.conversationId === conversationId &&
+        (runId === undefined || item.runId === runId)
       )) {
         return err("storage_failed", "Native activity history returned invalid or unrelated rows.");
       }
