@@ -9,6 +9,7 @@ interface CommandContext {
   history?: () => readonly ModelMessage[];
   audit?: (line: string) => Promise<string>;
   checkpoint?: (line: string) => Promise<string>;
+  recovery?: (line: string) => Promise<string>;
   run(goal: string, runId: string, signal: AbortSignal, onStep: (step: TerminalStepResult) => void): Promise<Result<TerminalStepResult[]>>;
   write(text: string): void;
   newId(): string;
@@ -17,6 +18,15 @@ interface CommandContext {
 
 /** Returns false when the input should be handled as a chat prompt. */
 export async function dispatchCommand(input: string, context: CommandContext): Promise<boolean> {
+  if (/^\/recovery(?:\s|$)/.test(input)) {
+    if (!context.recovery) {
+      context.write("Local recovery inspection is unavailable.\n");
+    } else {
+      try { context.write(await context.recovery(input)); }
+      catch { context.write("Recovery evidence is unavailable or unreadable.\n"); }
+    }
+    return true;
+  }
   if (/^\/checkpoints?(?:\s|$)/.test(input)) {
     if (!context.checkpoint) {
       context.write("Local CLI checkpoint inspection is unavailable.\n");
