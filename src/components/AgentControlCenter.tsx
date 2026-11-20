@@ -10,6 +10,7 @@ import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
 import type { ToolAuditEvent } from "../core/tools";
+import type { TraceEvent } from "../core/observability";
 import type { AmbiguousToolStep } from "../core/toolReconciliation";
 import { createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { loadProviderProfiles } from "../lib/providerProfiles";
@@ -146,6 +147,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
   const [auditEventsByConversation, setAuditEventsByConversation] = useState<Record<string, ToolAuditEvent[]>>({});
+  const [traceEventsByConversation, setTraceEventsByConversation] = useState<Record<string, TraceEvent[]>>({});
   const [auditRunByConversation, setAuditRunByConversation] = useState<Record<string, string | null>>({});
   const [historyLimitByConversation, setHistoryLimitByConversation] = useState<Record<string, number>>({});
   const [historyTruncatedByConversation, setHistoryTruncatedByConversation] = useState<Record<string, boolean>>({});
@@ -156,6 +158,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
   const auditRunFilter = auditRunByConversation[conversationKey] ?? null;
   const auditEvents = auditEventsByConversation[conversationKey] ?? [];
+  const traceEvents = traceEventsByConversation[conversationKey] ?? [];
   const historyLimit = historyLimitByConversation[conversationKey] ?? 50;
   const visibleHistory = checkpoints.slice(0, historyLimit);
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
@@ -219,9 +222,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
-    const [result, audit] = await Promise.all([
+    const [result, audit, traces] = await Promise.all([
       Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 200))),
-      runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 })
+      runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 }),
+      auditRunFilter ? runtime.traceSink.list({ runId: auditRunFilter, limit: 100 }) : Promise.resolve(null)
     ]);
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
@@ -239,6 +243,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       const scoped = audit.value.filter(item => auditRunFilter ? item.runId === auditRunFilter : runIds.has(item.runId));
       setAuditEventsByConversation(previous => ({ ...previous, [conversationKey]: scoped }));
     } else if (!audit.ok) addFeed(audit.error.message, "error");
+    if (traces?.ok) setTraceEventsByConversation(previous => ({ ...previous, [conversationKey]: traces.value }));
+    else if (traces && !traces.ok) addFeed(traces.error.message, "error");
   }, [runtime, addFeed, threads, conversationKey, auditRunFilter]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -609,6 +615,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
             {auditRunFilter && <div className="agent-form-footer"><span>Audit for {auditRunFilter}</span><button type="button" className="agent-small-button" onClick={showRecentAudit}>Show recent audits</button></div>}
+            {auditRunFilter && <section className="agent-reconciliation" aria-label="Persisted run trace">
+              <div className="agent-card-heading"><div><span className="agent-kicker">DURABLE ACTIVITY</span><h3>Run trace</h3></div><span className="agent-count">{traceEvents.length}</span></div>
+              {traceEvents.length === 0 ? <div className="agent-empty">No persisted trace events for this run.</div> :
+                <div className="agent-history">{traceEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.name + event.timestamp + index}>
+                  <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
+                  <p>{event.name}</p><small>{event.durationMs === undefined ? "Recorded event" : "Duration: " + event.durationMs + " ms"}</small>
+                </div>)}</div>}
+            </section>}
             {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
               <div className="agent-history">{auditEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
