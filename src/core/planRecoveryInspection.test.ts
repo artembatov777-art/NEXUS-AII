@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { inspectPlanRecovery } from "./planRecoveryInspection";
-import type { AgentCheckpoint, AgentCheckpointRepository } from "./agentCheckpoints";
-import type { ToolAuditEvent, ToolAuditSink } from "./tools";
+import type { AgentCheckpoint } from "./agentCheckpoints";
+import type { ToolAuditEvent } from "./tools";
 import { ok, err } from "./result";
 
 const checkpoint = (status: AgentCheckpoint["status"] = "failed"): AgentCheckpoint => ({
@@ -28,12 +28,9 @@ const started: ToolAuditEvent = {
   status: "started", timestamp: 110
 };
 function setup(cp: AgentCheckpoint | null = checkpoint(), events: ToolAuditEvent[] = [started]) {
-  const repository = {
-    get: vi.fn(async () => ok(cp))
-  } as Pick<AgentCheckpointRepository, "get">;
-  const audit = {
-    list: vi.fn(async () => ok(events))
-  } as Pick<ToolAuditSink, "list"> & { list: NonNullable<ToolAuditSink["list"]> };
+  const repository = { get: vi.fn(async (_id: string) => ok<AgentCheckpoint | null>(cp)) };
+  const audit = { list: vi.fn(async (_options?: { runId?: string; limit?: number }) =>
+    ok<ToolAuditEvent[]>(events)) };
   return { repository, audit };
 }
 const options = { agentId: "nexus.cli.workspace", threadId: "workspace-cli" };
