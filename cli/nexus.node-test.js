@@ -134,12 +134,14 @@ test("checkpoint commands inspect a persisted CLI plan without model requests or
       : { ...process.env, HOME: home };
     const result = spawnSync(process.execPath,
       ['build-cli/nexus.js', '--test-model', '--history', history],
-      { encoding: 'utf8', env, input: '/checkpoints\n/checkpoint run-inspected\n' });
+      { encoding: 'utf8', env, input: '/checkpoints\n/checkpoint run-inspected\n/recovery run-inspected\n' });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Saved CLI plan checkpoints/);
     assert.match(result.stdout, /cli\.workspace\.read/);
     assert.match(result.stdout, /unconfirmed/);
     assert.match(result.stdout, /audit status run-inspected/);
+    assert.match(result.stdout, /Recovery inspection/);
+    assert.match(result.stdout, /Automatic recovery and tool replay are disabled/);
     assert.doesNotMatch(result.stdout, /\[TEST MODEL\]/);
     assert.equal(readFileSync(record, 'utf8'), before);
   } finally {
