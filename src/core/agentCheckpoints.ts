@@ -78,10 +78,12 @@ export function validateAgentCheckpoint(value: AgentCheckpoint): string | null {
   if (!Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt) || value.updatedAt < value.createdAt) {
     return "Checkpoint timestamps are invalid.";
   }
+  if (value.status === "waiting_for_approval" && !value.pendingApproval) {
+    return "Waiting checkpoints require pending approval metadata.";
+  }
   if (value.pendingApproval && (
     value.status !== "waiting_for_approval" ||
-    typeof value.pendingApproval.permission !== "string" ||
-    !value.pendingApproval.permission.trim() ||
+    !["memory:read", "conversation:read", "tool:execute"].includes(value.pendingApproval.permission) ||
     !Number.isFinite(value.pendingApproval.requestedAt)
   )) return "Pending approval metadata is invalid.";
   if (!isSafeJsonValue(value.state)) return "Checkpoint state must contain only safe JSON values.";
