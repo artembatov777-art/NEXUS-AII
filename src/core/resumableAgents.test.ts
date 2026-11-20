@@ -284,4 +284,43 @@ describe("ResumableAgentRuntime", () => {
     expect(step).not.toHaveBeenCalled();
     expect(await service.get(runId)).toMatchObject({ ok: true, value: { status: "waiting_for_approval" } });
   });
+
+  it("preserves completed steps through multiple renewed approvals", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const requiredPermissions = ["memory:read", "tool:execute"] as const;
+    const step = vi.fn(makeDefinition().step);
+    const first = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 });
+    first.register({ ...makeDefinition(), requiredPermissions: [...requiredPermissions], step });
+    for await (const event of first.start(agentId, 0, "thread-multi-approval")) {
+      if (event.type === "progress") break;
+    }
+
+    let counter = 0;
+    const approvals = new InMemoryAgentApprovalAuthority(service, { approvalId: () => `renewal-${++counter}` });
+    const second = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("ask_user") },
+      { runId: () => runId }, { now: () => 2_000 }, undefined, approvals);
+    second.register({ ...makeDefinition(), requiredPermissions: [...requiredPermissions], step });
+    expect(await collect(second.continue(runId))).toEqual([
+      { type: "waiting_for_approval", runId, permission: "memory:read" }
+    ]);
+    const grant1 = await approvals.issue(runId);
+    expect(grant1.ok).toBe(true);
+    if (!grant1.ok) throw new Error("First grant missing");
+    expect(await collect(second.resume(runId, grant1.value))).toEqual([
+      { type: "waiting_for_approval", runId, permission: "tool:execute" }
+    ]);
+    expect(await service.get(runId)).toMatchObject({
+      ok: true, value: { state: { steps: 1, permissionIndex: 1 } }
+    });
+    const grant2 = await approvals.issue(runId);
+    expect(grant2.ok).toBe(true);
+    if (!grant2.ok) throw new Error("Second grant missing");
+    expect((await collect(second.resume(runId, grant2.value))).at(-1)).toEqual({
+      type: "completed", runId, steps: 2
+    });
+    expect(step).toHaveBeenCalledTimes(2);
+  });
 });
