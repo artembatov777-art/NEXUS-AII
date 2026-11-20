@@ -72,3 +72,13 @@ describe("AgentCheckpointService", () => {
     expect((await repository.get("run-1")).ok).toBe(false);
   });
 
+it("rejects waiting checkpoints without a valid pending permission", async () => {
+  const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+  const missing = await service.persist(checkpoint({ status: "waiting_for_approval" }));
+  expect(missing.ok).toBe(false);
+  const unrecognized = await service.persist(checkpoint({
+    status: "waiting_for_approval",
+    pendingApproval: { permission: "filesystem:write", requestedAt: 100 }
+  }));
+  expect(unrecognized.ok).toBe(false);
+});
