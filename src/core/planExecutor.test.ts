@@ -6,7 +6,7 @@ import { GatewayAgentToolExecutor, type AgentToolExecutor } from './agentToolBri
 import { ToolGateway, type ToolAuditEvent } from './tools';
 import { ToolRegistry } from './toolRegistry';
 import { ok } from './result';
-import { PlanExecutor as TerminalAgent } from './planExecutor';
+import { PlanExecutor as TerminalAgent, executeSequentialPlan } from './planExecutor';
 
 describe('terminal agent', () => {
   function setup(allowed: boolean) {
@@ -217,5 +217,46 @@ describe('terminal agent', () => {
     expect(await agent.run('inspect', 'tool-replaced', new AbortController().signal))
       .toMatchObject({ ok: false, error: { code: 'validation' } });
     expect(invoked).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a deterministic offline plan with the shared execution policy but no model planner', async () => {
+    const events: ToolAuditEvent[] = [];
+    const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
+      record: async event => { events.push(event); return ok(undefined); },
+      list: async () => ok([...events])
+    }, { now: () => 1 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: 'workspace.read', version: '1', description: 'Read file',
+      requiredPermissions: ['filesystem:read:selected'], risk: 'low', timeoutMs: 1_000,
+      validateInput: input => ok(input), execute: async input => ok(input) });
+    const plan = { goal: 'inspect the project', steps: [
+      { id: 'inspect', toolId: 'workspace.read', purpose: 'Read one file',
+        input: { path: 'README.md' }, dependsOn: [] }
+    ] };
+    const steps = vi.fn();
+    const result = await executeSequentialPlan(plan, 'deterministic-run',
+      new AbortController().signal, registry, new GatewayAgentToolExecutor(gateway, 'owner'), steps);
+    expect(result).toMatchObject({ ok: true, value: [
+      { stepId: 'inspect', output: { path: 'README.md' } }
+    ] });
+    expect(events.map(event => event.status)).toEqual(['started', 'completed']);
+    expect(steps).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a forged deterministic tool plan before the executor is invoked', async () => {
+    const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 1 });
+    const execute = vi.fn();
+    const executor: AgentToolExecutor = {
+      execute: async <Output = unknown>() => { execute(); return ok({} as Output); }
+    };
+    const plan = { goal: 'inspect', steps: [
+      { id: 'rogue', toolId: 'shell.exec', purpose: 'Unregistered command', input: {}, dependsOn: [] }
+    ] };
+    const result = await executeSequentialPlan(plan, 'run-rogue',
+      new AbortController().signal, new ToolRegistry(gateway), executor);
+    expect(result).toMatchObject({ ok: false, error: { code: 'validation' } });
+    expect(execute).not.toHaveBeenCalled();
   });
 });
