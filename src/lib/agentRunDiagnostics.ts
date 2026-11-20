@@ -17,7 +17,8 @@ export function formatAgentRunDiagnostics(
     "Agent: " + checkpoint.agentId,
     "Status: " + checkpoint.status,
     "Checkpoint: " + checkpoint.sequence,
-    "Updated: " + new Date(checkpoint.updatedAt).toISOString(),
+    "Updated: " + (Number.isFinite(checkpoint.updatedAt) && Number.isFinite(new Date(checkpoint.updatedAt).valueOf())
+      ? new Date(checkpoint.updatedAt).toISOString() : "unavailable"),
     "Audit entries: " + ownAudit.length,
     "Trace entries: " + ownTraces.length,
     "",
