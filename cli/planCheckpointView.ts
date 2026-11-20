@@ -39,9 +39,12 @@ function stateOf(checkpoint: AgentCheckpoint): PlanState | null {
     }
     if (state.active !== null) {
       if (!isRecord(state.active) ||
-          state.active.index !== state.nextStep ||
-          state.steps[state.active.index as number]?.id !== state.active.id ||
-          state.steps[state.active.index as number]?.toolId !== state.active.toolId) return null;
+          !Number.isSafeInteger(state.active.index) ||
+          state.active.index !== state.nextStep) return null;
+      const activeStep = state.steps[state.active.index as number];
+      if (!isRecord(activeStep) ||
+          activeStep.id !== state.active.id ||
+          activeStep.toolId !== state.active.toolId) return null;
     }
     if (checkpoint.status === "completed" &&
         (state.active !== null || state.nextStep !== state.steps.length)) return null;
