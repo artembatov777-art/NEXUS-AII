@@ -83,19 +83,35 @@ function validateCoordinationInput(plan: AgentPlan, assignments: Record<string, 
 
 export class MultiAgentCoordinator {
   private readonly pending = new Map<AgentRunId, PendingCoordination>();
+  // A run ID represents one execution attempt for the lifetime of this
+  // coordinator. Evicting completed IDs would permit duplicate side effects.
+  private readonly admitted = new Set<AgentRunId>();
+  private readonly active = new Set<AgentRunId>();
 
   constructor(
     private readonly executor: AgentTaskExecutor,
     private readonly policy: CoordinatorPolicy,
     private readonly traces: TraceSink,
     private readonly clock: { now(): number },
-    private readonly maxAgents = 4
+    private readonly maxAgents = 4,
+    private readonly maxLifetimeRuns = 4_096
   ) {}
+
+  private stepPermitted(step: AgentPlanStep, mayExecute?: (step: AgentPlanStep) => boolean): boolean {
+    if (!mayExecute) return true;
+    try { return mayExecute(step) === true; }
+    catch { return false; }
+  }
 
   async *run(runId: AgentRunId, plan: AgentPlan, assignments: Record<string, AgentId>, signal: AbortSignal,
     mayExecute?: (step: AgentPlanStep) => boolean): AsyncIterable<CoordinationEvent> {
-    if (this.pending.has(runId)) {
-      yield { type: "failed", runId, detail: "A coordination with this run ID is already waiting for approval." };
+    if (typeof runId !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(runId)) {
+      yield { type: "failed", runId, detail: "Coordination run ID must be a valid, bounded identifier." };
+      return;
+    }
+    if (!Number.isSafeInteger(this.maxLifetimeRuns) || this.maxLifetimeRuns < 1 ||
+        this.admitted.has(runId) || this.admitted.size >= this.maxLifetimeRuns) {
+      yield { type: "failed", runId, detail: "Coordination run ID was already used or the lifetime run budget is exhausted." };
       return;
     }
     const invalid = validateCoordinationInput(plan, assignments, this.maxAgents);
@@ -110,22 +126,41 @@ export class MultiAgentCoordinator {
     const safePlan = JSON.parse(serializedPlan) as AgentPlan;
     const safeAssignments = Object.fromEntries(Object.entries(assignments)) as Record<string, AgentId>;
     const outputs = new Map<string, unknown>();
-    yield { type: "started", runId };
-    await this.trace(runId, "started");
-    yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal, mayExecute);
+    // Claim the ID synchronously before yielding or awaiting anything, so
+    // simultaneous callers cannot delegate the same plan concurrently.
+    this.admitted.add(runId);
+    this.active.add(runId);
+    try {
+      yield { type: "started", runId };
+      await this.trace(runId, "started");
+      yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal, mayExecute);
+    } finally {
+      this.active.delete(runId);
+    }
   }
 
   /** Continues from the first unexecuted step after the host has granted the requested permission. */
   async *resume(runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> {
-    const pending = this.pending.get(runId);
-    if (!pending) { yield { type: "failed", runId, detail: "No pending coordination is available to resume." }; return; }
-    this.pending.delete(runId);
-    if (signal.aborted) {
-      await this.trace(runId, "cancelled");
-      yield { type: "failed", runId, detail: "Coordination was cancelled." };
+    if (this.active.has(runId)) {
+      yield { type: "failed", runId, detail: "A coordination with this run ID is already active." };
       return;
     }
-    yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal, pending.mayExecute);
+    const pending = this.pending.get(runId);
+    if (!pending) { yield { type: "failed", runId, detail: "No pending coordination is available to resume." }; return; }
+    // Resume claims the still-reserved run ID. An unrelated run() cannot
+    // start under this ID even during the await inside executeFrom.
+    this.pending.delete(runId);
+    this.active.add(runId);
+    try {
+      if (signal.aborted) {
+        await this.trace(runId, "cancelled");
+        yield { type: "failed", runId, detail: "Coordination was cancelled." };
+        return;
+      }
+      yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal, pending.mayExecute);
+    } finally {
+      this.active.delete(runId);
+    }
   }
 
   private async *executeFrom(
@@ -148,16 +183,11 @@ export class MultiAgentCoordinator {
       // A host allowlist can change after a plan was created or while approval
       // is pending. Check immediately before every delegation, on both run
       // and resume. Missing, throwing, or revoked host grants fail closed.
-      if (mayExecute) {
-        let permitted = false;
-        try { permitted = mayExecute(step) === true; }
-        catch { permitted = false; }
-        if (!permitted) {
-          await this.trace(runId, "failed", { step: index + 1 });
-          yield { type: "failed", runId, agentId, step: index + 1,
-            detail: "Planned tool is no longer permitted or registered." };
-          return;
-        }
+      if (!this.stepPermitted(step, mayExecute)) {
+        await this.trace(runId, "failed", { step: index + 1 });
+        yield { type: "failed", runId, agentId, step: index + 1,
+          detail: "Planned tool is no longer permitted or registered." };
+        return;
       }
       if (!agentId) {
         await this.trace(runId, "failed", { step: index + 1 });
@@ -192,8 +222,23 @@ export class MultiAgentCoordinator {
         yield { type: "failed", runId, agentId, step: index + 1, detail: "Agent delegation was denied." };
         return;
       }
+      // Authorization is asynchronous and may be followed by a checkpoint
+      // write while yielding agent_started. Re-evaluate the live permission
+      // immediately before the side-effect boundary, not only at step entry.
+      if (!this.stepPermitted(step, mayExecute)) {
+        await this.trace(runId, "failed", { step: index + 1 });
+        yield { type: "failed", runId, agentId, step: index + 1,
+          detail: "Planned tool is no longer permitted or registered." };
+        return;
+      }
       yield { type: "agent_started", runId, agentId, step: index + 1 };
       await this.trace(runId, "progress", { step: index + 1 });
+      if (signal.aborted || !this.stepPermitted(step, mayExecute)) {
+        await this.trace(runId, signal.aborted ? "cancelled" : "failed", { step: index + 1 });
+        yield { type: "failed", runId, agentId, step: index + 1,
+          detail: signal.aborted ? "Coordination cancelled." : "Planned tool is no longer permitted or registered." };
+        return;
+      }
       const input = {
         ...((step.input && typeof step.input === "object" && !Array.isArray(step.input))
           ? step.input as Record<string, unknown> : { value: step.input }),
