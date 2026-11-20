@@ -171,7 +171,7 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
       // Parent plan checkpoints share the same durable Desktop repository as
       // individual resumable agents. No automatic replay after a restart.
       const planCheckpoints = new PlanRunCheckpointService(checkpointService, {
-        agentId: "nexus.desktop.workflow", threadId, now: () => clock.now()
+        agentId: "nexus.desktop.workflow", threadId, now: () => clock.now(), runIdPrefix: "coord_"
       });
       return createAgentWorkflow(planner, toolRegistry, coordinator, TOOL_INVOCATION_AGENT_ID,
         allowedToolIds, planCheckpoints);
