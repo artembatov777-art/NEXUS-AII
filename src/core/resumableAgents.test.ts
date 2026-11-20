@@ -255,4 +255,33 @@ describe("ResumableAgentRuntime", () => {
     expect(step).toHaveBeenCalledTimes(2);
     expect(await service.get(runId)).toMatchObject({ ok: true, value: { status: "completed", state: { steps: 2 } } });
   });
+
+  it.each([
+    { permissionIndex: 0, pendingPermission: "memory:read" },
+    { permissionIndex: 2, pendingPermission: "tool:execute" },
+  ])("rejects forged or out-of-range checkpoint approvals: %j", async ({ permissionIndex, pendingPermission }) => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const step = vi.fn(makeDefinition().step);
+    const approvals = new InMemoryAgentApprovalAuthority(service, { approvalId: () => "forged-grant" });
+    const runtime = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 }, undefined, approvals);
+    runtime.register({ ...makeDefinition(), requiredPermissions: ["tool:execute"], step });
+    const persisted = await service.persist({
+      schemaVersion: 1, runId, agentId, threadId: "thread-forged", sequence: 1,
+      status: "waiting_for_approval",
+      state: { payload: { count: 0 }, permissionIndex, steps: 0, agentVersion: "1.0.0" },
+      pendingApproval: { permission: pendingPermission, requestedAt: 1_000 },
+      createdAt: 1_000, updatedAt: 1_000
+    });
+    expect(persisted.ok).toBe(true);
+    const grant = await approvals.issue(runId);
+    expect(grant.ok).toBe(true);
+    if (!grant.ok) throw new Error("Approval grant was not issued.");
+
+    const events = await collect(runtime.resume(runId, grant.value));
+    expect(events.at(-1)).toMatchObject({ type: "failed", message: expect.stringMatching(/approval.*match|checkpoint.*invalid/i) });
+    expect(step).not.toHaveBeenCalled();
+    expect(await service.get(runId)).toMatchObject({ ok: true, value: { status: "waiting_for_approval" } });
+  });
 });
