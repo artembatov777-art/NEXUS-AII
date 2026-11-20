@@ -16,6 +16,7 @@ import { AgentCheckpointService } from '../src/core/agentCheckpoints';
 import { PlanRunCheckpointService } from '../src/core/planRunCheckpoints';
 import { FileAgentCheckpointRepository } from './fileAgentCheckpoints';
 import { quoteTerminal } from './quote';
+import { inspectLocalGit } from './gitInspection';
 import {
   assertPrivateDirectory, assertPrivateJournal, digest, isIntentFile, isRecoveryId, MAX_DRAFT_FILES, MAX_EDIT_BYTES,
   MAX_INTENT_BYTES, MAX_STEPS_BYTES, parseEditEvidence, readInspectionJournal, readPrivateJournal,
@@ -338,6 +339,15 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
         return 'Selected '+quoteTerminal(root);
       }
       if (!host) return 'No project selected. Use /project <absolute directory>.';
+      if (command === '/git') {
+        // Inspection is strictly read-only and bound to the project selected
+        // through the native workspace host. No arbitrary Git arguments can
+        // be forwarded from a model, paste, or interactive prompt.
+        const result = await inspectLocalGit(root, line, signal);
+        return result.ok
+          ? 'Local Git inspection (read-only):\n' + quoteTerminal(result.value)
+          : 'Git inspection stopped: ' + quoteTerminal(result.error.message);
+      }
       if (command === '/agent') {
         const [action] = arg.split(/\s/, 1);
         const parameters = arg.slice(action.length).trim();
