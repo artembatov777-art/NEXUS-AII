@@ -1,11 +1,12 @@
 import type { Result } from "../src/core/result";
-import type { ToolAuditEvent } from "../src/core/tools";
+import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent } from "../src/core/tools";
+import { findAmbiguous } from "../src/core/toolReconciliation";
 import { quoteTerminal } from "./quote";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 const MAX_DETAIL_PREVIEW = 160;
-const USAGE = "Usage: /audit <run-id> [last <1-50>] | /audit recent [1-50] | /audit locks [1-50]\n";
+const USAGE = "Usage: /audit <run-id> [last <1-50>] | /audit status <run-id> | /audit recent [1-50] | /audit locks [1-50]\n";
 
 interface AuditReader {
   list(options: { runId: string; limit: number }): Promise<Result<ToolAuditEvent[]>>;
@@ -57,6 +58,44 @@ export async function renderAuditCommand(input: string, audit: AuditReader): Pro
     if (!results.value.length) return "No audit runs found.\n";
     const visible = results.value.slice(0, limit);
     return `Recent audit runs (${visible.length}):\n${visible.map(item => `${safeTime(item.updatedAt)}  ${quoteTerminal(item.runId)}`).join("\n")}\n`;
+  }
+  if (/^\/audit status(?:\s|$)/.test(command)) {
+    const matchedStatus = /^\/audit status ([A-Za-z0-9_-]{1,120})$/.exec(command);
+    if (!matchedStatus) return USAGE;
+    const runId = matchedStatus[1];
+    let result: Result<ToolAuditEvent[]>;
+    try { result = await audit.list({ runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS }); }
+    catch { return "Full audit journal is unavailable or unsafe. No tool was executed.\n"; }
+    if (!result.ok || !Array.isArray(result.value) ||
+        result.value.length > MAX_TOOL_AUDIT_HISTORY_EVENTS ||
+        result.value.some(event => !event || event.runId !== runId ||
+          typeof event.toolId !== "string" || typeof event.traceId !== "string" ||
+          !["started", "completed", "failed", "denied", "reconciled"].includes(event.status) ||
+          !Number.isFinite(event.timestamp))) {
+      return "Full audit journal is unavailable or unreadable. No tool was executed.\n";
+    }
+    if (!result.value.length) {
+      return "No audit events for " + quoteTerminal(runId) +
+        ". This does not prove no external effects; inspect /audit locks before retrying.\n";
+    }
+    // Use exactly the same ambiguous-outcome algorithm as Desktop manual
+    // reconciliation. Incomplete and failed post-dispatch steps may have had
+    // real effects and must not be replayed merely because an audit is sparse.
+    const ambiguous = findAmbiguous(result.value);
+    const header = "Audit status " + quoteTerminal(runId) + ": " +
+      result.value.length + " recorded events, " + ambiguous.length +
+      " ambiguous tool step(s) requiring owner review.\n";
+    if (!ambiguous.length) {
+      return header + "No ambiguous steps found in this journal. This is not proof of external outcomes or permission to retry.\n";
+    }
+    const visible = ambiguous.slice(0, 20).map(step => [
+      safeTime(step.startedAt), preview(step.toolId),
+      "trace=" + preview(step.traceId),
+      "outcome requires inspection"
+    ].join("  "));
+    return header + visible.join("\n") +
+      (ambiguous.length > visible.length ? "\nOnly the first " + visible.length + " ambiguous steps are shown." : "") +
+      "\nNo automatic retry was authorized.\n";
   }
   const matched = /^\/audit ([A-Za-z0-9_-]{1,120})(?: last (\d+))?$/.exec(command);
   if (!matched) return USAGE;
