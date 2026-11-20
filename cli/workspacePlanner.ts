@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { AgentPlanner, type AgentPlanStep } from '../src/core/agentPlanner';
+import type { AgentPlanStep } from '../src/core/agentPlanner';
 import type { AgentToolExecutor } from '../src/core/agentToolBridge';
-import { PlanExecutor, type PlanStepResult } from '../src/core/planExecutor';
+import { executeSequentialPlan, type PlanStepResult } from '../src/core/planExecutor';
 import { err, ok, type Result } from '../src/core/result';
 import type { ToolRegistry } from '../src/core/toolRegistry';
 import { quoteTerminal } from './quote';
@@ -81,26 +81,24 @@ function entries(output: unknown): string[] {
 export class WorkspacePlanner {
   constructor(private readonly registry: ToolRegistry, private readonly tools: AgentToolExecutor) {}
 
-  private executor(createSteps: (goal: string) => Result<AgentPlanStep[]>) {
-    const planner = new AgentPlanner({
-      async createPlan({ goal }) {
-        const steps = createSteps(goal);
-        return steps.ok ? ok({ goal, steps: steps.value }) : steps;
-      }
-    }, 2);
-    return new PlanExecutor(planner, this.registry, this.tools);
-  }
-
-  runInspection(root: string, goal: string, runId: string, signal: AbortSignal, onStep?: (step: PlanStepResult) => void) {
-    return this.executor(task => {
-      const match = /^(read|list|search)(?:[ \t]+(.+))?$/.exec(task);
-      if (!match || (!match[2] && match[1] !== 'list')) {
-        return err('validation', 'Offline tasks: read <file>, list [directory], search <text>.');
-      }
-      const [, operation, arg = ''] = match;
-      if (operation === 'search') return ok([workspaceStep(root, 'search', '', arg)]);
-      return ok([workspaceStep(root, operation === 'list' ? 'list' : 'read', arg)]);
-    }).run(goal, runId, signal, onStep);
+  async runInspection(
+    root: string,
+    goal: string,
+    runId: string,
+    signal: AbortSignal,
+    onStep?: (step: PlanStepResult) => void
+  ): Promise<Result<PlanStepResult[]>> {
+    const match = /^(read|list|search)(?:[ \t]+(.+))?$/.exec(goal);
+    if (!match || (!match[2] && match[1] !== 'list')) {
+      return err('validation', 'Offline tasks: read <file>, list [directory], search <text>.');
+    }
+    const [, operation, arg = ''] = match;
+    const steps = operation === 'search'
+      ? [workspaceStep(root, 'search', '', arg)]
+      : [workspaceStep(root, operation === 'list' ? 'list' : 'read', arg)];
+    // The offline path has no planner model. Execute the deterministic,
+    // bounded plan through the same checked executor used by model-backed CLI.
+    return executeSequentialPlan({ goal, steps }, runId, signal, this.registry, this.tools, onStep);
   }
 
   async plan(root: string, input: string, read: (path: string, planId: string) => Promise<Result<WorkspaceSnapshot>>, signal: AbortSignal) {
@@ -110,7 +108,7 @@ export class WorkspacePlanner {
     const id = randomUUID();
     const steps = [workspaceStep(root, 'list', directory)];
     if (query) steps.push(workspaceStep(root, 'search', directory, query));
-    const discovery = await this.executor(() => ok(steps)).run(goal, id, signal);
+    const discovery = await executeSequentialPlan({ goal, steps }, id, signal, this.registry, this.tools);
     if (!discovery.ok) return discovery;
 
     const prepared = await prepareChanges(changes, path => read(path, id), signal);
