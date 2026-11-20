@@ -167,7 +167,7 @@ describe('terminal agent', () => {
     }, { now: () => 0 });
     const planner = new AgentPlanner({ createPlan: async () => { throw new Error("Provider crashed"); } });
     const agent = new TerminalAgent(planner, new ToolRegistry(gateway), {
-      execute: async () => ok({})
+      execute: async <Output = unknown>() => ok({} as Output)
     });
     expect(await agent.run("inspect", "planner-exception", new AbortController().signal))
       .toMatchObject({ ok: false, error: { code: "provider_unavailable" } });
@@ -183,7 +183,7 @@ describe('terminal agent', () => {
     const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
       { id: "one", toolId: "read.a", purpose: "Read", input: {}, dependsOn: [] }
     ] }) });
-    const executor = { execute: async () => ok({ executed: true }) };
+    const executor: AgentToolExecutor = { execute: async <Output = unknown>() => ok({ executed: true } as Output) };
     const agent = new TerminalAgent(planner, registry, executor);
     const result = await agent.run("inspect", "observer-error", new AbortController().signal,
       () => { throw new Error("Terminal output disconnected"); });
