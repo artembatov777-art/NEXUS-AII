@@ -26,7 +26,8 @@ describe("reconciling interrupted agent tool history", () => {
     const reconciler = new ToolReconciliationService({
       record: async () => ok(undefined), list: async () => ok(events)
     }, repository);
-    const result = await reconciler.listAmbiguous("interrupted-1");
+    expect(await reconciler.listAmbiguous("interrupted-1")).toEqual({ ok: true, value: [] });
+    const result = await reconciler.listAmbiguous("interrupted-1", true);
     expect(result).toEqual({ ok: true, value: [{
       runId: "interrupted-1", toolId: "workspace.write",
       traceId: "interrupted-1:1", startedAt: 15
