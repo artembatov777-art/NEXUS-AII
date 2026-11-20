@@ -9,7 +9,7 @@ import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, S
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
-import type { ToolAuditEvent } from "../core/tools";
+import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent } from "../core/tools";
 import type { AmbiguousToolStep } from "../core/toolReconciliation";
 import { createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { loadProviderProfiles } from "../lib/providerProfiles";
@@ -146,10 +146,12 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
   const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
+  const [resumeEligibleByConversation, setResumeEligibleByConversation] = useState<Record<string, string[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const conversationKey = conversationId ?? "standalone";
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
+  const resumeEligibleRunIds = resumeEligibleByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
@@ -207,7 +209,30 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
-    } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
+      // Only the local, non-destructive demo may be restarted after a clean audit.
+      // A completed or ambiguous tool attempt is never eligible for replay.
+      const previewVersion = runtime.agentRuntime.list().find(agent => agent.id === BUILT_IN_AGENT_IDS.localWorkflow)?.version;
+      const candidates = checkpoints.filter(item => {
+        if (item.agentId !== BUILT_IN_AGENT_IDS.localWorkflow || item.status !== "running" || item.runId === activeRunId) return false;
+        const state = item.state;
+        return !!previewVersion && state !== null && typeof state === "object" && !Array.isArray(state) &&
+          "steps" in state && state.steps === 0 && "agentVersion" in state && state.agentVersion === previewVersion;
+      });
+      const auditResults = await Promise.all(candidates.map(item =>
+        runtime.auditSink.list({ runId: item.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS })
+      ));
+      setResumeEligibleByConversation(previous => ({
+        ...previous,
+        [conversationKey]: candidates.filter((_, index) => {
+          const result = auditResults[index];
+          return result.ok && result.value.length < MAX_TOOL_AUDIT_HISTORY_EVENTS &&
+            result.value.every(event => event.status === "denied");
+        }).map(item => item.runId)
+      }));
+    } else if (!failedResult.ok) {
+      setResumeEligibleByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+      addFeed(failedResult.error.message, "error");
+    }
     if (audit.ok) setAuditEvents(audit.value);
     else addFeed(audit.error.message, "error");
   }, [runtime, addFeed, threads, conversationKey, activeRunId]);
@@ -409,6 +434,26 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     void runAction(signal => runtime.agentRuntime.start(BUILT_IN_AGENT_IDS.localWorkflow, input, threads.primary, signal));
   }
 
+  async function continueLocalPreview(checkpoint: AgentCheckpoint) {
+    if (!runtime || busy || !resumeEligibleRunIds.includes(checkpoint.runId) ||
+        checkpoint.status !== "running" || checkpoint.agentId !== BUILT_IN_AGENT_IDS.localWorkflow) return;
+    const loaded = await runtime.checkpointService.get(checkpoint.runId);
+    if (!loaded.ok || !loaded.value || loaded.value.sequence !== checkpoint.sequence || loaded.value.status !== "running") {
+      addFeed("The interrupted checkpoint changed; inspect the current state before continuing.", "warning");
+      await refresh();
+      return;
+    }
+    const history = await runtime.auditSink.list({ runId: checkpoint.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
+    if (!history.ok || history.value.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS ||
+        history.value.some(event => event.status !== "denied")) {
+      addFeed("Cannot continue: previous tool outcomes are uncertain. Review the audit history first.", "warning");
+      await refresh();
+      return;
+    }
+    if (!window.confirm("Continue this local, non-destructive preview from its checkpoint? All agent permissions will be requested again. No external tool or model will be called.")) return;
+    await runAction(signal => runtime.agentRuntime.continue(checkpoint.runId as AgentRunId, signal));
+  }
+
   function approve(checkpoint: AgentCheckpoint) {
     if (!runtime) return;
     void runAction(async function* (signal: AbortSignal) {
@@ -529,7 +574,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && checkpoint.runId !== activeRunId && <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>}
+                {checkpoint.status === "running" && checkpoint.runId !== activeRunId && (resumeEligibleRunIds.includes(checkpoint.runId)
+                  ? <button className="agent-small-button" disabled={busy} onClick={() => void continueLocalPreview(checkpoint)}>Continue local preview</button>
+                  : <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>)}
               </div>)}</div>}
           </article>
 
