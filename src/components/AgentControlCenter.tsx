@@ -608,7 +608,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               </div>)}
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
-            {auditRunFilter && <div className="agent-form-footer"><span>Audit for {auditRunFilter}</span><button type="button" className="agent-small-button" onClick={showRecentAudit}>Show recent audits</button></div>
+            {auditRunFilter && <div className="agent-form-footer"><span>Audit for {auditRunFilter}</span><button type="button" className="agent-small-button" onClick={showRecentAudit}>Show recent audits</button></div>}
             {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
               <div className="agent-history">{auditEvents.slice(-50).reverse().map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
