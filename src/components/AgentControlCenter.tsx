@@ -246,6 +246,16 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       setHistoryTruncatedByConversation(previous => ({ ...previous, [conversationKey]: result.some(item => item.ok && item.value.length === 200) }));
       const reviewableRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled" ||
         (item.status === "running" && item.runId !== effectiveActiveRunId)).slice(0, 50);
+      // An owner can inspect an older saved run even when it falls outside the
+      // 50 most recent review candidates. Only query that additional run.
+      if (auditRunFilter) {
+        const focused = checkpoints.find(item => item.runId === auditRunFilter);
+        if (focused && (focused.status === "failed" || focused.status === "cancelled" ||
+          (focused.status === "running" && focused.runId !== effectiveActiveRunId)) &&
+          !reviewableRuns.some(item => item.runId === focused.runId)) {
+          reviewableRuns.push(focused);
+        }
+      }
       const reconciliationResults = await Promise.all(reviewableRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId, item.status === "running")
       ));
