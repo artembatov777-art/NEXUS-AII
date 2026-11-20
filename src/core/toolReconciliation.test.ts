@@ -66,11 +66,17 @@ describe("ToolReconciliationService", () => {
     expect(list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
   });
 
-  it("does not expose live or successful runs for reconciliation", async () => {
+  it("shows interrupted running tool evidence read-only while blocking reconciliation", async () => {
     const audit = new FakeAudit();
     audit.events = [started];
     const service = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("running")));
-    expect(await service.listAmbiguous("run-1")).toEqual({ ok: true, value: [] });
+    expect(await service.listAmbiguous("run-1")).toEqual({
+      ok: true,
+      value: [{ toolId: "workspace.write", runId: "run-1", traceId: "run-1:2", startedAt: 10 }]
+    });
+    expect(await service.reconcile("run-1", "workspace.write", "run-1:2", true))
+      .toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(audit.events).toHaveLength(1);
     const successful = new ToolReconciliationService(audit, new FakeCheckpoints(checkpoint("completed")));
     expect(await successful.listAmbiguous("run-1")).toEqual({ ok: true, value: [] });
   });
