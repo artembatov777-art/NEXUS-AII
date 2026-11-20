@@ -2,6 +2,11 @@ import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import type { ToolAuditEvent } from "../core/tools";
 import type { TraceEvent } from "../core/observability";
 
+/** Only machine-readable identifiers may enter a copied diagnostic report. */
+function safeCode(value: string): string {
+  return /^[A-Za-z][A-Za-z0-9._-]{0,119}$/.test(value) ? value : "[redacted]";
+}
+
 /** Human-readable troubleshooting data only, never raw state, outputs or secrets. */
 export function formatAgentRunDiagnostics(
   checkpoint: AgentCheckpoint,
@@ -26,12 +31,12 @@ export function formatAgentRunDiagnostics(
   ];
   for (const event of ownAudit.slice(-MAX_EVENTS)) {
     // Never include detail, input/output or arbitrary external responses.
-    lines.push(event.status + " | " + event.toolId + " | " + event.timestamp);
+    lines.push(event.status + " | " + safeCode(event.toolId) + " | " + event.timestamp);
   }
   if (ownAudit.length > MAX_EVENTS) lines.push((ownAudit.length - MAX_EVENTS) + " audit events omitted");
   lines.push("", "Agent trace (metadata only)");
   for (const event of ownTraces.slice(-MAX_EVENTS)) {
-    lines.push(event.status + " | " + event.name + " | " + event.timestamp);
+    lines.push(event.status + " | " + safeCode(event.name) + " | " + event.timestamp);
   }
   if (ownTraces.length > MAX_EVENTS) lines.push((ownTraces.length - MAX_EVENTS) + " trace events omitted");
   return lines.join("\n").slice(0, 18_000);
