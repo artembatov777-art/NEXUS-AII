@@ -2345,7 +2345,7 @@ mod database_tests {
         assert_eq!(saved[0]["kind"], "started");
         assert_eq!(saved[1]["kind"], "completed");
         assert_eq!(list_agent_activity_event_records(&db, "chat-a", 10, Some("run-one")).unwrap().len(), 2);
-        assert!(list_agent_activity_event_records(&db, "chat-a", 10, Some("bad\\nrun")).is_err());
+        assert!(list_agent_activity_event_records(&db, "chat-a", 10, Some("bad\nrun")).is_err());
         assert_eq!(list_agent_activity_event_records(&db, "chat-a", 1, None).unwrap().len(), 1);
         assert!(list_agent_activity_event_records(&db, "chat-a", 0, None).is_err());
     }
