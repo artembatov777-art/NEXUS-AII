@@ -30,6 +30,9 @@ jobs:
       - name: Pin npm to stable Arborist release
         run: npm install --global npm@10.8.2
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      # Catch CLI strict TypeScript errors and subprocess regressions before
+      # spending time building native installers on all three platforms.
+      - run: npm run test:cli
       - run: npm run test:web-api
       - run: npm run build
 
