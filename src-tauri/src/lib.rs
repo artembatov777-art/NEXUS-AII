@@ -2832,13 +2832,13 @@ mod database_tests {
     }
 
     #[test]
-    fn upgrades_schema_version_four_atomically_to_ten() {
+    fn upgrades_schema_version_four_atomically_to_eleven() {
         let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
         migrate_database(&mut connection).expect("create current schema");
         connection.pragma_update(None, "user_version", 4).expect("simulate v4");
-        connection.execute_batch("DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets; ALTER TABLE messages DROP COLUMN image_attachment;").expect("remove v5 and v6 tables");
-        migrate_database(&mut connection).expect("upgrade v4 to v10");
+        connection.execute_batch("DROP TABLE agent_activity_events; DROP TABLE trace_events; DROP TABLE tool_audit_events; DROP TABLE agent_checkpoints; DROP TABLE training_experiments; DROP TABLE training_datasets; ALTER TABLE messages DROP COLUMN image_attachment;").expect("remove v5 and v6 tables");
+        migrate_database(&mut connection).expect("upgrade v4 to v11");
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("schema version");
         assert_eq!(version, 11);
         let table: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_checkpoints'", [], |row| row.get(0)).expect("checkpoint table");
@@ -2851,9 +2851,9 @@ mod database_tests {
     fn schema_v8_upgrade_preserves_audit_history_and_adds_reconciled_status() {
         let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
         connection.execute_batch("CREATE TABLE messages (id TEXT PRIMARY KEY NOT NULL,conversation_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,source_references TEXT); CREATE TABLE tool_audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,tool_id TEXT NOT NULL,run_id TEXT NOT NULL,trace_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('started','completed','failed','denied')),timestamp REAL NOT NULL,detail TEXT); CREATE INDEX idx_tool_audit_run_id ON tool_audit_events(run_id,id DESC); INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES('tool.read','run-legacy','trace-legacy','completed',1.0,'preserve me'); PRAGMA user_version=8;").expect("create v8 schema");
-        migrate_database(&mut connection).expect("upgrade schema to v10");
+        migrate_database(&mut connection).expect("upgrade schema to v11");
         let version:i64=connection.pragma_query_value(None,"user_version",|row|row.get(0)).expect("schema version");
-        assert_eq!(version,10);
+        assert_eq!(version,11);
         let image_column: i64 = connection.query_row("SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name='image_attachment'", [], |row| row.get(0)).expect("image attachment column");
         assert_eq!(image_column, 1);
         let events=list_tool_audit_event_records(&connection,Some("run-legacy"),10).expect("load preserved audit history");
