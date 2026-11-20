@@ -159,6 +159,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const [activityByConversation, setActivityByConversation] = useState<Record<string, AgentActivityEvent[]>>({});
+  const [activityRunByConversation, setActivityRunByConversation] = useState<Record<string, string | null>>({});
   const conversationKey = conversationId ?? "standalone";
   const activeManagedRun = managedRunSnapshot.find(run => run.conversationId === conversationKey && run.status === "running") ?? null;
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
@@ -171,6 +172,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const savedActivity = activityByConversation[conversationKey] ?? [];
+  const activityRunFilter = activityRunByConversation[conversationKey] ?? null;
+  const displayedActivity = activityRunFilter ? savedActivity.filter(event => event.runId === activityRunFilter) : savedActivity;
   const [busy, setBusy] = useState(false);
   const operationBusy = busy || !!activeManagedRun;
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
@@ -242,7 +245,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 200))),
       runtime.auditSink.list({ ...(auditRunFilter ? { runId: auditRunFilter } : {}), limit: 100 }),
       auditRunFilter ? runtime.traceSink.list({ runId: auditRunFilter, limit: 100 }) : Promise.resolve(null),
-      runtime.activityRepository.listByConversation(conversationKey, 100)
+      runtime.activityRepository.listByConversation(conversationKey, 100, activityRunFilter ?? undefined)
     ]);
     const failedResult = result.find(item => !item.ok);
     if (!failedResult) {
@@ -276,7 +279,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     else if (traces && !traces.ok) addFeed(traces.error.message, "error");
     if (activity.ok) setActivityByConversation(previous => ({ ...previous, [conversationKey]: activity.value }));
     else addFeed("Saved agent activity could not be loaded.", "warning");
-  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns, effectiveActiveRunId]);
+  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns, effectiveActiveRunId, activityRunFilter]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -407,6 +410,17 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } catch {
       addFeed("Could not copy run diagnostics. No data was sent externally.", "error");
     }
+  }
+
+  function inspectRunActivity(runId: string) {
+    setActivityRunByConversation(previous => ({ ...previous, [conversationKey]: runId }));
+    setActivityByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+    setAgentView("progress");
+  }
+
+  function showAllActivity() {
+    setActivityRunByConversation(previous => ({ ...previous, [conversationKey]: null }));
+    setActivityByConversation(previous => ({ ...previous, [conversationKey]: [] }));
   }
 
   function inspectRunAudit(runId: string) {
@@ -655,9 +669,10 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("LIVE EXECUTION")}</span><h3>{t("Run event stream")}</h3></div><button className="agent-small-button" onClick={() => void refresh()} disabled={!runtime}><RefreshCw size={13}/> Refresh</button></div>
             {feed.length === 0 ? <div className="agent-empty">{t("Start a run to inspect progress, approval handoffs and output.")}</div> : <div className="agent-feed">{feed.map(item => <div className={"agent-feed-item " + item.tone} key={item.id}><span className="agent-feed-dot"/><pre>{t(item.text)}</pre></div>)}</div>}
             <section className="agent-card" aria-label="Saved agent activity">
-              <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED HISTORY</span><h3>Saved activity</h3></div><span className="agent-count">{savedActivity.length}</span></div>
-              {savedActivity.length === 0 ? <div className="agent-empty">No saved activity yet.</div> :
-                <div className="agent-feed">{savedActivity.slice(-50).map((event, index) => <div className="agent-feed-item" key={event.runId + ":" + event.timestamp + ":" + index}>
+              <div className="agent-card-heading"><div><span className="agent-kicker">PERSISTED HISTORY</span><h3>Saved activity</h3></div><span className="agent-count">{displayedActivity.length}</span></div>
+              {activityRunFilter && <div className="agent-form-footer"><span>Activity for {activityRunFilter}</span><button className="agent-small-button" type="button" onClick={showAllActivity}>Show all activity</button></div>}
+              {displayedActivity.length === 0 ? <div className="agent-empty">No saved activity yet.</div> :
+                <div className="agent-feed">{displayedActivity.slice(-50).map((event, index) => <div className="agent-feed-item" key={event.runId + ":" + event.timestamp + ":" + index}>
                   <span className="agent-feed-dot"/><div><strong>{agentActivityLabel(event)}</strong><small> · {new Date(event.timestamp).toLocaleString()} · {event.runId}</small></div>
                 </div>)}</div>}
               <p className="agent-disclaimer">Saved activity contains timestamps, statuses and step numbers only. Task text and tool output are not copied into this journal.</p>
@@ -695,7 +710,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               <div className="agent-history">{visibleHistory.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
-                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button><button className="agent-small-button" type="button" disabled={!runtime || busy} onClick={() => void copyRunDiagnostics(checkpoint)}>{copiedDiagnosticsRunId === checkpoint.runId ? "Copied diagnostics" : "Copy diagnostics"}</button></div>
+                <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunActivity(checkpoint.runId)}>Inspect activity</button><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button><button className="agent-small-button" type="button" disabled={!runtime || busy} onClick={() => void copyRunDiagnostics(checkpoint)}>{copiedDiagnosticsRunId === checkpoint.runId ? "Copied diagnostics" : "Copy diagnostics"}</button></div>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
                 {checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId &&
                   (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
