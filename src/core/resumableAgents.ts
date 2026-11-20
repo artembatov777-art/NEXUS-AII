@@ -44,6 +44,12 @@ const isStoredAgentState = (value: JsonValue): value is JsonValue & StoredAgentS
 const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0): JsonValue =>
   ({ payload, permissionIndex, agentVersion, steps } as JsonValue);
 
+// One JavaScript process may have multiple runtime instances (for example, when
+// Agent Center is closed and reopened). Prevent two instances from executing
+// the same durable run concurrently. Cross-process safety still relies on CAS.
+const activeAgentExecutions = new Set<string>();
+const activeContinuationClaims = new Set<string>();
+
 /** Serializable step execution. Each successful step is persisted before its events are emitted. */
 export class ResumableAgentRuntime {
   private readonly definitions = new Map<AgentId, ResumableAgentDefinition<unknown>>();
@@ -163,6 +169,12 @@ export class ResumableAgentRuntime {
 
   /** Claims an interrupted running checkpoint with CAS, then continues from its saved state. */
   async *continue(runId: AgentRunId, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+    if (activeAgentExecutions.has(runId) || activeContinuationClaims.has(runId)) {
+      yield { type: "failed", runId, message: "This agent run is already executing or being continued in this process." };
+      return;
+    }
+    activeContinuationClaims.add(runId);
+    try {
     const loaded = await this.checkpoints.get(runId);
     if (!loaded.ok || !loaded.value) {
       yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message };
@@ -220,6 +232,9 @@ export class ResumableAgentRuntime {
       return;
     }
     yield* this.execute(agent, claimed, cp.state.payload, auth.nextIndex, cp.state.steps, signal);
+    } finally {
+      activeContinuationClaims.delete(runId);
+    }
   }
 
   private async authorizeRemaining(agent: ResumableAgentDefinition<unknown>, startIndex: number):
@@ -238,6 +253,11 @@ export class ResumableAgentRuntime {
   private async *execute(agent: ResumableAgentDefinition<unknown>, checkpoint: AgentCheckpoint,
     initialState: JsonValue, permissionIndex: number, completedSteps: number, externalSignal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
     const runId = checkpoint.runId as AgentRunId;
+    if (activeAgentExecutions.has(runId)) {
+      yield { type: "failed", runId, message: "This agent run is already executing in this process." };
+      return;
+    }
+    activeAgentExecutions.add(runId);
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     if (externalSignal?.aborted) controller.abort();
@@ -284,6 +304,7 @@ export class ResumableAgentRuntime {
       }
       yield { type: "failed", runId, message };
     } finally {
+      activeAgentExecutions.delete(runId);
       clearTimeout(timeout);
       externalSignal?.removeEventListener("abort", onAbort);
     }
