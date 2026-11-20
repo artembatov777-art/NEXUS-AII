@@ -75,12 +75,18 @@ describe("manual agent continuation", () => {
     step.mockImplementationOnce(() => new Promise(resolve => { finishStep = resolve; }));
     const first = runtime.continue(runId)[Symbol.asyncIterator]();
     expect((await first.next()).value).toMatchObject({ type: "started" });
-    const second = await collect(runtime.continue(runId));
-    expect(second[0]).toMatchObject({ type: "failed" });
-    finishStep({ state: { count: 1 }, done: true });
-    const remaining: unknown[] = [];
-    for await (const event of { [Symbol.asyncIterator]: () => first }) remaining.push(event);
-    expect(remaining.at(-1)).toMatchObject({ type: "completed" });
+    // The first yield announces the run; advancing the iterator actually
+    // enters the agent step and keeps it pending while we attempt the duplicate.
+    const executing = first.next();
+    await vi.waitFor(() => expect(step).toHaveBeenCalledOnce());
+    try {
+      const second = await collect(runtime.continue(runId));
+      expect(second[0]).toMatchObject({ type: "failed" });
+    } finally {
+      finishStep({ state: { count: 1 }, done: true });
+    }
+    expect((await executing).value).toMatchObject({ type: "completed" });
+    expect((await first.next()).done).toBe(true);
     expect(step).toHaveBeenCalledOnce();
   });
 
