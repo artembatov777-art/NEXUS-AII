@@ -52,4 +52,12 @@ describe("safe agent run diagnostics", () => {
     const report = formatAgentRunDiagnostics({ ...checkpoint, updatedAt: Number.MAX_VALUE }, [], []);
     expect(report).toContain("Updated: unavailable");
   });
+
+  it("redacts unexpected free-form tool or trace names that may contain private text", () => {
+    const report = formatAgentRunDiagnostics(checkpoint,
+      [{ ...audit[0], toolId: "my-secret-token=DO_NOT_EXPORT" }],
+      [{ ...traces[0], name: "Prompt: DO_NOT_EXPORT" }]);
+    expect(report).not.toContain("DO_NOT_EXPORT");
+    expect(report).toContain("[redacted]");
+  });
 });
