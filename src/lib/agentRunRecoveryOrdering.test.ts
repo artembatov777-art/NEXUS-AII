@@ -163,4 +163,20 @@ describe("checkpoint recovery ordering", () => {
     manager.restoreCheckpoints("standalone", [{ ...waiting, sequence: 2, status: "failed", updatedAt: 150, pendingApproval: undefined }]);
     expect(manager.list("standalone")).toMatchObject([{ status: "failed", finishedAt: 150 }]);
   });
+
+  it("does not re-add pruned terminal runs on repeated bulk refreshes", () => {
+    const manager = new AgentRunManager();
+    const checkpoints: AgentCheckpoint[] = Array.from({ length: 300 }, (_, index) => ({
+      schemaVersion: 1, runId: "terminal-" + index, agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 2,
+      status: "completed", state: {}, createdAt: index, updatedAt: index + 1
+    }));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(manager.list("standalone")).toHaveLength(250);
+    const snapshots: number[] = [];
+    const unsubscribe = manager.subscribe(runs => snapshots.push(runs.length));
+    manager.restoreCheckpoints("standalone", checkpoints);
+    expect(snapshots).toEqual([250]);
+    unsubscribe();
+  });
 });
