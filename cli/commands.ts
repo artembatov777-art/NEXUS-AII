@@ -40,7 +40,8 @@ export async function dispatchCommand(input: string, context: CommandContext): P
     else context.write(renderHistoryCommand(input, context.history()) ?? 'History command is invalid.\n');
     return true;
   }
-  if (/^\/(project|files|read|search|draft|approve|apply|recover|rollback|discard)(?:\s|$)/.test(input) ||
+  if (/^\/git(?:\s|$)/.test(input) ||
+      /^\/(project|files|read|search|draft|approve|apply|recover|rollback|discard)(?:\s|$)/.test(input) ||
       /^\/agent\s+(?:plan(?:\s|$)|(?:inspect|diff|status)\s*$)/.test(input)) {
     if (context.workspace) { context.write(await context.workspace(input, context.signal) + '\n'); return true; }
     context.write('Workspace backend is unavailable; no filesystem access was attempted.\n');
