@@ -1,6 +1,6 @@
 import type { AgentId, AgentRunId } from './agents';
 import type { AgentPlanner, ValidatedPlan } from './agentPlanner';
-import { isExecutableToolStep, validateExecutablePlan } from './agentExecutionPolicy';
+import { captureExecutableToolRegistrations, isBoundExecutableToolStep, validateExecutablePlan } from './agentExecutionPolicy';
 import type { MultiAgentCoordinator, CoordinationEvent } from './multiAgentCoordinator';
 import type { ToolRegistry } from './toolRegistry';
 import { err, type Result } from './result';
@@ -30,9 +30,14 @@ export function createAgentWorkflow(planner: AgentPlanner, registry: ToolRegistr
         yield { type: "failed", runId, detail: checked.error.message };
         return;
       }
+      const bindings = captureExecutableToolRegistrations(checked.value, registry, grantedTools);
+      if (!bindings.ok) {
+        yield { type: "failed", runId, detail: bindings.error.message };
+        return;
+      }
       const assignments = Object.fromEntries(checked.value.steps.map(step => [step.id, agentId])) as Record<string, AgentId>;
       yield* coordinator.run(runId, checked.value, assignments, signal,
-        step => isExecutableToolStep(step.toolId, registry, grantedTools));
+        step => isBoundExecutableToolStep(step.toolId, registry, bindings.value, grantedTools));
     },
     resume: (runId: AgentRunId, signal: AbortSignal) => coordinator.resume(runId, signal)
   };
