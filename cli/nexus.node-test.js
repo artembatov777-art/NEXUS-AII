@@ -8,6 +8,7 @@ test('help describes terminal usage', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Usage: nexus/);
   assert.match(result.stdout, /\/agent plan <task>.*\/agent inspect.*\/agent diff.*\/agent status/);
+  assert.match(result.stdout, /\/git status.*\/git diff.*\/git diff staged.*\/git log/);
 });
 test('unknown arguments fail without starting a session', () => {
   const result = run('--unknown');
@@ -144,4 +145,20 @@ test("checkpoint commands inspect a persisted CLI plan without model requests or
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+
+test("Git commands without a selected project stay local and are never sent to the test model", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const home = mkdtempSync(join(tmpdir(), "nexus-git-cli-gate-"));
+  try {
+    const history = join(home, "test-history.json");
+    const result = spawnSync(process.execPath, ["build-cli/nexus.js", "--test-model", "--history", history],
+      { encoding: "utf8", input: "/git status\n/git diff\n/git log\n" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.match(/workspace backend.*unavailable/gi)?.length, 3);
+    assert.doesNotMatch(result.stdout, /TEST MODEL/);
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });
