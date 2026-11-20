@@ -59,7 +59,7 @@ These facts do not mean every planned feature is production-ready. See `docs/ROA
 
 ## Terminal transition
 
-A terminal entry point is under development. Run `npm run cli` or `npm run cli -- --help`. The shell includes an `/agent` command, but does not yet connect to a model, access project files, or execute commands; the existing desktop application remains available while its capabilities are migrated. See [the transition plan](tasks/plan.md) and [task list](tasks/todo.md).
+A terminal entry point is under development. Run `npm run cli` or `npm run cli -- --help`. Its local Rust workspace host supports explicitly selected projects, bounded file inspection and approval-gated draft operations on supported platforms. It is **not** yet a complete model-driven coding agent: live providers remain disconnected, and Desktop/CLI session and agent runtimes are not fully unified. The existing desktop application remains available during migration. See [the transition plan](tasks/plan.md) and [task list](tasks/todo.md).
 
 ## Development
 
@@ -86,6 +86,14 @@ npm run tauri dev
 ### Offline CLI test fixture
 
 `npm run cli -- --test-model` starts a deterministic echo fixture labelled `TEST MODEL`; it echoes chat input. In an interactive test session, select a project with `/project` and run `/agent read <relative file>` to exercise the offline planner. The shared Tool Gateway asks for approval and records the read before the Rust host runs it. Completed turns are stored in `~/.nexus-au/test-history.json`. Use `--history PATH` after `--test-model` to select a separate history file. The file contains conversation text; it is not encrypted and is not compatible with Desktop history. An invalid history file stops startup without overwriting it. Ctrl-C cancels the active terminal session. Normal CLI mode still has no configured provider.
+
+### Inspect local CLI history and audit
+
+In offline test mode, `/history` shows the last 10 completed turns; `/history last 5` selects a smaller window and `/history find text` searches locally without calling a model. Content previews are length-bounded and terminal-escaped. The CLI reads history using a bounded, no-follow file inspection path and validates complete user/assistant turn pairs before saving. The test history file is plaintext and is **not** a Desktop history database.
+
+The interactive CLI can inspect the local Tool Gateway audit even without an AI provider. Use `/audit recent` to find recent run IDs, `/audit <run-id>` to view the last 20 recorded events, or `/audit <run-id> last 10` for a shorter window. Audit records are written to `~/.nexus-au/workspace-audit/` with bounded append-only journals and file checks. Missing or damaged records are not treated as proof that a tool is safe to replay. The command only reads the audit, never executes actions or approves a retry.
+
+The CLI does not yet guarantee exactly-once external tool effects after a crash. Journal permissions use POSIX owner checks on Unix; Windows ACL policy must additionally be checked on the installed desktop by the owner.
 
 ### CLI workspace
 
