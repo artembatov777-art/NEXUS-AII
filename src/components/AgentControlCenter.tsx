@@ -150,6 +150,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [traceEventsByConversation, setTraceEventsByConversation] = useState<Record<string, TraceEvent[]>>({});
   const [auditRunByConversation, setAuditRunByConversation] = useState<Record<string, string | null>>({});
   const [historyLimitByConversation, setHistoryLimitByConversation] = useState<Record<string, number>>({});
+  const [historyQueryByConversation, setHistoryQueryByConversation] = useState<Record<string, string>>({});
+  const [historyStatusByConversation, setHistoryStatusByConversation] = useState<Record<string, string>>({});
   const [historyTruncatedByConversation, setHistoryTruncatedByConversation] = useState<Record<string, boolean>>({});
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
@@ -160,7 +162,8 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const auditEvents = auditEventsByConversation[conversationKey] ?? [];
   const traceEvents = traceEventsByConversation[conversationKey] ?? [];
   const historyLimit = historyLimitByConversation[conversationKey] ?? 50;
-  const visibleHistory = checkpoints.slice(0, historyLimit);
+  const historyQuery = historyQueryByConversation[conversationKey] ?? "";
+  const historyStatus = historyStatusByConversation[conversationKey] ?? "all";
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
   const [busy, setBusy] = useState(false);
@@ -168,6 +171,14 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   const [activeRunIds, setActiveRunIds] = useState<Record<string, string | null>>({});
   const activeManagerRequest = useRef<string | null>(null);
   const activeRunId = activeRunIds[conversationKey] ?? null;
+  const effectiveActiveRunId = activeRunId ?? activeManagedRun?.runtimeRunId ?? null;
+  const filteredHistory = checkpoints.filter(checkpoint => {
+    const label = checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "interrupted" : checkpoint.status;
+    return (historyStatus === "all" || label === historyStatus) &&
+      (!historyQuery.trim() || [checkpoint.runId, checkpoint.agentId, taskFromCheckpoint(checkpoint)]
+        .join(" ").toLocaleLowerCase().includes(historyQuery.trim().toLocaleLowerCase()));
+  });
+  const visibleHistory = filteredHistory.slice(0, historyLimit);
   const setActiveRunId = (id: string | null) => setActiveRunIds(previous => ({ ...previous, [conversationKey]: id }));
   const feedSequence = useRef(0);
   const runtime = runtimeState.runtime;
@@ -178,7 +189,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     WORKSPACE_TEST_PROVIDER, WORKSPACE_TEST_MODEL, threads.test, WORKSPACE_TEST_TOOLS
   ) ?? null, [runtime, threads]);
   const registeredAgents = runtime?.agentRuntime.list() ?? [];
-  const runningCount = checkpoints.filter(item => item.status === "running" && item.runId === activeRunId).length;
+  const runningCount = checkpoints.filter(item => item.status === "running" && item.runId === effectiveActiveRunId).length;
   const pendingApprovalCount = checkpoints.filter(item => item.status === "waiting_for_approval").length;
   const completedCount = checkpoints.filter(item => item.status === "completed").length;
   const failedCount = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").length;
@@ -585,13 +596,25 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
           <article className="agent-card" hidden={agentView !== "history"}>
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("PERSISTED CHECKPOINTS")}</span><h3>{t("Run history")}</h3></div><span className="agent-count">{checkpoints.length}</span></div>
+            <div className="agent-profile-fields">
+              <label>Search saved runs<input aria-label="Search saved runs" className="agent-profile-input" type="search"
+                value={historyQuery} onChange={event => setHistoryQueryByConversation(current => ({ ...current, [conversationKey]: event.target.value }))}
+                placeholder="Task or run ID"/></label>
+              <label>Status<select aria-label="Filter runs by status" className="agent-profile-input"
+                value={historyStatus} onChange={event => setHistoryStatusByConversation(current => ({ ...current, [conversationKey]: event.target.value }))}>
+                  <option value="all">All statuses</option><option value="running">Running</option>
+                  <option value="interrupted">Interrupted</option><option value="waiting_for_approval">Waiting for approval</option>
+                  <option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option>
+                </select></label>
+            </div>
             {checkpoints.length === 0 ? <div className="agent-empty">{t("No saved runs yet.")}</div> :
+              filteredHistory.length === 0 ? <div className="agent-empty">No saved runs match your filters.</div> :
               <div className="agent-history">{visibleHistory.map(checkpoint => <div className="agent-history-item" key={checkpoint.runId}>
-                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
+                <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
                 <div className="agent-approval-actions"><button className="agent-small-button" type="button" disabled={!runtime} onClick={() => inspectRunAudit(checkpoint.runId)}>Inspect audit</button></div>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                {checkpoint.status === "running" && checkpoint.runId !== activeRunId &&
+                {checkpoint.status === "running" && checkpoint.runId !== effectiveActiveRunId &&
                   (checkpoint.threadId === threads.primary && checkpoint.agentId === BUILT_IN_AGENT_IDS.localWorkflow
                     ? <div className="agent-approval-actions">
                         <p>Interrupted local run. Manual recovery verifies tool history and requests new approval.</p>
@@ -601,7 +624,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
                       </div>
                     : <p>Automatic continuation is disabled for this workflow. Start a new task after reviewing prior tool outcomes.</p>)}
               </div>)}</div>}
-            {checkpoints.length > 0 && <div className="agent-form-footer"><span>Showing {visibleHistory.length} of {checkpoints.length} runs</span>{visibleHistory.length < checkpoints.length && <button type="button" className="agent-small-button" onClick={loadMoreHistory}>Load more runs</button>}</div>}
+            {checkpoints.length > 0 && <div className="agent-form-footer"><span>Showing {visibleHistory.length} of {filteredHistory.length} runs</span>{visibleHistory.length < filteredHistory.length && <button type="button" className="agent-small-button" onClick={loadMoreHistory}>Load more runs</button>}</div>}
             {historyTruncatedByConversation[conversationKey] && <p className="agent-disclaimer">Some threads reached the 200-run query limit. Older runs may not be included in this view.</p>}
           </article>
 
