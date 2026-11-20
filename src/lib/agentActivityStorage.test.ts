@@ -22,7 +22,8 @@ describe("durable agent activity journal", () => {
         { runId: "run-1", conversationId: "chat-a", kind: "progress", step: 2, maxSteps: 4 }
       ]
     });
-    expect((await second.listByConversation("chat-b", 10)).value).toHaveLength(1);
+    const other = await second.listByConversation("chat-b", 10);
+    expect(other.ok && other.value).toHaveLength(1);
   });
 
   it("keeps the newest entries in chronological order and enforces limits", async () => {
