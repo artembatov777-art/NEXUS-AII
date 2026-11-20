@@ -85,3 +85,18 @@ test('history is not silently forwarded to the model in unconfigured terminal mo
   assert.equal(output.status, 0);
   assert.match(output.stdout, /\/history/);
 });
+
+
+test('audit lookup remains local without a model or workspace backend', async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = mkdtempSync(join(tmpdir(), 'nexus-audit-view-'));
+  const history = join(home, 'test-history.json');
+  const result = spawnSync(process.execPath,
+    ['build-cli/nexus.js', '--test-model', '--history', history],
+    { encoding: 'utf8', env: { ...process.env, HOME: home }, input: '/audit run-audit-smoke\n' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /No audit events for/);
+  assert.doesNotMatch(result.stdout, /TEST MODEL/);
+});
