@@ -94,6 +94,11 @@ export function findAmbiguous(events: ToolAuditEvent[]): AmbiguousToolStep[] {
       // that a failed return means nothing happened.
       const prior = pending.get(key);
       if (prior) pending.set(key, { ...prior });
+    } else if (event.status === "denied") {
+      // Permission denial normally occurs before a "started" receipt.
+      // Once a dispatch was already recorded, a later denial is NOT
+      // evidence that the external action never happened.
+      continue;
     } else {
       pending.delete(key);
     }
