@@ -98,4 +98,42 @@ describe("read-only workspace audit terminal command", () => {
     expect(output).toMatch(/unavailable|unsafe|unreadable/i);
     expect(output).not.toContain("No audit writer locks");
   });
+
+  it("summarizes a complete run using the shared ambiguous-step reconciliation rules", async () => {
+    const events: ToolAuditEvent[] = [
+      { runId: "run-1", toolId: "a.read", traceId: "completed", status: "started", timestamp: 1 },
+      { runId: "run-1", toolId: "a.read", traceId: "completed", status: "completed", timestamp: 2 },
+      { runId: "run-1", toolId: "b.write", traceId: "uncertain", status: "started", timestamp: 3 },
+      { runId: "run-1", toolId: "c.edit", traceId: "failed", status: "started", timestamp: 4 },
+      { runId: "run-1", toolId: "c.edit", traceId: "failed", status: "failed", timestamp: 5 },
+      { runId: "run-1", toolId: "d.search", traceId: "denied", status: "denied", timestamp: 6 },
+      { runId: "run-1", toolId: "e.reconciled", traceId: "manual", status: "started", timestamp: 7 },
+      { runId: "run-1", toolId: "e.reconciled", traceId: "manual", status: "reconciled", timestamp: 8 }
+    ];
+    const audit = { list: vi.fn(async () => ok(events)) };
+    const output = await renderAuditCommand("/audit status run-1", audit);
+    expect(audit.list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
+    expect(output).toContain("8 recorded events");
+    expect(output).toMatch(/2 ambiguous/i);
+    expect(output).toContain("b.write");
+    expect(output).toContain("c.edit");
+    expect(output).toContain("uncertain");
+    expect(output).not.toMatch(/safe to retry|automatically rerun/i);
+  });
+
+  it("fails closed when status cannot read a complete audit history", async () => {
+    const audit = { list: vi.fn(async () => err("storage_failed", "corrupted", true)) };
+    const output = await renderAuditCommand("/audit status run-1", audit);
+    expect(output).toMatch(/unavailable|unreadable|unsafe/i);
+    expect(output).not.toMatch(/0 ambiguous|no uncertain/);
+    expect(audit.list).toHaveBeenCalledWith({ runId: "run-1", limit: 5_000 });
+    expect(await renderAuditCommand("/audit status ../bad", audit)).toContain("Usage: /audit");
+  });
+
+  it("shows an empty status without claiming it proves no external effects", async () => {
+    const audit = { list: async () => ok([] as ToolAuditEvent[]) };
+    const output = await renderAuditCommand("/audit status run-1", audit);
+    expect(output).toContain("No audit events");
+    expect(output).toContain("/audit locks");
+  });
 });
