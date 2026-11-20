@@ -108,13 +108,60 @@ describe("Coordinator run-ID single-writer and replay protection", () => {
 
   it("does not accept new work when the safe lifetime run-ID capacity is exhausted", async () => {
     const execute = vi.fn(async () => ok({ done: true }));
-    const runtime = coordinator(execute);
-    // A bounded coordinator must not silently evict old run IDs, which could
-    // make previously executed tool traces replayable under the same identity.
-    for (let index = 0; index < 101; index++) {
+    const runtime = new MultiAgentCoordinator({ execute },
+      { authorize: async () => "allow" }, new InMemoryTraceSink(), { now: () => 100 }, 12, 3);
+    // An explicit lifetime limit must never evict prior IDs and allow replay.
+    for (let index = 0; index < 4; index++) {
       const events = await collect(runtime.run(("capacity-" + index) as AgentRunId, plan, assignments, signal()));
-      expect(events.at(-1)?.type).toBe(index < 100 ? "completed" : "failed");
+      expect(events.at(-1)?.type).toBe(index < 3 ? "completed" : "failed");
     }
-    expect(execute).toHaveBeenCalledTimes(100);
+    expect(execute).toHaveBeenCalledTimes(3);
+  });
+
+  it("rechecks a tool grant after a slow owner authorization returns", async () => {
+    const authorizing = gate();
+    const released = gate();
+    let permitted = true;
+    const execute = vi.fn(async () => ok({ done: true }));
+    const policy = {
+      authorize: vi.fn(async () => {
+        authorizing.open();
+        await released.waiting;
+        return "allow" as const;
+      })
+    };
+    const runtime = new MultiAgentCoordinator({ execute }, policy,
+      new InMemoryTraceSink(), { now: () => 100 }, 12);
+    const current = collect(runtime.run(id, plan, assignments, signal(), () => permitted));
+    await authorizing.waiting;
+    permitted = false;
+    released.open();
+    expect((await current).at(-1)?.type).toBe("failed");
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the live tool allowance immediately after the dispatch-intent event", async () => {
+    const execute = vi.fn(async () => ok({ done: true }));
+    const runtime = coordinator(execute);
+    let permitted = true;
+    const stream = runtime.run(id, plan, assignments, signal(), () => permitted)[Symbol.asyncIterator]();
+    expect((await stream.next()).value?.type).toBe("started");
+    expect((await stream.next()).value?.type).toBe("agent_started");
+    // Checkpointing and/or UI can suspend delivery after this yield.
+    // Revoking here must still prevent calling the actual tool.
+    permitted = false;
+    const following = await stream.next();
+    expect(following.value?.type).toBe("failed");
+    expect(execute).not.toHaveBeenCalled();
+    expect((await stream.next()).done).toBe(true);
+  });
+
+  it("keeps a failed run ID reserved even when an executor throws", async () => {
+    const execute = vi.fn(async () => { throw new Error("tool adapter unavailable"); });
+    const runtime = new MultiAgentCoordinator({ execute },
+      { authorize: async () => "allow" }, new InMemoryTraceSink(), { now: () => 100 }, 12);
+    expect((await collect(runtime.run(id, plan, assignments, signal()))).at(-1)?.type).toBe("failed");
+    expect((await collect(runtime.run(id, plan, assignments, signal()))).at(-1)?.type).toBe("failed");
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
