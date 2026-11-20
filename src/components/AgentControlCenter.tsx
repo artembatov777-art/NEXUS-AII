@@ -367,6 +367,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
         try {
           return await action(signal, managerId);
         } catch (cause) {
+          await persistActivity(managerId, signal.aborted ? "cancelled" : "failed");
           reportManagedEvent(managerId, "error", cause instanceof Error ? cause.message : "Agent execution failed.", "error");
           return "failed";
         }
@@ -577,6 +578,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     const result = await runtime.checkpointService.persist(rejected);
     if (!result.ok) addFeed(result.error.message, "error");
     else {
+      await persistActivity(checkpoint.runId, "failed");
       managedRuns.resolveWaiting(checkpoint.runId, "failed");
       addFeed("Approval rejected. The run was closed without executing the tool.", "warning");
     }
