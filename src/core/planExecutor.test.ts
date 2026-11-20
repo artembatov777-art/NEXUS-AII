@@ -190,4 +190,32 @@ describe('terminal agent', () => {
     expect(result).toMatchObject({ ok: false, error: { code: "internal", retryable: false } });
     if (!result.ok) expect(result.error.message).toMatch(/audit|completed|observer/i);
   });
+
+  it('does not invoke the next step after the same tool ID was re-registered', async () => {
+    const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    const definition = { id: 'safe.read', version: '1', description: 'Read', requiredPermissions: [] as [],
+      risk: 'low' as const, timeoutMs: 1_000, validateInput: (input: unknown) => ok(input),
+      execute: async (input: unknown) => ok(input) };
+    registry.register(definition);
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
+      { id: 'first', toolId: 'safe.read', purpose: 'Read A', input: {}, dependsOn: [] },
+      { id: 'second', toolId: 'safe.read', purpose: 'Read B', input: {}, dependsOn: ['first'] }
+    ] }) });
+    const invoked = vi.fn();
+    const executor: AgentToolExecutor = {
+      execute: async <Output = unknown>() => {
+        invoked();
+        registry.unregister('safe.read');
+        registry.register(definition);
+        return ok({ result: 'done' } as Output);
+      }
+    };
+    const agent = new TerminalAgent(planner, registry, executor);
+    expect(await agent.run('inspect', 'tool-replaced', new AbortController().signal))
+      .toMatchObject({ ok: false, error: { code: 'validation' } });
+    expect(invoked).toHaveBeenCalledTimes(1);
+  });
 });
