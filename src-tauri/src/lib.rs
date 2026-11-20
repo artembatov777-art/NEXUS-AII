@@ -1469,15 +1469,16 @@ fn record_agent_activity_event_record(
 }
 
 fn list_agent_activity_event_records(
-    connection: &Connection, conversation_id: &str, limit: i64
+    connection: &Connection, conversation_id: &str, limit: i64, run_id: Option<&str>
 ) -> Result<Vec<serde_json::Value>, String> {
-    if !activity_identifier(conversation_id) || !(1..=200).contains(&limit) {
+    if !activity_identifier(conversation_id) || !(1..=200).contains(&limit) ||
+        run_id.map_or(false, |value| !activity_identifier(value)) {
         return Err("Activity conversation or limit is invalid.".into());
     }
     let mut statement = connection.prepare(
-        "SELECT run_id,conversation_id,kind,timestamp,step,max_steps FROM agent_activity_events WHERE conversation_id=?1 ORDER BY id DESC LIMIT ?2"
+        "SELECT run_id,conversation_id,kind,timestamp,step,max_steps FROM agent_activity_events WHERE conversation_id=?1 AND (?3 IS NULL OR run_id=?3) ORDER BY id DESC LIMIT ?2"
     ).map_err(|e| e.to_string())?;
-    let rows = statement.query_map(params![conversation_id, limit], |row| {
+    let rows = statement.query_map(params![conversation_id, limit, run_id], |row| {
         let mut event = serde_json::json!({
             "runId": row.get::<_, String>(0)?,
             "conversationId": row.get::<_, String>(1)?,
@@ -1503,10 +1504,10 @@ fn record_agent_activity_event(
 
 #[tauri::command]
 fn list_agent_activity_events(
-    database: State<'_, AppDatabase>, conversation_id: String, limit: i64
+    database: State<'_, AppDatabase>, conversation_id: String, limit: i64, run_id: Option<String>
 ) -> Result<Vec<serde_json::Value>, String> {
     let connection = database.0.lock().map_err(|_| "Database lock is unavailable.")?;
-    list_agent_activity_event_records(&connection, &conversation_id, limit)
+    list_agent_activity_event_records(&connection, &conversation_id, limit, run_id.as_deref())
 }
 
 #[tauri::command]
@@ -2339,12 +2340,14 @@ mod database_tests {
         record_agent_activity_event_record(&mut db, record("run-one", "chat-a", "started", 1.0)).unwrap();
         record_agent_activity_event_record(&mut db, record("run-two", "chat-b", "approval", 2.0)).unwrap();
         record_agent_activity_event_record(&mut db, record("run-one", "chat-a", "completed", 3.0)).unwrap();
-        let saved = list_agent_activity_event_records(&db, "chat-a", 10).unwrap();
+        let saved = list_agent_activity_event_records(&db, "chat-a", 10, None).unwrap();
         assert_eq!(saved.len(), 2);
         assert_eq!(saved[0]["kind"], "started");
         assert_eq!(saved[1]["kind"], "completed");
-        assert_eq!(list_agent_activity_event_records(&db, "chat-a", 1).unwrap().len(), 1);
-        assert!(list_agent_activity_event_records(&db, "chat-a", 0).is_err());
+        assert_eq!(list_agent_activity_event_records(&db, "chat-a", 10, Some("run-one")).unwrap().len(), 2);
+        assert!(list_agent_activity_event_records(&db, "chat-a", 10, Some("bad\\nrun")).is_err());
+        assert_eq!(list_agent_activity_event_records(&db, "chat-a", 1, None).unwrap().len(), 1);
+        assert!(list_agent_activity_event_records(&db, "chat-a", 0, None).is_err());
     }
 
     #[test]
@@ -2362,7 +2365,7 @@ mod database_tests {
         let mut control = ordinary;
         control["conversationId"] = serde_json::json!("chat\nother");
         assert!(record_agent_activity_event_record(&mut db, control).is_err());
-        assert_eq!(list_agent_activity_event_records(&db, "chat", 200).unwrap().len(), 1);
+        assert_eq!(list_agent_activity_event_records(&db, "chat", 200, None).unwrap().len(), 1);
     }
     #[test]
     fn native_image_attachments_are_validated_and_have_a_migrated_storage_column() {
