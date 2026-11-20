@@ -20,6 +20,7 @@ import { McpHttpTransport } from "../core/mcpHttpTransport";
 import type { PermissionScope, ToolRisk } from "../core/tools";
 import { AgentPlanner } from "../core/agentPlanner";
 import { createAgentWorkflow } from "../core/agentWorkflow";
+import { PlanRunCheckpointService } from "../core/planRunCheckpoints";
 import { ModelRouterPlanner } from "../core/modelPlanner";
 import { MultiAgentCoordinator } from "../core/multiAgentCoordinator";
 import { ResumableAgentTaskExecutor } from "../core/resumableAgentExecutor";
@@ -167,7 +168,13 @@ export function createNexusRuntime(options: NexusRuntimeOptions) {
       }
       const planner = new AgentPlanner(new ModelRouterPlanner(options.models, providerId, model));
       const coordinator = createCoordinator(threadId);
-      return createAgentWorkflow(planner, toolRegistry, coordinator, TOOL_INVOCATION_AGENT_ID, allowedToolIds);
+      // Parent plan checkpoints share the same durable Desktop repository as
+      // individual resumable agents. No automatic replay after a restart.
+      const planCheckpoints = new PlanRunCheckpointService(checkpointService, {
+        agentId: "nexus.desktop.workflow", threadId, now: () => clock.now()
+      });
+      return createAgentWorkflow(planner, toolRegistry, coordinator, TOOL_INVOCATION_AGENT_ID,
+        allowedToolIds, planCheckpoints);
     },
     checkpointService,
     checkpointRepository,
