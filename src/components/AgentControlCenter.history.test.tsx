@@ -104,4 +104,43 @@ describe("Agent Center persisted run history", () => {
     await act(async () => root.unmount());
     node.remove();
   });
+
+  it("shows unresolved tool effects when inspecting an older interrupted run", async () => {
+    localStorage.clear();
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(localStorage));
+    for (let i = 0; i < 55; i++) {
+      expect((await service.persist({
+        schemaVersion: 1, runId: "older-run-" + i, agentId: "nexus.local-workflow",
+        threadId: agentThreads("history-session").primary,
+        sequence: 1, status: "running",
+        state: { payload: { task: "Task " + i }, permissionIndex: 1, agentVersion: "1.1.0", steps: 0 },
+        createdAt: 1_000 + i, updatedAt: 1_000 + i
+      })).ok).toBe(true);
+    }
+    const audit = new LocalStorageToolAuditSink(localStorage);
+    expect((await audit.record({
+      runId: "older-run-0", traceId: "older-run-0:1", toolId: "workspace.write",
+      status: "started", timestamp: 1_500
+    })).ok).toBe(true);
+    const node = document.createElement("div"); document.body.append(node);
+    const root = createRoot(node);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId="history-session"
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+    });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    await act(async () => { button(node, "Run history")!.click(); });
+    const search = node.querySelector<HTMLInputElement>('input[aria-label="Search saved runs"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "older-run-0");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const row = node.querySelector(".agent-history-item") as HTMLElement;
+    expect(row.textContent).toContain("older-run-0");
+    await act(async () => { button(row, "Inspect audit")!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(node.textContent).toContain("Ambiguous tool outcomes");
+    expect(node.textContent).toContain("workspace.write");
+    await act(async () => root.unmount()); node.remove();
+  });
 });
