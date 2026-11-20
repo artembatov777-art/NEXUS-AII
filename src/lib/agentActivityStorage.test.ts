@@ -60,7 +60,7 @@ describe("durable agent activity journal", () => {
     }
     const selected = await repo.listByConversation("chat", 10, "old");
     expect(selected).toMatchObject({ ok: true, value: [{ runId: "old", timestamp: 1 }] });
-    expect((await repo.listByConversation("chat", 10, "bad\\nid")).ok).toBe(false);
+    expect((await repo.listByConversation("chat", 10, "bad\nid")).ok).toBe(false);
   });
 
   it("rejects corrupt persisted data without silently replacing it", async () => {
