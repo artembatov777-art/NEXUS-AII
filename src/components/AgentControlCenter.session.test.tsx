@@ -56,4 +56,39 @@ describe("agent center session checkpoints", () => {
     await act(async () => root.unmount()); element.remove();
   });
 
+
+  it("shows ambiguous tool evidence from an interrupted checkpoint without allowing an acknowledgement", async () => {
+    localStorage.clear();
+    const conversationId = "session-one";
+    const threadId = `nexus-session:${conversationId.length}:${conversationId}`;
+    const runId = "run-interrupted";
+    localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([{
+      schemaVersion: 1, runId, agentId: "nexus.local-workflow", threadId, sequence: 2,
+      status: "running", state: { payload: { task: "Recover evidence" }, permissionIndex: 0, agentVersion: "1.1.0", steps: 0 },
+      createdAt: 1_000, updatedAt: 2_000
+    }]));
+    localStorage.setItem("nexus-au:tool-audit:v1", JSON.stringify([{
+      toolId: "workspace.write", runId, traceId: "run-interrupted:1",
+      status: "started", timestamp: 1_200
+    }]));
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId} conversationIds={[conversationId]}
+        onClose={() => {}} providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(element, "Audit")!.click(); });
+    expect(element.textContent).toContain("Ambiguous tool outcomes");
+    expect(element.textContent).toContain("workspace.write");
+    const inspectionButton = findButton(element, "Inspection only: run not stopped");
+    expect(inspectionButton?.disabled).toBe(true);
+    const persisted = JSON.parse(localStorage.getItem("nexus-au:tool-audit:v1")!);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].status).toBe("started");
+    await act(async () => root.unmount());
+    element.remove();
+    localStorage.clear();
+  });
 });
