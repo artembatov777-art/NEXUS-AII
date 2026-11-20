@@ -280,3 +280,10 @@ Test-first regression coverage includes forged high-risk tool plans, revoked, un
 - **Tests:** Fake audit sinks exercise mixed run IDs, invalid timestamps/status, malformed containers and exactly-at-limit histories; tests verify no user permission request, no tool execution and no deletion of stored receipts on failure.
 
 **Remaining:** Native cross-platform confirmation on the final SHA, installed Windows ACL review and manual recovery of old/truncated audit data. A valid receipt is not a guarantee of exactly-once external effects.
+
+## Read-only checkpoint and tool-audit recovery correlation (2026-11-20)
+
+- `src/core/planRecoveryInspection.ts` provides a host-neutral read-only `inspectPlanRecovery()` contract, requiring the expected checkpoint agent/thread identity, bounded safe plan-step metadata, and complete per-run tool audit evidence. Reports confirmed step count, current active dispatch, ambiguous audit receipts, owner-review status, and **`mayAutoResume: false` in every case**.
+- CLI `/recovery <run-id>` is implemented through `cli/recoveryView.ts`, wired to the persistent private `FileAgentCheckpointRepository` and `FileWorkspaceAuditSink`. It runs locally even without an AI model or selected workspace and cannot modify checkpoints, reconcile receipts, or execute commands.
+- Tests cover active unconfirmed dispatch with and without matching audit evidence, completed plans, identity forgery, malformed metadata, mixed-run and full-cap audit histories, disk errors, CLI command injection and CLI subprocess inspection across restart.
+- **Explicit limitation:** Desktop coordinator parent IDs use a prefixed checkpoint and tool invocations have separate child run IDs. The shared inspection contract accepts a host-supplied checkpoint ID, but automatic cross-host correlation and restartable execution are not supported. A missing parent audit event never proves the delegated action had no effect.
