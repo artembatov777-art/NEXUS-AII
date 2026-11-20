@@ -134,4 +134,33 @@ describe("checkpoint recovery ordering", () => {
     expect(manager.list("standalone")).toHaveLength(2);
     finish(); await resumed;
   });
+
+  it("synchronizes a restored interrupted run when its checkpoint later completes", () => {
+    const manager = new AgentRunManager();
+    const running: AgentCheckpoint = {
+      schemaVersion: 1, runId: "recovered-progress", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "running", state: {}, createdAt: 100, updatedAt: 100
+    };
+    manager.restoreCheckpoints("standalone", [running]);
+    expect(manager.list("standalone")).toMatchObject([{ id: "recovered-progress", status: "interrupted" }]);
+    const completed = { ...running, sequence: 3, status: "completed" as const, updatedAt: 250 };
+    manager.restoreCheckpoints("standalone", [completed]);
+    expect(manager.list("standalone")).toMatchObject([{ id: "recovered-progress", status: "completed", finishedAt: 250 }]);
+    manager.restoreCheckpoints("standalone", [running]);
+    expect(manager.list("standalone")[0].status).toBe("completed");
+  });
+
+  it("synchronizes a previously recovered approval that was rejected", () => {
+    const manager = new AgentRunManager();
+    const waiting: AgentCheckpoint = {
+      schemaVersion: 1, runId: "approval-recovered", agentId: "agent",
+      threadId: "nexus-agent-control-center", sequence: 1,
+      status: "waiting_for_approval", state: {}, createdAt: 100, updatedAt: 100,
+      pendingApproval: { permission: "tool:execute", requestedAt: 100 }
+    };
+    manager.restoreCheckpoints("standalone", [waiting]);
+    manager.restoreCheckpoints("standalone", [{ ...waiting, sequence: 2, status: "failed", updatedAt: 150, pendingApproval: undefined }]);
+    expect(manager.list("standalone")).toMatchObject([{ status: "failed", finishedAt: 150 }]);
+  });
 });
