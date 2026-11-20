@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AgentPlanner } from './agentPlanner';
 import { ModelRouter } from './model';
 import { ModelRouterPlanner } from './modelPlanner';
-import { GatewayAgentToolExecutor } from './agentToolBridge';
+import { GatewayAgentToolExecutor, type AgentToolExecutor } from './agentToolBridge';
 import { ToolGateway, type ToolAuditEvent } from './tools';
 import { ToolRegistry } from './toolRegistry';
 import { ok } from './result';
@@ -72,5 +72,53 @@ describe('terminal agent', () => {
     const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [] }) });
     const executor = new TerminalAgent(planner, new ToolRegistry(gateway), new GatewayAgentToolExecutor(gateway, 'owner'));
     expect(await executor.run('fix project', 'empty-plan', new AbortController().signal)).toMatchObject({ ok: false, error: { code: 'validation' } });
+  });
+
+  it('refuses to delegate a tool step removed from the registry while the plan was pending', async () => {
+    const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: 'read.a', version: '1', description: 'Read', requiredPermissions: [],
+      risk: 'low', timeoutMs: 1_000, validateInput: input => ok(input), execute: async () => ok({}) });
+    const planner = new AgentPlanner({
+      createPlan: async ({ goal }) => {
+        const plan = { goal, steps: [{ id: 'one', toolId: 'read.a', purpose: 'Read the file', input: {}, dependsOn: [] }] };
+        registry.unregister('read.a');
+        return ok(plan);
+      }
+    });
+    const invoked = vi.fn();
+    const executor: AgentToolExecutor = { execute: async <Output = unknown>() => {
+      invoked();
+      return ok({ executed: true } as Output);
+    } };
+    const agent = new TerminalAgent(planner, registry, executor);
+    expect(await agent.run('inspect', 'stale-registry', new AbortController().signal))
+      .toMatchObject({ ok: false, error: { code: 'validation' } });
+    expect(invoked).not.toHaveBeenCalled();
+  });
+
+  it('enforces current tool registration before each subsequent CLI execution step', async () => {
+    const gateway = new ToolGateway({ authorize: async () => 'allow' }, {
+      record: async () => ok(undefined), list: async () => ok([])
+    }, { now: () => 0 });
+    const registry = new ToolRegistry(gateway);
+    registry.register({ id: 'read.a', version: '1', description: 'Read', requiredPermissions: [],
+      risk: 'low', timeoutMs: 1_000, validateInput: input => ok(input), execute: async () => ok({}) });
+    const planner = new AgentPlanner({ createPlan: async ({ goal }) => ok({ goal, steps: [
+      { id: 'first', toolId: 'read.a', purpose: 'Read A', input: {}, dependsOn: [] },
+      { id: 'second', toolId: 'read.a', purpose: 'Read B', input: {}, dependsOn: ['first'] }
+    ] }) });
+    const invoked = vi.fn();
+    const executor: AgentToolExecutor = { execute: async <Output = unknown>(toolId: string) => {
+      invoked(toolId);
+      registry.unregister('read.a');
+      return ok({ executed: true } as Output);
+    } };
+    const agent = new TerminalAgent(planner, registry, executor);
+    expect(await agent.run('inspect', 'dynamic-registry', new AbortController().signal))
+      .toMatchObject({ ok: false, error: { code: 'validation' } });
+    expect(invoked).toHaveBeenCalledTimes(1);
   });
 });
