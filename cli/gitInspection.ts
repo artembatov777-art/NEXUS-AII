@@ -55,6 +55,17 @@ async function readGit(root: string, commandArgs: readonly string[], signal: Abo
       return;
     }
 
+    const stdout = child.stdout;
+    const stderr = child.stderr;
+    if (!stdout || !stderr) {
+      // The spawn configuration requires pipes; do not risk treating a
+      // process with missing inspection streams as a successful Git read.
+      child.on("error", () => {});
+      child.kill();
+      resolve(err("tool_failed", "Git inspection output streams are unavailable."));
+      return;
+    }
+
     let failed: Result<never> | undefined;
     let stdoutSize = 0;
     let stderrSize = 0;
@@ -70,7 +81,7 @@ async function readGit(root: string, commandArgs: readonly string[], signal: Abo
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
 
-    child.stdout.on("data", (data: Buffer) => {
+    stdout.on("data", (data: Buffer) => {
       if (failed) return;
       stdoutSize += data.byteLength;
       if (stdoutSize > MAX_OUTPUT_BYTES) {
@@ -79,7 +90,7 @@ async function readGit(root: string, commandArgs: readonly string[], signal: Abo
       }
       chunks.push(data);
     });
-    child.stderr.on("data", (data: Buffer) => {
+    stderr.on("data", (data: Buffer) => {
       stderrSize += data.byteLength;
       if (stderrSize > MAX_ERROR_BYTES) {
         stop(err("tool_failed", "Git returned excessive diagnostic output."));
