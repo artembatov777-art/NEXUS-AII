@@ -1,5 +1,5 @@
 import type { AgentPlanner, ValidatedPlan } from './agentPlanner';
-import { isExecutableToolStep, validateExecutablePlan } from './agentExecutionPolicy';
+import { captureExecutableToolRegistrations, isBoundExecutableToolStep, validateExecutablePlan } from './agentExecutionPolicy';
 import type { AgentToolExecutor } from './agentToolBridge';
 import type { AgentRunId } from './agents';
 import { err, ok, type Result } from './result';
@@ -28,11 +28,13 @@ export class PlanExecutor {
     // policy against the live host registry, not the model's tool list.
     const checked = validateExecutablePlan(plan.value, this.registry);
     if (!checked.ok) return checked;
+    const bindings = captureExecutableToolRegistrations(checked.value, this.registry);
+    if (!bindings.ok) return bindings;
     const results: PlanStepResult[] = [];
     for (const [index, step] of checked.value.steps.entries()) {
       if (signal.aborted) return err('cancelled', 'Agent run was cancelled.');
-      if (!isExecutableToolStep(step.toolId, this.registry)) {
-        return err('validation', 'Planned tool is no longer registered.');
+      if (!isBoundExecutableToolStep(step.toolId, this.registry, bindings.value)) {
+        return err('validation', 'Planned tool registration changed; inspect the audit and create a new plan.');
       }
       let result: Result<unknown>;
       try {
