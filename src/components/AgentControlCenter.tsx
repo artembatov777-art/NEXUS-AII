@@ -197,15 +197,20 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     if (!failedResult) {
       const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
       setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
-      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled");
-      const reconciliationResults = await Promise.all(terminalRuns.map(item =>
+      // Interruption evidence can be inspected read-only; the active local run is
+      // deliberately excluded while it is still executing in this window.
+      const inspectableRuns = checkpoints.filter(item =>
+        item.status === "failed" || item.status === "cancelled" ||
+        (item.status === "running" && item.runId !== activeRunId)
+      );
+      const reconciliationResults = await Promise.all(inspectableRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
     } else if (!failedResult.ok) addFeed(failedResult.error.message, "error");
     if (audit.ok) setAuditEvents(audit.value);
     else addFeed(audit.error.message, "error");
-  }, [runtime, addFeed, threads, conversationKey]);
+  }, [runtime, addFeed, threads, conversationKey, activeRunId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -531,11 +536,16 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "audit"}>
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
               <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
-              <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
-              {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
-                <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
-                <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>{t("Mark manually reconciled")}</button>
-              </div>)}
+              <p>These tools started without a confirmed final result. Inspect the external system. Running or interrupted checkpoints are inspection-only; manual reconciliation is allowed only after the run has stopped.</p>
+              {ambiguousToolSteps.map(step => {
+                const interrupted = checkpoints.some(item => item.runId === step.runId && item.status === "running");
+                return <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
+                  <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
+                  <button className="agent-small-button" disabled={busy || interrupted} onClick={() => void reconcileToolStep(step)}>
+                    {interrupted ? "Inspection only: run not stopped" : t("Mark manually reconciled")}
+                  </button>
+                </div>;
+              })}
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
             {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
