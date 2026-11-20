@@ -244,8 +244,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
       managedRuns.restoreCheckpoints(conversationKey, checkpoints);
       setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
       setHistoryTruncatedByConversation(previous => ({ ...previous, [conversationKey]: result.some(item => item.ok && item.value.length === 200) }));
-      const terminalRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled").slice(0, 50);
-      const reconciliationResults = await Promise.all(terminalRuns.map(item =>
+      const reviewableRuns = checkpoints.filter(item => item.status === "failed" || item.status === "cancelled" ||
+        (item.status === "running" && item.runId !== effectiveActiveRunId)).slice(0, 50);
+      const reconciliationResults = await Promise.all(reviewableRuns.map(item =>
         runtime.toolReconciliationService.listAmbiguous(item.runId)
       ));
       setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
@@ -257,7 +258,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
     } else if (!audit.ok) addFeed(audit.error.message, "error");
     if (traces?.ok) setTraceEventsByConversation(previous => ({ ...previous, [conversationKey]: traces.value }));
     else if (traces && !traces.ok) addFeed(traces.error.message, "error");
-  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns]);
+  }, [runtime, addFeed, threads, conversationKey, auditRunFilter, managedRuns, effectiveActiveRunId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -631,7 +632,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           <article className="agent-card" hidden={agentView !== "audit"}>
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
               <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
-              <p>These steps started before a run failed or was cancelled, but no final result was saved. Inspect the external system before marking one reconciled.</p>
+              <p>These tool steps started before a run failed, was cancelled, or was interrupted. Their outcome is uncertain. Inspect the external system before marking one reconciled. This will never retry the tool.</p>
               {ambiguousToolSteps.map(step => <div className="agent-history-item" key={step.runId + step.traceId + step.toolId}>
                 <p>{step.toolId}</p><small>Run {step.runId} · Trace {step.traceId}</small>
                 <button className="agent-small-button" disabled={busy} onClick={() => void reconcileToolStep(step)}>{t("Mark manually reconciled")}</button>
