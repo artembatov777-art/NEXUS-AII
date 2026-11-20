@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, join } from 'node:path';
-import { mkdir, open, readFile } from 'node:fs/promises';
+import { mkdir, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { ok, err } from '../src/core/result';
-import { ToolGateway, type PermissionService, type ToolAuditEvent } from '../src/core/tools';
+import { ToolGateway, type PermissionService } from '../src/core/tools';
+import { FileWorkspaceAuditSink } from './workspaceAudit';
 import { registerCliWorkspaceTools } from './workspace';
 import { GatewayAgentToolExecutor } from '../src/core/agentToolBridge';
 import type { PlanStepResult } from '../src/core/planExecutor';
@@ -102,10 +103,6 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
   } | undefined;
   const dir = join(homedir(), '.nexus-au', 'workspace-audit');
   const recovery = new WorkspaceRecoveryStore(join(dirname(dir), 'workspace-recovery'));
-  const auditFile = (id: string) => {
-    if (!/^[a-zA-Z0-9_-]{1,120}$/.test(id)) throw new Error('Invalid audit run identifier');
-    return join(dir, id + '.jsonl');
-  };
   const intentFile = (id: string) => {
     if (!isRecoveryId(id)) throw new Error('Invalid recovery ID');
     return join(dir, id + '.edit.json');
@@ -131,24 +128,7 @@ export function workspaceSession(permissions: PermissionService, report: (text: 
   async function syncAuditDirectory() {
     for (const path of [dir, dirname(dir), homedir()]) await syncDirectory(path);
   }
-  const gateway = new ToolGateway(permissions, {
-    async record(event) {
-      await mkdir(dir,{recursive:true,mode:0o700});
-      const file = await open(auditFile(event.runId), 'a', 0o600);
-      try {
-        await file.appendFile(JSON.stringify(event)+'\n');
-        await file.sync();
-      } finally { await file.close(); }
-      if (event.toolId === 'cli.workspace.apply-draft' && process.platform === 'linux') {
-        await syncAuditDirectory();
-      }
-      return ok(undefined);
-    },
-    async list(options) {
-      try { return ok((await readFile(auditFile(options!.runId!), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as ToolAuditEvent)); }
-      catch(error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok([]); throw error; }
-    }
-  }, { now: Date.now });
+  const gateway = new ToolGateway(permissions, new FileWorkspaceAuditSink(dir), { now: Date.now });
   const registry = new ToolRegistry(gateway);
   registerCliWorkspaceTools(registry,{
     async invoke({operation,path,query,root:requested},signal) {
