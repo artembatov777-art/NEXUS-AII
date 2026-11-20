@@ -154,3 +154,29 @@ it("fails closed if Git inspection is requested before a workspace is selected",
   expect(output.join("")).toMatch(/workspace backend.*unavailable/i);
   expect(run).not.toHaveBeenCalled();
 });
+
+
+it("routes /recovery diagnostics locally without any model or workspace access", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not run"));
+  const workspace = vi.fn(async () => "must not call native workspace");
+  const recovery = vi.fn(async () => "Safe recovery inspection only\n");
+  const context = { run, workspace, recovery,
+    write: (value: string) => output.push(value),
+    newId: () => "run", signal: new AbortController().signal };
+  expect(await dispatchCommand("/recovery run-1", context)).toBe(true);
+  expect(recovery).toHaveBeenCalledExactlyOnceWith("/recovery run-1");
+  expect(output).toEqual(["Safe recovery inspection only\n"]);
+  expect(run).not.toHaveBeenCalled();
+  expect(workspace).not.toHaveBeenCalled();
+});
+
+it("does not forward /recovery to a model when storage is unavailable", async () => {
+  const output: string[] = [];
+  const run = vi.fn(async () => err("tool_failed", "must not run"));
+  const context = { run, write: (text: string) => output.push(text),
+    newId: () => "run", signal: new AbortController().signal };
+  expect(await dispatchCommand("/recovery run-1", context)).toBe(true);
+  expect(output.join("")).toMatch(/recovery.*unavailable/i);
+  expect(run).not.toHaveBeenCalled();
+});
