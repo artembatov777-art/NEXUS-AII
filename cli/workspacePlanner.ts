@@ -66,7 +66,10 @@ function parseTask(input: string): Result<Task> {
 }
 
 function workspaceStep(root: string, operation: 'list' | 'search' | 'read', path: string, query?: string): AgentPlanStep {
-  return { id: operation, toolId: `cli.workspace.${operation}`, purpose: `Workspace ${operation}`, input: { root, path, query }, dependsOn: [] };
+  // JSON plans cannot contain undefined values. Omit optional query for read/list
+  // rather than weakening the shared Agent Engine's strict input boundary.
+  const input = query === undefined ? { root, path } : { root, path, query };
+  return { id: operation, toolId: `cli.workspace.${operation}`, purpose: `Workspace ${operation}`, input, dependsOn: [] };
 }
 
 function entries(output: unknown): string[] {
