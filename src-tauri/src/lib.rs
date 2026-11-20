@@ -2360,7 +2360,7 @@ mod database_tests {
         impossible["step"] = serde_json::json!(4);
         assert!(record_agent_activity_event_record(&mut db, impossible).is_err());
         let mut control = ordinary;
-        control["conversationId"] = serde_json::json!("chat\\nother");
+        control["conversationId"] = serde_json::json!("chat\nother");
         assert!(record_agent_activity_event_record(&mut db, control).is_err());
         assert_eq!(list_agent_activity_event_records(&db, "chat", 200).unwrap().len(), 1);
     }
