@@ -1,4 +1,4 @@
-import type { AgentPlanner } from './agentPlanner';
+import type { AgentPlanner, ValidatedPlan } from './agentPlanner';
 import { isExecutableToolStep, validateExecutablePlan } from './agentExecutionPolicy';
 import type { AgentToolExecutor } from './agentToolBridge';
 import type { AgentRunId } from './agents';
@@ -15,7 +15,13 @@ export class PlanExecutor {
     if (!runId.trim() || runId.length > 120 || /[\u0000-\u001f\u007f]/.test(runId)) return err('validation', 'A valid run ID is required.');
     const tools = this.registry.search('', 200);
     if (!tools.ok) return tools;
-    const plan = await this.planner.plan(goal, tools.value, signal);
+    let plan: Result<ValidatedPlan>;
+    try { plan = await this.planner.plan(goal, tools.value, signal); }
+    catch {
+      return signal.aborted
+        ? err('cancelled', 'Planning was cancelled.')
+        : err('provider_unavailable', 'Planner failed unexpectedly before execution.');
+    }
     if (!plan.ok) return plan;
     // The planner validates a candidate plan, but the tool catalog may have
     // changed while planning. Both CLI and Desktop enforce the same execution
@@ -28,11 +34,22 @@ export class PlanExecutor {
       if (!isExecutableToolStep(step.toolId, this.registry)) {
         return err('validation', 'Planned tool is no longer registered.');
       }
-      const result = await this.executor.execute(step.toolId, step.input, { runId: runId as AgentRunId, step: index + 1, signal });
+      let result: Result<unknown>;
+      try {
+        result = await this.executor.execute(step.toolId, step.input, { runId: runId as AgentRunId, step: index + 1, signal });
+      } catch {
+        return err('tool_failed', 'Tool adapter failed unexpectedly. The outcome may be unknown; inspect audit before retrying.');
+      }
+      // A non-cooperating adapter may return a successful response after its
+      // signal was aborted. Never report that run as successfully completed.
+      if (signal.aborted) return err('cancelled', 'Agent run was cancelled; a dispatched tool may already have acted. Inspect audit before retrying.');
       if (!result.ok) return result;
       const completed = { stepId: step.id, output: result.value };
       results.push(completed);
-      onStep?.(completed);
+      try { onStep?.(completed); }
+      catch {
+        return err('internal', 'Tool step completed, but its progress observer failed. Inspect the audit before retrying.');
+      }
     }
     return ok(results);
   }
