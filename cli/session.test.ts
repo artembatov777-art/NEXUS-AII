@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadHistory, saveHistory } from './history';
 import { ModelRouter, type ModelProvider } from '../src/core/model';
 import { ok } from '../src/core/result';
 import { TerminalSession } from './session';
@@ -56,4 +60,33 @@ it('does not retain a turn when durable history fails', async () => {
   const session = new TerminalSession(router, 'test', 'model', [], async () => { throw new Error('disk full'); });
   await expect(session.send('hello', () => {})).rejects.toThrow('disk full');
   expect(session.history()).toEqual([]);
+});
+
+it('a stale terminal session cannot erase a completed turn saved in another session', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'nexus-session-conflict-'));
+  try {
+    const file = join(directory, 'history.json');
+    const initial = [{ role: 'user' as const, content: 'previous' },
+      { role: 'assistant' as const, content: 'reply' }];
+    await saveHistory(file, initial);
+    const router = new ModelRouter();
+    router.register({ id: 'test', listModels: async () => ok([]), async *stream(request) {
+      yield { type: 'text_delta' as const, text: `${request.messages.at(-1)?.content ?? ''} answer` };
+      yield { type: 'completed' as const };
+    } });
+    const fresh = new TerminalSession(router, 'test', 'model', await loadHistory(file),
+      messages => saveHistory(file, messages));
+    const stale = new TerminalSession(router, 'test', 'model', await loadHistory(file),
+      messages => saveHistory(file, messages));
+
+    await fresh.send('first', () => {});
+    const stored = await loadHistory(file);
+    expect(stored.map(message => message.content))
+      .toEqual(['previous', 'reply', 'first', 'first answer']);
+    await expect(stale.send('second', () => {})).rejects.toThrow(/history changed/i);
+    expect(stale.history()).toEqual(initial);
+    expect(await loadHistory(file)).toEqual(stored);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
