@@ -195,4 +195,64 @@ describe("ResumableAgentRuntime", () => {
     ]);
     expect(results.flat().filter(event => event.type === "completed")).toHaveLength(1);
   });
+
+  it("rechecks previously allowed permissions before continuing after a restart", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const permission = "tool:execute" as const;
+    const step = vi.fn(makeDefinition().step);
+    const first = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 });
+    first.register({ ...makeDefinition(), requiredPermissions: [permission], step });
+    for await (const event of first.start(agentId, 0, "thread-revoked")) {
+      if (event.type === "progress") break;
+    }
+    expect(step).toHaveBeenCalledTimes(1);
+
+    const reauthorize = vi.fn().mockResolvedValue("deny");
+    const restarted = new ResumableAgentRuntime(service,
+      { authorize: reauthorize },
+      { runId: () => runId }, { now: () => 2_000 });
+    restarted.register({ ...makeDefinition(), requiredPermissions: [permission], step });
+    const result = await collect(restarted.continue(runId));
+    expect(reauthorize).toHaveBeenCalledWith(expect.objectContaining({ permission }));
+    expect(result.at(-1)).toMatchObject({ type: "failed", message: expect.stringMatching(/permission.*denied/i) });
+    expect(step).toHaveBeenCalledTimes(1);
+    expect(await service.get(runId)).toMatchObject({ ok: true, value: { status: "failed" } });
+  });
+
+  it("pauses continuation for renewed approval and resumes from the saved step", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const permission = "tool:execute" as const;
+    const step = vi.fn(makeDefinition().step);
+    const initial = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockResolvedValue("allow") },
+      { runId: () => runId }, { now: () => 1_000 });
+    initial.register({ ...makeDefinition(), requiredPermissions: [permission], step });
+    for await (const event of initial.start(agentId, 0, "thread-reauthorize")) {
+      if (event.type === "progress") break;
+    }
+
+    let decision: "ask_user" | "allow" = "ask_user";
+    const approvals = new InMemoryAgentApprovalAuthority(service, { approvalId: () => "renewal-approval" });
+    const restarted = new ResumableAgentRuntime(service,
+      { authorize: vi.fn().mockImplementation(async () => decision) },
+      { runId: () => runId }, { now: () => 2_000 }, undefined, approvals);
+    restarted.register({ ...makeDefinition(), requiredPermissions: [permission], step });
+    expect(await collect(restarted.continue(runId))).toEqual([
+      { type: "waiting_for_approval", runId, permission }
+    ]);
+    const waiting = await service.get(runId);
+    expect(waiting).toMatchObject({ ok: true, value: { status: "waiting_for_approval", state: { steps: 1 } } });
+    expect(step).toHaveBeenCalledTimes(1);
+
+    const issued = await approvals.issue(runId);
+    expect(issued.ok).toBe(true);
+    if (!issued.ok) throw new Error("Approval grant was not issued.");
+    decision = "allow";
+    const resumed = await collect(restarted.resume(runId, issued.value));
+    expect(resumed.at(-1)).toEqual({ type: "completed", runId, steps: 2 });
+    expect(step).toHaveBeenCalledTimes(2);
+    expect(await service.get(runId)).toMatchObject({ ok: true, value: { status: "completed", state: { steps: 2 } } });
+  });
 });
