@@ -8,6 +8,7 @@ import { renderAuditCommand } from './auditView';
 import { FileWorkspaceAuditSink } from './workspaceAudit';
 import { FileAgentCheckpointRepository } from './fileAgentCheckpoints';
 import { renderPlanCheckpointCommand } from './planCheckpointView';
+import { renderRecoveryCommand } from './recoveryView';
 import { stdin, stdout, stderr } from 'node:process';
 import { ModelRouter } from '../src/core/model';
 import { TerminalSession } from './session';
@@ -28,7 +29,7 @@ Usage: nexus [--help | --version | --test-model [--history PATH]]
   --test-model Use deterministic offline echo fixture (not AI)
   --history    History file for test mode (local, not encrypted)
 
-Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit status <run-id>, /audit <run-id>, /checkpoints, /checkpoint <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
+Interactive commands: /help, /history, /history last N, /history find TEXT, /audit recent, /audit locks, /audit status <run-id>, /audit <run-id>, /checkpoints, /checkpoint <run-id>, /recovery <run-id>, /audit <run-id> last N, /agent <task>, /project, /files, /read, /search, /draft, /approve, /apply, /recover, /rollback, /discard, /exit
 Use /project <absolute directory> to grant a project for this session.
 Workspace planner: /agent plan <task>, /agent inspect, /agent diff, /agent status.
 Local Git (selected repository only): /git status, /git diff, /git diff staged, /git log. Read-only, bounded, no network.
@@ -70,6 +71,7 @@ if (args.length && !testMode && !(args.length === 1 && ['--help', '-h', '--versi
     workspace: workspace?.command, run,
     audit: async (line: string) => await renderAuditCommand(line, auditSink) ?? 'Usage: /audit <run-id> [last <1-50>]\n',
     checkpoint: async (line: string) => await renderPlanCheckpointCommand(line, checkpointStore) ?? 'Usage: /checkpoints [1-50] | /checkpoint <run-id>\n',
+    recovery: async (line: string) => await renderRecoveryCommand(line, checkpointStore, auditSink) ?? 'Usage: /recovery <run-id>\n',
     history: testMode ? () => session.history() : undefined,
     write: (text: string) => stdout.write(text),
     newId: randomUUID, signal: controller.signal
