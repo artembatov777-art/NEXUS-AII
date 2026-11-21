@@ -48,6 +48,13 @@ function savedOutputFromCheckpoint(checkpoint: AgentCheckpoint): string | null {
   return payload.preview;
 }
 
+/** Saved plan/child approvals are not standalone owner grants. */
+function isPlanOwnedCheckpoint(checkpoint: AgentCheckpoint): boolean {
+  return checkpoint.agentId === "nexus.desktop.workflow" || checkpoint.agentId === TOOL_INVOCATION_AGENT_ID ||
+    (checkpoint.state !== null && typeof checkpoint.state === "object" &&
+      !Array.isArray(checkpoint.state) && "delegation" in checkpoint.state);
+}
+
 function statusLabel(status: AgentCheckpoint["status"]): string {
   const labels: Record<AgentCheckpoint["status"], string> = {
     running: "Running",
@@ -66,7 +73,11 @@ function ParentPlanCheckpointProgress({ checkpoint, runtime }: { checkpoint: Age
   } | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const request = useRef(0);
-  useEffect(() => () => { request.current += 1; }, [checkpoint.runId, checkpoint.sequence, runtime]);
+  useEffect(() => {
+    setInspection(null);
+    setInspecting(false);
+    return () => { request.current += 1; };
+  }, [checkpoint.runId, checkpoint.sequence, runtime]);
   if (checkpoint.agentId !== "nexus.desktop.workflow") return null;
   const plan = summarizePlanCheckpoint(checkpoint);
   if (!plan) return <p>Plan progress is unavailable or unsafe to interpret.</p>;
@@ -515,7 +526,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   function approve(checkpoint: AgentCheckpoint) {
-    if (!runtime) return;
+    if (!runtime || isPlanOwnedCheckpoint(checkpoint)) return;
     void runAction(async function* (signal: AbortSignal) {
       const grant = await runtime.issueApproval(checkpoint.runId as AgentRunId);
       if (!grant.ok) {
@@ -527,7 +538,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   async function reject(checkpoint: AgentCheckpoint) {
-    if (!runtime || checkpoint.status !== "waiting_for_approval") return;
+    if (!runtime || checkpoint.status !== "waiting_for_approval" || isPlanOwnedCheckpoint(checkpoint)) return;
     const rejected: AgentCheckpoint = {
       ...checkpoint,
       sequence: checkpoint.sequence + 1,
@@ -623,7 +634,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
             {checkpoints.filter(item => item.status === "waiting_for_approval").length === 0 ? <div className="agent-empty">{t("No pending approvals.")}</div> :
               checkpoints.filter(item => item.status === "waiting_for_approval").map(checkpoint => <div className="agent-approval-item" key={checkpoint.runId}>
                 <strong>{checkpoint.pendingApproval?.permission}</strong><p>{taskFromCheckpoint(checkpoint)}</p><small>Run {checkpoint.runId}</small>
-                <div className="agent-approval-actions"><button onClick={() => approve(checkpoint)} disabled={busy}><Check size={13}/> Approve once</button><button onClick={() => void reject(checkpoint)} disabled={busy}>{t("Reject")}</button></div>
+                {isPlanOwnedCheckpoint(checkpoint)
+                  ? <p>Owning plan approval required. This saved checkpoint is inspection-only; standalone approval or rejection is unavailable.</p>
+                  : <div className="agent-approval-actions"><button onClick={() => approve(checkpoint)} disabled={busy}><Check size={13}/> Approve once</button><button onClick={() => void reject(checkpoint)} disabled={busy}>{t("Reject")}</button></div>}
               </div>)}
           </article>
 
