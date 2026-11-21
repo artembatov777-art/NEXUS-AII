@@ -24,7 +24,10 @@ describe("CLI read-only recovery overview", () => {
     const output = await renderRecoveryCommand("/recovery run-1", checkpoint, audit);
     expect(output).toContain("run-1");
     expect(output).toContain("cli.workspace.read");
-    expect(output).toContain("0/1");
+    expect(output).toContain("Checkpoint-confirmed steps: 0/1");
+    expect(output).toContain("Audit-confirmed steps: 0/1");
+    expect(output).toContain("Step 1:");
+    expect(output).toContain("Uncertain outcome");
     expect(output).toMatch(/unconfirmed|ambiguous/i);
     expect(output).toContain("/audit status run-1");
     expect(output).not.toMatch(/safe to retry|automatically resume/i);
