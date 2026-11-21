@@ -63,12 +63,63 @@ describe("combined read-only plan recovery inspection", () => {
     done.state = { kind: "nexus.plan-run.v1",
       steps: [{ id: "first", toolId: "cli.workspace.read" }, { id: "second", toolId: "cli.workspace.search" }],
       nextStep: 2, active: null };
-    const { repository, audit } = setup(done, [{ ...started, status: "completed", timestamp: 111 }]);
+    const first: ToolAuditEvent = { ...started, toolId: "cli.workspace.read", traceId: "run-1:1", timestamp: 101 };
+    const { repository, audit } = setup(done, [
+      first, { ...first, status: "completed", timestamp: 105 },
+      started, { ...started, status: "completed", timestamp: 111 }
+    ]);
     const report = await inspectPlanRecovery("run-1", repository, audit, options);
     expect(report).toMatchObject({ ok: true, value: {
       status: "completed", confirmedSteps: 2, inFlight: null,
       requiresOwnerReview: false, mayAutoResume: false
     } });
+  });
+
+  it("requires matching ordered start and completion receipts for every confirmed plan step", async () => {
+    const done = checkpoint("completed");
+    done.state = { kind: "nexus.plan-run.v1", steps: [
+      { id: "first", toolId: "cli.workspace.read" }, { id: "second", toolId: "cli.workspace.search" }
+    ], nextStep: 2, active: null };
+    const first: ToolAuditEvent = { ...started, toolId: "cli.workspace.read", traceId: "run-1:1", timestamp: 101 };
+    const firstDone: ToolAuditEvent = { ...first, status: "completed", timestamp: 102 };
+    const secondDone: ToolAuditEvent = { ...started, status: "completed", timestamp: 111 };
+    for (const receipts of [
+      [secondDone], [started, secondDone], [first, firstDone, secondDone],
+      [firstDone, first, started, secondDone],
+      [first, firstDone, started, secondDone, secondDone],
+      [started, secondDone, first, firstDone]
+    ]) {
+      const { repository, audit } = setup(done, receipts);
+      const result = await inspectPlanRecovery("run-1", repository, audit, options);
+      expect(result).toMatchObject({ ok: true, value: {
+        requiresOwnerReview: true, mayAutoResume: false
+      } });
+    }
+  });
+
+  it("does not attribute foreign tool IDs or unplanned trace IDs to a plan", async () => {
+    for (const receipt of [
+      { ...started, toolId: "other.tool" },
+      { ...started, traceId: "run-1:3" },
+      { ...started, traceId: "unrelated" }
+    ]) {
+      const { repository, audit } = setup(checkpoint(), [receipt]);
+      expect(await inspectPlanRecovery("run-1", repository, audit, options))
+        .toMatchObject({ ok: true, value: { requiresOwnerReview: true,
+          unmatchedAuditEvents: 1, auditConfirmedSteps: 0, mayAutoResume: false } });
+    }
+  });
+
+  it("separates checkpoint progress from audit-backed progress", async () => {
+    const { repository, audit } = setup();
+    expect(await inspectPlanRecovery("run-1", repository, audit, options))
+      .toMatchObject({ ok: true, value: {
+        confirmedSteps: 1, auditConfirmedSteps: 0,
+        stepEvidence: [
+          { index: 0, evidence: "missing_receipts" },
+          { index: 1, evidence: "uncertain" }
+        ]
+      } });
   });
 
   it("rejects forged run identity or a different owner's agent without returning metadata", async () => {
