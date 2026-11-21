@@ -298,3 +298,42 @@ it("shows delegated approval checkpoints as inspection-only rather than independ
     localStorage.clear();
   }
 });
+
+it("distinguishes unavailable audit data from an empty verified journal and revokes stale continuation controls", async () => {
+  localStorage.clear();
+  const conversationId = "corrupt-audit-recovery";
+  const threadId = "nexus-session:" + conversationId.length + ":" + conversationId;
+  localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([{
+    schemaVersion: 1, runId: "preview-restore-check", agentId: "nexus.local-workflow",
+    threadId, sequence: 1, status: "running",
+    state: { payload: { task: "Inspect audit status" }, permissionIndex: 1, agentVersion: "1.1.0", steps: 0 },
+    createdAt: 1_000, updatedAt: 1_000
+  }]));
+  const node = document.createElement("div");
+  document.body.appendChild(node);
+  const root = createRoot(node);
+  try {
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId}
+        conversationIds={[conversationId]} onClose={() => {}}
+        providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(node, "Run history")!.click(); });
+    expect(findButton(node, "Continue local preview")?.disabled).toBe(false);
+    localStorage.setItem("nexus-au:tool-audit:v1", "unreadable journal");
+    await act(async () => {
+      findButton(node, "Refresh")!.click();
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(node, "Audit")!.click(); });
+    expect(node.textContent).toContain("Audit history unavailable");
+    expect(node.textContent).not.toContain("No tool executions have been recorded.");
+    expect(findButton(node, "Continue local preview")).toBeUndefined();
+    expect(localStorage.getItem("nexus-au:tool-audit:v1")).toBe("unreadable journal");
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    localStorage.clear();
+  }
+});
