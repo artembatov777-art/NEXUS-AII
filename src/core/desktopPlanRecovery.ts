@@ -1,7 +1,7 @@
 import {
   validateAgentCheckpoint, type AgentCheckpoint, type AgentCheckpointRepository
 } from "./agentCheckpoints";
-import { summarizePlanCheckpoint } from "./planRecoveryInspection";
+import { hasMatchingCompletionReceipts, summarizePlanCheckpoint } from "./planRecoveryInspection";
 import { err, ok, type Result } from "./result";
 import { MAX_TOOL_AUDIT_HISTORY_EVENTS, validateCompleteToolAuditHistory, type ToolAuditSink } from "./tools";
 import { TOOL_INVOCATION_AGENT_ID } from "./toolInvocationAgent";
@@ -117,9 +117,7 @@ export async function inspectDesktopPlanRecovery(
       // All other sequences (including reconciliation) remain review-only.
       const receipts = events.value;
       row.evidence = child.status === "completed" &&
-        child.state.steps === 1 && receipts.length === 2 &&
-        receipts[0].status === "started" && receipts[1].status === "completed" &&
-        receipts[1].timestamp >= receipts[0].timestamp
+        child.state.steps === 1 && hasMatchingCompletionReceipts(receipts)
         ? "confirmed" : "uncertain";
       result.push(row);
     }
