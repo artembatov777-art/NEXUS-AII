@@ -1,7 +1,7 @@
 import { err, ok, type Result } from "./result";
 import type { AgentId } from "./agents";
 import type { ResumableAgentRuntime } from "./resumableAgents";
-import type { AgentTaskExecutor } from "./multiAgentCoordinator";
+import type { AgentTaskExecutor, DelegatedTaskContext } from "./multiAgentCoordinator";
 
 const MAX_OUTPUT_BYTES = 64_000;
 
@@ -9,11 +9,11 @@ const MAX_OUTPUT_BYTES = 64_000;
 export class ResumableAgentTaskExecutor implements AgentTaskExecutor {
   constructor(private readonly runtime: ResumableAgentRuntime, private readonly threadId: string) {}
 
-  async execute(agentId: AgentId, input: unknown, signal: AbortSignal): Promise<Result<unknown>> {
+  async execute(agentId: AgentId, input: unknown, signal: AbortSignal, delegation?: DelegatedTaskContext): Promise<Result<unknown>> {
     const output: string[] = [];
     let completed = false;
     try {
-      for await (const event of this.runtime.start(agentId, input, this.threadId, signal)) {
+      for await (const event of this.runtime.start(agentId, input, this.threadId, signal, delegation)) {
         if (event.type === "output") {
           output.push(event.content);
           if (new TextEncoder().encode(output.join("\n")).byteLength > MAX_OUTPUT_BYTES) {
