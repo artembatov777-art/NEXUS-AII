@@ -1262,6 +1262,13 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
         Some(v) => Some(v.as_str().filter(|s|s.len()<=1000).ok_or("Invalid audit detail.")?.to_string())
     };
     let tx=connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+    // Retention is a safety boundary, not a rolling display cache. Never
+    // discard the only evidence of an earlier external execution.
+    let audit_count: i64 = tx.query_row("SELECT COUNT(*) FROM tool_audit_events", [], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    if audit_count >= MAX_PERSISTED_EVENTS {
+        return Err("Tool audit is full; preserve and inspect its history before further execution.".into());
+    }
     // The Immediate transaction makes this claim atomic across multiple windows/processes.
     // A durable started/terminal event means this run step must never execute again.
     if status == "started" {
@@ -1300,7 +1307,6 @@ fn record_tool_audit_event_record(connection: &mut Connection, event: serde_json
         }
     }
     tx.execute("INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp,detail) VALUES(?1,?2,?3,?4,?5,?6)",params![tool_id,run_id,trace_id,status,timestamp,detail]).map_err(|e|e.to_string())?;
-    tx.execute("DELETE FROM tool_audit_events WHERE id NOT IN (SELECT id FROM tool_audit_events ORDER BY id DESC LIMIT ?1)",params![MAX_PERSISTED_EVENTS]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())
 }
 
@@ -1308,7 +1314,19 @@ fn list_tool_audit_event_records(connection: &Connection, run_id: Option<&str>, 
     if !(1..=MAX_PERSISTED_EVENTS).contains(&limit) || run_id.map_or(false,|v|v.trim().is_empty()||v.len()>160) {
         return Err("Audit filter or limit is invalid.".into());
     }
-    let mut statement=connection.prepare("SELECT tool_id,run_id,trace_id,status,timestamp,detail FROM tool_audit_events WHERE (?1 IS NULL OR run_id=?1) ORDER BY id DESC LIMIT ?2").map_err(|e|e.to_string())?;
+    // Count and select share a SQLite read transaction, so another process
+    // cannot change the snapshot between the capacity check and the query.
+    let snapshot = connection.unchecked_transaction().map_err(|error| error.to_string())?;
+    if run_id.is_some() {
+        let audit_count: i64 = snapshot.query_row("SELECT COUNT(*) FROM tool_audit_events", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        // Older releases could silently evict entries at this limit. A full
+        // database cannot prove that a filtered run history is complete.
+        if audit_count >= MAX_PERSISTED_EVENTS {
+            return Err("Tool audit history may be truncated at capacity; filtered recovery evidence is unavailable.".into());
+        }
+    }
+    let mut statement=snapshot.prepare("SELECT tool_id,run_id,trace_id,status,timestamp,detail FROM tool_audit_events WHERE (?1 IS NULL OR run_id=?1) ORDER BY id DESC LIMIT ?2").map_err(|e|e.to_string())?;
     let rows=statement.query_map(params![run_id,limit],|r|{
         let detail:Option<String>=r.get(5)?;
         let mut event=serde_json::json!({
@@ -1320,6 +1338,8 @@ fn list_tool_audit_event_records(connection: &Connection, run_id: Option<&str>, 
     }).map_err(|e|e.to_string())?;
     let mut output=rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?;
     output.reverse();
+    drop(statement);
+    snapshot.commit().map_err(|error| error.to_string())?;
     Ok(output)
 }
 
