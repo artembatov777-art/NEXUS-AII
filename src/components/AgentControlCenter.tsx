@@ -8,6 +8,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { Activity, AlertTriangle, Bot, Check, Clock3, Play, RefreshCw, Shield, Sparkles, X } from "lucide-react";
 import type { AgentCheckpoint } from "../core/agentCheckpoints";
 import { summarizePlanCheckpoint } from "../core/planRecoveryInspection";
+import { inspectDesktopPlanRecovery, type DesktopPlanRecoveryReport, type DelegatedRecoveryEvidence } from "../core/desktopPlanRecovery";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
 import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent } from "../core/tools";
@@ -59,16 +60,60 @@ function statusLabel(status: AgentCheckpoint["status"]): string {
 }
 
 /** Displays persisted parent-plan state only, without granting a restart. */
-function ParentPlanCheckpointProgress({ checkpoint }: { checkpoint: AgentCheckpoint }) {
+function ParentPlanCheckpointProgress({ checkpoint, runtime }: { checkpoint: AgentCheckpoint; runtime: RuntimeBundle | null }) {
+  const [inspection, setInspection] = useState<{
+    sequence: number; report?: DesktopPlanRecoveryReport; error?: string
+  } | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const request = useRef(0);
+  useEffect(() => () => { request.current += 1; }, [checkpoint.runId, checkpoint.sequence, runtime]);
   if (checkpoint.agentId !== "nexus.desktop.workflow") return null;
   const plan = summarizePlanCheckpoint(checkpoint);
   if (!plan) return <p>Plan progress is unavailable or unsafe to interpret.</p>;
+  const inspect = async () => {
+    if (!runtime) return;
+    const id = ++request.current;
+    setInspection(null);
+    setInspecting(true);
+    try {
+      const result = await inspectDesktopPlanRecovery(checkpoint.runId, checkpoint.threadId,
+        runtime.checkpointRepository, runtime.auditSink);
+      if (request.current !== id) return;
+      setInspection(result.ok
+        ? { sequence: checkpoint.sequence, report: result.value }
+        : { sequence: checkpoint.sequence, error: result.error.message });
+    } catch {
+      if (request.current === id) setInspection({
+        sequence: checkpoint.sequence, error: "Linked run evidence is unavailable."
+      });
+    } finally {
+      if (request.current === id) setInspecting(false);
+    }
+  };
+  const visible = inspection?.sequence === checkpoint.sequence ? inspection : null;
+  const labels: Record<DelegatedRecoveryEvidence, string> = {
+    not_dispatched: "No dispatch recorded",
+    unlinked: "No saved child link",
+    missing_checkpoint: "Child checkpoint missing",
+    uncertain: "Outcome uncertain",
+    confirmed: "Matching completion receipts"
+  };
   return <div className="agent-plan-checkpoint-progress">
     <p>Plan progress: {plan.confirmedSteps}/{plan.totalSteps} confirmed</p>
     {plan.inFlight && <p>Unconfirmed dispatch: {plan.inFlight.toolId} (step {plan.inFlight.index + 1}).</p>}
     <p>{checkpoint.status === "completed" && !plan.inFlight
       ? "Read-only checkpoint snapshot. Completion alone does not authorize replay."
       : "Owner inspection required before restart. No automatic tool replay."}</p>
+    <button className="agent-small-button" disabled={!runtime || inspecting}
+      onClick={() => void inspect()}>{inspecting ? "Inspecting linked runs…" : "Inspect linked tool runs"}</button>
+    {visible?.error && <p role="alert">{visible.error} No automatic tool replay.</p>}
+    {visible?.report && <div aria-live="polite">
+      {visible.report.steps.map(step => <div key={step.index}>
+        <p>Step {step.index + 1}: {step.toolId} · {labels[step.evidence]}</p>
+        {step.childRunId && <small>Run {step.childRunId} · {step.childStatus ?? "Unknown status"} · {step.auditEvents} audit event{step.auditEvents === 1 ? "" : "s"}</small>}
+      </div>)}
+      <p>{visible.report.requiresOwnerReview ? "Owner inspection required." : "Saved child and parent evidence matches."} No automatic tool replay.</p>
+    </div>}
   </div>;
 }
 
@@ -589,7 +634,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
                 <div className="agent-history-top"><span className={"agent-status " + checkpoint.status}>{checkpoint.status === "running" && checkpoint.runId !== activeRunId ? "Interrupted" : statusLabel(checkpoint.status)}</span><time>{new Date(checkpoint.updatedAt).toLocaleString()}</time></div>
                 <p>{taskFromCheckpoint(checkpoint)}</p><small>{checkpoint.runId} · checkpoint #{checkpoint.sequence}</small>
                 {savedOutputFromCheckpoint(checkpoint) && <details className="agent-saved-output"><summary>{t("View saved result")}</summary><pre>{savedOutputFromCheckpoint(checkpoint)}</pre></details>}
-                <ParentPlanCheckpointProgress checkpoint={checkpoint} />
+                <ParentPlanCheckpointProgress key={checkpoint.runId + ":" + checkpoint.sequence} checkpoint={checkpoint} runtime={runtime} />
                 {checkpoint.status === "running" && checkpoint.runId !== activeRunId && (resumeEligibleRunIds.includes(checkpoint.runId)
                   ? <button className="agent-small-button" disabled={busy} onClick={() => void continueLocalPreview(checkpoint)}>Continue local preview</button>
                   : <p>Continuation unavailable until permissions and previous tool outcomes can be verified.</p>)}
