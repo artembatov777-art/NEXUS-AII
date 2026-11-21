@@ -205,3 +205,60 @@ it("shows durable parent-plan progress read-only in Desktop run history without 
   node.remove();
   localStorage.clear();
 });
+
+it("inspects the exact child audit from parent history after restarting Desktop without rewriting saved data", async () => {
+  localStorage.clear();
+  const conversationId = "linked-parent-recovery";
+  const threadId = "nexus-session:" + conversationId.length + ":" + conversationId + "-planned";
+  const parentId = "coord_linked-parent";
+  const parent = {
+    schemaVersion: 1, runId: parentId, agentId: "nexus.desktop.workflow",
+    threadId, sequence: 3, status: "failed",
+    state: { kind: "nexus.plan-run.v1",
+      steps: [{ id: "read", toolId: "workspace.read" }], nextStep: 0,
+      active: { index: 0, id: "read", toolId: "workspace.read" },
+      childRuns: [{ index: 0, runId: "linked-child" }] },
+    createdAt: 1_000, updatedAt: 2_000
+  };
+  const child = {
+    schemaVersion: 1, runId: "linked-child", agentId: "nexus.tool-invocation",
+    threadId, sequence: 1, status: "running",
+    state: { payload: { toolId: "workspace.read", purpose: "Inspect", input: {} },
+      permissionIndex: 1, agentVersion: "1.0.0", steps: 0,
+      delegation: { parentCheckpointId: parentId, stepIndex: 0 } },
+    createdAt: 1_100, updatedAt: 1_100
+  };
+  const checkpoints = JSON.stringify([parent, child]);
+  const audit = JSON.stringify([{ toolId: "workspace.read", runId: "linked-child",
+    traceId: "linked-child:1", status: "started", timestamp: 1_200 }]);
+  localStorage.setItem("nexus-au:agent-checkpoints:v1", checkpoints);
+  localStorage.setItem("nexus-au:tool-audit:v1", audit);
+  const node = document.createElement("div");
+  document.body.appendChild(node);
+  const root = createRoot(node);
+  try {
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId}
+        conversationIds={[conversationId]} onClose={() => {}}
+        providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(node, "Run history")!.click(); });
+    await act(async () => {
+      findButton(node, "Inspect linked tool runs")!.click();
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    const panel = node.querySelector(".agent-plan-checkpoint-progress");
+    expect(panel?.textContent).toContain("linked-child");
+    expect(panel?.textContent).toContain("Outcome uncertain");
+    expect(panel?.textContent).toContain("1 audit event");
+    expect(panel?.textContent).toContain("No automatic tool replay");
+    expect(findButton(node, "Continue local preview")).toBeUndefined();
+    expect(localStorage.getItem("nexus-au:agent-checkpoints:v1")).toBe(checkpoints);
+    expect(localStorage.getItem("nexus-au:tool-audit:v1")).toBe(audit);
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    localStorage.clear();
+  }
+});
