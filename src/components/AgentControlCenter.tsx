@@ -11,7 +11,7 @@ import { summarizePlanCheckpoint } from "../core/planRecoveryInspection";
 import { inspectDesktopPlanRecovery, type DesktopPlanRecoveryReport, type DelegatedRecoveryEvidence } from "../core/desktopPlanRecovery";
 import type { AgentRunId } from "../core/agents";
 import type { ProviderSettings } from "../types";
-import { MAX_TOOL_AUDIT_HISTORY_EVENTS, type ToolAuditEvent } from "../core/tools";
+import { MAX_TOOL_AUDIT_HISTORY_EVENTS, validateCompleteToolAuditHistory, type ToolAuditEvent } from "../core/tools";
 import type { AmbiguousToolStep } from "../core/toolReconciliation";
 import { createTauriAutoModelRouterForProfiles, NATIVE_MODEL_PROVIDER_ID } from "../lib/tauriModelProvider";
 import { loadProviderProfiles } from "../lib/providerProfiles";
@@ -215,12 +215,17 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }, [initialTask]);
   const [profile, setProfile] = useState<AgentProfile>(runtimeState.profile ?? DEFAULT_AGENT_PROFILE);
   const [checkpointsByConversation, setCheckpointsByConversation] = useState<Record<string, AgentCheckpoint[]>>({});
-  const [auditEvents, setAuditEvents] = useState<ToolAuditEvent[]>([]);
+  const [auditByConversation, setAuditByConversation] = useState<Record<string, {
+    status: "loading" | "ready" | "unavailable"; events: ToolAuditEvent[]; incompleteRecovery: boolean
+  }>>({});
+  const refreshEpochs = useRef(new Map<string, number>());
   const [ambiguousByConversation, setAmbiguousByConversation] = useState<Record<string, AmbiguousToolStep[]>>({});
   const [resumeEligibleByConversation, setResumeEligibleByConversation] = useState<Record<string, string[]>>({});
   const [feedByConversation, setFeedByConversation] = useState<Record<string, FeedItem[]>>({});
   const conversationKey = conversationId ?? "standalone";
   const checkpoints = checkpointsByConversation[conversationKey] ?? [];
+  const auditView = auditByConversation[conversationKey];
+  const auditEvents = auditView?.events ?? [];
   const ambiguousToolSteps = ambiguousByConversation[conversationKey] ?? [];
   const resumeEligibleRunIds = resumeEligibleByConversation[conversationKey] ?? [];
   const feed = feedByConversation[conversationKey] ?? [];
@@ -262,50 +267,78 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
-    const [result, audit] = await Promise.all([
-      Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 50))),
-      runtime.auditSink.list({ limit: 30 })
-    ]);
-    const failedResult = result.find(item => !item.ok);
-    if (!failedResult) {
-      const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
-      setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
-      // Interruption evidence can be inspected read-only; the active local run is
-      // deliberately excluded while it is still executing in this window.
-      const inspectableRuns = checkpoints.filter(item =>
-        item.status === "failed" || item.status === "cancelled" ||
-        (item.status === "running" && item.runId !== activeRunId)
-      );
-      const reconciliationResults = await Promise.all(inspectableRuns.map(item =>
-        runtime.toolReconciliationService.listAmbiguous(item.runId)
-      ));
-      setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : []) }));
-      // Only the local, non-destructive demo may be restarted after a clean audit.
-      // A completed or ambiguous tool attempt is never eligible for replay.
-      const previewVersion = runtime.agentRuntime.list().find(agent => agent.id === BUILT_IN_AGENT_IDS.localWorkflow)?.version;
-      const candidates = checkpoints.filter(item => {
-        if (item.agentId !== BUILT_IN_AGENT_IDS.localWorkflow || item.status !== "running" || item.runId === activeRunId) return false;
-        const state = item.state;
-        return !!previewVersion && state !== null && typeof state === "object" && !Array.isArray(state) &&
-          "steps" in state && state.steps === 0 && "agentVersion" in state && state.agentVersion === previewVersion;
-      });
-      const auditResults = await Promise.all(candidates.map(item =>
-        runtime.auditSink.list({ runId: item.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS })
-      ));
-      setResumeEligibleByConversation(previous => ({
-        ...previous,
-        [conversationKey]: candidates.filter((_, index) => {
-          const result = auditResults[index];
-          return result.ok && result.value.length < MAX_TOOL_AUDIT_HISTORY_EVENTS &&
-            result.value.every(event => event.status === "denied");
-        }).map(item => item.runId)
+    const epoch = (refreshEpochs.current.get(conversationKey) ?? 0) + 1;
+    refreshEpochs.current.set(conversationKey, epoch);
+    const current = () => refreshEpochs.current.get(conversationKey) === epoch;
+    setResumeEligibleByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+    setAuditByConversation(previous => ({
+      ...previous, [conversationKey]: { status: "loading", events: [], incompleteRecovery: false }
+    }));
+    try {
+      const [result, audit] = await Promise.all([
+        Promise.all([threads.primary, threads.planned, threads.test].map(thread => runtime.checkpointService.listByThread(thread, 50))),
+        runtime.auditSink.list({ limit: 30 })
+      ]);
+      if (!current()) return;
+      const failedResult = result.find(item => !item.ok);
+      let incompleteRecovery = !!failedResult;
+      if (!failedResult) {
+        const checkpoints = result.flatMap(item => item.ok ? item.value : []).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
+        setCheckpointsByConversation(previous => ({ ...previous, [conversationKey]: checkpoints }));
+        const inspectableRuns = checkpoints.filter(item =>
+          item.status === "failed" || item.status === "cancelled" ||
+          (item.status === "running" && item.runId !== activeRunId)
+        );
+        const reconciliationResults = await Promise.all(inspectableRuns.map(item =>
+          runtime.toolReconciliationService.listAmbiguous(item.runId)
+        ));
+        if (!current()) return;
+        incompleteRecovery ||= reconciliationResults.some(item => !item.ok);
+        setAmbiguousByConversation(previous => ({
+          ...previous, [conversationKey]: reconciliationResults.flatMap(item => item.ok ? item.value : [])
+        }));
+        const previewVersion = runtime.agentRuntime.list().find(agent => agent.id === BUILT_IN_AGENT_IDS.localWorkflow)?.version;
+        const candidates = checkpoints.filter(item => {
+          if (item.agentId !== BUILT_IN_AGENT_IDS.localWorkflow || item.status !== "running" ||
+              item.runId === activeRunId || isPlanOwnedCheckpoint(item)) return false;
+          const state = item.state;
+          return !!previewVersion && state !== null && typeof state === "object" && !Array.isArray(state) &&
+            "steps" in state && state.steps === 0 && "agentVersion" in state && state.agentVersion === previewVersion;
+        });
+        const auditResults = await Promise.all(candidates.map(item =>
+          runtime.auditSink.list({ runId: item.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS })
+        ));
+        if (!current()) return;
+        const eligible = candidates.filter((candidate, index) => {
+          const history = auditResults[index];
+          const valid = history.ok && validateCompleteToolAuditHistory(candidate.runId, history.value);
+          if (!valid) { incompleteRecovery = true; return false; }
+          return history.value.every(event => event.status === "denied");
+        });
+        setResumeEligibleByConversation(previous => ({
+          ...previous, [conversationKey]: audit.ok && !incompleteRecovery ? eligible.map(item => item.runId) : []
+        }));
+      } else if (!failedResult.ok) {
+        setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+        addFeed(failedResult.error.message, "error");
+      }
+      if (!current()) return;
+      setAuditByConversation(previous => ({
+        ...previous, [conversationKey]: {
+          status: audit.ok ? "ready" : "unavailable", events: audit.ok ? audit.value : [], incompleteRecovery
+        }
       }));
-    } else if (!failedResult.ok) {
+      if (!audit.ok) addFeed(audit.error.message, "error");
+      if (incompleteRecovery) addFeed("Some run recovery evidence could not be verified.", "warning");
+    } catch {
+      if (!current()) return;
       setResumeEligibleByConversation(previous => ({ ...previous, [conversationKey]: [] }));
-      addFeed(failedResult.error.message, "error");
+      setAmbiguousByConversation(previous => ({ ...previous, [conversationKey]: [] }));
+      setAuditByConversation(previous => ({
+        ...previous, [conversationKey]: { status: "unavailable", events: [], incompleteRecovery: true }
+      }));
+      addFeed("Audit and recovery evidence could not be loaded safely.", "error");
     }
-    if (audit.ok) setAuditEvents(audit.value);
-    else addFeed(audit.error.message, "error");
   }, [runtime, addFeed, threads, conversationKey, activeRunId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -506,16 +539,20 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
   }
 
   async function continueLocalPreview(checkpoint: AgentCheckpoint) {
-    if (!runtime || busy || !resumeEligibleRunIds.includes(checkpoint.runId) ||
+    if (!runtime || busy || auditView?.status !== "ready" || auditView.incompleteRecovery ||
+        !resumeEligibleRunIds.includes(checkpoint.runId) || isPlanOwnedCheckpoint(checkpoint) ||
         checkpoint.status !== "running" || checkpoint.agentId !== BUILT_IN_AGENT_IDS.localWorkflow) return;
     const loaded = await runtime.checkpointService.get(checkpoint.runId);
-    if (!loaded.ok || !loaded.value || loaded.value.sequence !== checkpoint.sequence || loaded.value.status !== "running") {
+    if (!loaded.ok || !loaded.value || loaded.value.runId !== checkpoint.runId ||
+        loaded.value.sequence !== checkpoint.sequence || loaded.value.status !== "running" ||
+        loaded.value.threadId !== checkpoint.threadId || loaded.value.agentId !== checkpoint.agentId ||
+        isPlanOwnedCheckpoint(loaded.value)) {
       addFeed("The interrupted checkpoint changed; inspect the current state before continuing.", "warning");
       await refresh();
       return;
     }
     const history = await runtime.auditSink.list({ runId: checkpoint.runId, limit: MAX_TOOL_AUDIT_HISTORY_EVENTS });
-    if (!history.ok || history.value.length >= MAX_TOOL_AUDIT_HISTORY_EVENTS ||
+    if (!history.ok || !validateCompleteToolAuditHistory(checkpoint.runId, history.value) ||
         history.value.some(event => event.status !== "denied")) {
       addFeed("Cannot continue: previous tool outcomes are uncertain. Review the audit history first.", "warning");
       await refresh();
@@ -655,6 +692,7 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
           </article>
 
           <article className="agent-card" hidden={agentView !== "audit"}>
+            {auditView?.incompleteRecovery && <p role="alert">Some run recovery evidence is unavailable or incomplete. Continuation is blocked until it can be verified.</p>}
             {ambiguousToolSteps.length > 0 && <div className="agent-reconciliation">
               <div className="agent-card-heading"><div><span className="agent-kicker">{t("OWNER REVIEW REQUIRED")}</span><h3>{t("Ambiguous tool outcomes")}</h3></div><span className="agent-count">{ambiguousToolSteps.length}</span></div>
               <p>These tools started without a confirmed final result. Inspect the external system. Running or interrupted checkpoints are inspection-only; manual reconciliation is allowed only after the run has stopped.</p>
@@ -669,7 +707,9 @@ export function AgentControlCenter({ onClose, providerSettings, hasProviderKey, 
               })}
             </div>}
             <div className="agent-card-heading"><div><span className="agent-kicker">{t("TOOL GATEWAY")}</span><h3>{t("Recent tool audit")}</h3></div><span className="agent-count">{auditEvents.length}</span></div>
-            {auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
+            {!auditView || auditView.status === "loading" ? <p>Loading audit history…</p> :
+              auditView.status === "unavailable" ? <p role="alert">Audit history unavailable. Missing records do not prove that no tool executed.</p> :
+              auditEvents.length === 0 ? <div className="agent-empty">{t("No tool executions have been recorded.")}</div> :
               <div className="agent-history">{auditEvents.slice(0, 20).map((event, index) => <div className="agent-history-item" key={event.traceId + event.toolId + event.timestamp + index}>
                 <div className="agent-history-top"><span className={"agent-status " + event.status}>{event.status.toUpperCase()}</span><time>{new Date(event.timestamp).toLocaleString()}</time></div>
                 <p>{event.toolId}</p><small>Run {event.runId} · Trace {event.traceId}</small>
