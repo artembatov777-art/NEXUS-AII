@@ -38,6 +38,13 @@ export class InMemoryAgentApprovalAuthority implements AgentApprovalAuthority {
     if (!checkpoint || checkpoint.status !== "waiting_for_approval" || !checkpoint.pendingApproval) {
       return err("validation", "This run is not waiting for user approval.");
     }
+    if (checkpoint.runId !== runId ||
+        (checkpoint.state !== null && typeof checkpoint.state === "object" &&
+          !Array.isArray(checkpoint.state) && "delegation" in checkpoint.state) ||
+        checkpoint.agentId === "nexus.desktop.workflow" ||
+        checkpoint.agentId === "nexus.tool-invocation") {
+      return err("permission_denied", "Delegated plan approvals must be handled by the owning workflow.");
+    }
     const permission = checkpoint.pendingApproval.permission;
     if (!["memory:read", "conversation:read", "tool:execute"].includes(permission)) {
       return err("validation", "The pending permission is not recognized.");
