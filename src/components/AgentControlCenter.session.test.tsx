@@ -262,3 +262,39 @@ it("inspects the exact child audit from parent history after restarting Desktop 
     localStorage.clear();
   }
 });
+
+it("shows delegated approval checkpoints as inspection-only rather than independent approvals", async () => {
+  localStorage.clear();
+  const conversationId = "protected-approval";
+  const threadId = "nexus-session:" + conversationId.length + ":" + conversationId + "-planned";
+  const record = {
+    schemaVersion: 1, runId: "child-waiting", agentId: "nexus.tool-invocation",
+    threadId, sequence: 1, status: "waiting_for_approval",
+    state: { payload: { toolId: "workspace.read", purpose: "Inspect", input: {} },
+      permissionIndex: 0, agentVersion: "1.0.0", steps: 0,
+      delegation: { parentCheckpointId: "coord_parent", stepIndex: 0 } },
+    pendingApproval: { permission: "tool:execute", requestedAt: 1_000 },
+    createdAt: 1_000, updatedAt: 1_000
+  };
+  localStorage.setItem("nexus-au:agent-checkpoints:v1", JSON.stringify([record]));
+  const node = document.createElement("div");
+  document.body.appendChild(node);
+  const root = createRoot(node);
+  try {
+    await act(async () => {
+      root.render(<AgentControlCenter conversationId={conversationId}
+        conversationIds={[conversationId]} onClose={() => {}}
+        providerSettings={DEFAULT_PROVIDER} hasProviderKey={false} />);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    await act(async () => { findButton(node, "Approvals")!.click(); });
+    expect(node.textContent).toContain("Owning plan approval required");
+    expect(findButton(node, "Approve once")).toBeUndefined();
+    expect(findButton(node, "Reject")).toBeUndefined();
+    expect(localStorage.getItem("nexus-au:agent-checkpoints:v1")).toBe(JSON.stringify([record]));
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    localStorage.clear();
+  }
+});
