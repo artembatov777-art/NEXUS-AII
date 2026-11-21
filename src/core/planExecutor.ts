@@ -35,8 +35,8 @@ export class PlanExecutor {
  * auditing and cancellation boundary; neither can bypass live registration
  * checks or send a forged tool input directly to the tool executor.
  *
- * Does not yet persist whole-plan checkpoints. The ToolGateway retains its
- * own durable per-step audit and will refuse ambiguous automatic replay.
+ * When a checkpoint adapter is configured, persists intent and step results.
+ * ToolGateway retains its separate audit and refuses ambiguous automatic replay.
  */
 export async function executeSequentialPlan(
   plan: ValidatedPlan,
@@ -87,6 +87,14 @@ export async function executeSequentialPlan(
       const prepared = await checkpoint.beforeStep(index, step.id, step.toolId);
       if (!prepared.ok) return err("storage_failed",
         "Could not persist tool dispatch intent. No tool was invoked; inspect the checkpoint before retrying.");
+    }
+    // Persisting dispatch intent is asynchronous: a host could revoke the
+    // tool or cancel the run while storage was committing. Recheck at handoff.
+    if (signal.aborted) {
+      return stop(err('cancelled', 'Agent run was cancelled before tool dispatch.'), "cancelled");
+    }
+    if (!isBoundExecutableToolStep(step.toolId, registry, bindings.value)) {
+      return stop(err('validation', 'Planned tool registration changed before dispatch. Inspect the checkpoint before retrying.'), "failed");
     }
     let result: Result<unknown>;
     try {
