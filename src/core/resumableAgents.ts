@@ -157,7 +157,7 @@ export class ResumableAgentRuntime {
     const cp = loaded.value;
     // Delegation authority belongs to the owning live plan, not a persisted
     // child checkpoint. Standalone recovery must never restart a linked child.
-    if (isStoredAgentState(cp.state) && "delegation" in cp.state) {
+    if (cp.agentId === "nexus.tool-invocation" || (isStoredAgentState(cp.state) && "delegation" in cp.state)) {
       yield { type: "failed", runId, message: "Delegated child runs require owner-plan recovery; independent continuation is unavailable." }; return;
     }
     const agent = this.definitions.get(cp.agentId as AgentId);
@@ -213,7 +213,7 @@ export class ResumableAgentRuntime {
     const cp = loaded.value;
     // Delegation authority belongs to the owning live plan, not a persisted
     // child checkpoint. Standalone recovery must never restart a linked child.
-    if (isStoredAgentState(cp.state) && "delegation" in cp.state) {
+    if (cp.agentId === "nexus.tool-invocation" || (isStoredAgentState(cp.state) && "delegation" in cp.state)) {
       yield { type: "failed", runId, message: "Delegated child runs require owner-plan recovery; independent continuation is unavailable." }; return;
     }
     const agent = this.definitions.get(cp.agentId as AgentId);
