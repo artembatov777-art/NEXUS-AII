@@ -27,12 +27,22 @@ export async function renderRecoveryCommand(
   const lines = [
     "Recovery inspection " + quoteTerminal(report.runId),
     "Checkpoint status: " + quoteTerminal(report.status),
-    "Confirmed steps: " + report.confirmedSteps + "/" + report.totalSteps,
+    "Checkpoint-confirmed steps: " + report.confirmedSteps + "/" + report.totalSteps,
+    "Audit-confirmed steps: " + report.auditConfirmedSteps + "/" + report.totalSteps,
+    "Unmatched audit events: " + report.unmatchedAuditEvents,
     "Verified audit events: " + report.auditEvents,
     "Ambiguous audit actions: " + report.ambiguous.length,
+    ...report.stepEvidence.map(step => "Step " + (step.index + 1) + ": " +
+      quoteTerminal(step.toolId) + " · " + ({
+        not_dispatched: "No dispatch recorded",
+        missing_receipts: "Missing audit receipts",
+        uncertain: "Uncertain outcome",
+        confirmed: "Matching completion receipts"
+      })[step.evidence]),
+
     report.inFlight
       ? "Unconfirmed dispatch: " + quoteTerminal(report.inFlight.toolId) +
-        " (step " + report.inFlight.index + ", ID " + quoteTerminal(report.inFlight.id) + ")"
+         " (step " + (report.inFlight.index + 1) + ", ID " + quoteTerminal(report.inFlight.id) + ")"
       : "Checkpoint has no in-flight tool step.",
     ...report.ambiguous.slice(0, 10).map(item =>
       "Review " + quoteTerminal(item.toolId) + " trace=" + quoteTerminal(item.traceId)),
