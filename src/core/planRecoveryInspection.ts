@@ -4,12 +4,24 @@ import {
 } from "./agentCheckpoints";
 import {
   MAX_TOOL_AUDIT_HISTORY_EVENTS, validateCompleteToolAuditHistory,
-  type ToolAuditSink
+  type ToolAuditSink, type ToolAuditEvent
 } from "./tools";
 import { findAmbiguous, type AmbiguousToolStep } from "./toolReconciliation";
 import { err, ok, type Result } from "./result";
 
 interface PlanStepIdentity { id: string; toolId: string }
+export interface PlanStepRecoveryEvidence extends PlanStepIdentity {
+  index: number;
+  evidence: "not_dispatched" | "missing_receipts" | "uncertain" | "confirmed";
+  auditEvents: number;
+}
+
+/** Only an ordered, unique start/completion pair confirms a receipt. */
+export function hasMatchingCompletionReceipts(events: readonly ToolAuditEvent[]): boolean {
+  return events.length === 2 &&
+    events[0].status === "started" && events[1].status === "completed" &&
+    events[1].timestamp >= events[0].timestamp;
+}
 export interface PlanRecoveryReport {
   runId: string;
   status: AgentCheckpoint["status"];
@@ -18,6 +30,9 @@ export interface PlanRecoveryReport {
   inFlight: (PlanStepIdentity & { index: number }) | null;
   ambiguous: AmbiguousToolStep[];
   auditEvents: number;
+  auditConfirmedSteps: number;
+  unmatchedAuditEvents: number;
+  stepEvidence: PlanStepRecoveryEvidence[];
   requiresOwnerReview: boolean;
   /** Recovery inspection never issues an executable authorization. */
   mayAutoResume: false;
@@ -51,6 +66,7 @@ function planState(value: unknown): { steps: PlanStepIdentity[];
       !Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > 12 ||
       Object.keys(value.steps).length !== value.steps.length ||
       !value.steps.every(validStep) ||
+      new Set(value.steps.map(step => step.id)).size !== value.steps.length ||
       !Number.isSafeInteger(value.nextStep) ||
       (value.nextStep as number) < 0 || (value.nextStep as number) > value.steps.length) return null;
   const index = value.nextStep as number;
@@ -131,8 +147,34 @@ export async function inspectPlanRecovery(
         "Tool audit is unavailable, mixed, malformed or potentially truncated; review must stop.");
     }
     const ambiguous = findAmbiguous(events.value);
+    const attempted = state.nextStep + (state.active ? 1 : 0);
+    const expected = new Map(state.steps.slice(0, attempted).map((step, index) =>
+      [runId + ":" + (index + 1), { step, index }] as const));
+    const perStep = state.steps.map((): ToolAuditEvent[] => []);
+    let unmatchedAuditEvents = 0;
+    let lastIndex = -1;
+    let ordered = true;
+    for (const event of events.value) {
+      const match = expected.get(event.traceId);
+      if (!match || match.step.toolId !== event.toolId) {
+        unmatchedAuditEvents++;
+        continue;
+      }
+      if (match.index < lastIndex) ordered = false;
+      lastIndex = match.index;
+      perStep[match.index].push(event);
+    }
+    const stepEvidence: PlanStepRecoveryEvidence[] = state.steps.map((step, index) => {
+      const receipts = perStep[index];
+      const evidence = index >= attempted ? "not_dispatched" :
+        !receipts.length ? "missing_receipts" :
+        hasMatchingCompletionReceipts(receipts) ? "confirmed" : "uncertain";
+      return { index, id: step.id, toolId: step.toolId, evidence, auditEvents: receipts.length };
+    });
+    const auditConfirmedSteps = stepEvidence.filter(step => step.evidence === "confirmed").length;
     const requiresOwnerReview = cp.status !== "completed" || state.active !== null ||
-      ambiguous.length > 0 || events.value.length === 0;
+      ambiguous.length > 0 || unmatchedAuditEvents > 0 || !ordered ||
+      auditConfirmedSteps !== state.steps.length;
     return ok({
       runId,
       status: cp.status,
@@ -141,6 +183,7 @@ export async function inspectPlanRecovery(
       inFlight: state.active,
       ambiguous,
       auditEvents: events.value.length,
+      auditConfirmedSteps, unmatchedAuditEvents, stepEvidence,
       requiresOwnerReview,
       mayAutoResume: false
     });
