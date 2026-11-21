@@ -74,7 +74,9 @@ describe("Desktop parent-child recovery evidence", () => {
     expect(audit.list).not.toHaveBeenCalled();
   });
   it("treats incomplete, denied or failed audit as unresolved even if the parent says completed", async () => {
-    for (const events of [[], [started], [completed], [started, { ...completed, status: "failed" as const }]]) {
+    for (const events of [[], [started], [completed], [completed, started],
+      [started, completed, completed], [started, { ...completed, timestamp: 100 }],
+      [started, { ...completed, status: "failed" as const }]]) {
       const { inspect } = setup(parent(), child(), events);
       expect(await inspect()).toMatchObject({ ok: true, value: {
         requiresOwnerReview: true, mayAutoResume: false, steps: [{ evidence: "uncertain" }]
