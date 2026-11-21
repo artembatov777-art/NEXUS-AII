@@ -2492,6 +2492,40 @@ mod database_tests {
     }
 
     #[test]
+    fn native_audit_capacity_does_not_evict_old_execution_receipts() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite");
+        migrate_database(&mut connection).expect("apply migrations");
+        let oldest = serde_json::json!({
+            "toolId":"workspace.read","runId":"old-run","traceId":"old-run:1","status":"started","timestamp":1.0
+        });
+        record_tool_audit_event_record(&mut connection,oldest.clone()).expect("persist oldest claim");
+        connection.execute(
+            "WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < ?1)
+             INSERT INTO tool_audit_events(tool_id,run_id,trace_id,status,timestamp)
+             SELECT 'notes.read','filler','trace-' || n,'denied',n+1 FROM seq",
+            params![MAX_PERSISTED_EVENTS - 2]
+        ).expect("fill audit to one below capacity");
+        let last = serde_json::json!({
+            "toolId":"workspace.read","runId":"last-run","traceId":"last-run:1","status":"denied","timestamp":6000.0
+        });
+        record_tool_audit_event_record(&mut connection,last).expect("last available record");
+        let extra = serde_json::json!({
+            "toolId":"workspace.read","runId":"new-run","traceId":"new-run:1","status":"started","timestamp":6001.0
+        });
+        assert!(record_tool_audit_event_record(&mut connection,extra).is_err(),
+            "a full audit must block new execution claims");
+        let count: i64 = connection.query_row("SELECT COUNT(*) FROM tool_audit_events", [], |row|row.get(0)).unwrap();
+        let oldest_count: i64 = connection.query_row("SELECT COUNT(*) FROM tool_audit_events WHERE run_id='old-run'", [], |row|row.get(0)).unwrap();
+        assert_eq!(count, MAX_PERSISTED_EVENTS);
+        assert_eq!(oldest_count, 1, "capacity must never silently delete old start receipts");
+        assert!(record_tool_audit_event_record(&mut connection,oldest).is_err());
+        assert!(list_tool_audit_event_records(&connection,Some("unknown-run"),10).is_err(),
+            "empty filtered history at global capacity might hide a previously evicted receipt");
+        assert_eq!(list_tool_audit_event_records(&connection,None,10).unwrap().len(),10,
+            "owner may still inspect recent audit receipts");
+    }
+
+    #[test]
     fn native_audit_claim_prevents_duplicate_started_events_atomically() {
         let mut connection=Connection::open_in_memory().expect("in-memory SQLite");
         migrate_database(&mut connection).expect("apply migrations");
