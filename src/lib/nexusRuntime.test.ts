@@ -128,7 +128,20 @@ describe("createNexusRuntime", () => {
       ids: { runId: () => `run_${++sequence}` as AgentRunId, approvalId: () => "approval-unused" },
       clock: { now: () => 20_000 }
     });
-    const execute = vi.fn(async (input: { query: string }) => ok({ matches: [input.query], count: 1 }));
+    const execute = vi.fn(async (input: { query: string }) => {
+      // Both durable identities must exist before the tool can act.
+      expect(await runtime.checkpointService.get("coord_coordination-1")).toMatchObject({
+        ok: true, value: { status: "running", state: {
+          active: { index: 0 }, childRuns: [{ index: 0, runId: "run_1" }]
+        }}
+      });
+      expect(await runtime.checkpointService.get("run_1")).toMatchObject({
+        ok: true, value: { status: "running", state: {
+          delegation: { parentCheckpointId: "coord_coordination-1", stepIndex: 0 }
+        }}
+      });
+      return ok({ matches: [input.query], count: 1 });
+    });
     expect(runtime.toolRegistry.register({
       id: "notes.search", version: "1", description: "Search local notes",
       requiredPermissions: ["memory:read"], risk: "low", timeoutMs: 1_000,
@@ -173,8 +186,13 @@ describe("createNexusRuntime", () => {
       expect(savedPlans.value).toHaveLength(2);
       expect(savedPlans.value).toEqual(expect.arrayContaining([
         expect.objectContaining({ runId: "coord_coordination-1", status: "completed",
-          agentId: "nexus.desktop.workflow" }),
-        expect.objectContaining({ status: "completed", agentId: "nexus.tool-invocation" })
+          agentId: "nexus.desktop.workflow", state: expect.objectContaining({
+            childRuns: [{ index: 0, runId: "run_1" }]
+          }) }),
+        expect.objectContaining({ runId: "run_1", status: "completed", agentId: "nexus.tool-invocation",
+          state: expect.objectContaining({
+            delegation: { parentCheckpointId: "coord_coordination-1", stepIndex: 0 }
+          }) })
       ]));
     }
     expect(await runtime.auditSink.list()).toMatchObject({ ok: true, value: [
