@@ -3,6 +3,7 @@ import type { AgentClock, AgentId, AgentIdFactory, AgentPermission, AgentPermiss
 import { err, ok, type Result } from "./result";
 import type { AgentToolExecutor } from "./agentToolBridge";
 import type { AgentApprovalAuthority } from "./agentApprovals";
+import type { DelegatedTaskContext } from "./multiAgentCoordinator";
 
 export interface ResumableAgentContext {
   readonly runId: AgentRunId;
@@ -35,13 +36,27 @@ export type ResumableAgentEvent =
   | { type: "completed"; runId: AgentRunId; steps: number }
   | { type: "failed"; runId: AgentRunId; message: string };
 
-interface StoredAgentState { payload: JsonValue; permissionIndex: number; agentVersion: string; steps: number; }
+interface DelegationIdentity { parentCheckpointId: string; stepIndex: number; }
+interface StoredAgentState { payload: JsonValue; permissionIndex: number; agentVersion: string; steps: number; delegation?: DelegationIdentity; }
 const isStoredAgentState = (value: JsonValue): value is JsonValue & StoredAgentState =>
   value !== null && typeof value === "object" && !Array.isArray(value) &&
   "payload" in value && "permissionIndex" in value &&
   Number.isInteger(value.permissionIndex) && Number(value.permissionIndex) >= 0 && typeof value.agentVersion === "string" && Number.isInteger(value.steps) && Number(value.steps) >= 0;
-const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0): JsonValue =>
-  ({ payload, permissionIndex, agentVersion, steps } as JsonValue);
+const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0,
+  delegation?: DelegationIdentity): JsonValue =>
+  ({ payload, permissionIndex, agentVersion, steps, ...(delegation ? { delegation } : {}) } as JsonValue);
+function delegationPermitted(context?: DelegatedTaskContext): boolean {
+  if (!context) return true;
+  try { return context.mayExecute() === true; } catch { return false; }
+}
+function validDelegation(context: DelegatedTaskContext, runId: string): boolean {
+  return /^[A-Za-z0-9_-]{1,120}$/.test(runId) &&
+    typeof context.parentCheckpointId === "string" &&
+    /^[A-Za-z0-9_-]{1,120}$/.test(context.parentCheckpointId) &&
+    context.parentCheckpointId !== runId &&
+    Number.isSafeInteger(context.stepIndex) && context.stepIndex >= 0 && context.stepIndex < 12 &&
+    typeof context.bindChildRun === "function" && typeof context.mayExecute === "function";
+}
 
 /** Serializable step execution. Each successful step is persisted before its events are emitted. */
 export class ResumableAgentRuntime {
@@ -87,7 +102,7 @@ export class ResumableAgentRuntime {
     }));
   }
 
-  async *start<Input>(agentId: AgentId, input: Input, threadId: string, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+  async *start<Input>(agentId: AgentId, input: Input, threadId: string, signal?: AbortSignal, delegation?: DelegatedTaskContext): AsyncIterable<ResumableAgentEvent> {
     const runId = this.ids.runId();
     const agent = this.definitions.get(agentId) as ResumableAgentDefinition<Input> | undefined;
     if (!agent || !threadId.trim()) { yield { type: "failed", runId, message: "Registered agent and thread id are required." }; return; }
@@ -97,9 +112,26 @@ export class ResumableAgentRuntime {
     catch { yield { type: "failed", runId, message: "Agent could not create its initial state." }; return; }
     if (signal?.aborted) { yield { type: "failed", runId, message: "Agent run was cancelled before checkpoint creation." }; return; }
 
+    // The parent must durably reserve this exact child identity before any
+    // child checkpoint or tool effect. A failed reservation cannot be retried
+    // independently as a child run.
+    let parent: DelegationIdentity | undefined;
+    if (delegation) {
+      if (!validDelegation(delegation, runId) || !delegationPermitted(delegation)) {
+        yield { type: "failed", runId, message: "Delegated run context is invalid or no longer permitted." }; return;
+      }
+      parent = { parentCheckpointId: delegation.parentCheckpointId, stepIndex: delegation.stepIndex };
+      let bound: Result<void>;
+      try { bound = await delegation.bindChildRun(runId); }
+      catch { bound = err("storage_failed", "Could not bind delegated run identity."); }
+      if (!bound.ok) { yield { type: "failed", runId, message: bound.error.message }; return; }
+      if (signal?.aborted || !delegationPermitted(delegation)) {
+        yield { type: "failed", runId, message: "Delegated run was cancelled or revoked before checkpoint creation." }; return;
+      }
+    }
     const now = this.clock.now();
     const initial: AgentCheckpoint = { schemaVersion: 1, runId, agentId, threadId, sequence: 1,
-      status: "running", state: packState(payload, 0, agent.version), createdAt: now, updatedAt: now };
+      status: "running", state: packState(payload, 0, agent.version, 0, parent), createdAt: now, updatedAt: now };
     const auth = await this.authorizeRemaining(agent, 0);
     if (auth.kind === "denied") {
       const saved = await this.checkpoints.persist({ ...initial, status: "failed" });
@@ -108,21 +140,26 @@ export class ResumableAgentRuntime {
     if (auth.kind === "approval") {
       const waiting: AgentCheckpoint = { ...initial, status: "waiting_for_approval",
         pendingApproval: { permission: auth.permission, requestedAt: this.clock.now() },
-        state: packState(payload, auth.nextIndex, agent.version) };
+        state: packState(payload, auth.nextIndex, agent.version, 0, parent) };
       const saved = await this.checkpoints.persist(waiting);
       if (!saved.ok) { yield { type: "failed", runId, message: saved.error.message }; return; }
       yield { type: "waiting_for_approval", runId, permission: auth.permission }; return;
     }
-    const ready = { ...initial, state: packState(payload, auth.nextIndex, agent.version) };
+    const ready = { ...initial, state: packState(payload, auth.nextIndex, agent.version, 0, parent) };
     const saved = await this.checkpoints.persist(ready);
     if (!saved.ok) { yield { type: "failed", runId, message: saved.error.message }; return; }
-    yield* this.execute(agent, ready, payload, auth.nextIndex, 0, signal);
+    yield* this.execute(agent, ready, payload, auth.nextIndex, 0, signal, delegation, parent);
   }
 
   async *resume(runId: AgentRunId, approvalId: string, signal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
     const loaded = await this.checkpoints.get(runId);
     if (!loaded.ok || !loaded.value) { yield { type: "failed", runId, message: loaded.ok ? "Checkpoint was not found." : loaded.error.message }; return; }
     const cp = loaded.value;
+    // Delegation authority belongs to the owning live plan, not a persisted
+    // child checkpoint. Standalone recovery must never restart a linked child.
+    if (isStoredAgentState(cp.state) && "delegation" in cp.state) {
+      yield { type: "failed", runId, message: "Delegated child runs require owner-plan recovery; independent continuation is unavailable." }; return;
+    }
     const agent = this.definitions.get(cp.agentId as AgentId);
     if (!agent || cp.status !== "waiting_for_approval" || !cp.pendingApproval || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
       yield { type: "failed", runId, message: "Checkpoint is not awaiting approval, or its agent is unavailable." }; return;
@@ -174,6 +211,11 @@ export class ResumableAgentRuntime {
       return;
     }
     const cp = loaded.value;
+    // Delegation authority belongs to the owning live plan, not a persisted
+    // child checkpoint. Standalone recovery must never restart a linked child.
+    if (isStoredAgentState(cp.state) && "delegation" in cp.state) {
+      yield { type: "failed", runId, message: "Delegated child runs require owner-plan recovery; independent continuation is unavailable." }; return;
+    }
     const agent = this.definitions.get(cp.agentId as AgentId);
     if (!agent || cp.status !== "running" || !isStoredAgentState(cp.state) || cp.state.agentVersion !== agent.version) {
       yield { type: "failed", runId, message: "Only a running checkpoint with a registered agent can be continued." };
@@ -228,7 +270,8 @@ export class ResumableAgentRuntime {
   }
 
   private async *execute(agent: ResumableAgentDefinition<unknown>, checkpoint: AgentCheckpoint,
-    initialState: JsonValue, permissionIndex: number, completedSteps: number, externalSignal?: AbortSignal): AsyncIterable<ResumableAgentEvent> {
+    initialState: JsonValue, permissionIndex: number, completedSteps: number, externalSignal?: AbortSignal,
+    delegation?: DelegatedTaskContext, parent?: DelegationIdentity): AsyncIterable<ResumableAgentEvent> {
     const runId = checkpoint.runId as AgentRunId;
     const controller = new AbortController();
     const onAbort = () => controller.abort();
@@ -240,10 +283,11 @@ export class ResumableAgentRuntime {
     let timedOut = false;
     // The timeout applies to active execution, not time spent waiting for user approval or app restart.
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, agent.timeoutMs);
-    yield { type: "started", runId, agentId: agent.id };
     try {
+      yield { type: "started", runId, agentId: agent.id };
       while (steps < agent.maxSteps) {
         if (controller.signal.aborted) throw new Error(timedOut ? "Agent timed out." : "Agent was cancelled.");
+        if (!delegationPermitted(delegation)) throw new Error("Delegated tool permission was revoked.");
         const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort",
           () => reject(new Error(timedOut ? "Agent timed out." : "Agent was cancelled.")), { once: true }));
         const result = await Promise.race([agent.step(state, { runId, step: steps + 1, signal: controller.signal, tools: this.tools }), abort]);
@@ -253,7 +297,7 @@ export class ResumableAgentRuntime {
         state = result.state;
         steps += 1;
         const next: AgentCheckpoint = { ...checkpoint, sequence: sequence + 1, status: result.done ? "completed" : "running",
-          state: packState(state, permissionIndex, agent.version, steps), updatedAt: this.clock.now() };
+          state: packState(state, permissionIndex, agent.version, steps, parent), updatedAt: this.clock.now() };
         delete next.pendingApproval;
         const persisted = await this.checkpoints.persist(next);
         if (!persisted.ok) throw new Error(persisted.error.message);
