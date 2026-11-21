@@ -3,8 +3,18 @@ import type { AgentId, AgentRunId } from "./agents";
 import type { AgentPlan, AgentPlanStep } from "./agentPlanner";
 import type { TraceSink } from "./observability";
 
+export interface DelegatedTaskContext {
+  parentCheckpointId: string;
+  stepIndex: number;
+  bindChildRun(runId: AgentRunId): Promise<Result<void>>;
+  mayExecute(): boolean;
+}
+export interface CoordinationDelegation {
+  parentCheckpointId: string;
+  bindChildRun(index: number, runId: AgentRunId): Promise<Result<void>>;
+}
 export interface AgentTaskExecutor {
-  execute(agentId: AgentId, input: unknown, signal: AbortSignal): Promise<Result<unknown>>;
+  execute(agentId: AgentId, input: unknown, signal: AbortSignal, delegation?: DelegatedTaskContext): Promise<Result<unknown>>;
 }
 export interface CoordinatorPolicy {
   authorize(agentId: AgentId, reason: string): Promise<"allow" | "deny" | "ask_user">;
@@ -22,6 +32,7 @@ interface PendingCoordination {
   nextIndex: number;
   outputs: Map<string, unknown>;
   mayExecute?: (step: AgentPlanStep) => boolean;
+  delegation?: CoordinationDelegation;
 }
 
 const MAX_PLAN_BYTES = 64_000;
@@ -104,7 +115,7 @@ export class MultiAgentCoordinator {
   }
 
   async *run(runId: AgentRunId, plan: AgentPlan, assignments: Record<string, AgentId>, signal: AbortSignal,
-    mayExecute?: (step: AgentPlanStep) => boolean): AsyncIterable<CoordinationEvent> {
+    mayExecute?: (step: AgentPlanStep) => boolean, delegation?: CoordinationDelegation): AsyncIterable<CoordinationEvent> {
     if (typeof runId !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(runId)) {
       yield { type: "failed", runId, detail: "Coordination run ID must be a valid, bounded identifier." };
       return;
@@ -133,7 +144,7 @@ export class MultiAgentCoordinator {
     try {
       yield { type: "started", runId };
       await this.trace(runId, "started");
-      yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal, mayExecute);
+      yield* this.executeFrom(runId, safePlan, safeAssignments, 0, outputs, signal, mayExecute, delegation);
     } finally {
       this.active.delete(runId);
     }
@@ -157,7 +168,7 @@ export class MultiAgentCoordinator {
         yield { type: "failed", runId, detail: "Coordination was cancelled." };
         return;
       }
-      yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal, pending.mayExecute);
+      yield* this.executeFrom(runId, pending.plan, pending.assignments, pending.nextIndex, pending.outputs, signal, pending.mayExecute, pending.delegation);
     } finally {
       this.active.delete(runId);
     }
@@ -170,7 +181,8 @@ export class MultiAgentCoordinator {
     start: number,
     outputs: Map<string, unknown>,
     signal: AbortSignal,
-    mayExecute?: (step: AgentPlanStep) => boolean
+    mayExecute?: (step: AgentPlanStep) => boolean,
+    delegation?: CoordinationDelegation
   ): AsyncIterable<CoordinationEvent> {
     for (let index = start; index < plan.steps.length; index++) {
       const step: AgentPlanStep = plan.steps[index];
@@ -211,7 +223,7 @@ export class MultiAgentCoordinator {
         return;
       }
       if (decision === "ask_user") {
-        this.pending.set(runId, { plan, assignments, nextIndex: index, outputs, mayExecute });
+        this.pending.set(runId, { plan, assignments, nextIndex: index, outputs, mayExecute, delegation });
         await this.trace(runId, "waiting_for_approval", { step: index + 1 });
         yield { type: "waiting_for_approval", runId, agentId, step: index + 1,
           detail: "Explicit host approval is required before this agent starts." };
@@ -250,7 +262,14 @@ export class MultiAgentCoordinator {
       };
       let result: Result<unknown>;
       try {
-        result = await this.executor.execute(agentId, input, signal);
+        result = delegation
+          ? await this.executor.execute(agentId, input, signal, {
+              parentCheckpointId: delegation.parentCheckpointId,
+              stepIndex: index,
+              bindChildRun: childId => delegation.bindChildRun(index, childId),
+              mayExecute: () => !signal.aborted && this.stepPermitted(step, mayExecute)
+            })
+          : await this.executor.execute(agentId, input, signal);
       } catch {
         await this.trace(runId, signal.aborted ? "cancelled" : "failed", { step: index + 1 });
         yield { type: "failed", runId, agentId, step: index + 1,
