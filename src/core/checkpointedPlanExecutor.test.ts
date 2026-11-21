@@ -13,6 +13,7 @@ const plan = { goal: "inspect", steps: [
 ] };
 
 function setup(rejectSequence = -1) {
+  let onSaved: ((checkpoint: AgentCheckpoint) => void) | undefined;
   const snapshots: AgentCheckpoint[] = [];
   const saved = new Map<string, AgentCheckpoint>();
   const repository: AgentCheckpointRepository = {
@@ -25,6 +26,7 @@ function setup(rejectSequence = -1) {
       const snapshot = JSON.parse(JSON.stringify(checkpoint)) as AgentCheckpoint;
       saved.set(checkpoint.runId, snapshot);
       snapshots.push(snapshot);
+      onSaved?.(snapshot);
       return ok(undefined);
     },
     listByThread: async () => ok([]),
@@ -44,7 +46,8 @@ function setup(rejectSequence = -1) {
   const executor: AgentToolExecutor = {
     execute: async <Output = unknown>() => await executed() as ReturnType<typeof ok<Output>>
   };
-  return { recorder, registry, executor, executed, saved, snapshots };
+  return { recorder, registry, executor, executed, saved, snapshots,
+    onSaved: (callback: (checkpoint: AgentCheckpoint) => void) => { onSaved = callback; } };
 }
 
 describe("checkpointed shared sequential plan execution", () => {
@@ -104,6 +107,27 @@ describe("checkpointed shared sequential plan execution", () => {
     expect(saved.get("run-cancelled")?.status).toBe("cancelled");
     expect((saved.get("run-cancelled")?.state as {active: unknown}).active)
       .toMatchObject({ index: 0, id: "one" });
+  });
+
+  it("does not dispatch a tool revoked while the dispatch checkpoint is being saved", async () => {
+    const { recorder, registry, executor, executed, saved, onSaved } = setup();
+    onSaved(cp => { if (cp.sequence === 2) registry.unregister("test.read"); });
+    const result = await executeSequentialPlan(plan, "revoked-during-save",
+      new AbortController().signal, registry, executor, undefined, recorder);
+    expect(result).toMatchObject({ ok: false, error: { code: "validation" } });
+    expect(executed).not.toHaveBeenCalled();
+    expect(saved.get("revoked-during-save")?.status).toBe("failed");
+  });
+
+  it("does not dispatch after cancellation while saving the dispatch checkpoint", async () => {
+    const controller = new AbortController();
+    const { recorder, registry, executor, executed, saved, onSaved } = setup();
+    onSaved(cp => { if (cp.sequence === 2) controller.abort(); });
+    const result = await executeSequentialPlan(plan, "cancelled-during-save",
+      controller.signal, registry, executor, undefined, recorder);
+    expect(result).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(executed).not.toHaveBeenCalled();
+    expect(saved.get("cancelled-during-save")?.status).toBe("cancelled");
   });
 
   it("refuses to reuse a run ID before any tool can be repeated", async () => {
