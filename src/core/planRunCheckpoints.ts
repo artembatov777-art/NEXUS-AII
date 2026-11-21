@@ -11,6 +11,7 @@ interface PlanRunState {
   steps: StepIdentity[];
   nextStep: number;
   active: ActiveStep | null;
+  childRuns?: { index: number; runId: string }[];
 }
 
 function boundedIdentity(value: unknown, regex: RegExp): value is string {
@@ -149,6 +150,24 @@ export class PlanRunCheckpointSession {
     return this.transition({
       ...this.state,
       active: { index, id, toolId }
+    });
+  }
+
+  get storageRunId(): string { return this.checkpoint.runId; }
+
+  /** Record the actual child ID before its checkpoint or any tool effect. */
+  async bindChildRun(index: number, runId: string): Promise<Result<void>> {
+    const previous = this.state.childRuns ?? [];
+    if (!Number.isSafeInteger(index) || this.state.active?.index !== index ||
+        index !== this.state.nextStep ||
+        !boundedIdentity(runId, /^[A-Za-z0-9_-]{1,120}$/) ||
+        runId === this.checkpoint.runId ||
+        previous.some(link => link.index === index || link.runId === runId)) {
+      return err("validation", "Delegated run identity does not match the active plan step.");
+    }
+    return this.transition({
+      ...this.state,
+      childRuns: [...previous, { index, runId }]
     });
   }
 
