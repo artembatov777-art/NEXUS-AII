@@ -324,3 +324,78 @@ describe("ResumableAgentRuntime", () => {
     expect(step).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("delegated recovery authority", () => {
+  it("fails closed when the parent cannot durably bind the child before execution", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const runtime = makeRuntime(service);
+    const step = vi.fn(async () => ({ state: { count: 2 }, done: true }));
+    expect(runtime.replace({ ...makeDefinition(), step }).ok).toBe(true);
+    const events = await collect(runtime.start(agentId, 0, "parent-thread", undefined, {
+      parentCheckpointId: "coord_parent", stepIndex: 0,
+      bindChildRun: async () => ({ ok: false, error: { code: "storage_failed", message: "Parent unavailable", retryable: false } }),
+      mayExecute: () => true
+    }));
+    expect(events.at(-1)).toMatchObject({ type: "failed" });
+    expect(step).not.toHaveBeenCalled();
+    expect(await service.get(runId)).toEqual(ok(null));
+  });
+
+  it("does not independently continue an interrupted delegated child after restart", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const runtime = makeRuntime(service);
+    for await (const event of runtime.start(agentId, 0, "parent-thread", undefined, {
+      parentCheckpointId: "coord_parent", stepIndex: 0,
+      bindChildRun: async () => ok(undefined),
+      mayExecute: () => true
+    })) {
+      if (event.type === "progress") break;
+    }
+    const before = await service.get(runId);
+    expect(before).toMatchObject({ ok: true, value: { status: "running", state: {
+      steps: 1, delegation: { parentCheckpointId: "coord_parent", stepIndex: 0 }
+    }}});
+    const restarted = makeRuntime(service);
+    const step = vi.fn(async () => ({ state: { count: 2 }, done: true }));
+    restarted.replace({ ...makeDefinition(), step });
+    expect((await collect(restarted.continue(runId))).at(-1)).toMatchObject({
+      type: "failed", message: expect.stringContaining("owner-plan recovery")
+    });
+    expect(step).not.toHaveBeenCalled();
+    expect(await service.get(runId)).toEqual(before);
+  });
+
+  it("does not let a standalone approval grant resume a delegated child", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    const approvals = new InMemoryAgentApprovalAuthority(service, { approvalId: () => "child-approval" });
+    const step = vi.fn(async () => ({ state: { count: 2 }, done: true }));
+    const runtime = new ResumableAgentRuntime(service,
+      { authorize: async () => "ask_user" }, { runId: () => runId }, { now: () => 1_000 },
+      undefined, approvals);
+    runtime.register({ ...makeDefinition(), requiredPermissions: ["tool:execute"], step });
+    expect((await collect(runtime.start(agentId, 0, "parent-thread", undefined, {
+      parentCheckpointId: "coord_parent", stepIndex: 0,
+      bindChildRun: async () => ok(undefined), mayExecute: () => true
+    }))).at(-1)).toMatchObject({ type: "waiting_for_approval" });
+    const before = await service.get(runId);
+    expect((await approvals.issue(runId)).ok).toBe(false);
+    expect((await collect(runtime.resume(runId, "child-approval"))).at(-1)).toMatchObject({ type: "failed" });
+    expect(await service.get(runId)).toEqual(before);
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  it("rechecks parent authority after child authorization before executing a step", async () => {
+    const service = new AgentCheckpointService(new LocalStorageAgentCheckpointRepository(new FakeStorage()));
+    let permitted = true;
+    const step = vi.fn(async () => ({ state: { count: 2 }, done: true }));
+    const runtime = new ResumableAgentRuntime(service,
+      { authorize: async () => { permitted = false; return "allow"; } },
+      { runId: () => runId }, { now: () => 1_000 });
+    runtime.register({ ...makeDefinition(), requiredPermissions: ["tool:execute"], step });
+    expect((await collect(runtime.start(agentId, 0, "parent-thread", undefined, {
+      parentCheckpointId: "coord_parent", stepIndex: 0,
+      bindChildRun: async () => ok(undefined), mayExecute: () => permitted
+    }))).at(-1)).toMatchObject({ type: "failed" });
+    expect(step).not.toHaveBeenCalled();
+  });
+});
