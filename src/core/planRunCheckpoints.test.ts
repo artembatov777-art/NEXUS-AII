@@ -52,6 +52,31 @@ describe("shared plan run checkpoints", () => {
     expect(raw).toContain("workspace.read");
   });
 
+  it("binds exactly one child run to each active step before recording completion", async () => {
+    const { tracker, service } = setup();
+    const begun = await tracker.begin("parent-run", plan);
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) return;
+    expect((await begun.value.bindChildRun(0, "child-1")).ok).toBe(false);
+    expect((await begun.value.beforeStep(0, "read", "workspace.read")).ok).toBe(true);
+    expect((await begun.value.bindChildRun(1, "child-1")).ok).toBe(false);
+    expect((await begun.value.bindChildRun(0, "parent-run")).ok).toBe(false);
+    expect((await begun.value.bindChildRun(0, "../unsafe")).ok).toBe(false);
+    expect((await begun.value.bindChildRun(0, "child-1")).ok).toBe(true);
+    expect((await begun.value.bindChildRun(0, "other-child")).ok).toBe(false);
+    expect((await begun.value.afterStep(0)).ok).toBe(true);
+    expect((await begun.value.beforeStep(1, "search", "workspace.search")).ok).toBe(true);
+    expect((await begun.value.bindChildRun(1, "child-1")).ok).toBe(false);
+    expect((await begun.value.bindChildRun(1, "child-2")).ok).toBe(true);
+    expect((await begun.value.interrupt("failed")).ok).toBe(true);
+    expect(await service.get("parent-run")).toMatchObject({
+      ok: true, value: { status: "failed", state: {
+        childRuns: [{ index: 0, runId: "child-1" }, { index: 1, runId: "child-2" }],
+        nextStep: 1, active: { index: 1 }
+      }}
+    });
+  });
+
   it("never lets a second session claim an existing run or skip a dispatch", async () => {
     const { tracker } = setup();
     const first = await tracker.begin("same-run", plan);
