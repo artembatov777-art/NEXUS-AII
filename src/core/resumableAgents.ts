@@ -44,7 +44,7 @@ const isStoredAgentState = (value: JsonValue): value is JsonValue & StoredAgentS
   Number.isInteger(value.permissionIndex) && Number(value.permissionIndex) >= 0 && typeof value.agentVersion === "string" && Number.isInteger(value.steps) && Number(value.steps) >= 0;
 const packState = (payload: JsonValue, permissionIndex: number, agentVersion: string, steps = 0,
   delegation?: DelegationIdentity): JsonValue =>
-  ({ payload, permissionIndex, agentVersion, steps, ...(delegation ? { delegation } : {}) } as JsonValue);
+  ({ payload, permissionIndex, agentVersion, steps, ...(delegation ? { delegation: { parentCheckpointId: delegation.parentCheckpointId, stepIndex: delegation.stepIndex } } : {}) });
 function delegationPermitted(context?: DelegatedTaskContext): boolean {
   if (!context) return true;
   try { return context.mayExecute() === true; } catch { return false; }
