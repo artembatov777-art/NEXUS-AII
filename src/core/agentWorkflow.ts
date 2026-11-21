@@ -123,10 +123,10 @@ export function createAgentWorkflow(planner: AgentPlanner, registry: ToolRegistr
         return;
       }
       const assignments = Object.fromEntries(checked.value.steps.map(step => [step.id, agentId])) as Record<string, AgentId>;
-      const coordinated = coordinator.run(runId, checked.value, assignments, signal,
-        step => isBoundExecutableToolStep(step.toolId, registry, bindings.value, grantedTools) && permittedNow(step.toolId));
+      const mayExecute = (step: ValidatedPlan["steps"][number]) =>
+        isBoundExecutableToolStep(step.toolId, registry, bindings.value, grantedTools) && permittedNow(step.toolId);
       if (!checkpoints) {
-        yield* coordinated;
+        yield* coordinator.run(runId, checked.value, assignments, signal, mayExecute);
         return;
       }
       const begun = await checkpoints.begin(runId, checked.value);
@@ -136,6 +136,10 @@ export function createAgentWorkflow(planner: AgentPlanner, registry: ToolRegistr
       }
       const record = { checkpoint: begun.value, plan: checked.value };
       pending.set(runId, record);
+      const coordinated = coordinator.run(runId, checked.value, assignments, signal, mayExecute, {
+        parentCheckpointId: record.checkpoint.storageRunId,
+        bindChildRun: (index, childId) => record.checkpoint.bindChildRun(index, childId)
+      });
       yield* track(runId, coordinated, record);
     },
     resume: async function* (runId: AgentRunId, signal: AbortSignal): AsyncIterable<CoordinationEvent> {
